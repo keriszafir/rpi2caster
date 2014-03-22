@@ -8,9 +8,13 @@ Based on computer2caster by John Cornelisse
 Original idea described at http://letterpress.ch
 
 Target functionality:
+
 1. deprecating all obsolete technology [M$ DOS, LPT / RS232...]
+
 2. complete embedded system with no need to connect a PC to caster
+
 3. standalone or headless, remotely controlled via SSH, VNC and/or web server
+
 4. perhaps adding Mactronic-like functionality of composing based on the input file [PDF, ODS, DOC, LaTeX...]
 
 
