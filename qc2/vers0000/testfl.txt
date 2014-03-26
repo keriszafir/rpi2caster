@@ -1,0 +1,13 @@
+dit is een testfile om het programma van de gietmachine te testen 
+en lange regels te kunnen inlezen, ze te kunnen afbreken en nog meer. Het einde 
+van de alinea wordt gekenerkt door een code met 'CR'.^CR
+Dit is het begin van een nieuwe alinea, wat weer eens in een smalle 
+kolom zou gezet meten worden.^CR
+Het einde van het file komt na de code EF, de compiler negeert alle 
+text daarna, en dat kan de gebruiker dus gebruiken om allerlei 
+commentaar op te nemen in het file, zonder dat dit tot extra code 
+leidt.^CR
+Ligaturen aan het eind van de regel, die kunnen worden vermeden, indien 
+de gebruiker dat desgewenst verkiest.^CR
+^EF
+

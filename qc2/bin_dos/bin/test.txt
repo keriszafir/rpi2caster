@@ -1,0 +1,13 @@
+Dit wordt een klein file-tje met wat letters.
+Om uit te proberen, wat de editor moet gaan doen.
+Ook moet hij ligaturen als in finantieel, of
+saffloer kunnen herkennen op den duur.
+Het zou van een grote blijdschap zijn, als het
+snel zou gaan werken.
+Maar dit file-tje moet eerst gelezen kunnen worden en
+op het scherm weergegeven.
+Daarna gaan we allerlei andere zaken inbouwen.
+eerst maar een buffertje, dat zich vult.
+Niet al te groot, om te beginnen, want dan zie je
+de werking niet goed.
+Dit zal wel genoeg zijn.
