@@ -45,6 +45,10 @@ You need to install some software to use the RPi GPIO for controlling the interf
 1. Raspbian wheezy (jessie, etc.)
 2. RPi.GPIO Python library - https://pypi.python.org/packages/source/R/RPi.GPIO
 Make sure you have python-dev and python3-dev installed (build dependencies). Download, untar and run "sudo python setup.py install".
-3. i2c-dev - sudo aptitude install i2c-dev
-After installing i2c-dev, add user(s) to the i2c group. Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
+3. libi2c-dev - I2C device library, which provides the I2C kernel module.
+Install with "sudo aptitude install libi2c-dev"
+After installing i2c-dev, add user(s) to the i2c group unless you want to run the software as root, which is of course not recommended. 
+Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
 4. wiringPi C library - find it here with setup instructions: https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
+5. i2c-tools - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
+Install with "sudo aptitude install i2c-tools".
