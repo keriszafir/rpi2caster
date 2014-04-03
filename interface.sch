@@ -1,0 +1,153 @@
+EESchema Schematic File Version 2
+LIBS:power
+LIBS:device
+LIBS:transistors
+LIBS:conn
+LIBS:linear
+LIBS:regul
+LIBS:74xx
+LIBS:cmos4000
+LIBS:adc-dac
+LIBS:memory
+LIBS:xilinx
+LIBS:special
+LIBS:microcontrollers
+LIBS:dsp
+LIBS:microchip
+LIBS:analog_switches
+LIBS:motorola
+LIBS:texas
+LIBS:intel
+LIBS:audio
+LIBS:interface
+LIBS:digital-audio
+LIBS:philips
+LIBS:display
+LIBS:cypress
+LIBS:siliconi
+LIBS:opto
+LIBS:atmel
+LIBS:contrib
+LIBS:valves
+LIBS:MCP23017
+LIBS:interface-cache
+EELAYER 27 0
+EELAYER END
+$Descr A4 11693 8268
+encoding utf-8
+Sheet 1 1
+Title ""
+Date "26 mar 2014"
+Rev ""
+Comp ""
+Comment1 ""
+Comment2 ""
+Comment3 ""
+Comment4 ""
+$EndDescr
+$Comp
+L CONN_13X2 H1
+U 1 1 533353BA
+P 2350 2550
+F 0 "H1" H 2350 3250 60  0000 C CNN
+F 1 "Raspberry Pi GPIO" V 2350 2550 50  0000 C CNN
+F 2 "" H 2350 2550 60  0000 C CNN
+F 3 "" H 2350 2550 60  0000 C CNN
+	1    2350 2550
+	1    0    0    -1  
+$EndComp
+$Comp
+L +5V #PWR?
+U 1 1 5333545A
+P 3050 1950
+F 0 "#PWR?" H 3050 2040 20  0001 C CNN
+F 1 "+5V" H 3050 2040 30  0000 C CNN
+F 2 "" H 3050 1950 60  0000 C CNN
+F 3 "" H 3050 1950 60  0000 C CNN
+	1    3050 1950
+	1    0    0    -1  
+$EndComp
+$Comp
+L GND #PWR?
+U 1 1 5333547A
+P 3050 2250
+F 0 "#PWR?" H 3050 2250 30  0001 C CNN
+F 1 "GND" H 3050 2180 30  0001 C CNN
+F 2 "" H 3050 2250 60  0000 C CNN
+F 3 "" H 3050 2250 60  0000 C CNN
+	1    3050 2250
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	2750 2050 3050 2050
+Wire Wire Line
+	3050 2050 3050 2250
+Wire Wire Line
+	2750 1950 3050 1950
+$Comp
+L MCP23017 U?
+U 1 1 53335DAB
+P 5100 2400
+F 0 "U?" H 4550 3500 50  0000 C CNN
+F 1 "MCP23017" H 5550 1300 50  0000 C CNN
+F 2 "MODULE" H 4600 1300 50  0001 C CNN
+F 3 "DOCUMENTATION" H 5100 2350 50  0001 C CNN
+	1    5100 2400
+	1    0    0    -1  
+$EndComp
+$Comp
+L MCP23017 U?
+U 1 1 53335DBA
+P 5100 5500
+F 0 "U?" H 4550 6600 50  0000 C CNN
+F 1 "MCP23017" H 5550 4400 50  0000 C CNN
+F 2 "MODULE" H 4600 4400 50  0001 C CNN
+F 3 "DOCUMENTATION" H 5100 5450 50  0001 C CNN
+	1    5100 5500
+	1    0    0    -1  
+$EndComp
+$Comp
+L GND #PWR?
+U 1 1 53335EB9
+P 5100 3750
+F 0 "#PWR?" H 5100 3750 30  0001 C CNN
+F 1 "GND" H 5100 3680 30  0001 C CNN
+F 2 "" H 5100 3750 60  0000 C CNN
+F 3 "" H 5100 3750 60  0000 C CNN
+	1    5100 3750
+	1    0    0    -1  
+$EndComp
+$Comp
+L GND #PWR?
+U 1 1 53335ECA
+P 5100 6850
+F 0 "#PWR?" H 5100 6850 30  0001 C CNN
+F 1 "GND" H 5100 6780 30  0001 C CNN
+F 2 "" H 5100 6850 60  0000 C CNN
+F 3 "" H 5100 6850 60  0000 C CNN
+	1    5100 6850
+	1    0    0    -1  
+$EndComp
+$Comp
+L +5V #PWR?
+U 1 1 53335ED9
+P 5100 4150
+F 0 "#PWR?" H 5100 4240 20  0001 C CNN
+F 1 "+5V" H 5100 4240 30  0000 C CNN
+F 2 "" H 5100 4150 60  0000 C CNN
+F 3 "" H 5100 4150 60  0000 C CNN
+	1    5100 4150
+	1    0    0    -1  
+$EndComp
+$Comp
+L +5V #PWR?
+U 1 1 53335EE8
+P 5100 1050
+F 0 "#PWR?" H 5100 1140 20  0001 C CNN
+F 1 "+5V" H 5100 1140 30  0000 C CNN
+F 2 "" H 5100 1050 60  0000 C CNN
+F 3 "" H 5100 1050 60  0000 C CNN
+	1    5100 1050
+	1    0    0    -1  
+$EndComp
+$EndSCHEMATC

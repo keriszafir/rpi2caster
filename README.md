@@ -35,3 +35,16 @@ TODO
 	31 additional resistors, transistors and surge suppressing diodes to drive each of the solenoid valves. 
 	BTW, I've got a nice power supply salvaged from a fax machine - it supplies +5V and +24V.
 5. Port the source so that it uses RPi I/O addresses, can be built with GNU toolchain and supports UTF-8. 
+
+
+Dependencies
+============
+
+You need to install some software to use the RPi GPIO for controlling the interface.
+
+1. Raspbian wheezy (jessie, etc.)
+2. RPi.GPIO Python library - https://pypi.python.org/packages/source/R/RPi.GPIO
+Make sure you have python-dev and python3-dev installed (build dependencies). Download, untar and run "sudo python setup.py install".
+3. i2c-dev - sudo aptitude install i2c-dev
+After installing i2c-dev, add user(s) to the i2c group. Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
+4. wiringPi C library - find it here with setup instructions: https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
