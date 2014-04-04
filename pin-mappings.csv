@@ -1,0 +1,45 @@
+"Mapping of MCP23017 pins to solenoid valves and matrix row/column";
+
+"We want to address the valves in ascending order by the way software sees them. wiringPi will address GPA0 as the first pin and GPB7 as the last one." 
+
+"IC1 controls rows. Address 32 = 0x20. Pins 15, 16, 17 grounded.";
+
+Pin;"I/O";
+
+1;GPB0;9
+2;GPB1;10
+3;GPB2;11
+4;GPB3;12
+5;GPB4;13
+6;GPB5;14
+7;GPB6;0005
+8;GPB7;0075
+21;GPA0;1
+22;GPA1;2
+23;GPA2;3
+24;GPA3;4
+25;GPA4;5
+26;GPA5;6
+27;GPA6;7
+28;GPA7;8
+
+"IC2 controls columns. Address 33 = 0x21. Pin 15 connected to 3V3. Pins 16, 17 grounded."
+
+Pin;"I/O";
+
+1;GPB0;I
+2;GPB1;J
+3;GPB2;K
+4;GPB3;L
+5;GPB4;M
+6;GPB5;N
+7;GPB6;S
+8;GPB7;redundant
+21;GPA0;A
+22;GPA1;B 
+23;GPA2;C 
+24;GPA3;D 
+25;GPA4;E 
+26;GPA5;F 
+27;GPA6;G 
+28;GPA7;H

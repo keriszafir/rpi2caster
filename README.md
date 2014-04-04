@@ -36,6 +36,9 @@ TODO
 	especially given that the unit needs customizing. I built a module on a THT prototyping board and DIP IC's. The extension needs 
 	drivers to connect the MCP23017 outputs with each of the solenoid valves. ULN2803 ICs (8-channel Darlington drivers 
 	with surge suppressing diodes) are perfect for this. You need 4 of them - two for each of the MCP23017's.
+	You have to choose the different addresses for both MCP23017. This is achieved by connecting different combinations of A0, A1
+	and A2 input (pin numbers 15, 16, 17) to +3V3 or GND. For my device, I've chosen 0x20 (all pins grounded) for the chip that 
+	controls rows, and 1x20 (3V3 on pin 15 and pins 16, 17 grounded) for the chip that controls columns. See pin-mappings.csv 
 	BTW, I've got a nice power supply salvaged from a fax machine - it supplies +5V and +24V.
 5. Resolve the dependencies as described further.
 6. Port the source so that it uses RPi I/O addresses, can be built with GNU toolchain and supports UTF-8. 
@@ -48,11 +51,18 @@ Dependencies
 You need to install some software to use the RPi GPIO for controlling the interface.
 
 1. Raspbian wheezy (jessie, etc.)
-	Initial setup: expand rootfs, enable SSH, choose locale, change the hostname, set up the password etc. using raspi-config. 
-	Create user accounts and disable no-password admin login for "pi" by commenting out the respective line in /etc/sudoers.
+	Initial setup - connect a keyboard and screen, power the Raspberry up. Raspi-config will start. Expand rootfs, enable SSH, 
+	choose locale, change the hostname, set up the password etc. Exit raspi-config and run ifconfig, check the MAC address.
+
+	Network setup - I recommend configuring your router to offer Raspberry a static DHCP lease based on the MAC address. 
+	If that's not possible (e.g. you're not a network admin), use static IP address... or scan the network for a host 
+	with the RPi's MAC address after each boot. 
+ 
+	From now on, you can do everything via SSH. No need for screen and keyboard.
+	Create user accounts and disable no-password sudoing for "pi" by commenting out the respective line in /etc/sudoers.
 	Add new users to groups user "pi" belongs to.
 	You can enable GUI access by VNC. Install tightvncserver. Edit /etc/lightdm/lightdm.conf and uncomment the lines in VNC section. 
-	You can change the port, geometry etc. as well. You don't have to create any init scripts; lightdm will take care of running the
+	Change the port, geometry etc. if you wish. You don't have to create any init scripts; lightdm will already take care of running the
 	VNC server. Just run "vncviewer [hostname or IP addr]:[port]" client-side and you'll get a lightdm login screen. Sign in to your account.
 2. RPi.GPIO Python library - https://pypi.python.org/packages/source/R/RPi.GPIO
 	Make sure you have python-dev and python3-dev installed (build dependencies). Download, untar and run "sudo python setup.py install".
