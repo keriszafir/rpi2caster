@@ -1,0 +1,88 @@
+1. initialize outputs for MCP23017 by writing bytes to the IODIRA and IODIRB registers for each MCP23017 IC
+for command line, you're supposed to use i2ctools
+first you can run "i2cdetect 0" and "i2cdetect 1" to probe the buses; two addresses should appear, you'll need them soon
+remember which bus they're on!
+
+issue command "i2cset [-y - don't ask for confirmation] BUS_ID DEVICE_ADDRESS REGISTER_ID DATA
+
+bus ID depends on your Raspberry Pi PCB revision. For mod B revision 1 the bus ID = 0. For B rev 2 it's 1. 
+	Just use the one which gave you some results with i2cdetect.
+
+device address, register ID and data can be entered as hex (0x00 - 0xff) or integer (0-255), not binary
+in our case:
+device 0x20 (32) controls columns
+device 0x21 (33) controls rows
+
+registers:
+IODIRA (input / output direction, bank A) - hex 0x00, int 0
+IODIRB (input / output direction, bank B) - hex 0x01, int 1
+
+data:
+a byte in hex / integer format, where each bit corresponds to each I/O line; 0 for output and 1 for input, so we write zeros only
+
+long story short, we issue a set of commands: 
+
+i2cset -y 0 32 0 0  (or i2cset -y 0 0x20 0x00 0x00)      //columns, bank A, all out
+i2cset -y 0 32 1 0  (or i2cset -y 0 0x20 0x01 0x00)      //columns, bank B, all out
+i2cset -y 0 33 0 0  (or i2cset -y 0 0x21 0x00 0x00)      //rows, bank A, all out
+i2cset -y 0 33 1 0  (or i2cset -y 0 0x21 0x01 0x00)      //rows, bank B, all out
+
+otherwise the IC doesn't know if we want the pins to be inputs or outputs; writing data to them won't turn them on
+see MCP23017's datasheet and various articles on I/O expansions using this chip for further info
+
+
+2. read a character from input file, incl. ligatures and special codes (CR etc.)
+3. if control code detected, jump to step 6.
+   else:  
+4. find a character in a matcase array database (CSV, maybe SQL later on?)
+
+example mat case array (totally unrealistic for sake of simplicity):
+
+"font name";NI;NL;A;B;C;D;E;F;G;H;I;J;K;L;M;N;O
+1;A;B;C;D;E;F;G;H;I;J;K;L;M;N;O;P;Q
+2;R;S;T;U;V;W;X;Y;Z;a;b;c;d;e;f;g;h
+3;i;j;k;l;m;n;o;p;q;r;s;t;u;v;w;x;y
+4;z;Ą;Ć;Ę;Ł;Ń;Ó;Ś;Ź;Ż;ą;ć;ę;ł;ń;ó;ś
+5;ź;ż;IJ;ij;ffi;ffl;.;";";:;+;-;,;.;[;];{;};%
+6 ....
+7 ....
+8 ....
+9 ....
+10 ...
+11 ...
+12 ...
+13 ...
+14 ...
+15 ...
+
+5. retrieve the character's position: column & row
+
+for example, the character "Ź" would be in position G4, so:
+col=G
+row=4
+
+5. map the control codes, row and column to the proper valve control lines 
+the valves are controlled by writing bytes to the GPIOA and GPIOB registers of MCP23017
+
+
+
+device 0 - rows
+device 1 - columns
+
+A 
+B
+C
+D
+E
+F
+G
+H
+I
+J
+K
+L
+M
+N
+O null
+NI
+NL 
