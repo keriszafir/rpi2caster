@@ -51,26 +51,54 @@ Dependencies
 You need to install some software to use the RPi GPIO for controlling the interface.
 
 1. Raspbian wheezy (jessie, etc.)
-	Initial setup - connect a keyboard and screen, power the Raspberry up. Raspi-config will start. Expand rootfs, enable SSH, 
-	choose locale, change the hostname, set up the password etc. Exit raspi-config and run ifconfig, check the MAC address.
+	Initial setup (Squeeze won't work because SSH is disabled by default; you have to set up a local console!):
+
+        Find the hosts on your network by typing "nmap -sP 192.168.1.0/24" (if your IP address is on the 192.168.1.x).
+	Connect the Raspberry to your LAN and power. It should get its IP address by DHCP. Try to find the IP address by running 
+        "nmap -sP {subnet IP address}" again; you should see one more IP address and that's probably your RPi.
+        SSH into it (username: pi, password: raspberry). Since it's your first logon, raspi-config will start automatically. 
+        Expand rootfs, choose locale, timezone & keyboard layout. You can change the hostname (I've named my machine "monotype"), 
+        set up the password etc. 
+        Exit raspi-config and run ifconfig, check the MAC address if you don't know it already.
 
 	Network setup - I recommend configuring your router to offer Raspberry a static DHCP lease based on the MAC address. 
 	If that's not possible (e.g. you're not a network admin), use static IP address... or scan the network for a host 
 	with the RPi's MAC address after each boot. 
  
-	From now on, you can do everything via SSH. No need for screen and keyboard.
 	Create user accounts and disable no-password sudoing for "pi" by commenting out the respective line in /etc/sudoers.
-	Add new users to groups user "pi" belongs to.
+	Add new users to groups user "pi" belongs to. For security reasons, you may want to  remove "pi" from the "sudo" and "adm" groups.
+        
+        Since you'll log on the machine via SSH, you can use a RSA key authentication instead of entering a password on each logon.
+        Create a ~/.ssh/authorized_keys file and paste your account@machine's id_rsa.pub contents there. Then you can just ssh by typing
+        "ssh username@monotype" 
+
 	You can enable GUI access by VNC. Install tightvncserver. Edit /etc/lightdm/lightdm.conf and uncomment the lines in VNC section. 
 	Change the port, geometry etc. if you wish. You don't have to create any init scripts; lightdm will already take care of running the
 	VNC server. Just run "vncviewer [hostname or IP addr]:[port]" client-side and you'll get a lightdm login screen. Sign in to your account.
+
+	If we want to use the pins 8 and 10 on the GPIO (which are used as the serial port's RxD and TxD lines by default!), we have to disable
+	the serial port. That is done by editing two files:
+	/etc/inittab: we have to comment out any lines containing the "ttyAMA0 115200 vt100" string
+	/boot/cmdline.txt: remove all references to ttyAMA0
+	 
+
 2. RPi.GPIO Python library - https://pypi.python.org/packages/source/R/RPi.GPIO
 	Make sure you have python-dev and python3-dev installed (build dependencies). Download, untar and run "sudo python setup.py install".
 3. libi2c-dev - I2C device library, which provides the I2C kernel module.
 	Install with "sudo aptitude install libi2c-dev"
 	After installing i2c-dev, add user(s) to the i2c group unless you want to run the software as root, which is obviously not recommended. 
 	Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
+	Remove (or comment) the i2c-bcm2708 in /etc/modprobe.d/raspi-blacklist.conf
+
 4. wiringPi library - find it here with setup instructions: https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
-	This is required for C programs to use the GPIO. 
+	This is required for C programs to use the GPIO. Python programs need this as well, or else they'd need the root privileges to access GPIO.
 5. i2c-tools - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
-Install with "sudo aptitude install i2c-tools".
+	libi2c-dev depends on i2c-tools, so this will already be installed in step 3.
+
+
+Garbage removal
+===============
+
+The original Raspbian distro has some unneeded software installed by default. We can get rid of it by using "sudo aptitude purge...":
+-wolfram-engine - removing it will clean aomewhere around 450MB (!)
+-X, LXDE etc. unless you want to VNC into the machine or set up a local console with GUI
