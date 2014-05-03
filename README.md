@@ -81,19 +81,22 @@ You need to install some software to use the RPi GPIO for controlling the interf
 	/etc/inittab: we have to comment out any lines containing the "ttyAMA0 115200 vt100" string
 	/boot/cmdline.txt: remove all references to ttyAMA0
 	 
+	Some of the dependencies will be marked as "(repo)". This means that you can install them from Raspbian repository using apt or aptitude.
 
 2. RPi.GPIO Python library - https://pypi.python.org/packages/source/R/RPi.GPIO
 	Make sure you have python-dev and python3-dev installed (build dependencies). Download, untar and run "sudo python setup.py install".
-3. libi2c-dev - I2C device library, which provides the I2C kernel module.
+3. libi2c-dev (repo) - I2C device library, which provides the I2C kernel module.
 	Install with "sudo aptitude install libi2c-dev"
 	After installing i2c-dev, add user(s) to the i2c group unless you want to run the software as root, which is obviously not recommended. 
 	Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
 	Remove (or comment) the i2c-bcm2708 in /etc/modprobe.d/raspi-blacklist.conf
 
-4. wiringPi library - find it here with setup instructions: https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
+4. wiringPi library - find it (with setup instructions) at https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
 	This is required for C programs to use the GPIO. Python programs need this as well, or else they'd need the root privileges to access GPIO.
-5. i2c-tools - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
+5. i2c-tools (repo) - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
 	libi2c-dev depends on i2c-tools, so this will already be installed in step 3.
+6. python-daemon (repo), Python daemon library. We need it for the powerbuttond.py daemon 
+7. python-smbus (repo), Python SMBus & I2C library, needed to control the valves
 
 
 Garbage removal
