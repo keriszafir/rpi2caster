@@ -95,8 +95,7 @@ You need to install some software to use the RPi GPIO for controlling the interf
 	This is required for C programs to use the GPIO. Python programs need this as well, or else they'd need the root privileges to access GPIO.
 5. i2c-tools (repo) - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
 	libi2c-dev depends on i2c-tools, so this will already be installed in step 3.
-6. python-daemon (repo), Python daemon library. We need it for the powerbuttond.py daemon 
-7. python-smbus (repo), Python SMBus & I2C library, needed to control the valves
+6. python-smbus (repo), Python SMBus & I2C library, needed to control the valves
 
 
 Garbage removal
