@@ -96,6 +96,8 @@ You need to install some software to use the RPi GPIO for controlling the interf
 5. i2c-tools (repo) - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
 	libi2c-dev depends on i2c-tools, so this will already be installed in step 3.
 6. python-smbus (repo), Python SMBus & I2C library, needed to control the valves
+7. python-setuptools (repo) - you need it to install a Python module for WiringPi
+8. WiringPi2-Python - install it from GitHub. Instructions at https://github.com/WiringPi/WiringPi2-Python/blob/master/README
 
 
 Garbage removal

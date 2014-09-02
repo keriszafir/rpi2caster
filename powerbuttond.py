@@ -24,7 +24,7 @@ def blink(n,speed):
 
 def signal_handler(signal, frame):
 	print("Terminated by OS")
-	blink(10,0.5)
+	blink(3,0.1)
 	gpio.output(4,0)
 	gpio.cleanup()
 	sys.exit()
@@ -34,8 +34,9 @@ def shutdown(channel):
 	if (gpio.input(15) == 1):
 		blink(5,0.1)
 		os.system("sudo shutdown -h now")
+		gpio.output(4,1)
+		gpio.cleanup()
 
-signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
 gpio.add_event_detect(15, gpio.RISING, callback = shutdown, bouncetime = 2000)

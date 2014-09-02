@@ -1,14 +1,6 @@
 #!/usr/bin/python
 import sys, os, time
 import wiringpi2 as wiringpi
-import RPi.GPIO as gpio
-
-gpio.setmode(gpio.BCM)
-#wiringpi.wiringPiSetup()
-#wiringpi.pinMode(14, 0)
-#wiringpi.pullUpDnControl(14, 2)
-gpio.setup(14, gpio.IN, pull_up_down = gpio.PUD_UP)
-gpio.add_event_detect(14, gpio.RISING, bouncetime = 10)
 wiringpi.mcp23017Setup(65,0x20)
 wiringpi.mcp23017Setup(81,0x21)
 
@@ -26,8 +18,6 @@ try:
 			time.sleep(1)
 			wiringpi.digitalWrite(pin,0)
 		print("The test is done. Starting all over again!")
-#		if (gpio.event_detected(14)):
-#			print("Photo cell activated.")
 		
 except RuntimeError:
 	print("You must run this program as root!")
@@ -36,5 +26,4 @@ except KeyboardInterrupt:
 finally:
 	for pin in range(65,97):
 		wiringpi.digitalWrite(pin, 0)
-	gpio.cleanup()
 	exit()
