@@ -33,7 +33,7 @@ def shutdown(channel):
 	time.sleep(2)
 	if (gpio.input(15) == 1):
 		blink(5,0.1)
-		os.system("sudo shutdown -h now")
+		os.system("poweroff")
 		gpio.output(4,1)
 		gpio.cleanup()
 
