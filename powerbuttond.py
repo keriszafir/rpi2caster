@@ -13,7 +13,6 @@ try:
   os.system('echo "14" > /sys/class/gpio/export') # BCM pin no 14
   os.system('echo "in" > /sys/class/gpio/gpio14/direction') # input
   os.system('echo "both" > /sys/class/gpio/gpio14/edge') # generate interrupts when the photocell becomes obscured AND lit up
-  os.system('gpio -g mode 14 up') # set the input as initially high (pull-up)
 
 except RuntimeError:
 

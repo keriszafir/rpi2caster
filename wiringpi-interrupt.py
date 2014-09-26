@@ -1,18 +1,16 @@
 #!/usr/bin/python
-import wiringpi2
+import wiringpi2 as wiringpi
 import time
 
-wiringpi2.wiringPiSetupGpio()
-wiringpi2.pinMode(14, 0)
-wiringpi2.pullUpDnControl(14, 2)
+wiringpi.wiringPiSetupSys()
+wiringpi.pinMode(14, 0)
+# wiringpi.pullUpDnControl(14, 2) not working in sys mode, exported with gpio utility at system startup
 
-def my_int():
-    print('Interrupt')
+def interrupt_test():
+    print('It works')
     return True
 
-#wpi = wiringpi2.GPIO(wiringpi2.GPIO.WPI_MODE_PINS)
-#wpi.pullUpDnControl(14,wpi.PUD_UP) 
-wpi.wiringPiISR(14, wpi.INT_EDGE_RISING, my_int())
+wiringpi.wiringPiISR(14, 2, interrupt_test())
 while True:
     time.sleep(1)
     print('Waiting...')
