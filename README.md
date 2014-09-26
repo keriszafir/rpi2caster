@@ -50,8 +50,8 @@ Dependencies
 
 You need to install some software to use the RPi GPIO for controlling the interface.
 
-1. Raspbian wheezy (jessie, etc.)
-	Initial setup (Squeeze won't work because SSH is disabled by default; you have to set up a local console!):
+1. Raspbian wheezy, jessie, etc.
+	Initial setup (Squeeze won't work because SSH is disabled by default; you have to set up with a local console!):
 
         Find the hosts on your network by typing "nmap -sP 192.168.1.0/24" (if your IP address is on the 192.168.1.x).
 	Connect the Raspberry to your LAN and power. It should get its IP address by DHCP. Try to find the IP address by running 
@@ -72,6 +72,9 @@ You need to install some software to use the RPi GPIO for controlling the interf
         Create a ~/.ssh/authorized_keys file and paste your account@machine's id_rsa.pub contents there. Then you can just ssh by typing
         "ssh username@monotype" 
 
+        You may want to change LXDE to Xfce, sysvinit to systemd (for Jessie users), bash to zsh etc. if you want to, know what you're doing 
+	and don't have anything against fiddling with your config files.
+
 	You can enable GUI access by VNC. Install tightvncserver. Edit /etc/lightdm/lightdm.conf and uncomment the lines in VNC section. 
 	Change the port, geometry etc. if you wish. You don't have to create any init scripts; lightdm will already take care of running the
 	VNC server. Just run "vncviewer [hostname or IP addr]:[port]" client-side and you'll get a lightdm login screen. Sign in to your account.
@@ -91,13 +94,14 @@ You need to install some software to use the RPi GPIO for controlling the interf
 	Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
 	Remove (or comment) the i2c-bcm2708 in /etc/modprobe.d/raspi-blacklist.conf
 
-4. wiringPi library - find it (with setup instructions) at https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
-	This is required for C programs to use the GPIO. Python programs need this as well, or else they'd need the root privileges to access GPIO.
+4. wiringPi2 library - find it (with setup instructions) at https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
+	This is required for programs to access GPIO.
 5. i2c-tools (repo) - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
 	libi2c-dev depends on i2c-tools, so this will already be installed in step 3.
 6. python-smbus (repo), Python SMBus & I2C library, needed to control the valves
 7. python-setuptools (repo) - you need it to install a Python module for WiringPi
 8. WiringPi2-Python - install it from GitHub. Instructions at https://github.com/WiringPi/WiringPi2-Python/blob/master/README
+9. gpio - command line utility for GPIO setup & management, used by powerbuttond.py
 
 
 Garbage removal
@@ -106,3 +110,4 @@ Garbage removal
 The original Raspbian distro has some unneeded software installed by default. We can get rid of it by using "sudo aptitude purge...":
 -wolfram-engine - removing it will clean aomewhere around 450MB (!)
 -X, LXDE etc. unless you want to VNC into the machine or set up a local console with GUI
+-anything related to Scratch

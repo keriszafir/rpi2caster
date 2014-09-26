@@ -52,16 +52,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <conio.h>
-#include <dos.h>
-#include <io.h>
-#include <bios.h>
-#include <graph.h>
+//#include <conio.h>
+//#include <dos.h>
+//#include <io.h>
+//#include <bios.h>
+//#include <graph.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <time.h>
-#include <sys\types.h>
-#include <sys\stat.h>
+//#include <sys\types.h>
+//#include <sys\stat.h>
 #include <malloc.h>
 #include <errno.h>
 #include <string.h>
@@ -191,7 +191,7 @@ void tussen ( int nr , int ptr );
 #include <c:\qc2\last02\monocas1.c>
  */
 
-#include <c:\qc2\bask\monotis1.c> /* : wig [] 536... */
+#include </home/elegant/rpi2caster/qc2/bask/monotis1.c> /* : wig [] 536... */
 
    /* includes:  c:\qc2\last02\monolus.c */
 
@@ -363,7 +363,7 @@ void dispcode(unsigned char letter[])
 #include <c:\qc2\last02\monocas6.c>
  */
 
-#include <c:\qc2\bask\monoti11.c>
+#include </home/elegant/rpi2caster/qc2/bask/monoti11.c>
 		       /*monga12f.c> 12 punt geneve
 			 12 punt in monoga12.c */
 
@@ -371,11 +371,11 @@ void dispcode(unsigned char letter[])
        /*was: c:\qc2\caslon .... stripc\monobai6/c fx*/
 
 
-#include <c:\qc2\bask\monoinc7.c>  /* intro intro1 */
+#include </home/elegant/rpi2caster/qc2/bask/monoinc7.c>  /* intro intro1 */
 
-#include <c:\qc2\bask\monoinc8.c>
-#include <c:\qc2\bask\moninc10.c>
-#include <c:\qc2\bask\monolus.c>
+#include </home/elegant/rpi2caster/qc2/bask/monoinc8.c>
+#include </home/elegant/rpi2caster/qc2/bask/moninc10.c>
+#include </home/elegant/rpi2caster/qc2/bask/monolus.c>
 
 /* #include <c:\qc2\stripc\monolus.c> */
 
@@ -1727,7 +1727,7 @@ void afbreken( void )
 }
 	       /*  was:     inc9.c */
 
-#include <c:\qc2\bask\monoin00.c>
+#include </home/elegant/rpi2caster/qc2/bask/monoin00.c>
 
 
 
