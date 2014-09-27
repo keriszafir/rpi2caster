@@ -42,7 +42,7 @@ def signal_handler(signal, frame):
   sys.exit()
 
 def shutdown(channel):
-  time.sleep(2)
+  time.sleep(1000)
   if (gpio.input(buttonGPIO) == 1):
     blink(5,0.1)
     os.system("poweroff")
@@ -50,10 +50,13 @@ def shutdown(channel):
     gpio.cleanup()
     os.system('echo "' + photocellGPIO + '" > /sys/class/gpio/unexport')
     sys.exit()
+  else
+    continue
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
-gpio.add_event_detect(buttonGPIO, gpio.RISING, callback = shutdown, bouncetime = 1000)
+# gpio.add_event_detect(buttonGPIO, gpio.RISING, callback = shutdown, bouncetime = 1000)
 
 while True:
-  time.sleep(1)
+  gpio.wait_for_edge(buttonGPIO, gpio.RISING)
+  shutdown(1)
