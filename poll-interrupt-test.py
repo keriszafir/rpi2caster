@@ -3,7 +3,7 @@ import select, os
 
 f = open(os.path('/sys/class/gpio/gpio14/value'), 'r')
 
-po = select.poll()
+po = select.epoll()
 po.register(f, select.POLLPRI)
 
 while 1:
