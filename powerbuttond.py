@@ -41,7 +41,7 @@ def signal_handler(signal, frame):
   os.system('echo "' + photocellGPIO + '" > /sys/class/gpio/unexport')
   sys.exit()
 
-def shutdown():
+def shutdown(channel):
   time.sleep(2)
   if (gpio.input(buttonGPIO) == 1):
     blink(5,0.1)
