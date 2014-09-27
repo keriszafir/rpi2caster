@@ -2,17 +2,23 @@
 import RPi.GPIO as gpio
 import os, sys, time, signal
 
+# initial config, BCM GPIO numbers
+photocellGPIO = 14
+buttonGPIO = 15
+ledGPIO = 4
+
 try:
 # Set up the GPIO for button and green LED:
   gpio.setmode(gpio.BCM)
   gpio.setwarnings(False)
-  gpio.setup(15, gpio.IN, pull_up_down = gpio.PUD_DOWN) # button
-  gpio.setup(4, gpio.OUT) # LED
-  gpio.output(4,1)
-# Set up the photocell line to be used with rpi2caster:
-  os.system('echo "14" > /sys/class/gpio/export') # BCM pin no 14
-  os.system('echo "in" > /sys/class/gpio/gpio14/direction') # input
-  os.system('echo "both" > /sys/class/gpio/gpio14/edge') # generate interrupts when the photocell becomes obscured AND lit up
+  gpio.setup(buttonGPIO, gpio.IN, pull_up_down = gpio.PUD_DOWN) # shutdown button
+  gpio.setup(ledGPIO, gpio.OUT) # green LED
+  gpio.output(ledGPIO,1)
+# Set up the machine cycle sensor (photocell) GPIO to be used with rpi2caster:
+  os.system('echo "' + photocellGPIO + '" > /sys/class/gpio/export') # BCM pin for photocell input
+  os.system('echo "in" > /sys/class/gpio/gpio' + photocellGPIO + '/direction') # input
+# Enable generating interrupts when the photocell becomes obscured AND lit up
+  os.system('echo "both" > /sys/class/gpio/gpio' + photocellGPIO + '/edge')
 
 except RuntimeError:
 
@@ -21,30 +27,33 @@ except RuntimeError:
 
 def blink(n,speed):
   for i in range(0,n):
-    gpio.output(4,0)
+    gpio.output(ledGPIO,0)
     time.sleep(speed)
-    gpio.output(4,1)
+    gpio.output(ledGPIO,1)
     time.sleep(speed)
 
 def signal_handler(signal, frame):
   print("Terminated by OS")
   blink(3,0.1)
-  gpio.output(4,0)
+  # turn the green LED off if you stop the program with ctrl-C or SIGTERM
+  gpio.output(ledGPIO,0)
   gpio.cleanup()
-  os.system('echo "14" > /sys/class/gpio/unexport')
+  os.system('echo "' + photocellGPIO + '" > /sys/class/gpio/unexport')
   sys.exit()
 
-def shutdown(channel):
+def shutdown():
   time.sleep(2)
-  if (gpio.input(15) == 1):
+  if (gpio.input(buttonGPIO) == 1):
     blink(5,0.1)
     os.system("poweroff")
-    gpio.output(4,1)
+    gpio.output(ledGPIO,1) # keep the green LED lit up until system shuts down completely
     gpio.cleanup()
+    os.system('echo "' + photocellGPIO + '" > /sys/class/gpio/unexport')
+    sys.exit()
 
 signal.signal(signal.SIGINT, signal_handler)
-
-gpio.add_event_detect(15, gpio.RISING, callback = shutdown, bouncetime = 2000)
+signal.signal(signal.SIGTERM, signal_handler)
+gpio.add_event_detect(buttonGPIO, gpio.RISING, callback = shutdown, bouncetime = 1000)
 
 while True:
   time.sleep(1)
