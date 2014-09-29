@@ -36,6 +36,9 @@ for pin in range(65,97):
 # Assign wiringPi pin numbers on MCP23017s to the Monotype control codes.
 wiringPiPinNumber = dict([('1', 65), ('2', 66), ('3', 67), ('4', 68), ('5', 69), ('6', 70), ('7', 71), ('8', 72), ('9', 73), ('10', 74), ('11', 75), ('12', 76), ('13', 77), ('14', 78), ('0005', 79), ('0075', 80), ('A', 81), ('B', 82), ('C', 83), ('D', 84), ('E', 85), ('F', 86), ('G', 87), ('H', 88), ('I', 89), ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])
 
+# Set up comment symbols for parsing the ribbon files:
+commentSymbol = '//'
+
 # This function enables tab key auto-completion when you enter the filename. Will definitely come in handy.
 def complete(text, state):
   return (glob.glob(text+'*')+[None])[state]
@@ -117,7 +120,10 @@ def cast(filename, mode):
       print("\nThe combinations of Monotype signals will be displayed on screen while the machine casts the type.\n")
       raw_input("\nInput file found. Press return to start casting.\n")
     for row in reader:
-      print(str.upper(' '.join(row)))
+      if ((' '.join(row)).startswith(commentSymbol)):
+        print(' '.join(row)[2:])
+      else:
+        print(str.upper(' '.join(row)))
 
 # Activate valves as specified in row, then wait and deactivate them. 
 # For punching, activate additional O15 the keyboard paper tower needs.:
@@ -126,7 +132,7 @@ def cast(filename, mode):
 #      deactivate_valves()
 			
 # Wait for interrupt from photocell and activate the valves
-      wiringpi.wiringPiISR(14, 3, activate_valves(mode, row))  # rising: activate, falling: deactivater
+        wiringpi.wiringPiISR(14, 3, activate_valves(mode, row))  # rising: activate, falling: deactivater
 
 # After casting/punching is finished:
 
