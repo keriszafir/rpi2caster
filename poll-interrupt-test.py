@@ -1,7 +1,7 @@
 #! /usr/bin/python
 import select, os
-
-f = open(os.path('/sys/class/gpio/gpio14/value'), 'r')
+gpiofilename='/sys/class/gpio/gpio14/value'
+f = open(gpiofilename, 'r')
 
 po = select.epoll()
 po.register(f, select.POLLPRI)
@@ -12,4 +12,5 @@ while 1:
     print('timeout')
   else:
     f.seek(0)
-    state.last=f.read()
+    state_last=f.read()
+    print 'debug'
