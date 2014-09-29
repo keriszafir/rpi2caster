@@ -1,17 +1,16 @@
 #! /usr/bin/python
-import select, os
+import select, os, sys, time
 gpiofilename='/sys/class/gpio/gpio14/value'
-f = open(gpiofilename, 'r')
 
-po = select.epoll()
-po.register(f, select.POLLPRI)
-
-while 1:
-  events = po.poll(10)
-  if not events:
-    print('timeout')
-    exit()
-  else:
-    f.seek(0)
-    state_last=f.read()
-    print 'waiting'
+with open(gpiofilename, 'r') as gpiostate:
+  po = select.epoll()
+  po.register(gpiostate, select.POLLPRI)
+  while 1:
+    events = po.poll(5)
+    if events:
+      gpiostate.seek(0)
+      state_last = gpiostate.read()
+      print 'Val: %s' % state_last
+    else:
+      print('Machine not running!')
+      exit()
