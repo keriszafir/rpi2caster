@@ -34,15 +34,16 @@ def blink(n,speed):
 
 def signal_handler(signal, frame):
   print("Terminated by OS")
-  blink(3,0.1)
+  if(signal==SIGINT):
+    blink(3,0.1)
 # turn the green LED off if you stop the program with ctrl-C or SIGTERM
-  gpio.output(ledGPIO,0)
+    gpio.output(ledGPIO,0)
   gpio.cleanup()
   os.system('echo "%s" > /sys/class/gpio/unexport' % photocellGPIO)
   sys.exit()
 
 def shutdown():
-  time.sleep(1000)
+  time.sleep(1)
   if (gpio.input(buttonGPIO) == 1):   #check if you're still pressing the button after 1sec
     blink(5,0.1)
     os.system("poweroff")
@@ -50,8 +51,6 @@ def shutdown():
     gpio.cleanup()
     os.system('echo "%s" > /sys/class/gpio/unexport' % photocellGPIO)
     sys.exit()
-  else
-    continue
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
