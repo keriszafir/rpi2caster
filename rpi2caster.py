@@ -1,25 +1,24 @@
 #!/usr/bin/python
 
 # Monotype composition caster & keyboard paper tower control program by Christophe Slychan
-# The program reads a "ribbon" file, then waits for the user to start casting or punching the paper tape. 
-# In the casting mode, during each machine cycle, the photocell is obscured (high state) or lit (low state). 
+# The program reads a "ribbon" file, then waits for the user to start casting or punching the paper tape.
+# In the casting mode, during each machine cycle, the photocell is obscured (high state) or lit (low state).
 # When high, the program reads a line from ribbon and turns on the solenoid valves respective to the Monotype control codes.
 # After the photocell is lit, the valves are turned off and the program moves on to the next line.
 
-import sys, os, time, string, csv, readline, glob
+import sys, os, time, string, csv, readline, glob, select
 import wiringpi2 as wiringpi
 
 #import RPi.GPIO as gpio
 
-# Commment out lines referring to RPi.GPIO or WiringPi, depending on which module you use for reading the photocell input.
-# RPi.GPIO requires you to run the program as root. WiringPi has some problems with input interrupt handling.
-
-# I think we'll stick with WiringPi. Less dependencies, can be configured to run as normal user. We still need it for MCP23017. 
-# WiringPi seems to have an interrupt handling if you use sysfs interface.
 # We need to set up the sysfs interface before (powerbuttond.py - a daemon running on boot with root privileges takes care of it)
 
+photocellGPIO = 14
+gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
+valueFileName = gpioSysfsPath + 'value'
+
 # Might need to change powerbuttond.py to set envvar or touch a file in /run to indicate that the photocell GPIO is initialized properly.
-# Or just check if the intput is exported... 
+# Or just check if the intput is exported...
 
 # In the future, we'll add configurable GPIO numbers. Why store the device config in the program source, if we can use a .conf file?
 
@@ -77,8 +76,8 @@ def menu():
     if inputFileName != "":
       print("Input file name: " + inputFileName + "\n")
 
-    ans = raw_input("Choose an option: ") 
-    if ans=="1": 
+    ans = raw_input("Choose an option: ")
+    if ans=="1":
       enter_filename()
       menu()
     elif ans=="2":
@@ -92,24 +91,39 @@ def menu():
     elif ans=="0":
       print("\nGoodbye! :)\n")
       exit()
-    elif ans !="":
+    else:
       print("\nNo such option. Choose again.")
 
-def activate_valves(mode, row):
-  if ( wiringpi.digitalRead(14) == 1):
-    for monotypeSignal in row:
-      pin = wiringPiPinNumber[str.upper(monotypeSignal)]
-      wiringpi.digitalWrite(pin,1)
-      if mode == "punch":
-        wiringpi.digitalWrite(wiringPiPinNumber["O15"],1)
-  else:
-    for pin in range(65,97):
-      wiringpi.digitalWrite(pin,0)
+def activate_valves(mode, signals):
+# Print signals fed to function and activate valves for them
+  print(str.upper(' '.join(signals)))
+  for monotypeSignal in signals:
+    pin = wiringPiPinNumber[str.upper(monotypeSignal)]
+    wiringpi.digitalWrite(pin,1)
+    if mode == "punch":
+      wiringpi.digitalWrite(wiringPiPinNumber["O15"],1)
 
+def deactivate_valves():
+  for pin in range(65,97):
+    wiringpi.digitalWrite(pin,0)
+
+
+def machine_stop():
+# Allow us to choose whether we want to continue, return to menu or exit if the machine stops during casting.
+  choice = raw_input("Machine not running!\n(C)ontinue, return to (M)enu or (E)xit program.")
+  if choice.lower() == 'c':
+    return True
+  elif choice.lower() == 'm':
+    menu()
+  elif choice.lower() == 'e':
+    exit()
+  else:
+    print("\nNo such option. Choose again.")
+
+def cast(filename, mode):
 # Main casting/punching routine.
 # When punching, the input file is read in reversed order and an additional line (O15) is switched on for operating the paper tower.
 # The input file can contain lowercase (a, b, g, s...) or uppercase (A, B, G, S...) signals. The program will translate them.
-def cast(filename, mode):
   with open(filename, 'rb') as ribbon:
     if mode == "punch":
       reader = csv.reader(ribbon, delimiter=';')
@@ -123,16 +137,32 @@ def cast(filename, mode):
       if ((' '.join(row)).startswith(commentSymbol)):
         print(' '.join(row)[2:])
       else:
-        print(str.upper(' '.join(row)))
+#        print(str.upper(' '.join(row)))
 
-# Activate valves as specified in row, then wait and deactivate them. 
+# Activate valves as specified in row, then wait and deactivate them.
 # For punching, activate additional O15 the keyboard paper tower needs.:
 #      activate_valves(mode, row)
 #      time.sleep(2)
 #      deactivate_valves()
-			
-# Wait for interrupt from photocell and activate the valves
-        wiringpi.wiringPiISR(14, 3, activate_valves(mode, row))  # rising: activate, falling: deactivater
+
+        with open(valueFileName, 'r') as gpiostate:
+          po = select.epoll()
+          po.register(gpiostate, select.POLLPRI)
+          previousState = "undefined"
+          while 1:
+            events = po.poll(5)
+            if events:
+              gpiostate.seek(0)
+              photocellState = int(gpiostate.read())
+              if photocellState == 1:
+                activate_valves(mode, row)
+                previousState = 1
+              elif photocellState == 0 and previousState == 1:
+                deactivate_valves()
+                previousState = 0
+                break
+            else:
+              machine_stop()
 
 # After casting/punching is finished:
 
