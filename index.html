@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>rpi2caster by elegantandrogyne</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">rpi2caster</h1>
+        <p class="header">Raspberry Pi controls a Monotype composition caster.</p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/elegantandrogyne/rpi2caster/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/elegantandrogyne/rpi2caster/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/elegantandrogyne/rpi2caster">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/elegantandrogyne">elegantandrogyne</a></p>
+
+
+      </header>
+      <section>
+        <h1>
+<a name="rpi2caster" class="anchor" href="#rpi2caster"><span class="octicon octicon-link"></span></a>rpi2caster</h1>
+
+<p>Raspberry Pi controls a Monotype composition caster, which is a machine designed in late 19th century for casting composed type according to a "program" written on a perforated paper tape. These casters are still used by printshops using traditional lead type &amp; press technology.</p>
+
+<p>I've chosen Raspberry Pi Mod. B (for future devices it'll be replaced by B+, a redesigned PCB which is a bit nicer to build into projects). The Raspberry has to be connected via GPIO with the following peripherals:</p>
+
+<ol>
+<li>32 solenoid valves controlling the air flowing into one or more of 31 composition caster's air tubes</li>
+<li>Machine cycle sensor, which determines when the air flows (originally, an air manifold was pressed against paper tape and air flowed through holes into the tubes)</li>
+</ol><p>Optionally, the Raspberry can be connected to:
+1. Shutdown button for shutting the Raspberry down without entering any commands
+2. Power LED lighting up when the machine is ready
+3. Valve indicator LEDs showing the valves/airlines which are currently on
+4. Temperature sensor(s) for cooling water, lead etc. temperatures
+5. Motor on, motor off relays (you can do that to turn the machine on/off automatically... but you'd need to modify the caster's wiring)
+6. Clutch trigger solenoid - this can be done as well</p>
+
+<p>The program logic will be based on computer2caster by John Cornelisse
+Original idea described at <a href="http://letterpress.ch">http://letterpress.ch</a></p>
+
+<p>Contrary to computer2caster, this program features:</p>
+
+<ol>
+<li>getting rid of all obsolete hardware and software [M$ DOS and LPT / RS232 ports] as well as hardware/software limitation workarounds, mostly relating to the M$ QuickC2 compiler used for building computer2caster</li>
+<li>self-contained, embedded system which can be controlled with local KVM (HDMI/composite video for display, USB for keyboard &amp; mouse) as well as SSH or VNC over the network</li>
+<li>using MySQL for storing all data relating to matrices and matrix cases, instead of hardcoding the layout data (thus enabling data management with e.g. LibreOffice Base or web apps)</li>
+<li>native support for UTF-8 - no codepages and so on!</li>
+<li>possible developments in the future: web app front-end, reading typesetting from formatted input files [PDF, ODS, DOC, LaTeX...] etc.</li>
+</ol><h1>
+<a name="hardware" class="anchor" href="#hardware"><span class="octicon octicon-link"></span></a>Hardware</h1>
+
+<ol>
+<li>Get a Raspberry Pi mod B or B+ and install Raspbian</li>
+<li>Make a pneumatic interface that attaches on the Monotype's paper tower - or have it made by someone with a CNC mill. 
+This is the hardest part. The pneumatic interface must be very precisely done, so that holes are aligned with those on the paper tower and no air leaks.</li>
+<li>Get 31 three-way (3/2) solenoid valves on valve islands. 12 or 24V DC. 
+IMPORTANT: Some valves require minimum air pressure of 2...2.5bar. Since the Monotype uses only 1bar, 
+the pressure differential across the valve will be too low and the valve won't open. We need the 0bar minimum 
+pressure variety, even though they may take more electrical power to open.
+John Cornelisse used the MATRIX (Italy) BX758 series. The valve block is very compact. It features 8 valves in 
+a 55x55mm enclosure, with 12V DC or 24V DC controls and minimal pressure of 0 bar.</li>
+<li>Make a RPi I2C I/O extension as shown at:
+<a href="http://www.abelectronics.co.uk/products/3/Raspberry-Pi/18/IO-Pi-32-Channel-Port-Expander-for-the-Raspberry-Pi-computer-boards">http://www.abelectronics.co.uk/products/3/Raspberry-Pi/18/IO-Pi-32-Channel-Port-Expander-for-the-Raspberry-Pi-computer-boards</a>
+I built a module using a THT prototyping board and DIP IC's. You also need FET or bipolar
+drivers to connect the MCP23017 outputs with each of the solenoid valves. Four ULN2803 ICs (8-channel Darlington drivers 
+with surge suppressing diodes) are perfect for this. Each MCP23017 uses one ULN2803 for port A and one for port B.
+You have to choose different I2C bus addresses for both MCP23017. This is achieved by connecting different combinations of A0, A1
+and A2 input (pin numbers 15, 16, 17) to +3V3 or GND. For my device, I've chosen 0x20 (all pins grounded) for the chip that 
+controls rows, and 1x20 (3V3 on pin 15 and pins 16, 17 grounded) for the chip that controls columns.</li>
+<li>A power supply capable of 5V 1A (regulated) and 24V 2...5A. I used a nice SMPS salvaged from a fax machine.</li>
+</ol><h1>
+<a name="system" class="anchor" href="#system"><span class="octicon octicon-link"></span></a>System</h1>
+
+<p>You need to install some software to use the RPi GPIO for controlling the interface.</p>
+
+<p>Raspbian jessie or later. It may work on wheezy, but I'm not sure.
+    Initial setup (Squeeze won't work because SSH is disabled by default; you have to set up with a local console!):
+        Install an utility called nmap and scan your network to find the running hosts by typing "nmap -sP {subnet IP address}". For example, "nmap -sP 192.168.1.0/24" if your IP address is 192.168.1.x.
+    Connect the Raspberry to your LAN and power. It should get its IP address by DHCP. Try to scan the network by running 
+        "nmap -sP {subnet IP address}" again; you should see one more IP address and that's probably your RPi.
+        SSH into it (username: pi, password: raspberry). Since it's your first logon, raspi-config will start automatically. 
+        Expand rootfs, choose locale, timezone &amp; keyboard layout. You can change the hostname (I've named my machine "monotype"), 
+        set up the password etc. Exit raspi-config when you're done.
+    As for network setup - I recommend either a static IP, or setting up your router to offer Raspberry a a static DHCP lease based on the MAC address, so that Raspberry's IP address will remain the same. You can also scan the network for hosts 
+    with the RPi's MAC address after each boot to determine the IP address. 
+    Create user accounts and disable no-password sudoing for "pi" by commenting out the respective line in /etc/sudoers (for security reasons). You may want to  remove "pi" from the "sudo" and "adm" groups as well.
+    Add new users to groups user "pi" belongs to, and also the "gpio" and "i2c" groups. 
+        Since you'll log on the machine via SSH, you can use a RSA key authentication instead of entering a password on each logon.
+        Create a ~/.ssh/authorized_keys file and paste your account@machine's id_rsa.pub contents there. Then you can just ssh by typing
+        "ssh username@ip" or "ssh username@hostname" if you have a local DNS server on your network. 
+        You may want to change sysvinit to systemd (for Jessie), bash to zsh etc. if you want to, know what you're doing 
+    and don't have anything against fiddling with your config files.
+    You can enable GUI access by VNC if you want to use a graphical interface. Install tightvncserver. Edit /etc/lightdm/lightdm.conf and uncomment the lines in VNC section. 
+    Change the port, geometry etc. if you wish. You don't have to create any init scripts; lightdm will already take care of running the
+    VNC server. Just run "vncviewer [hostname or IP addr]:[port]" client-side and you'll get a lightdm login screen. Sign in to your account.
+    If you want to use the pins 8 and 10 on the P1 header (which are used as UART's RxD and TxD lines by default), you have to disable
+    the serial port. That is done by editing two files:
+    /etc/inittab: we have to comment out any lines containing the "ttyAMA0 115200 vt100" string
+    /boot/cmdline.txt: remove all references to ttyAMA0</p>
+
+<h1>
+<a name="dependencies" class="anchor" href="#dependencies"><span class="octicon octicon-link"></span></a>Dependencies</h1>
+
+<p>Some of the dependencies will be marked as "(repo)". This means that you can install them from Raspbian repository using apt or aptitude.
+1. RPi.GPIO Python library - <a href="https://pypi.python.org/packages/source/R/RPi.GPIO">https://pypi.python.org/packages/source/R/RPi.GPIO</a>
+    Make sure you have python-dev and python3-dev installed (build dependencies). Download, untar and run "sudo python setup.py install".
+2. libi2c-dev (repo) - I2C device library, which provides the I2C kernel module.
+    Install with "sudo aptitude install libi2c-dev"
+    After installing i2c-dev, add user(s) to the i2c group unless you want to run the software as root, which is obviously not recommended. 
+    Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
+    Remove (or comment) the i2c-bcm2708 in /etc/modprobe.d/raspi-blacklist.conf
+3. wiringPi2 library - find it (with setup instructions) at <a href="https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/">https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/</a>
+    This is required for programs to access GPIO.
+4. i2c-tools (repo) - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging. libi2c-dev depends on i2c-tools, so this will already be installed in step 2.
+5. python-smbus (repo), Python SMBus &amp; I2C library, probably not necessary thanks to wiringpi
+6. python-setuptools (repo) - you need it to install a Python module for WiringPi
+7. WiringPi2-Python - install it from GitHub. Instructions at <a href="https://github.com/WiringPi/WiringPi2-Python/blob/master/README">https://github.com/WiringPi/WiringPi2-Python/blob/master/README</a>
+8. gpio - command line utility for GPIO setup &amp; management, used by powerbuttond.py</p>
+
+<h1>
+<a name="garbage-removal" class="anchor" href="#garbage-removal"><span class="octicon octicon-link"></span></a>Garbage removal</h1>
+
+<p>The original Raspbian distro has some unneeded software installed by default. We can get rid of it by using "sudo aptitude purge...":
+-wolfram-engine - removing it will clean aomewhere around 450MB (!)
+-X, LXDE etc. unless you want to VNC into the machine or set up a local console with GUI
+-LibreOffice
+-anything related to Scratch</p>
+
+<p>You may be interested in an unofficial image called "Raspbian Server Edition", which is a stripped and lightweight Raspbian without any desktop environments etc.</p>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="http://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
