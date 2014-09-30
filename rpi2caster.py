@@ -42,18 +42,20 @@ commentSymbol = '//'
 def complete(text, state):
   return (glob.glob(text+'*')+[None])[state]
 readline.set_completer_delims(' \t\n;')
-readline.parse_and_bind("tab: complete")
+readline.parse_and_bind('tab: complete')
 readline.set_completer(complete)
 
 global inputFileName
 inputFileName = ""
 def enter_filename():
   global inputFileName
-  inputFileName = raw_input("\n Enter the ribbon file name: ")
+  inputFileName = raw_input('\n Enter the ribbon file name: ')
 
 def menu():
-  os.system("clear")
-  print("rpi2caster - Monotype Composition Caster control utility by Christophe Slychan.\n\nThis program reads a ribbon (input file) and casts the type on a Composition Caster, or punches a paper tape.\n")
+# Main menu. On entering, clear the screen and turn any valves off.
+  os.system('clear')
+  deactivate_valves()
+  print('rpi2caster - Monotype Composition Caster control utility.\n\nThis program reads a ribbon (input file) and casts the type on a Composition Caster, \nor punches a paper tape with a Monotype keyboard\'s paper tower.\n')
   ans = True
   while ans:
     print ("""
@@ -67,50 +69,52 @@ def menu():
 
 		4. Calibrate the caster
 
+		5. Test the valves and pinblocks
+
 
 
 		0. Exit to shell
 
 		""")
 
-    if inputFileName != "":
-      print("Input file name: " + inputFileName + "\n")
+    if inputFileName != '':
+      print('Input file name: %s\n' % os.path.realpath(inputFileName))
 
-    ans = raw_input("Choose an option: ")
-    if ans=="1":
+    ans = raw_input('Choose an option: ')
+    if ans=='1':
       enter_filename()
       menu()
-    elif ans=="2":
-      cast(inputFileName, "cast")
-    elif ans=="3":
-      cast(inputFileName, "punch")
-    elif ans=="4":
-      print("\n Testing the machine...")
+    elif ans=='2':
+      cast(inputFileName)
+    elif ans=='3':
+      punch(inputFileName)
+    elif ans=='4':
+      print('\n Testing the machine...')
+    elif ans=='5':
+      print('This will check if the valves, pin blocks and 0005, S, 0075 are working')
 
-
-    elif ans=="0":
-      print("\nGoodbye! :)\n")
+    elif ans=='0':
+      print('\nGoodbye! :)\n')
       exit()
     else:
-      print("\nNo such option. Choose again.")
+      print('\nNo such option. Choose again.')
 
 def activate_valves(mode, signals):
-# Print signals fed to function and activate valves for them
-  print(str.upper(' '.join(signals)))
+# Activates the valves corresponding to signals found in file
   for monotypeSignal in signals:
     pin = wiringPiPinNumber[str.upper(monotypeSignal)]
     wiringpi.digitalWrite(pin,1)
-    if mode == "punch":
-      wiringpi.digitalWrite(wiringPiPinNumber["O15"],1)
+    if mode == 'punch':
+      wiringpi.digitalWrite(wiringPiPinNumber['O15'],1)
 
 def deactivate_valves():
   for pin in range(65,97):
     wiringpi.digitalWrite(pin,0)
 
 
-def machine_stop():
+def machine_stopped():
 # Allow us to choose whether we want to continue, return to menu or exit if the machine stops during casting.
-  choice = raw_input("Machine not running!\n(C)ontinue, return to (M)enu or (E)xit program.")
+  choice = raw_input("Machine not running! Check what's going on.'\n(C)ontinue, return to (M)enu or (E)xit program.")
   if choice.lower() == 'c':
     return True
   elif choice.lower() == 'm':
@@ -118,75 +122,82 @@ def machine_stop():
   elif choice.lower() == 'e':
     exit()
   else:
-    print("\nNo such option. Choose again.")
+    print('\nNo such option. Choose again.')
 
-def cast(filename, mode):
-# Main casting/punching routine.
+def cast(filename):
+# Casting routine.
+# The input file can contain lowercase (a, b, g, s...) or uppercase (A, B, G, S...) signals. The program will translate them.
+  with open(filename, 'rb') as ribbon:
+    mode = 'cast'
+    fileContents = reversed(list(csv.reader(ribbon, delimiter=';')))
+    print('\nThe combinations of Monotype signals will be displayed on screen while the machine casts the type.\n')
+    raw_input('\nInput file found. Press return to start casting.\n')
+    code_reader(fileContents, mode)
+
+def punch(filename):
+# Punching routine.
 # When punching, the input file is read in reversed order and an additional line (O15) is switched on for operating the paper tower.
 # The input file can contain lowercase (a, b, g, s...) or uppercase (A, B, G, S...) signals. The program will translate them.
   with open(filename, 'rb') as ribbon:
-    if mode == "punch":
-      reader = csv.reader(ribbon, delimiter=';')
-      print("\nThe combinations of Monotype signals will be displayed on screen while the paper tower punches the ribbon.\n")
-      raw_input("\nInput file found. Turn on the air, fit the tape on your paper tower and press return to start punching.\n")
+    mode = 'punch'
+    fileContents = csv.reader(ribbon, delimiter=';')
+    print('\nThe combinations of Monotype signals will be displayed on screen while the paper tower punches the ribbon.\n')
+    raw_input('\nInput file found. Turn on the air, fit the tape on your paper tower and press return to start punching.\n')
+    code_reader(fileContents, mode)
+
+def code_reader(fileContents, mode):
+# A function that works on ribbon file's contents and casts/punches signals, row by row
+  for row in fileContents:
+    # check if the row begins with a defined comment symbol - if so, print it but don't turn on the valves
+    if ((' '.join(row)).startswith(commentSymbol)):
+      print(' '.join(row)[2:])
     else:
-      reader = reversed(list(csv.reader(ribbon, delimiter=';')))
-      print("\nThe combinations of Monotype signals will be displayed on screen while the machine casts the type.\n")
-      raw_input("\nInput file found. Press return to start casting.\n")
-    for row in reader:
-      if ((' '.join(row)).startswith(commentSymbol)):
-        print(' '.join(row)[2:])
-      else:
-#        print(str.upper(' '.join(row)))
-
-# Activate valves as specified in row, then wait and deactivate them.
-# For punching, activate additional O15 the keyboard paper tower needs.:
-#      activate_valves(mode, row)
-#      time.sleep(2)
-#      deactivate_valves()
-
-        with open(valueFileName, 'r') as gpiostate:
-          po = select.epoll()
-          po.register(gpiostate, select.POLLPRI)
-          previousState = "undefined"
-          while 1:
-            events = po.poll(5)
-            if events:
-              gpiostate.seek(0)
-              photocellState = int(gpiostate.read())
-              if photocellState == 1:
-                activate_valves(mode, row)
-                previousState = 1
-              elif photocellState == 0 and previousState == 1:
-                deactivate_valves()
-                previousState = 0
-                break
-            else:
-              machine_stop()
-
+      cast_row(row, mode)
 # After casting/punching is finished:
-
   raw_input("\nEnd of ribbon. All done. Press return to go to main menu.")
   main()
 
-# Main loop definition. All exceptions should be caught here.
+
+def cast_row(signals, mode):
+# Detect events on a photocell input and cast all signals in a row.
+# Ask the user what to do if the machine is stopped (no events).
+  with open(valueFileName, 'r') as gpiostate:
+    po = select.epoll()
+    po.register(gpiostate, select.POLLPRI)
+    previousState = 0
+    while 1:
+      events = po.poll(5)
+      if events:
+      # machine is working
+        gpiostate.seek(0)
+        photocellState = int(gpiostate.read())
+        if photocellState == 1:
+          activate_valves(mode, signals)
+          previousState = 1
+        elif photocellState == 0 and previousState == 1:
+        # print signals so that we know what we cast
+          print(str.upper(' '.join(signals)))
+          deactivate_valves()
+          previousState = 0
+          break
+      else:
+        # if machine isn't working, the photocell status is not changing
+        machine_stopped()
+
+
+
 def main():
+# Main loop definition. All exceptions should be caught here.
   try:
     menu()
-  except RuntimeError:
-    print("\nYou must run this program as root!")
-#  except (IOError, NameError):
-#    raw_input("\nInput file not chosen or wrong input file name. Press return to go to main menu.\n")
-#    main()
+  except (IOError, NameError):
+    raw_input("\nInput file not chosen or wrong input file name. Press return to go to main menu.\n")
+    main()
   except KeyboardInterrupt:
     print("Terminated by user.")
-    for pin in range(65,97):
-      wiringpi.digitalWrite(pin, 0)
     exit()
   finally:
-    for pin in range(65,97):
-      wiringpi.digitalWrite(pin, 0)
-#    gpio.cleanup()
+    deactivate_valves()
 
 # Do the main loop.
 main()
