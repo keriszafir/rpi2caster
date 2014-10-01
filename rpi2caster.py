@@ -58,7 +58,7 @@ def menu():
 # Main menu. On entering, clear the screen and turn any valves off.
   os.system('clear')
   deactivate_valves()
-  print('rpi2caster - Monotype Composition Caster control utility.\n\nThis program reads a ribbon (input file) and casts the type on a Composition Caster, \nor punches a paper tape with a Monotype keyboard\'s paper tower.\n')
+  print('rpi2caster - CAT (Computer-Aided Typecasting) for Monotype Composition or Type and Rule casters.\n\nThis program reads a ribbon (input file) and casts the type on a Composition Caster, \nor punches a paper tape with a Monotype keyboard\'s paper tower.\n')
   ans = True
   while ans:
     print ("""
@@ -173,6 +173,7 @@ def line_test():
   raw_input('\nTesting done. Press return to go to main menu.')
 
 def cast_sorts():
+  # Ask user about the diecase row & column, as well as number of sorts
   os.system('clear')
   print('Calibration and Sort Casting:\n\n')
   column = raw_input('Enter column symbol (default: G)').upper()
@@ -190,6 +191,8 @@ def cast_sorts():
   n = int(n)
   choice = raw_input('\nWe\'ll cast %s%s, %s times.\n(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?' % (column, row, n)
   if choice.lower() == 'c':
+
+    # Cast the sorts
     print('Starting the pump...')
     cast_row(['0075'], 'cast', 5)
     print('Casting characters...')
@@ -197,6 +200,8 @@ def cast_sorts():
       cast_row(signal, 'cast', 5)
     print('Stopping pump and putting line to the galley...')
     cast_row(['0005', '0075'], 'cast', 5)
+
+    # Ask what to do after casting
     finishedChoice = raw_input('Finished!\n(R)epeat, go back to (M)enu or (E)xit program?')
     if finishedChoice.lower() == 'r':
       cast_sorts()
