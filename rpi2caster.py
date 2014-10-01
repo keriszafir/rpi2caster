@@ -70,7 +70,7 @@ def menu():
 
 		3. Punch a paper tape
 
-		4. Calibrate the caster
+		4. Calibrate the caster or cast sorts
 
 		5. Test the valves and pinblocks
 
@@ -92,9 +92,8 @@ def menu():
     elif ans=='3':
       punch(inputFileName)
     elif ans=='4':
-      print('\n Testing the machine...')
+      cast_sorts()
     elif ans=='5':
-      raw_input('This will check if the valves, pin blocks and 0005, S, 0075 mechanisms are working. Press return to continue...')
       line_test()
 
     elif ans=='0':
@@ -126,6 +125,7 @@ def machine_stopped():
   elif choice.lower() == 'm':
     menu()
   elif choice.lower() == 'e':
+    deactivate_valves()
     exit()
   else:
     print('\nNo such option. Choose again.')
@@ -164,12 +164,61 @@ def code_reader(fileContents, mode):
 def line_test():
 # Test all valves and composition caster's inputs to check if everything works and is properly connected
 # Signals will be tested in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL, MNH, MNK
+  raw_input('This will check if the valves, pin blocks and 0005, S, 0075 mechanisms are working. Press return to continue...')
   for signal in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'], ['5'], ['6'], ['7'],
               ['8'], ['9'], ['10'], ['11'], ['12'], ['13'], ['14'], ['A'], ['B'], ['C'], ['D'],
               ['E'], ['F'], ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
               ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
     cast_row(signal, 'cast', 60)
   raw_input('\nTesting done. Press return to go to main menu.')
+
+def cast_sorts():
+  os.system('clear')
+  print('Calibration and Sort Casting:\n\n')
+  column = raw_input('Enter column symbol (default: G)').upper()
+  row = raw_input('Enter row number (default: 5)')
+  if not row.isdigit() or int(row) > 16 or int(row) < 1:
+    print('Wrong row number. Defaulting to 5.'):
+    row = '5'
+  if not column.isalpha():
+    print('Wrong column symbol. Defaulting to G.'):
+    column = 'G'
+  n = raw_input('How many do you want to cast? (default: 10)')
+  if not n.isdigit() or int(n) <= 0:
+    print('Incorrect number. Defaulting to 10.')
+    n = '10'
+  n = int(n)
+  choice = raw_input('\nWe\'ll cast %s%s, %s times.\n(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?' % (column, row, n)
+  if choice.lower() == 'c':
+    print('Starting the pump...')
+    cast_row(['0075'], 'cast', 5)
+    print('Casting characters...')
+    for signal in [[row, column] * n]:
+      cast_row(signal, 'cast', 5)
+    print('Stopping pump and putting line to the galley...')
+    cast_row(['0005', '0075'], 'cast', 5)
+    finishedChoice = raw_input('Finished!\n(R)epeat, go back to (M)enu or (E)xit program?')
+    if finishedChoice.lower() == 'r':
+      cast_sorts()
+    elif finishedChoice.lower() == 'm':
+      menu()
+    elif finishedChoice.lower() == 'e':
+      deactivate_valves()
+      exit()
+    else:
+    print('\nNo such option. Choose again.')
+
+  elif choice.lower() == 'r':
+    cast_sorts()
+  elif choice.lower() == 'm':
+    menu()
+  elif choice.lower() == 'e':
+    deactivate_valves()
+    exit()
+  else:
+    print('\nNo such option. Choose again.')
+
+
 
 def cast_row(signals, mode, machineTimeout):
 # Detect events on a photocell input and cast all signals in a row.
