@@ -158,7 +158,7 @@ def code_reader(fileContents, mode):
     else:
       cast_row(row, mode, 5)
 # After casting/punching is finished:
-  raw_input("\nEnd of ribbon. All done. Press return to go to main menu.")
+  raw_input('\nEnd of ribbon. All done. Press return to go to main menu.')
   main()
 
 def line_test():
@@ -169,7 +169,7 @@ def line_test():
               ['E'], ['F'], ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
               ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
     cast_row(signal, 'cast', 60)
-  raw_input("\nTesting done. Press return to go to main menu.")
+  raw_input('\nTesting done. Press return to go to main menu.')
 
 def cast_row(signals, mode, machineTimeout):
 # Detect events on a photocell input and cast all signals in a row.
@@ -203,9 +203,9 @@ def main():
 # Main loop definition. All exceptions should be caught here.
   try:
     menu()
-#  except (IOError, NameError):
-#    raw_input("\nInput file not chosen or wrong input file name. Press return to go to main menu.\n")
-#    main()
+  except (IOError, NameError):
+    raw_input("\nInput file not chosen or wrong input file name. Press return to go to main menu.\n")
+    main()
   except KeyboardInterrupt:
     print("Terminated by user.")
     exit()
