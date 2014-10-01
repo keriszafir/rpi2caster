@@ -91,7 +91,8 @@ def menu():
     elif ans=='4':
       print('\n Testing the machine...')
     elif ans=='5':
-      print('This will check if the valves, pin blocks and 0005, S, 0075 are working')
+      raw_input('This will check if the valves, pin blocks and 0005, S, 0075 mechanisms are working. Press return to continue...')
+      line_test()
 
     elif ans=='0':
       print('\nGoodbye! :)\n')
@@ -152,13 +153,22 @@ def code_reader(fileContents, mode):
     if ((' '.join(row)).startswith(commentSymbol)):
       print(' '.join(row)[2:])
     else:
-      cast_row(row, mode)
+      cast_row(row, mode, 5)
 # After casting/punching is finished:
   raw_input("\nEnd of ribbon. All done. Press return to go to main menu.")
   main()
 
+def line_test():
+# Test all valves and composition caster's inputs to check if everything works and is properly connected
+# Signals will be tested in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL, MNH, MNK
+  for signal in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'], ['5'], ['6'], ['7'],
+              ['8'], ['9'], ['10'], ['11'], ['12'], ['13'], ['14'], ['A'], ['B'], ['C'], ['D'],
+              ['E'], ['F'], ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
+              ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
+    cast_row(signal, 'cast', 60)
+  raw_input("\nTesting done. Press return to go to main menu.")
 
-def cast_row(signals, mode):
+def cast_row(signals, mode, machineTimeout):
 # Detect events on a photocell input and cast all signals in a row.
 # Ask the user what to do if the machine is stopped (no events).
   with open(valueFileName, 'r') as gpiostate:
@@ -166,17 +176,17 @@ def cast_row(signals, mode):
     po.register(gpiostate, select.POLLPRI)
     previousState = 0
     while 1:
-      events = po.poll(5)
+      events = po.poll(machineTimeout)
       if events:
       # machine is working
         gpiostate.seek(0)
         photocellState = int(gpiostate.read())
         if photocellState == 1:
+        # print signals to console, so that we know what we cast or test
+          print(str.upper(' '.join(signals)))
           activate_valves(mode, signals)
           previousState = 1
         elif photocellState == 0 and previousState == 1:
-        # print signals so that we know what we cast
-          print(str.upper(' '.join(signals)))
           deactivate_valves()
           previousState = 0
           break
@@ -190,9 +200,9 @@ def main():
 # Main loop definition. All exceptions should be caught here.
   try:
     menu()
-  except (IOError, NameError):
-    raw_input("\nInput file not chosen or wrong input file name. Press return to go to main menu.\n")
-    main()
+#  except (IOError, NameError):
+#    raw_input("\nInput file not chosen or wrong input file name. Press return to go to main menu.\n")
+#    main()
   except KeyboardInterrupt:
     print("Terminated by user.")
     exit()
