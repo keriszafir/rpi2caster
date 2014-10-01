@@ -9,37 +9,40 @@
 import sys, os, time, string, csv, readline, glob, select
 import wiringpi2 as wiringpi
 
-#import RPi.GPIO as gpio
+def input_setup():
+  # We need to set up the sysfs interface before (powerbuttond.py - a daemon running on boot with root privileges takes care of it)
+  # In the future, we'll add configurable GPIO numbers. Why store the device config in the program source, if we can use a .conf file?
+  photocellGPIO = 14
+  gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
+  global valueFileName
+  valueFileName = gpioSysfsPath + 'value'
+  edgeFileName = gpioSysfsPath + 'edge'
 
-# We need to set up the sysfs interface before (powerbuttond.py - a daemon running on boot with root privileges takes care of it)
+  # Check if the photocell GPIO has been configured:
+  if not os.access(valueFileName, os.R_OK):
+    print('%s: file does not exist or cannot be read. You must export the GPIO no %i as input first!' % (valueFileName, photocellGPIO))
+    exit()
+  # Check if the interrupts are generated for photocell GPIO rising AND falling edge:
+  with open(edgeFileName, 'r') as edgeFile:
+    if (edgeFile.read()[:4] != "both"):
+      print('%s: file does not exist, cannot be read or the interrupt on GPIO no %i is not set to "both". Check the system config.' % (edgeFileName, photocellGPIO))
+      exit()
 
-photocellGPIO = 14
-gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
-valueFileName = gpioSysfsPath + 'value'
+def output_setup():
+  # Setup the wiringPi MCP23017 chips for valve outputs:
+  wiringpi.mcp23017Setup(65,0x20)
+  wiringpi.mcp23017Setup(81,0x21)
+  for pin in range(65,97):
+    wiringpi.pinMode(pin,1)
+  # Assign wiringPi pin numbers on MCP23017s to the Monotype control codes.
+  global wiringPiPinNumber
+  wiringPiPinNumber = dict([('1', 65), ('2', 66), ('3', 67), ('4', 68), ('5', 69), ('6', 70), ('7', 71), ('8', 72), ('9', 73), ('10', 74), ('11', 75), ('12', 76), ('13', 77), ('14', 78), ('0005', 79), ('0075', 80), ('A', 81), ('B', 82), ('C', 83), ('D', 84), ('E', 85), ('F', 86), ('G', 87), ('H', 88), ('I', 89), ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])
 
-# Might need to change powerbuttond.py to set envvar or touch a file in /run to indicate that the photocell GPIO is initialized properly.
-# Or just check if the intput is exported...
-
-# In the future, we'll add configurable GPIO numbers. Why store the device config in the program source, if we can use a .conf file?
-
-wiringpi.wiringPiSetupSys()
-#wiringpi.pinMode(14, 0) # already taken care of in powerbuttond.py
-#gpio.setmode(gpio.BCM)
-#gpio.setup(14, gpio.IN, pull_up_down = gpio.PUD_UP)
-#gpio.add_event_detect(14, gpio.RISING, bouncetime = 10)
-wiringpi.mcp23017Setup(65,0x20)
-wiringpi.mcp23017Setup(81,0x21)
-for pin in range(65,97):
-  wiringpi.pinMode(pin,1)
-
-# Assign wiringPi pin numbers on MCP23017s to the Monotype control codes.
-wiringPiPinNumber = dict([('1', 65), ('2', 66), ('3', 67), ('4', 68), ('5', 69), ('6', 70), ('7', 71), ('8', 72), ('9', 73), ('10', 74), ('11', 75), ('12', 76), ('13', 77), ('14', 78), ('0005', 79), ('0075', 80), ('A', 81), ('B', 82), ('C', 83), ('D', 84), ('E', 85), ('F', 86), ('G', 87), ('H', 88), ('I', 89), ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])
-
-# Set up comment symbols for parsing the ribbon files:
+  # Set up comment symbols for parsing the ribbon files:
 commentSymbol = '//'
 
-# This function enables tab key auto-completion when you enter the filename. Will definitely come in handy.
 def complete(text, state):
+# This function enables tab key auto-completion when you enter the filename. Will definitely come in handy.
   return (glob.glob(text+'*')+[None])[state]
 readline.set_completer_delims(' \t\n;')
 readline.parse_and_bind('tab: complete')
@@ -101,7 +104,9 @@ def menu():
       print('\nNo such option. Choose again.')
 
 def activate_valves(mode, signals):
-# Activates the valves corresponding to signals found in file
+# Activates the valves corresponding to Monotype signals found in an array fed to the function.
+# The input array can contain lowercase (a, b, g, s...) or uppercase (A, B, G, S...) signals.
+# In "punch" mode, an additional line (O+15) will be activated.
   for monotypeSignal in signals:
     pin = wiringPiPinNumber[str.upper(monotypeSignal)]
     wiringpi.digitalWrite(pin,1)
@@ -127,7 +132,6 @@ def machine_stopped():
 
 def cast(filename):
 # Casting routine.
-# The input file can contain lowercase (a, b, g, s...) or uppercase (A, B, G, S...) signals. The program will translate them.
   with open(filename, 'rb') as ribbon:
     mode = 'cast'
     fileContents = reversed(list(csv.reader(ribbon, delimiter=';')))
@@ -138,7 +142,6 @@ def cast(filename):
 def punch(filename):
 # Punching routine.
 # When punching, the input file is read in reversed order and an additional line (O15) is switched on for operating the paper tower.
-# The input file can contain lowercase (a, b, g, s...) or uppercase (A, B, G, S...) signals. The program will translate them.
   with open(filename, 'rb') as ribbon:
     mode = 'punch'
     fileContents = csv.reader(ribbon, delimiter=';')
@@ -210,4 +213,6 @@ def main():
     deactivate_valves()
 
 # Do the main loop.
+input_setup()
+output_setup()
 main()
