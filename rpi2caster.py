@@ -160,9 +160,11 @@ def code_reader(fileContents, mode):
 
 def line_test():
 # Test all valves and composition caster's inputs to check if everything works and is properly connected
+# Signals will be tested in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL, MNH, MNK
   for signal in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'], ['5'], ['6'], ['7'],
               ['8'], ['9'], ['10'], ['11'], ['12'], ['13'], ['14'], ['A'], ['B'], ['C'], ['D'],
-              ['E'], ['F'], ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15']]:
+              ['E'], ['F'], ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
+              ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']:
     cast_row(signal, 'cast', 60)
   raw_input("\nTesting done. Press return to go to main menu.")
 
@@ -180,7 +182,7 @@ def cast_row(signals, mode, machineTimeout):
         gpiostate.seek(0)
         photocellState = int(gpiostate.read())
         if photocellState == 1:
-        # print signals so that we know what we cast or test
+        # print signals to console, so that we know what we cast or test
           print(str.upper(' '.join(signals)))
           activate_valves(mode, signals)
           previousState = 1
