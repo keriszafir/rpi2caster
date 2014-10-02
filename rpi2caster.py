@@ -92,7 +92,7 @@ def menu():
     elif ans=='3':
       punch_composition(inputFileName)
     elif ans=='4':
-      cast_sorts()
+      sorts_menu()
     elif ans=='5':
       line_test()
 
@@ -176,13 +176,13 @@ def line_test():
     cast_row(signal, 'cast', 60)
   raw_input('\nTesting done. Press return to go to main menu.')
 
-def cast_sorts():
+def sorts_menu():
   # Ask user about the diecase row & column, as well as number of sorts
   os.system('clear')
   print('Calibration and Sort Casting:\n\n')
-  column = raw_input('Enter column symbol (default: G)').upper()
-  row = raw_input('Enter row number (default: 5)')
-  n = raw_input('How many do you want to cast? (default: 10)')
+  column = raw_input('Enter column symbol (default: G) ').upper()
+  row = raw_input('Enter row number (default: 5) ')
+  n = raw_input('How many do you want to cast? (default: 10) ')
   if not row.isdigit() or int(row) > 16 or int(row) < 1:
     print('Wrong row number. Defaulting to 5.')
     row = '5'
@@ -194,37 +194,13 @@ def cast_sorts():
     n = '10'
   n = int(n)
   choice = ''
+  os.system('clear')
   while choice == '':
     choice = raw_input('\nWe\'ll cast %s%s, %s times.\n(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?' % (column, row, n))
     if choice.lower() == 'c':
-      # Cast the sorts; turn on the pump first
-      print('Starting the pump...')
-      cast_row(['0075'], 'cast', 5)
-      print('Casting characters...')
-      # Generate n combinations of row & column, then cast them one by one
-      codes = [[column, row]] * n
-      code_reader(codes, 'cast')
-      # After casting sorts we need to stop the pump
-      print('Stopping pump and putting line to the galley...')
-      cast_row(['0005', '0075'], 'cast', 5)
-
-      # Ask what to do after casting
-      finishedChoice = ''
-      while finishedChoice == '':
-        finishedChoice = raw_input('Finished!\n(R)epeat, go back to (M)enu or (E)xit program?')
-        if finishedChoice.lower() == 'r':
-          cast_sorts()
-        elif finishedChoice.lower() == 'm':
-          menu()
-        elif finishedChoice.lower() == 'e':
-          deactivate_valves()
-          exit()
-        else:
-          print('\nNo such option. Choose again.')
-          finishedChoice = ''
-
+      cast_sorts(column, row, n)
     elif choice.lower() == 'r':
-      cast_sorts()
+      sorts_menu()
     elif choice.lower() == 'm':
       menu()
     elif choice.lower() == 'e':
@@ -234,7 +210,32 @@ def cast_sorts():
       print('\nNo such option. Choose again.')
       choice = ''
 
+def cast_sorts(column, row, n):
+  # Cast the sorts; turn on the pump first
+  print('Starting the pump...')
+  cast_row(['0075'], 'cast', 5)
+  print('Casting characters...')
+  # Generate n combinations of row & column, then cast them one by one
+  codes = [[column, row]] * n
+  code_reader(codes, 'cast')
+  # After casting sorts we need to stop the pump
+  print('Stopping pump and putting line to the galley...')
+  cast_row(['0005', '0075'], 'cast', 5)
 
+  # Ask what to do after casting
+  finishedChoice = ''
+  while finishedChoice == '':
+    finishedChoice = raw_input('Finished!\n(R)epeat, go back to (M)enu or (E)xit program?')
+    if finishedChoice.lower() == 'r':
+      sorts_menu()
+    elif finishedChoice.lower() == 'm':
+      menu()
+    elif finishedChoice.lower() == 'e':
+      deactivate_valves()
+      exit()
+    else:
+      print('\nNo such option. Choose again.')
+      finishedChoice = ''
 
 def cast_row(signals, mode, machineTimeout):
 # Detect events on a photocell input and cast all signals in a row.
