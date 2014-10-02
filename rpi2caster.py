@@ -59,8 +59,8 @@ def menu():
   os.system('clear')
   deactivate_valves()
   print('rpi2caster - CAT (Computer-Aided Typecasting) for Monotype Composition or Type and Rule casters.\n\nThis program reads a ribbon (input file) and casts the type on a Composition Caster, \nor punches a paper tape with a Monotype keyboard\'s paper tower.\n')
-  ans = True
-  while ans:
+  ans = ''
+  while ans == '':
     print ("""
 		Main menu:
 
@@ -88,9 +88,9 @@ def menu():
       enter_filename()
       menu()
     elif ans=='2':
-      cast(inputFileName)
+      cast_composition(inputFileName)
     elif ans=='3':
-      punch(inputFileName)
+      punch_composition(inputFileName)
     elif ans=='4':
       cast_sorts()
     elif ans=='5':
@@ -101,6 +101,7 @@ def menu():
       exit()
     else:
       print('\nNo such option. Choose again.')
+      ans = ''
 
 def activate_valves(mode, signals):
 # Activates the valves corresponding to Monotype signals found in an array fed to the function.
@@ -130,16 +131,18 @@ def machine_stopped():
   else:
     print('\nNo such option. Choose again.')
 
-def cast(filename):
-# Casting routine.
+def cast_composition(filename):
+# Composition casting routine.
   with open(filename, 'rb') as ribbon:
     mode = 'cast'
     fileContents = reversed(list(csv.reader(ribbon, delimiter=';')))
     print('\nThe combinations of Monotype signals will be displayed on screen while the machine casts the type.\n')
     raw_input('\nInput file found. Press return to start casting.\n')
     code_reader(fileContents, mode)
+  raw_input('\nCasting finished. Press return to go to main menu.')
+  main()
 
-def punch(filename):
+def punch_composition(filename):
 # Punching routine.
 # When punching, the input file is read in reversed order and an additional line (O15) is switched on for operating the paper tower.
   with open(filename, 'rb') as ribbon:
@@ -148,6 +151,9 @@ def punch(filename):
     print('\nThe combinations of Monotype signals will be displayed on screen while the paper tower punches the ribbon.\n')
     raw_input('\nInput file found. Turn on the air, fit the tape on your paper tower and press return to start punching.\n')
     code_reader(fileContents, mode)
+    # After casting/punching is finished:
+  raw_input('\nPunching finished. Press return to go to main menu.')
+  main()
 
 def code_reader(fileContents, mode):
 # A function that works on ribbon file's contents and casts/punches signals, row by row
@@ -157,9 +163,7 @@ def code_reader(fileContents, mode):
       print(' '.join(row)[2:])
     else:
       cast_row(row, mode, 5)
-# After casting/punching is finished:
-  raw_input('\nEnd of ribbon. All done. Press return to go to main menu.')
-  main()
+
 
 def line_test():
 # Test all valves and composition caster's inputs to check if everything works and is properly connected
@@ -178,50 +182,57 @@ def cast_sorts():
   print('Calibration and Sort Casting:\n\n')
   column = raw_input('Enter column symbol (default: G)').upper()
   row = raw_input('Enter row number (default: 5)')
+  n = raw_input('How many do you want to cast? (default: 10)')
   if not row.isdigit() or int(row) > 16 or int(row) < 1:
-    print('Wrong row number. Defaulting to 5.'):
+    print('Wrong row number. Defaulting to 5.')
     row = '5'
   if not column.isalpha():
-    print('Wrong column symbol. Defaulting to G.'):
+    print('Wrong column symbol. Defaulting to G.')
     column = 'G'
-  n = raw_input('How many do you want to cast? (default: 10)')
   if not n.isdigit() or int(n) <= 0:
     print('Incorrect number. Defaulting to 10.')
     n = '10'
   n = int(n)
-  choice = raw_input('\nWe\'ll cast %s%s, %s times.\n(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?' % (column, row, n)
-  if choice.lower() == 'c':
+  choice = ''
+  while choice == '':
+    choice = raw_input('\nWe\'ll cast %s%s, %s times.\n(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?' % (column, row, n))
+    if choice.lower() == 'c':
+      # Cast the sorts; turn on the pump first
+      print('Starting the pump...')
+      cast_row(['0075'], 'cast', 5)
+      print('Casting characters...')
+      # Generate n combinations of row & column, then cast them one by one
+      codes = [[column, row]] * n
+      code_reader(codes, 'cast')
+      # After casting sorts we need to stop the pump
+      print('Stopping pump and putting line to the galley...')
+      cast_row(['0005', '0075'], 'cast', 5)
 
-    # Cast the sorts
-    print('Starting the pump...')
-    cast_row(['0075'], 'cast', 5)
-    print('Casting characters...')
-    for signal in [[row, column] * n]:
-      cast_row(signal, 'cast', 5)
-    print('Stopping pump and putting line to the galley...')
-    cast_row(['0005', '0075'], 'cast', 5)
+      # Ask what to do after casting
+      finishedChoice = ''
+      while finishedChoice == '':
+        finishedChoice = raw_input('Finished!\n(R)epeat, go back to (M)enu or (E)xit program?')
+        if finishedChoice.lower() == 'r':
+          cast_sorts()
+        elif finishedChoice.lower() == 'm':
+          menu()
+        elif finishedChoice.lower() == 'e':
+          deactivate_valves()
+          exit()
+        else:
+          print('\nNo such option. Choose again.')
+          finishedChoice = ''
 
-    # Ask what to do after casting
-    finishedChoice = raw_input('Finished!\n(R)epeat, go back to (M)enu or (E)xit program?')
-    if finishedChoice.lower() == 'r':
+    elif choice.lower() == 'r':
       cast_sorts()
-    elif finishedChoice.lower() == 'm':
+    elif choice.lower() == 'm':
       menu()
-    elif finishedChoice.lower() == 'e':
+    elif choice.lower() == 'e':
       deactivate_valves()
       exit()
     else:
-    print('\nNo such option. Choose again.')
-
-  elif choice.lower() == 'r':
-    cast_sorts()
-  elif choice.lower() == 'm':
-    menu()
-  elif choice.lower() == 'e':
-    deactivate_valves()
-    exit()
-  else:
-    print('\nNo such option. Choose again.')
+      print('\nNo such option. Choose again.')
+      choice = ''
 
 
 
