@@ -266,7 +266,7 @@ def cast_row(signals, mode, machineTimeout):
 
 
 def main():
-# Main loop definition. All exceptions should be caught here.
+# Main loop definition. All exceptions should be caught here. Also, ensure cleaning up after exit.
   try:
     menu()
   except (IOError, NameError):
