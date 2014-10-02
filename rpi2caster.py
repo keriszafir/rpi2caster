@@ -106,11 +106,11 @@ def menu():
 def activate_valves(mode, signals):
 # Activates the valves corresponding to Monotype signals found in an array fed to the function.
 # The input array can contain lowercase (a, b, g, s...) or uppercase (A, B, G, S...) signals.
-# In "punch" mode, an additional line (O+15) will be activated.
+# In "punch" mode, an additional line (O+15) will be activated if 0 or 1 signals are to be sent.
   for monotypeSignal in signals:
     pin = wiringPiPinNumber[str.upper(monotypeSignal)]
     wiringpi.digitalWrite(pin,1)
-    if mode == 'punch':
+    if mode == 'punch' and len(signals) < 2:
       wiringpi.digitalWrite(wiringPiPinNumber['O15'],1)
 
 def deactivate_valves():
