@@ -129,16 +129,17 @@ def deactivate_valves():
 
 def machine_stopped():
 # This allows us to choose whether we want to continue, return to menu or exit if the machine stops during casting.
-  choice = raw_input("Machine not running! Check what's going on.'\n(C)ontinue, return to (M)enu or (E)xit program.")
-  if choice.lower() == 'c':
-    return True
-  elif choice.lower() == 'm':
-    menu()
-  elif choice.lower() == 'e':
-    deactivate_valves()
-    exit()
+  choice = ""
+  while choice is not 'c' and choice is not 'm' and choice is not 'e':
+    choice = raw_input("Machine not running! Check what's going on.'\n(C)ontinue, return to (M)enu or (E)xit program.")
   else:
-    print('\nNo such option. Choose again.')
+    if choice.lower() == 'c':
+      return True
+    elif choice.lower() == 'm':
+      menu()
+    elif choice.lower() == 'e':
+      deactivate_valves()
+      exit()
 
 
 def cast_composition(filename):
@@ -211,8 +212,9 @@ def sorts_menu():
   n = int(n)
   choice = ''
   os.system('clear')
-  while choice == '':
+  while choice is not 'c' and choice is not 'r' and choice is not 'm' and choice is not 'e':
     choice = raw_input('\nWe\'ll cast %s%s, %s times.\n(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?' % (column, row, n))
+  else:
     if choice.lower() == 'c':
       cast_sorts(column, row, n)
     elif choice.lower() == 'r':
@@ -222,9 +224,7 @@ def sorts_menu():
     elif choice.lower() == 'e':
       deactivate_valves()
       exit()
-    else:
-      print('\nNo such option. Choose again.')
-      choice = ''
+
 
 def cast_sorts(column, row, n):
   # Cast the sorts; turn on the pump first
