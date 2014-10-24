@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import RPi.GPIO as gpio
 import os, sys, time, signal
+global photocellGPIO, shutdownbuttonGPIO, rebootbuttonGPIO, ledGPIO
 
 # initial config, use BCM GPIO numbers
 photocellGPIO = 17         # black - was gpio 14, pin 8 - let's leave that alone for UART TxD
@@ -17,13 +18,18 @@ def blink(n,speed):
 
 def signal_handler(signal, frame):
   print("Terminated by OS")
-  if(signal==SIGINT):
+  if(signal=='SIGINT'):
     blink(3,0.1)
 # turn the green LED off if you stop the program with ctrl-C
     gpio.output(ledGPIO,0)
   gpio.cleanup()
   os.system('echo "%i" > /sys/class/gpio/unexport' % photocellGPIO)
   sys.exit()
+
+def poweroff(channel):
+  shutdown(shutdownbuttonGPIO, 0)
+def reboot(channel):
+  shutdown(rebootbuttonGPIO, 1)
 
 def shutdown(buttonGPIO, mode):
   command = {0 : 'poweroff', 1 : 'reboot', 2: 'echo "debug info"'}
@@ -60,10 +66,8 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 # If user presses shutdown or reboot button, do a threaded callback to shutdown function:
-gpio.add_event_detect(shutdownbuttonGPIO, gpio.RISING,
-    callback = shutdown(shutdownbuttonGPIO, 0), bouncetime = 1000)
-gpio.add_event_detect(rebootbuttonGPIO, gpio.RISING,
-    callback = shutdown(rebootbuttonGPIO, 1), bouncetime = 1000)
+gpio.add_event_detect(shutdownbuttonGPIO, gpio.RISING, callback = poweroff, bouncetime = 1000)
+gpio.add_event_detect(rebootbuttonGPIO, gpio.RISING, callback = reboot, bouncetime = 1000)
 
 while True:
   time.sleep(1)  # just wait
