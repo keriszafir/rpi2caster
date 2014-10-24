@@ -3,9 +3,9 @@ import RPi.GPIO as gpio
 import os, sys, time, signal
 
 # initial config, use BCM GPIO numbers
-photocellGPIO = 17         # yellow - was gpio 14, pin 8 - let's leave that alone for UART TxD
+photocellGPIO = 17         # black - was gpio 14, pin 8 - let's leave that alone for UART TxD
 shutdownbuttonGPIO = 22    # brown - was gpio 15, pin 10 - let's leave that alone for UART RxD
-rebootbuttonGPIO = 23      # black
+rebootbuttonGPIO = 23      # yellow
 ledGPIO = 4                # blue
 
 def blink(n,speed):
