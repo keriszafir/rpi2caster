@@ -26,7 +26,7 @@ def signal_handler(signal, frame):
   sys.exit()
 
 def shutdown(buttonGPIO, mode):
-  command = [0 : 'poweroff', 1 : 'reboot', 2: 'echo "debug info"']
+  command = {0 : 'poweroff', 1 : 'reboot', 2: 'echo "debug info"'}
   time.sleep(1)
   if (gpio.input(buttonGPIO) == 1):   #check if you're still pressing the button after 1sec
     blink(5,0.1)
