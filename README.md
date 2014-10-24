@@ -79,29 +79,35 @@ You need to install some software to use the RPi GPIO for controlling the interf
 	Change the port, geometry etc. if you wish. You don't have to create any init scripts; lightdm will already take care of running the
 	VNC server. Just run "vncviewer [hostname or IP addr]:[port]" client-side and you'll get a lightdm login screen. Sign in to your account.
 
+        Using a web-based SSH client might be a good idea. I've used shellinabox with great results. This way, you won't have to install any
+	additional software, esp. if you're using M$ Windows (otherwise, you'll need PuTTY or other SSH client).
+
 	If we want to use the pins 8 and 10 on the GPIO (which are used as the serial port's RxD and TxD lines by default!), we have to disable
 	the serial port. That is done by editing two files:
 	/etc/inittab: we have to comment out any lines containing the "ttyAMA0 115200 vt100" string
 	/boot/cmdline.txt: remove all references to ttyAMA0
+	In my case, these GPIOs are left alone and we don't have to do anything with serial tty config.
 	 
-	Some of the dependencies will be marked as "(repo)". This means that you can install them from Raspbian repository using apt or aptitude.
+
+Some of the dependencies will be marked as "(repo)". This means that you can install them from Raspbian repository using apt or aptitude.
 
 2. RPi.GPIO Python library - https://pypi.python.org/packages/source/R/RPi.GPIO
 	Make sure you have python-dev and python3-dev installed (build dependencies). Download, untar and run "sudo python setup.py install".
 3. libi2c-dev (repo) - I2C device library, which provides the I2C kernel module.
-	Install with "sudo aptitude install libi2c-dev"
+	You probably have this if you're using Raspbian wheezy or jessie. Run raspi-config and go to advanced settings, then enable GPIO and SPI.
+	If that didn't work, install with "sudo aptitude install libi2c-dev"
 	After installing i2c-dev, add user(s) to the i2c group unless you want to run the software as root, which is obviously not recommended. 
 	Add "i2c-dev" module to the /etc/modules file so that you won't have to modprobe it each time.
-	Remove (or comment) the i2c-bcm2708 in /etc/modprobe.d/raspi-blacklist.conf
+	Remove (or comment) the i2c-bcm2708 in /etc/modprobe.d/raspi-blacklist.conf (raspi-config should do that already)
 
 4. wiringPi2 library - find it (with setup instructions) at https://projects.drogon.net/raspberry-pi/wiringpi/download-and-install/
-	This is required for programs to access GPIO.
+	This is required for rpi2caster, it takes care of communicating with MCP23017 via I2C.
 5. i2c-tools (repo) - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
 	libi2c-dev depends on i2c-tools, so this will already be installed in step 3.
-6. python-smbus (repo), Python SMBus & I2C library, needed to control the valves
-7. python-setuptools (repo) - you need it to install a Python module for WiringPi
+6. python-smbus (repo), Python SMBus & I2C library, wiringpi2 probably depends on it
+7. python-setuptools (repo) - wiringpi2-python depends on it
 8. WiringPi2-Python - install it from GitHub. Instructions at https://github.com/WiringPi/WiringPi2-Python/blob/master/README
-9. gpio - command line utility for GPIO setup & management, used by powerbuttond.py
+9. gpio - command line utility for GPIO setup & management, powerbuttond.py depends on it
 
 
 Garbage removal
@@ -111,3 +117,4 @@ The original Raspbian distro has some unneeded software installed by default. We
 -wolfram-engine - removing it will clean aomewhere around 450MB (!)
 -X, LXDE etc. unless you want to VNC into the machine or set up a local console with GUI
 -anything related to Scratch
+-Minecraft or any other games, LibreOffice etc., huge diskspace hogs
