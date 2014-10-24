@@ -13,7 +13,7 @@ import wiringpi2 as wiringpi
 def input_setup():
 # We need to set up the sysfs interface before (powerbuttond.py - a daemon running on boot with root privileges takes care of it)
 # In the future, we'll add configurable GPIO numbers. Why store the device config in the program source, if we can use a .conf file?
-  photocellGPIO = 14
+  photocellGPIO = 17
   gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
   global valueFileName
   valueFileName = gpioSysfsPath + 'value'
