@@ -190,6 +190,7 @@ def line_test():
               ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
     cast_row(signal, 'cast', 60)
   raw_input('\nTesting done. Press return to go to main menu.')
+  main()
 
 
 def sorts_menu():
