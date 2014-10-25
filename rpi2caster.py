@@ -301,28 +301,36 @@ def cast_sorts(column, row, n):
 def cast_row(signals, mode, machineTimeout):
 # Detect events on a photocell input and cast all signals in a row.
 # Ask the user what to do if the machine is stopped (no events).
-  with open(valueFileName, 'r') as gpiostate:
-    po = select.epoll()
-    po.register(gpiostate, select.POLLPRI)
-    previousState = 0
-    while 1:
-      events = po.poll(machineTimeout)
-      if events:
-      # machine is working
-        gpiostate.seek(0)
-        photocellState = int(gpiostate.read())
-        if photocellState == 1:
-        # print signals to console, so that we know what we cast or test
-          print(str.upper(' '.join(signals)))
-          activate_valves(mode, signals)
-          previousState = 1
-        elif photocellState == 0 and previousState == 1:
-          deactivate_valves()
-          previousState = 0
-          break
-      else:
-        # if machine isn't working, the photocell status is not changing
-        machine_stopped()
+  if mode == 'punch':
+# Punching - the pace is arbitrary, let's set it to 200ms/200ms
+    activate_valves(mode, signals)
+    time.sleep(0.2)
+    deactivate_valves()
+    time.sleep(0.2)
+  else:
+# Casting - the pace is dictated by the machine (via photocell)
+    with open(valueFileName, 'r') as gpiostate:
+      po = select.epoll()
+      po.register(gpiostate, select.POLLPRI)
+      previousState = 0
+      while 1:
+        events = po.poll(machineTimeout)
+        if events:
+        # machine is working
+          gpiostate.seek(0)
+          photocellState = int(gpiostate.read())
+          if photocellState == 1:
+          # print signals to console, so that we know what we cast or test
+            print(str.upper(' '.join(signals)))
+            activate_valves(mode, signals)
+            previousState = 1
+          elif photocellState == 0 and previousState == 1:
+            deactivate_valves()
+            previousState = 0
+            break
+        else:
+          # if machine isn't working, the photocell status is not changing
+          machine_stopped()
 
 
 
