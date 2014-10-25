@@ -78,9 +78,11 @@ def menu():
 
 		3. Punch a paper tape
 
-		4. Calibrate the caster or cast sorts
+		4. Cast sorts
 
 		5. Test the valves and pinblocks
+
+		6. Lock the caster on a specified diecase position
 
 
 
@@ -103,6 +105,8 @@ def menu():
       sorts_menu()
     elif ans=='5':
       line_test()
+    elif ans=='6':
+      lock_on_position()
 
     elif ans=='0':
       print('\nGoodbye! :)\n')
@@ -226,6 +230,46 @@ def sorts_menu():
       deactivate_valves()
       exit()
 
+def lock_on_position():
+# This function allows us to give the program a specific combination of Monotype codes,
+# and will keep the valves on until we press return (useful for calibration).
+  signals = ''
+  columns = []
+  rows = []
+  special_signals = []
+# Let the user enter a combo:
+  while signals == '':
+    signals = raw_input('Enter the signals to send to the machine: ').upper()
+# Strip non-alphanumeric characters, like !, +, ; or spacebar
+  for char in signals:
+    if not char.isalnum():
+      signals = signals.replace(char, '')
+# Detect special signals: 0005, 0075, S
+  for special in ['0005', '0075', 'S']:
+    if signals.find(special) != -1:
+      special_signals.append(special)
+    signals = signals.replace(special, '')
+# Look for any numbers between 14 and 100, strip them
+  for n in range(100, 14, -1):
+    signals = signals.replace(str(n), '')
+# Determine row numbers
+  for n in range(15, 0, -1):
+    pos = signals.find(str(n))
+    if pos > -1:
+      rows.append(str(n))
+    signals = signals.replace(str(n), '')
+# Determine columns A...N, strip any other letters (S was taken care of earlier)
+# List comprehensions return generator objects, so we must convert that to list.
+  columns = list(char for char in signals if char in list('ABCDEFGHIJKLMN'))
+# Now we can splice all the signal lists into one, then feed them to activate_valves
+  signals = columns + rows + special_signals
+# Display columns, rows and special signals
+  print ' '.join(signals)
+  activate_valves('cast', signals)
+# Wait until user decides to stop sending those signals to valves:
+  raw_input('Press return to stop and go back to main menu')
+  deactivate_valves()
+  main()
 
 def cast_sorts(column, row, n):
   # Cast the sorts; turn on the pump first
