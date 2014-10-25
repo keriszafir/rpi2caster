@@ -121,7 +121,7 @@ def menu():
     elif ans=='3':
       punch_composition(inputFileName)
     elif ans=='4':
-      sorts_menu()
+      cast_sorts()
     elif ans=='5':
       line_test()
     elif ans=='6':
@@ -208,7 +208,14 @@ def punch_composition(filename):
       if ((''.join(row))[:2] in commentSymbols):
         print(' '.join(row)[2:])
       else:
-        punch_row(signals)
+        if len(signals) < 2:
+          signals += ('O15',)
+        print(str.upper(' '.join(signals)))
+        activate_valves(signals)
+        """The pace is arbitrary, let's set it to 200ms/200ms"""
+        time.sleep(0.2)
+        deactivate_valves()
+        time.sleep(0.2)
   """After punching is finished, notify the user:"""
   raw_input('\nPunching finished. Press return to go to main menu. ')
   main()
@@ -231,7 +238,7 @@ def line_test():
   main()
 
 
-def sorts_menu():
+def cast_sorts():
   """Sorts casting routine, based on the position in diecase.
   Ask user about the diecase row & column, as well as number of sorts."""
   os.system('clear')
@@ -261,9 +268,18 @@ def sorts_menu():
     choice = raw_input('(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program? ')
   else:
     if choice.lower() == 'c':
-      cast_sorts(signals, n)
+      """Cast the sorts: turn on the pump first."""
+      print('Starting the pump...')
+      send_signals_to_caster(['N', 'K', '0075'], 5)
+      print('Casting characters...')
+      """Cast n combinations of row & column, one by one"""
+      for i in range(n):
+        send_signals_to_caster(signals, 5)
+      """After casting sorts we need to stop the pump"""
+      print('Stopping pump and putting line to the galley...')
+      send_signals_to_caster(['0005', '0075'], 5)
     elif choice.lower() == 'r':
-      sorts_menu()
+      cast_sorts()
     elif choice.lower() == 'm':
       menu()
     elif choice.lower() == 'e':
@@ -276,7 +292,7 @@ def sorts_menu():
   while finishedChoice not in ['r', 'm', 'e']:
     finishedChoice = raw_input('(R)epeat, go back to (M)enu or (E)xit program? ')
     if finishedChoice.lower() == 'r':
-      sorts_menu()
+      cast_sorts()
     elif finishedChoice.lower() == 'm':
       menu()
     elif finishedChoice.lower() == 'e':
@@ -286,17 +302,6 @@ def sorts_menu():
       print('\nNo such option. Choose again.')
       finishedChoice = ''
 
-def cast_sorts(signals, n):
-  """Cast the sorts; turn on the pump first."""
-  print('Starting the pump...')
-  send_signals_to_caster(['N', 'K', '0075'], 5)
-  print('Casting characters...')
-  """Cast n combinations of row & column, one by one"""
-  for i in range(n):
-    send_signals_to_caster(signals, 5)
-  """After casting sorts we need to stop the pump"""
-  print('Stopping pump and putting line to the galley...')
-  send_signals_to_caster(['0005', '0075'], 5)
 
 def lock_on_position():
   """This function allows us to give the program a specific combination
@@ -343,17 +348,6 @@ def lock_on_position():
   deactivate_valves()
   main()
 
-def punch_row(signals):
-  """Punching - the pace is arbitrary, let's set it to 200ms/200ms
-  print signals to console, so that we know what we punch. An additional
-  line (O+15) will be activated if less than two signals are to be sent."""
-  if len(signals) < 2:
-    signals += ('O15',)
-  print(str.upper(' '.join(signals)))
-  activate_valves(signals)
-  time.sleep(0.2)
-  deactivate_valves()
-  time.sleep(0.2)
 
 def send_signals_to_caster(signals, machineTimeout):
   """Casting - the pace is dictated by the machine (via photocell)."""
