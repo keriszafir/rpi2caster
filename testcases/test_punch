@@ -4,5 +4,9 @@ A
 1
 // Row and column
 G;5
+// No row and no column (in the middle of a file)
+
 // Row, column and S-needle
 H;S;6
+//No row and no column (empty traliing line)
+
