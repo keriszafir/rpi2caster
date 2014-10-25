@@ -19,11 +19,11 @@ def input_setup():
   valueFileName = gpioSysfsPath + 'value'
   edgeFileName = gpioSysfsPath + 'edge'
 
-  # Check if the photocell GPIO has been configured:
+# Check if the photocell GPIO has been configured:
   if not os.access(valueFileName, os.R_OK):
     print('%s: file does not exist or cannot be read. You must export the GPIO no %i as input first!' % (valueFileName, photocellGPIO))
     exit()
-  # Check if the interrupts are generated for photocell GPIO rising AND falling edge:
+# Check if the interrupts are generated for photocell GPIO rising AND falling edge:
   with open(edgeFileName, 'r') as edgeFile:
     if (edgeFile.read()[:4] != "both"):
       print('%s: file does not exist, cannot be read or the interrupt on GPIO no %i is not set to "both". Check the system config.' % (edgeFileName, photocellGPIO))
@@ -36,13 +36,14 @@ def output_setup():
   wiringpi.mcp23017Setup(81,0x21)
   for pin in range(65,97):
     wiringpi.pinMode(pin,1)
-  # Assign wiringPi pin numbers on MCP23017s to the Monotype control codes.
+# Assign wiringPi pin numbers on MCP23017s to the Monotype control codes.
   global wiringPiPinNumber
   wiringPiPinNumber = dict([('1', 65), ('2', 66), ('3', 67), ('4', 68), ('5', 69), ('6', 70), ('7', 71), ('8', 72), ('9', 73), ('10', 74), ('11', 75), ('12', 76), ('13', 77), ('14', 78), ('0005', 79), ('0075', 80), ('A', 81), ('B', 82), ('C', 83), ('D', 84), ('E', 85), ('F', 86), ('G', 87), ('H', 88), ('I', 89), ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])
 
 
 # Set up comment symbols for parsing the ribbon files:
-commentSymbol = '//'
+global commentSymbols
+commentSymbols = ['**', '* ', '//']
 
 
 def complete(text, state):
@@ -169,7 +170,7 @@ def punch_composition(filename):
     print('\nThe combinations of Monotype signals will be displayed on screen while the paper tower punches the ribbon.\n')
     raw_input('\nInput file found. Turn on the air, fit the tape on your paper tower and press return to start punching.\n')
     code_reader(fileContents, mode)
-    # After casting/punching is finished:
+# After casting/punching is finished:
   raw_input('\nPunching finished. Press return to go to main menu.')
   main()
 
@@ -177,11 +178,11 @@ def punch_composition(filename):
 def code_reader(fileContents, mode):
 # A function that works on ribbon file's contents (2-dimensional array) and casts/punches signals, row by row
   for row in fileContents:
-    # check if the row begins with a defined comment symbol - if so, print it but don't turn on the valves
-    if ((' '.join(row)).startswith(commentSymbol)):
+# check if the row begins with a defined comment symbols - if so, print it but don't turn on the valves
+    if ((''.join(row))[:2] in commentSymbols):
       print(' '.join(row)[2:])
     else:
-      cast_row(row, mode, 5)
+        cast_row(row, mode, 5)
 
 
 def line_test():
@@ -272,18 +273,18 @@ def lock_on_position():
   main()
 
 def cast_sorts(column, row, n):
-  # Cast the sorts; turn on the pump first
+# Cast the sorts; turn on the pump first
   print('Starting the pump...')
   cast_row(['0075'], 'cast', 5)
   print('Casting characters...')
-  # Generate n combinations of row & column, then cast them one by one
+# Generate n combinations of row & column, then cast them one by one
   codes = [[column, row]] * n
   code_reader(codes, 'cast')
-  # After casting sorts we need to stop the pump
+# After casting sorts we need to stop the pump
   print('Stopping pump and putting line to the galley...')
   cast_row(['0005', '0075'], 'cast', 5)
 
-  # Ask what to do after casting
+# Ask what to do after casting
   finishedChoice = ''
   while finishedChoice == '':
     finishedChoice = raw_input('Finished!\n(R)epeat, go back to (M)enu or (E)xit program?')
@@ -303,6 +304,8 @@ def cast_row(signals, mode, machineTimeout):
 # Ask the user what to do if the machine is stopped (no events).
   if mode == 'punch':
 # Punching - the pace is arbitrary, let's set it to 200ms/200ms
+# print signals to console, so that we know what we cast or test
+    print(str.upper(' '.join(signals)))
     activate_valves(mode, signals)
     time.sleep(0.2)
     deactivate_valves()
@@ -316,11 +319,11 @@ def cast_row(signals, mode, machineTimeout):
       while 1:
         events = po.poll(machineTimeout)
         if events:
-        # machine is working
+# machine is working
           gpiostate.seek(0)
           photocellState = int(gpiostate.read())
           if photocellState == 1:
-          # print signals to console, so that we know what we cast or test
+# print signals to console, so that we know what we cast or test
             print(str.upper(' '.join(signals)))
             activate_valves(mode, signals)
             previousState = 1
@@ -329,7 +332,7 @@ def cast_row(signals, mode, machineTimeout):
             previousState = 0
             break
         else:
-          # if machine isn't working, the photocell status is not changing
+# if machine isn't working, the photocell status is not changing
           machine_stopped()
 
 
