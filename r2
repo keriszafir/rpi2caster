@@ -1,3 +1,6 @@
+* comment
+** comment
+// comment
 0005;0075
 0075
 k;12

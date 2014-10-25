@@ -33,7 +33,7 @@ def input_setup():
   """Check if the interrupts are generated for photocell GPIO
   for both rising and falling edge:"""
   with open(edgeFileName, 'r') as edgeFile:
-    if (edgeFile.read()[:4] != "both"):
+    if (edgeFile.read()[:4] != 'both'):
       print('%s: file does not exist, cannot be read or the interrupt '
       'on GPIO no %i is not set to "both". Check the system config.'
       % (edgeFileName, photocellGPIO))
@@ -134,17 +134,14 @@ def menu():
       print('\nNo such option. Choose again.')
       ans = ''
 
-def activate_valves(mode, signals):
+def activate_valves(signals):
   """ Activates the valves corresponding to Monotype signals found
   in an array fed to the function. The input array "signals" can contain
-  lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions.
-  In "punch" mode, an additional line (O+15) will be activated
-  if less than two signals are to be sent."""
-  for monotypeSignal in signals:
-    pin = wiringPiPinNumber[str.upper(monotypeSignal)]
-    wiringpi.digitalWrite(pin,1)
-    if mode == 'punch' and len(signals) < 2:
-      wiringpi.digitalWrite(wiringPiPinNumber['O15'],1)
+  lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions."""
+  if len(signals) != 0:
+    for monotypeSignal in signals:
+      pin = wiringPiPinNumber[monotypeSignal.upper()]
+      wiringpi.digitalWrite(pin,1)
 
 def deactivate_valves():
   """Turn all valves off to avoid erroneous operation,
@@ -206,12 +203,16 @@ def code_reader(fileContents, mode):
   """A function that works on ribbon file's contents (2-dimensional
   array) and casts/punches signals, row by row"""
   for row in fileContents:
+    """Make sure that the combination won't be changed"""
+    signals = tuple(row)
     """Check if the row begins with a defined comment symbols - if so,
     print it to screen, but don't turn on the valves!"""
     if ((''.join(row))[:2] in commentSymbols):
       print(' '.join(row)[2:])
+    elif mode == 'punch':
+      punch_row(signals)
     else:
-        cast_row(row, mode, 5)
+      send_signals_to_caster(signals, 5)
 
 
 def line_test():
@@ -226,7 +227,7 @@ def line_test():
               ['13'], ['14'], ['A'], ['B'], ['C'], ['D'], ['E'], ['F'],
               ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
               ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
-    cast_row(signal, 'cast', 60)
+    send_signals_to_caster(signal, 60)
   raw_input('\nTesting done. Press return to go to main menu.')
   main()
 
@@ -239,24 +240,26 @@ def sorts_menu():
   column = raw_input('Enter column symbol (default: G) ').upper()
   row = raw_input('Enter row number (default: 5) ')
   n = raw_input('How many sorts do you want to cast? (default: 10) ')
-  if not row.isdigit() or int(row) not in range(15):
+  print('\n')
+  if not row.isdigit() or int(row) not in range(1,16):
     print('Wrong row number. Defaulting to 5.')
     row = '5'
-  if column not in (list('ABCDEFGHIJKLMN') + ['NI', 'NL']):
+  if column not in (list('ABCDEFGHIJKLMNO') + ['NI', 'NL']):
     print('Wrong column symbol. Defaulting to G.')
     column = 'G'
   if not n.isdigit() or int(n) < 0:
     print('Incorrect number of sorts. Defaulting to 10.')
     n = '10'
   n = int(n)
-  os.system('clear')
   print ('\nWe\'ll cast %s %s, %s times.\n' % (column, row, n))
+  signals = (column, row)
+  """Ask user if the entered parameters are correct"""
   choice = ''
   while choice not in ['c', 'r', 'm', 'e']:
     choice = raw_input('(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?')
   else:
     if choice.lower() == 'c':
-      cast_sorts(column, row, n)
+      cast_sorts(signals, n)
     elif choice.lower() == 'r':
       sorts_menu()
     elif choice.lower() == 'm':
@@ -281,17 +284,17 @@ def sorts_menu():
       print('\nNo such option. Choose again.')
       finishedChoice = ''
 
-def cast_sorts(column, row, n):
+def cast_sorts(signals, n):
   """Cast the sorts; turn on the pump first."""
   print('Starting the pump...')
-  cast_row(['0075'], 'cast', 5)
+  send_signals_to_caster(['N', 'K', '0075'], 5)
   print('Casting characters...')
-  """Generate n combinations of row & column, then cast them one by one"""
-  codes = [[column, row]] * n
-  code_reader(codes, 'cast')
+  """Cast n combinations of row & column, one by one"""
+  for i in range(n):
+    send_signals_to_caster(signals, 5)
   """After casting sorts we need to stop the pump"""
   print('Stopping pump and putting line to the galley...')
-  cast_row(['0005', '0075'], 'cast', 5)
+  send_signals_to_caster(['0005', '0075'], 5)
 
 def lock_on_position():
   """This function allows us to give the program a specific combination
@@ -326,53 +329,64 @@ def lock_on_position():
   """Determine columns A...N, strip any other letters
   (S was taken care of earlier). List comprehensions return
   generator objects, so we must convert that to list."""
-  columns = list(char for char in signals if char in list('ABCDEFGHIJKLMN'))
+  columns = list(s for s in signals if s in list('ABCDEFGHIJKLMN'))
 
   """Join all the signal lists into one, print them to console,
   then feed them to the activate_valves function in cast mode"""
   signals = columns + rows + special_signals
   print ' '.join(signals)
-  activate_valves('cast', signals)
+  activate_valves(signals)
   """Wait until user decides to stop sending those signals to valves:"""
   raw_input('Press return to stop and go back to main menu')
   deactivate_valves()
   main()
 
-def cast_row(signals, mode, machineTimeout):
+def punch_row(signals):
+  """Punching - the pace is arbitrary, let's set it to 200ms/200ms
+  print signals to console, so that we know what we punch. An additional
+  line (O+15) will be activated if less than two signals are to be sent."""
+  if len(signals) < 2:
+    signals += ('O15',)
+  print(str.upper(' '.join(signals)))
+  activate_valves(signals)
+  time.sleep(0.2)
+  deactivate_valves()
+  time.sleep(0.2)
+
+def send_signals_to_caster(signals, machineTimeout):
   """Detect events on a photocell input and cast all signals in a row.
   Ask the user what to do if the machine is stopped (no events)."""
-  if mode == 'punch':
-    """Punching - the pace is arbitrary, let's set it to 200ms/200ms
-    print signals to console, so that we know what we punch."""
-    print(str.upper(' '.join(signals)))
-    activate_valves(mode, signals)
-    time.sleep(0.2)
-    deactivate_valves()
-    time.sleep(0.2)
-  else:
-    """Casting - the pace is dictated by the machine (via photocell)."""
-    with open(valueFileName, 'r') as gpiostate:
-      po = select.epoll()
-      po.register(gpiostate, select.POLLPRI)
-      previousState = 0
-      while 1:
-        events = po.poll(machineTimeout)
-        if events:
-          """be sure that the machine is working"""
-          gpiostate.seek(0)
-          photocellState = int(gpiostate.read())
-          if photocellState == 1:
-            """print signals to console, so that we know what we cast"""
-            print(str.upper(' '.join(signals)))
-            activate_valves(mode, signals)
-            previousState = 1
-          elif photocellState == 0 and previousState == 1:
-            deactivate_valves()
-            previousState = 0
-            break
-        else:
-          """if machine isn't working, notify the user"""
-          machine_stopped()
+
+
+  """Casting - the pace is dictated by the machine (via photocell)."""
+  with open(valueFileName, 'r') as gpiostate:
+    po = select.epoll()
+    po.register(gpiostate, select.POLLPRI)
+    previousState = 0
+    while 1:
+      events = po.poll(machineTimeout)
+      if events:
+        """be sure that the machine is working"""
+        gpiostate.seek(0)
+        photocellState = int(gpiostate.read())
+        if photocellState == 1:
+          """print signals to console, so that we know what we cast"""
+          print(str.upper(' '.join(signals)))
+          """don't turn the O+15 valve on during casting"""
+          signals = list(signals)
+          if 'O' in signals:
+            signals.remove('O')
+          if '15' in signals:
+            signals.remove('15')
+          activate_valves(signals)
+          previousState = 1
+        elif photocellState == 0 and previousState == 1:
+          deactivate_valves()
+          previousState = 0
+          break
+      else:
+        """if machine isn't working, notify the user"""
+        machine_stopped()
 
 
 
@@ -381,10 +395,10 @@ def main():
   Also, ensure cleaning up after exit."""
   try:
     menu()
-  except (IOError, NameError):
-    raw_input('\nInput file not chosen or wrong input file name. '
-                              'Press return to go to main menu.\n')
-    main()
+#  except (IOError, NameError):
+#    raw_input('\nInput file not chosen or wrong input file name. '
+#                              'Press return to go to main menu.\n')
+#    main()
   except KeyboardInterrupt:
     print("Terminated by user.")
     exit()
