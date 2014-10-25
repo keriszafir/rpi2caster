@@ -60,13 +60,13 @@ global commentSymbols
 commentSymbols = ['**', '* ', '//']
 
 
-def complete(text, state):
+def tab_complete(text, state):
   """This function enables tab key auto-completion when you
   enter the filename. Will definitely come in handy."""
   return (glob.glob(text+'*')+[None])[state]
 readline.set_completer_delims(' \t\n;')
 readline.parse_and_bind('tab: complete')
-readline.set_completer(complete)
+readline.set_completer(tab_complete)
 
 
 global inputFileName
@@ -137,7 +137,8 @@ def menu():
 def activate_valves(signals):
   """ Activates the valves corresponding to Monotype signals found
   in an array fed to the function. The input array "signals" can contain
-  lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions."""
+  lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions.
+  Do nothing if the function receives an empty sequence."""
   if len(signals) != 0:
     for monotypeSignal in signals:
       pin = wiringPiPinNumber[monotypeSignal.upper()]
@@ -171,13 +172,20 @@ def cast_composition(filename):
   """ Composition casting routine. The input file is read backwards -
   last characters are cast first, after setting the justification."""
   with open(filename, 'rb') as ribbon:
-    mode = 'cast'
     fileContents = reversed(list(csv.reader(ribbon, delimiter=';')))
     print('\nThe combinations of Monotype signals will be displayed '
                      'on screen while the machine casts the type.\n')
     raw_input('\nInput file found. Press return to start casting.\n')
-    code_reader(fileContents, mode)
-  raw_input('\nCasting finished. Press return to go to main menu.')
+    for row in fileContents:
+      """Make sure that the combination won't be changed"""
+      signals = tuple(row)
+      """Check if the row begins with a defined comment symbols - if so,
+      print it to screen, but don't turn on the valves!"""
+      if ((''.join(row))[:2] in commentSymbols):
+        print(' '.join(row)[2:])
+      else:
+        send_signals_to_caster(signals, 5)
+  raw_input('\nCasting finished. Press return to go to main menu. ')
   main()
 
 
@@ -187,32 +195,23 @@ def punch_composition(filename):
   (O15) is switched on for operating the paper tower, if less than two
   signals are found in a sequence."""
   with open(filename, 'rb') as ribbon:
-    mode = 'punch'
     fileContents = csv.reader(ribbon, delimiter=';')
     print('\nThe combinations of Monotype signals will be displayed '
               'on screen while the paper tower punches the ribbon.\n')
     raw_input('\nInput file found. Turn on the air, fit the tape '
            'on your paper tower and press return to start punching.\n')
-    code_reader(fileContents, mode)
+    for row in fileContents:
+      """Make sure that the combination won't be changed"""
+      signals = tuple(row)
+      """Check if the row begins with a defined comment symbols - if so,
+      print it to screen, but don't turn on the valves!"""
+      if ((''.join(row))[:2] in commentSymbols):
+        print(' '.join(row)[2:])
+      else:
+        punch_row(signals)
   """After punching is finished, notify the user:"""
-  raw_input('\nPunching finished. Press return to go to main menu.')
+  raw_input('\nPunching finished. Press return to go to main menu. ')
   main()
-
-
-def code_reader(fileContents, mode):
-  """A function that works on ribbon file's contents (2-dimensional
-  array) and casts/punches signals, row by row"""
-  for row in fileContents:
-    """Make sure that the combination won't be changed"""
-    signals = tuple(row)
-    """Check if the row begins with a defined comment symbols - if so,
-    print it to screen, but don't turn on the valves!"""
-    if ((''.join(row))[:2] in commentSymbols):
-      print(' '.join(row)[2:])
-    elif mode == 'punch':
-      punch_row(signals)
-    else:
-      send_signals_to_caster(signals, 5)
 
 
 def line_test():
@@ -221,14 +220,14 @@ def line_test():
   in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL,
   MNH, MNK (feel free to add other important combinations!)"""
   raw_input('This will check if the valves, pin blocks and 0005, S, '
-           '0075 mechanisms are working. Press return to continue...')
+           '0075 mechanisms are working. Press return to continue... ')
   for signal in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'],
               ['5'], ['6'], ['7'], ['8'], ['9'], ['10'], ['11'], ['12'],
               ['13'], ['14'], ['A'], ['B'], ['C'], ['D'], ['E'], ['F'],
               ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
               ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
     send_signals_to_caster(signal, 60)
-  raw_input('\nTesting done. Press return to go to main menu.')
+  raw_input('\nTesting done. Press return to go to main menu. ')
   main()
 
 
@@ -252,11 +251,14 @@ def sorts_menu():
     n = '10'
   n = int(n)
   print ('\nWe\'ll cast %s %s, %s times.\n' % (column, row, n))
+  if n > 30:
+    print('\nWarning: you want to cast a single character more than '
+                  '30 times. This may lead to matrix overheating!\n')
   signals = (column, row)
   """Ask user if the entered parameters are correct"""
   choice = ''
   while choice not in ['c', 'r', 'm', 'e']:
-    choice = raw_input('(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program?')
+    choice = raw_input('(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program? ')
   else:
     if choice.lower() == 'c':
       cast_sorts(signals, n)
@@ -272,7 +274,7 @@ def sorts_menu():
   print('\nFinished!')
   finishedChoice = ''
   while finishedChoice not in ['r', 'm', 'e']:
-    finishedChoice = raw_input('(R)epeat, go back to (M)enu or (E)xit program?')
+    finishedChoice = raw_input('(R)epeat, go back to (M)enu or (E)xit program? ')
     if finishedChoice.lower() == 'r':
       sorts_menu()
     elif finishedChoice.lower() == 'm':
@@ -337,7 +339,7 @@ def lock_on_position():
   print ' '.join(signals)
   activate_valves(signals)
   """Wait until user decides to stop sending those signals to valves:"""
-  raw_input('Press return to stop and go back to main menu')
+  raw_input('Press return to stop and go back to main menu. ')
   deactivate_valves()
   main()
 
@@ -354,15 +356,13 @@ def punch_row(signals):
   time.sleep(0.2)
 
 def send_signals_to_caster(signals, machineTimeout):
-  """Detect events on a photocell input and cast all signals in a row.
-  Ask the user what to do if the machine is stopped (no events)."""
-
-
   """Casting - the pace is dictated by the machine (via photocell)."""
   with open(valueFileName, 'r') as gpiostate:
     po = select.epoll()
     po.register(gpiostate, select.POLLPRI)
     previousState = 0
+    """Detect events on a photocell input and cast all signals in a row.
+    Ask the user what to do if the machine is stopped (no events)."""
     while 1:
       events = po.poll(machineTimeout)
       if events:
