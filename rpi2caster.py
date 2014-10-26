@@ -337,8 +337,9 @@ def signals_parser(originalSignals):
   rows = []
   special_signals = []
 
-  """Make it a list and throw all non-alnum chars to /dev/null"""
+  """Convert input to list"""
   signals = list(originalSignals)
+
   """Check for comments and print them out, return False"""
   if ((''.join(originalSignals))[0] in commentSymbols or (''.join(originalSignals))[:2] in commentSymbols):
     if type(originalSignals) == type('string'):
@@ -346,6 +347,8 @@ def signals_parser(originalSignals):
     else:
       print(' '.join(originalSignals)[2:])
     return False
+
+  """Throw all non-alnum chars to /dev/null"""
   signals = filter(lambda char: char.isalnum(), signals)
   signals = ''.join(signals)
   signals = signals.upper()
