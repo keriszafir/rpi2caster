@@ -55,9 +55,9 @@ def output_setup():
     ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])
 
 
-"""Set up comment symbols for parsing the ribbon files:"""
+"""Set up comment symbols for signals_parser:"""
 global commentSymbols
-commentSymbols = ['**', '* ', '//']
+commentSymbols = ['**', '*', '//', '##', '#', ';', ':']
 
 
 def tab_complete(text, state):
@@ -139,7 +139,7 @@ def activate_valves(signals):
   in an array fed to the function. The input array "signals" can contain
   lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions.
   Do nothing if the function receives an empty sequence."""
-  if len(signals) != 0:
+  if signals is not False and len(signals) != 0:
     for monotypeSignal in signals:
       pin = wiringPiPinNumber[monotypeSignal.upper()]
       wiringpi.digitalWrite(pin,1)
@@ -149,7 +149,6 @@ def deactivate_valves():
   esp. in case of program termination."""
   for pin in range(65,97):
     wiringpi.digitalWrite(pin,0)
-
 
 def machine_stopped():
   """This allows us to choose whether we want to continue, return to menu
@@ -171,20 +170,22 @@ def machine_stopped():
 def cast_composition(filename):
   """ Composition casting routine. The input file is read backwards -
   last characters are cast first, after setting the justification."""
+
+  """Open a file with signals"""
   with open(filename, 'rb') as ribbon:
-    fileContents = reversed(list(csv.reader(ribbon, delimiter=';')))
+
+    """Wait until the operator confirms"""
     print('\nThe combinations of Monotype signals will be displayed '
                      'on screen while the machine casts the type.\n')
     raw_input('\nInput file found. Press return to start casting.\n')
-    for row in fileContents:
-      """Make sure that the combination won't be changed"""
-      signals = tuple(row)
-      """Check if the row begins with a defined comment symbols - if so,
-      print it to screen, but don't turn on the valves!"""
-      if ((''.join(row))[:2] in commentSymbols):
-        print(' '.join(row)[2:])
-      else:
+    for line in ribbon:
+
+      """Parse the row, return a list of signals, or False if comment"""
+      signals = signals_parser(line)
+      if signals is not False:
         send_signals_to_caster(signals, 5)
+
+  """After punching is finished, notify the user:"""
   raw_input('\nCasting finished. Press return to go to main menu. ')
   main()
 
@@ -194,28 +195,30 @@ def punch_composition(filename):
   When punching, the input file is read forwards. An additional line
   (O15) is switched on for operating the paper tower, if less than two
   signals are found in a sequence."""
+
+  """Open a file with signals"""
   with open(filename, 'rb') as ribbon:
-    fileContents = csv.reader(ribbon, delimiter=';')
+
+    """Wait until the operator confirms"""
     print('\nThe combinations of Monotype signals will be displayed '
               'on screen while the paper tower punches the ribbon.\n')
     raw_input('\nInput file found. Turn on the air, fit the tape '
            'on your paper tower and press return to start punching.\n')
-    for row in fileContents:
-      """Make sure that the combination won't be changed"""
-      signals = tuple(row)
-      """Check if the row begins with a defined comment symbols - if so,
-      print it to screen, but don't turn on the valves!"""
-      if ((''.join(row))[:2] in commentSymbols):
-        print(' '.join(row)[2:])
-      else:
+    for line in ribbon:
+
+      """Parse the row, return a list of signals, or False if comment"""
+      signals = signals_parser(line)
+      if signals is not False:
+        """Determine if we need to turn O+15 on"""
         if len(signals) < 2:
           signals += ('O15',)
-        print(str.upper(' '.join(signals)))
         activate_valves(signals)
+
         """The pace is arbitrary, let's set it to 200ms/200ms"""
         time.sleep(0.2)
         deactivate_valves()
         time.sleep(0.2)
+
   """After punching is finished, notify the user:"""
   raw_input('\nPunching finished. Press return to go to main menu. ')
   main()
@@ -228,12 +231,13 @@ def line_test():
   MNH, MNK (feel free to add other important combinations!)"""
   raw_input('This will check if the valves, pin blocks and 0005, S, '
            '0075 mechanisms are working. Press return to continue... ')
-  for signal in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'],
+  for combination in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'],
               ['5'], ['6'], ['7'], ['8'], ['9'], ['10'], ['11'], ['12'],
               ['13'], ['14'], ['A'], ['B'], ['C'], ['D'], ['E'], ['F'],
               ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
               ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
-    send_signals_to_caster(signal, 60)
+    print ' '.join(combination)
+    send_signals_to_caster(combination, 60)
   raw_input('\nTesting done. Press return to go to main menu. ')
   main()
 
@@ -243,25 +247,27 @@ def cast_sorts():
   Ask user about the diecase row & column, as well as number of sorts."""
   os.system('clear')
   print('Calibration and Sort Casting:\n\n')
-  column = raw_input('Enter column symbol (default: G) ').upper()
-  row = raw_input('Enter row number (default: 5) ')
-  n = raw_input('How many sorts do you want to cast? (default: 10) ')
+  signals = raw_input('Enter column and row symbols (default: G 5) ')
   print('\n')
-  if not row.isdigit() or int(row) not in range(1,16):
-    print('Wrong row number. Defaulting to 5.')
-    row = '5'
-  if column not in (list('ABCDEFGHIJKLMNO') + ['NI', 'NL']):
-    print('Wrong column symbol. Defaulting to G.')
-    column = 'G'
+  if signals == '':
+    signals = 'G5'
+  signals = signals_parser(signals)
+  if signals is False:
+    print('\nRe-enter the sequence')
+    time.sleep(1)
+    cast_sorts()
+  n = raw_input('\nHow many sorts do you want to cast? (default: 10) ')
+  print('\n')
+
   if not n.isdigit() or int(n) < 0:
-    print('Incorrect number of sorts. Defaulting to 10.')
     n = '10'
   n = int(n)
-  print ('\nWe\'ll cast %s %s, %s times.\n' % (column, row, n))
+
+  print ('\nWe\'ll cast it %i times.\n' % (n))
   if n > 30:
     print('\nWarning: you want to cast a single character more than '
                   '30 times. This may lead to matrix overheating!\n')
-  signals = (column, row)
+
   """Ask user if the entered parameters are correct"""
   choice = ''
   while choice not in ['c', 'r', 'm', 'e']:
@@ -274,6 +280,7 @@ def cast_sorts():
       print('Casting characters...')
       """Cast n combinations of row & column, one by one"""
       for i in range(n):
+        print ' '.join(signals)
         send_signals_to_caster(signals, 5)
       """After casting sorts we need to stop the pump"""
       print('Stopping pump and putting line to the galley...')
@@ -303,84 +310,102 @@ def cast_sorts():
       finishedChoice = ''
 
 
+
 def lock_on_position():
   """This function allows us to give the program a specific combination
   of Monotype codes, and will keep the valves on until we press return
   (useful for calibration). It also checks the signals' validity"""
-  signals = ''
-  columns = []
-  rows = []
-  special_signals = []
+
   """Let the user enter a combo:"""
+  signals = ''
   while signals == '':
-    signals = raw_input('Enter the signals to send to the machine: ').upper()
-  """Strip non-alphanumeric characters, like !, +, ; or spacebar"""
-  for char in signals:
-    if not char.isalnum():
-      signals = signals.replace(char, '')
-  """Detect special signals: 0005, 0075, S"""
-  for special in ['0005', '0075', 'S']:
-    if signals.find(special) != -1:
-      special_signals.append(special)
-    signals = signals.replace(special, '')
-  """Look for any numbers between 14 and 100, strip them"""
-  for n in range(100, 14, -1):
-    signals = signals.replace(str(n), '')
-  """Determine row numbers"""
-  for n in range(15, 0, -1):
-    pos = signals.find(str(n))
-    if pos > -1:
-      rows.append(str(n))
-    signals = signals.replace(str(n), '')
+    signals = raw_input('Enter the signals to send to the machine: ')
 
-  """Determine columns A...N, strip any other letters
-  (S was taken care of earlier). List comprehensions return
-  generator objects, so we must convert that to list."""
-  columns = list(s for s in signals if s in list('ABCDEFGHIJKLMN'))
-
-  """Join all the signal lists into one, print them to console,
-  then feed them to the activate_valves function in cast mode"""
-  signals = columns + rows + special_signals
-  print ' '.join(signals)
-  activate_valves(signals)
+  combination = signals_parser(signals)
+  print ' '.join(combination)
+  activate_valves(combination)
   """Wait until user decides to stop sending those signals to valves:"""
   raw_input('Press return to stop and go back to main menu. ')
   deactivate_valves()
   main()
 
 
+
+def signals_parser(originalSignals):
+  """Parses an input seq, passes only A-N, 1-14, 0005, S, 0075"""
+  columns = []
+  rows = []
+  special_signals = []
+
+  """Make it a list and throw all non-alnum chars to /dev/null"""
+  signals = list(originalSignals)
+  """Check for comments and print them out, return False"""
+  if ((''.join(originalSignals))[0] in commentSymbols or (''.join(originalSignals))[:2] in commentSymbols):
+    if type(originalSignals) == type('string'):
+      print originalSignals[2:].strip()
+    else:
+      print(' '.join(originalSignals)[2:])
+    return False
+  signals = filter(lambda char: char.isalnum(), signals)
+  signals = ''.join(signals)
+  signals = signals.upper()
+
+  """Detect special signals: 0005, 0075, S"""
+  for special in ['0005', '0075', 'S']:
+    if signals.find(special) != -1:
+      special_signals.append(special)
+      signals = signals.replace(special, '')
+
+  """Look for any numbers between 14 and 100, strip them"""
+  for n in range(100, 14, -1):
+    signals = signals.replace(str(n), '')
+
+  """Determine row numbers"""
+  for n in range(15, 0, -1):
+    pos = signals.find(str(n))
+    if pos > -1:
+      rows.append(str(n))
+    signals = signals.replace(str(n), '')
+  signals = list(signals)
+
+  """Determine columns A...N, strip any other letters
+  (S was taken care of earlier)."""
+  columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), signals)
+
+  """Join all the signal lists into one, and return it"""
+  resultSignals = columns + rows + special_signals
+
+  """Print signals to console, so that we know what we send"""
+  print(' '.join(resultSignals))
+  return resultSignals
+
+
+
 def send_signals_to_caster(signals, machineTimeout):
   """Casting - the pace is dictated by the machine (via photocell)."""
-  with open(valueFileName, 'r') as gpiostate:
-    po = select.epoll()
-    po.register(gpiostate, select.POLLPRI)
-    previousState = 0
-    """Detect events on a photocell input and cast all signals in a row.
-    Ask the user what to do if the machine is stopped (no events)."""
-    while 1:
-      events = po.poll(machineTimeout)
-      if events:
-        """be sure that the machine is working"""
-        gpiostate.seek(0)
-        photocellState = int(gpiostate.read())
-        if photocellState == 1:
-          """print signals to console, so that we know what we cast"""
-          print(str.upper(' '.join(signals)))
-          """don't turn the O+15 valve on during casting"""
-          signals = list(signals)
-          if 'O' in signals:
-            signals.remove('O')
-          if '15' in signals:
-            signals.remove('15')
-          activate_valves(signals)
-          previousState = 1
-        elif photocellState == 0 and previousState == 1:
-          deactivate_valves()
-          previousState = 0
-          break
-      else:
-        """if machine isn't working, notify the user"""
-        machine_stopped()
+  if signals is not False:
+    with open(valueFileName, 'r') as gpiostate:
+      po = select.epoll()
+      po.register(gpiostate, select.POLLPRI)
+      previousState = 0
+      """Detect events on a photocell input and cast all signals in a row.
+      Ask the user what to do if the machine is stopped (no events)."""
+      while 1:
+        events = po.poll(machineTimeout)
+        if events:
+          """be sure that the machine is working"""
+          gpiostate.seek(0)
+          photocellState = int(gpiostate.read())
+          if photocellState == 1:
+            activate_valves(signals)
+            previousState = 1
+          elif photocellState == 0 and previousState == 1:
+            deactivate_valves()
+            previousState = 0
+            break
+        else:
+          """if machine isn't working, notify the user"""
+          machine_stopped()
 
 
 
