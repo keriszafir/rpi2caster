@@ -6,6 +6,8 @@ g 5
 g,5 ** inline comment
 g, 5
 * four times G5
+
+*an empty line for O + 15 (if youre casting)
 ** double asterisk comment
 * single asterisk comment
 // double slash comment
