@@ -23,40 +23,43 @@ class Hardware(object):
     self.pinBase = pinBase
 
 
-  def input_setup(photocellGPIO):
+
+  def input_setup(self):
+    print self.photocellGPIO
     """Input configuration
     We need to set up the sysfs interface before (powerbuttond.py -
     a daemon running on boot with root privileges takes care of it).
     In the future,  we'll add configurable GPIO numbers. Why store the
     device config in the program source, if we can use a .conf file?"""
 
-    gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
-    global valueFileName
-    valueFileName = gpioSysfsPath + 'value'
-    edgeFileName = gpioSysfsPath + 'edge'
+    gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.photocellGPIO
+    self.valueFileName = gpioSysfsPath + 'value'
+    self.edgeFileName = gpioSysfsPath + 'edge'
 
     """Check if the photocell GPIO has been configured:"""
-    if not os.access(valueFileName, os.R_OK):
+    if not os.access(self.valueFileName, os.R_OK):
       print('%s: file does not exist or cannot be read. '
          'You must export the GPIO no %i as input first!'
-                        % (valueFileName, photocellGPIO))
+              % (self.valueFileName, self.photocellGPIO))
+
       exit()
     """Check if the interrupts are generated for photocell GPIO
     for both rising and falling edge:"""
-    with open(edgeFileName, 'r') as edgeFile:
+    with open(self.edgeFileName, 'r') as edgeFile:
       if (edgeFile.read()[:4] != 'both'):
         print('%s: file does not exist, cannot be read or the interrupt '
         'on GPIO no %i is not set to "both". Check the system config.'
-        % (edgeFileName, photocellGPIO))
+        % (self.edgeFileName, self.photocellGPIO))
         exit()
 
 
-  def output_setup(mcp0Address, mcp1Address, pinBase):
+
+  def output_setup(self):
     """Output configuration
     Setup the wiringPi MCP23017 chips for valve outputs:"""
-    wiringpi.mcp23017Setup(pinBase, mcp0Address)
-    wiringpi.mcp23017Setup(pinBase + 16, mcp1Address)
-    pins = range(pinBase, pinBase + 32)
+    wiringpi.mcp23017Setup(self.pinBase, self.mcp0Address)
+    wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
+    pins = range(self.pinBase, self.pinBase + 32)
     signals = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',
              '12', '13', '14', '0005', '0075', 'A', 'B', 'C', 'D', 'E',
              'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'S', 'O15']
@@ -65,8 +68,7 @@ class Hardware(object):
       wiringpi.pinMode(pin,1)
 
     """Assign wiringPi pin numbers on MCP23017s to the Monotype control codes."""
-    global wiringPiPinNumber
-        wiringPiPinNumber = dict(zip(signals, pins))
+    self.wiringPiPinNumber = dict(zip(signals, pins))
 
     """old hard-wired assignment
     wiringPiPinNumber = dict([('1', 65), ('2', 66), ('3', 67), ('4', 68), ('5', 69),
@@ -74,6 +76,71 @@ class Hardware(object):
       ('13', 77), ('14', 78), ('0005', 79), ('0075', 80), ('A', 81), ('B', 82),
       ('C', 83), ('D', 84), ('E', 85), ('F', 86), ('G', 87), ('H', 88), ('I', 89),
       ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])"""
+
+
+
+  def send_signals_to_caster(self, signals, machineTimeout):
+    """Casting - the pace is dictated by the machine (via photocell)."""
+    with open(self.valueFileName, 'r') as gpiostate:
+      po = select.epoll()
+      po.register(gpiostate, select.POLLPRI)
+      previousState = 0
+      """Detect events on a photocell input and cast all signals in a row.
+      Ask the user what to do if the machine is stopped (no events)."""
+      while 1:
+        events = po.poll(machineTimeout)
+        if events:
+          """be sure that the machine is working"""
+          gpiostate.seek(0)
+          photocellState = int(gpiostate.read())
+          if photocellState == 1:
+            self.activate_valves(signals)
+            previousState = 1
+          elif photocellState == 0 and previousState == 1:
+            self.deactivate_valves()
+            previousState = 0
+            break
+        else:
+          """if machine isn't working, notify the user"""
+          self.machine_stopped()
+
+
+
+  def activate_valves(self, signals):
+    """ Activates the valves corresponding to Monotype signals found
+    in an array fed to the function. The input array "signals" can contain
+    lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions.
+    Do nothing if the function receives an empty sequence."""
+    if len(signals) != 0:
+      for monotypeSignal in signals:
+        pin = self.wiringPiPinNumber[monotypeSignal]
+        wiringpi.digitalWrite(pin,1)
+
+
+
+  def deactivate_valves(self):
+    """Turn all valves off to avoid erroneous operation,
+    esp. in case of program termination."""
+    for pin in range(self.pinBase, self.pinBase + 32):
+      wiringpi.digitalWrite(pin,0)
+
+
+
+  def machine_stopped(self):
+    """This allows us to choose whether we want to continue, return to menu
+    or exit if the machine stops during casting."""
+    choice = ""
+    while choice not in ['c', 'm', 'e']:
+      choice = raw_input('Machine not running! Check what\'s going on.'
+                   '\n(C)ontinue, return to (M)enu or (E)xit program.')
+    else:
+      if choice.lower() == 'c':
+        return True
+      elif choice.lower() == 'm':
+        menu()
+      elif choice.lower() == 'e':
+        deactivate_valves()
+        exit()
 
 
 
@@ -103,7 +170,7 @@ def enter_filename():
 def menu():
   """Main menu. On entering, clear the screen and turn any valves off."""
   os.system('clear')
-  deactivate_valves()
+  interface.deactivate_valves()
   print('rpi2caster - CAT (Computer-Aided Typecasting) for Monotype '
   'Composition or Type and Rule casters.\n\nThis program reads '
   'a ribbon (input file) and casts the type on a Composition Caster, '
@@ -158,41 +225,6 @@ def menu():
 
 
 
-def activate_valves(signals):
-  """ Activates the valves corresponding to Monotype signals found
-  in an array fed to the function. The input array "signals" can contain
-  lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions.
-  Do nothing if the function receives an empty sequence."""
-  if len(signals) != 0:
-    for monotypeSignal in signals:
-      pin = wiringPiPinNumber[monotypeSignal]
-      wiringpi.digitalWrite(pin,1)
-
-
-
-def deactivate_valves():
-  """Turn all valves off to avoid erroneous operation,
-  esp. in case of program termination."""
-  for pin in range(65,97):
-    wiringpi.digitalWrite(pin,0)
-
-
-
-def machine_stopped():
-  """This allows us to choose whether we want to continue, return to menu
-  or exit if the machine stops during casting."""
-  choice = ""
-  while choice not in ['c', 'm', 'e']:
-    choice = raw_input('Machine not running! Check what\'s going on.'
-                 '\n(C)ontinue, return to (M)enu or (E)xit program.')
-  else:
-    if choice.lower() == 'c':
-      return True
-    elif choice.lower() == 'm':
-      menu()
-    elif choice.lower() == 'e':
-      deactivate_valves()
-      exit()
 
 
 
@@ -232,7 +264,9 @@ def cast_composition(filename):
     if len(comment) == 0 or len(signals) > 0:
       if len(signals) > 0:
         print ' '.join(signals)
-      send_signals_to_caster(signals, 5)
+      else:
+        print('O+15 - no signals')
+      interface.send_signals_to_caster(signals, 5)
 
   """After punching is finished, notify the user:"""
   raw_input('\nCasting finished. Press return to go to main menu. ')
@@ -277,11 +311,11 @@ def punch_composition(filename):
         if len(signals) < 2:
           signals += ('O15',)
         print ' '.join(signals)
-        activate_valves(signals)
+        interface.activate_valves(signals)
 
         """The pace is arbitrary, let's set it to 200ms/200ms"""
         time.sleep(0.2)
-        deactivate_valves()
+        interface.deactivate_valves()
         time.sleep(0.2)
 
   """After punching is finished, notify the user:"""
@@ -303,7 +337,7 @@ def line_test():
               ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
               ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
     print ' '.join(combination)
-    send_signals_to_caster(combination, 60)
+    interface.send_signals_to_caster(combination, 60)
   raw_input('\nTesting done. Press return to go to main menu. ')
   main()
 
@@ -351,22 +385,24 @@ def cast_sorts():
     if choice.lower() == 'c':
       """Cast the sorts: turn on the pump first."""
       print('Starting the pump...')
-      send_signals_to_caster(['N', 'K', '0075'], 5)
+      interface.send_signals_to_caster(['N', 'K', '0075'], 5)
       print('Casting characters...')
       """Cast n combinations of row & column, one by one"""
       for i in range(n):
         if len(combination) > 0:
           print ' '.join(combination)
-        send_signals_to_caster(combination, 5)
+        else:
+          print('O+15 - no signals')
+        interface.send_signals_to_caster(combination, 5)
       """After casting sorts we need to stop the pump"""
       print('Stopping pump and putting line to the galley...')
-      send_signals_to_caster(['0005', '0075'], 5)
+      interface.send_signals_to_caster(['0005', '0075'], 5)
     elif choice.lower() == 'r':
       cast_sorts()
     elif choice.lower() == 'm':
       menu()
     elif choice.lower() == 'e':
-      deactivate_valves()
+      interface.deactivate_valves()
       exit()
 
   """Ask what to do after casting"""
@@ -379,7 +415,7 @@ def cast_sorts():
     elif finishedChoice.lower() == 'm':
       menu()
     elif finishedChoice.lower() == 'e':
-      deactivate_valves()
+      interface.deactivate_valves()
       exit()
     else:
       print('\nNo such option. Choose again.')
@@ -397,12 +433,13 @@ def lock_on_position():
   while signals == '':
     signals = raw_input('Enter the signals to send to the machine: ')
   combination = signals_parser(signals)[0]
-  print ' '.join(combination)
-  activate_valves(combination)
+  if len(combination) > 0:
+    print ' '.join(combination)
+  interface.activate_valves(combination)
 
   """Wait until user decides to stop sending those signals to valves:"""
   raw_input('Press return to stop and go back to main menu. ')
-  deactivate_valves()
+  interface.deactivate_valves()
   main()
 
 
@@ -427,10 +464,6 @@ def signals_parser(originalSignals):
       comment = signals[symbolPosition + len(symbol):].strip()
       signals = signals[:symbolPosition].strip()
       signals = signals.upper()
-      #print comment
-      #"""Return None if there's only a comment in the line."""
-      #if signals == '':
-      #  return None
 
   """Filter out all non-alphanumeric characters and whitespace"""
   signals = filter(str.isalnum, signals).upper()
@@ -465,37 +498,7 @@ def signals_parser(originalSignals):
   """Join all the signal lists into one and return a list containing
   the signals, as well as a comment."""
   resultSignals = columns + rows + special_signals
-  #print(' '.join(resultSignals))
   return [resultSignals, comment]
-
-
-
-def send_signals_to_caster(signals, machineTimeout):
-  """Casting - the pace is dictated by the machine (via photocell)."""
-  with open(valueFileName, 'r') as gpiostate:
-    po = select.epoll()
-    po.register(gpiostate, select.POLLPRI)
-    previousState = 0
-    """Detect events on a photocell input and cast all signals in a row.
-    Ask the user what to do if the machine is stopped (no events)."""
-    while 1:
-      events = po.poll(machineTimeout)
-      if events:
-        """be sure that the machine is working"""
-        gpiostate.seek(0)
-        photocellState = int(gpiostate.read())
-        if photocellState == 1:
-          if len(signals) == 0:
-            print('O+15 - no signals')
-          activate_valves(signals)
-          previousState = 1
-        elif photocellState == 0 and previousState == 1:
-          deactivate_valves()
-          previousState = 0
-          break
-      else:
-        """if machine isn't working, notify the user"""
-        machine_stopped()
 
 
 
@@ -504,17 +507,21 @@ def main():
   Also, ensure cleaning up after exit."""
   try:
     menu()
-#  except (IOError, NameError):
-#    raw_input('\nInput file not chosen or wrong input file name. '
-#                              'Press return to go to main menu.\n')
-#    main()
+  except (IOError, NameError):
+    raw_input('\nInput file not chosen or wrong input file name. '
+                              'Press return to go to main menu.\n')
+    main()
   except KeyboardInterrupt:
     print("Terminated by user.")
     exit()
   finally:
-    deactivate_valves()
+    interface.deactivate_valves()
 
 """Do the main loop."""
-input_setup()
-output_setup()
+
+"""Set up interface:
+photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65"""
+interface = Hardware(17, 0x20, 0x21, 65)
+interface.input_setup()
+interface.output_setup()
 main()
