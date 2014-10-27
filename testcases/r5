@@ -3,7 +3,7 @@
 nkj0075
 g5
 g 5
-g,5
+g,5 ** inline comment
 g, 5
 * four times G5
 ** double asterisk comment

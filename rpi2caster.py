@@ -9,8 +9,9 @@ the solenoid valves respective to the Monotype control codes.
 After the photocell is lit (low state on input), the valves are
 turned off and the program moves on to the next line."""
 
-import sys, os, time, string, csv, readline, glob, select
+import sys, os, time, string, readline, glob, select
 import wiringpi2 as wiringpi
+
 
 
 def input_setup():
@@ -40,6 +41,7 @@ def input_setup():
       exit()
 
 
+
 def output_setup():
   """Setup the wiringPi MCP23017 chips for valve outputs:"""
   wiringpi.mcp23017Setup(65,0x20)
@@ -55,10 +57,6 @@ def output_setup():
     ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])
 
 
-"""Set up comment symbols for signals_parser:"""
-global commentSymbols
-commentSymbols = ['**', '*', '//', '##', '#', ';', ':']
-
 
 def tab_complete(text, state):
   """This function enables tab key auto-completion when you
@@ -69,14 +67,19 @@ readline.parse_and_bind('tab: complete')
 readline.set_completer(tab_complete)
 
 
+
+"""We need this inside and outside menu"""
 global inputFileName
 inputFileName = ""
+
 
 
 def enter_filename():
   """Enter the ribbon filename"""
   global inputFileName
   inputFileName = raw_input('\n Enter the ribbon file name: ')
+
+
 
 def menu():
   """Main menu. On entering, clear the screen and turn any valves off."""
@@ -134,21 +137,27 @@ def menu():
       print('\nNo such option. Choose again.')
       ans = ''
 
+
+
 def activate_valves(signals):
   """ Activates the valves corresponding to Monotype signals found
   in an array fed to the function. The input array "signals" can contain
   lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions.
   Do nothing if the function receives an empty sequence."""
-  if signals is not False and len(signals) != 0:
+  if signals is not None and len(signals) != 0:
     for monotypeSignal in signals:
-      pin = wiringPiPinNumber[monotypeSignal.upper()]
+      pin = wiringPiPinNumber[monotypeSignal]
       wiringpi.digitalWrite(pin,1)
+
+
 
 def deactivate_valves():
   """Turn all valves off to avoid erroneous operation,
   esp. in case of program termination."""
   for pin in range(65,97):
     wiringpi.digitalWrite(pin,0)
+
+
 
 def machine_stopped():
   """This allows us to choose whether we want to continue, return to menu
@@ -167,6 +176,7 @@ def machine_stopped():
       exit()
 
 
+
 def cast_composition(filename):
   """ Composition casting routine. The input file is read backwards -
   last characters are cast first, after setting the justification."""
@@ -180,14 +190,16 @@ def cast_composition(filename):
     raw_input('\nInput file found. Press return to start casting.\n')
     for line in ribbon:
 
-      """Parse the row, return a list of signals, or False if comment"""
+      """Parse the row, return a list of signals, or None if there's
+      only a comment in the row"""
       signals = signals_parser(line)
-      if signals is not False:
+      if signals is not None:
         send_signals_to_caster(signals, 5)
 
   """After punching is finished, notify the user:"""
   raw_input('\nCasting finished. Press return to go to main menu. ')
   main()
+
 
 
 def punch_composition(filename):
@@ -206,9 +218,10 @@ def punch_composition(filename):
            'on your paper tower and press return to start punching.\n')
     for line in ribbon:
 
-      """Parse the row, return a list of signals, or False if comment"""
+      """Parse the row, return a list of signals, or None if there's
+      only a comment in the row"""
       signals = signals_parser(line)
-      if signals is not False:
+      if signals is not None:
         """Determine if we need to turn O+15 on"""
         if len(signals) < 2:
           signals += ('O15',)
@@ -222,6 +235,7 @@ def punch_composition(filename):
   """After punching is finished, notify the user:"""
   raw_input('\nPunching finished. Press return to go to main menu. ')
   main()
+
 
 
 def line_test():
@@ -242,6 +256,7 @@ def line_test():
   main()
 
 
+
 def cast_sorts():
   """Sorts casting routine, based on the position in diecase.
   Ask user about the diecase row & column, as well as number of sorts."""
@@ -252,7 +267,7 @@ def cast_sorts():
   if signals == '':
     signals = 'G5'
   signals = signals_parser(signals)
-  if signals is False:
+  if signals is None:
     print('\nRe-enter the sequence')
     time.sleep(1)
     cast_sorts()
@@ -320,10 +335,9 @@ def lock_on_position():
   signals = ''
   while signals == '':
     signals = raw_input('Enter the signals to send to the machine: ')
-
   combination = signals_parser(signals)
-  print ' '.join(combination)
   activate_valves(combination)
+
   """Wait until user decides to stop sending those signals to valves:"""
   raw_input('Press return to stop and go back to main menu. ')
   deactivate_valves()
@@ -332,28 +346,39 @@ def lock_on_position():
 
 
 def signals_parser(originalSignals):
-  """Parses an input seq, passes only A-N, 1-14, 0005, S, 0075"""
+  """Parses an input string, passes only A-N, 1-14, 0005, S, 0075.
+  Prints any comments to screen."""
+
+  """We need to work on strings. Convert any lists, integers etc."""
+  signals = str(originalSignals)
+
+  """This is a comment parser. It looks for any comment symbols defined
+  here - e.g. **, *, ##, #, // etc. - and prints the comment to screen.
+  If it's an inline comment (placed after combination), we cast this
+  combination. If a line in file contains a comment only, we cast nothing.
+  So, we need an empty line if we want to cast O15 (place the comment above)."""
+  commentSymbols = ['**', '*', '//', '##', '#']
+  for symbol in commentSymbols:
+    symbolPosition = signals.find(symbol)
+    if symbolPosition != -1:
+      comment = signals[symbolPosition + len(symbol):].strip()
+      signals = signals[:symbolPosition].strip()
+      signals = signals.upper()
+      print comment
+      """Return None if there's only a comment in the line."""
+      if signals == '':
+        return None
+
+  """Filter out all non-alphanumeric characters and whitespace"""
+  signals = filter(str.isalnum, signals).upper()
+
+  """Codes for columns, rows and special signals will be stored
+  separately and sorted on output"""
   columns = []
   rows = []
   special_signals = []
 
-  """Convert input to list"""
-  signals = list(originalSignals)
-
-  """Check for comments and print them out, return False"""
-  if ((''.join(originalSignals))[0] in commentSymbols or (''.join(originalSignals))[:2] in commentSymbols):
-    if type(originalSignals) == type('string'):
-      print originalSignals[2:].strip()
-    else:
-      print(' '.join(originalSignals)[2:])
-    return False
-
-  """Throw all non-alnum chars to /dev/null"""
-  signals = filter(lambda char: char.isalnum(), signals)
-  signals = ''.join(signals)
-  signals = signals.upper()
-
-  """Detect special signals: 0005, 0075, S"""
+  """First, detect special signals: 0005, 0075, S"""
   for special in ['0005', '0075', 'S']:
     if signals.find(special) != -1:
       special_signals.append(special)
@@ -363,22 +388,20 @@ def signals_parser(originalSignals):
   for n in range(100, 14, -1):
     signals = signals.replace(str(n), '')
 
-  """Determine row numbers"""
+  """From remaining numbers, determine row numbers"""
   for n in range(15, 0, -1):
     pos = signals.find(str(n))
     if pos > -1:
       rows.append(str(n))
     signals = signals.replace(str(n), '')
-  signals = list(signals)
 
-  """Determine columns A...N, strip any other letters
-  (S was taken care of earlier)."""
-  columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), signals)
+  """Treat signals as a list and filter it, dump all letters beyond N
+  (S was taken care of earlier). That will be the column signals."""
+  columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), list(signals))
 
-  """Join all the signal lists into one, and return it"""
+  """Join all the signal lists into one, print signals to console
+  (so that we know what we cast/punch) and return the result"""
   resultSignals = columns + rows + special_signals
-
-  """Print signals to console, so that we know what we send"""
   print(' '.join(resultSignals))
   return resultSignals
 
@@ -386,7 +409,7 @@ def signals_parser(originalSignals):
 
 def send_signals_to_caster(signals, machineTimeout):
   """Casting - the pace is dictated by the machine (via photocell)."""
-  if signals is not False:
+  if signals is not None:
     with open(valueFileName, 'r') as gpiostate:
       po = select.epoll()
       po.register(gpiostate, select.POLLPRI)
