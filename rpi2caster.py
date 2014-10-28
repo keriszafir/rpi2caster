@@ -68,21 +68,28 @@ class Hardware(object):
       po = select.epoll()
       po.register(gpiostate, select.POLLPRI)
       previousState = 0
+
       """Detect events on a photocell input and cast all signals in a row.
       Ask the user what to do if the machine is stopped (no events)."""
       while 1:
+        """polling for interrupts"""
         events = po.poll(machineTimeout)
         if events:
           """be sure that the machine is working"""
           gpiostate.seek(0)
           photocellState = int(gpiostate.read())
+
           if photocellState == 1:
+            """there's a signal from photocell - let the air in"""
             self.activate_valves(signals)
             previousState = 1
+
           elif photocellState == 0 and previousState == 1:
+            """state changes from 1 to 0 - end of air in phase"""
             self.deactivate_valves()
             previousState = 0
             break
+
         else:
           """if machine isn't working, notify the user"""
           self.machine_stopped()
@@ -147,16 +154,14 @@ class Parsing(object):
       if symbolPosition != -1:
         comment = signals[symbolPosition + len(symbol):].strip()
         signals = signals[:symbolPosition].strip()
-        signals = signals.upper()
+      #  signals = signals.upper()
 
     """Filter out all non-alphanumeric characters and whitespace"""
     signals = filter(str.isalnum, signals).upper()
 
     """Codes for columns, rows and special signals will be stored
     separately and sorted on output"""
-    columns = []
-    rows = []
-    special_signals = []
+    columns = rows = special_signals = []
 
     """First, detect special signals: 0005, 0075, S"""
     for special in ['0005', '0075', 'S']:
@@ -179,10 +184,8 @@ class Parsing(object):
     (S was taken care of earlier). That will be the column signals."""
     columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), list(signals))
 
-    """Join all the signal lists into one and return a list containing
-    the signals, as well as a comment."""
-    resultSignals = columns + rows + special_signals
-    return [resultSignals, comment]
+    """Return a list containing the signals, as well as a comment."""
+    return [columns + rows + special_signals, comment]
 
 
 
@@ -208,16 +211,11 @@ class Actions(Parsing):
     raw_input('\nInput file found. Press return to start casting.\n')
     for line in contents:
 
-      """Parse the row, return a list of signals, or None if there's
-      only a comment in the row"""
-      outcome = self.signals_parser(line)
+      """Parse the row, return a list of signals and a comment.
+      Both can have zero or positive length."""
+      signals, comment = self.signals_parser(line)
 
-      """The outcome is a list: [signals (list), comment (str)]
-      Both can be empty"""
-      signals = outcome[0]
-      comment = outcome[1]
-
-      """Print a comment if there is one"""
+      """Print a comment if there is one (positive length)"""
       if len(comment) > 0:
         print comment
 
@@ -251,16 +249,11 @@ class Actions(Parsing):
              'on your paper tower and press return to start punching.\n')
       for line in ribbon:
 
-        """Parse the row, return a list of signals, or None if there's
-        only a comment in the row"""
-        outcome = self.signals_parser(line)
+        """Parse the row, return a list of signals and a comment.
+        Both can have zero or positive length."""
+        signals, comment = self.signals_parser(line)
 
-        """The outcome is a list: [signals (list), comment (str)]
-        Both can be empty"""
-        signals = outcome[0]
-        comment = outcome[1]
-
-        """Print a comment if there is one"""
+        """Print a comment if there is one - positive length"""
         if len(comment) > 0:
           print comment
 
@@ -311,14 +304,12 @@ class Actions(Parsing):
     print('\n')
     if signals == '':
       signals = 'G5'
-    outcome = self.signals_parser(signals)
 
-    """We need only a sequence of signals, no comments"""
-    combination = outcome[0]
+    parsedSignals, comment = self.signals_parser(signals)
 
     """O15 yields no signals, but we may want to cast it - check if we
     entered spacebar"""
-    if len(combination) == 0 and signals != ' ':
+    if len(parsedSignals) == 0 and signals != ' ':
       print('\nRe-enter the sequence')
       time.sleep(1)
       self.cast_sorts()
@@ -348,11 +339,11 @@ class Actions(Parsing):
         print('Casting characters...')
         """Cast n combinations of row & column, one by one"""
         for i in range(n):
-          if len(combination) > 0:
-            print ' '.join(combination)
+          if len(parsedSignals) > 0:
+            print ' '.join(parsedSignals)
           else:
             print('O+15 - no signals')
-          self.send_signals_to_caster(combination, 5)
+          self.send_signals_to_caster(parsedSignals, 5)
         """After casting sorts we need to stop the pump"""
         print('Stopping pump and putting line to the galley...')
         self.send_signals_to_caster(['0005', '0075'], 5)
