@@ -88,7 +88,6 @@ class Hardware(object):
           self.machine_stopped()
 
 
-
   def activate_valves(self, signals):
     """ Activates the valves corresponding to Monotype signals found
     in an array fed to the function. The input array "signals" can contain
@@ -100,13 +99,11 @@ class Hardware(object):
         wiringpi.digitalWrite(pin,1)
 
 
-
   def deactivate_valves(self):
     """Turn all valves off to avoid erroneous operation,
     esp. in case of program termination."""
     for pin in range(self.pinBase, self.pinBase + 32):
       wiringpi.digitalWrite(pin,0)
-
 
 
   def machine_stopped(self):
@@ -127,9 +124,70 @@ class Hardware(object):
 
 
 
-class Actions(object):
-  """Actions the user can do in this software"""
+class Parsing(object):
+  """This class contains file- and line-parsing methods"""
 
+
+  def signals_parser(self, originalSignals):
+    """Parses an input string, passes only A-N, 1-14, 0005, S, 0075.
+    Prints any comments to screen."""
+
+    """We need to work on strings. Convert any lists, integers etc."""
+    signals = str(originalSignals)
+
+    """This is a comment parser. It looks for any comment symbols defined
+    here - e.g. **, *, ##, #, // etc. - and prints the comment to screen.
+    If it's an inline comment (placed after combination), we cast this
+    combination. If a line in file contains a comment only, we cast nothing.
+    So, we need an empty line if we want to cast O15 (place the comment above)."""
+    commentSymbols = ['**', '*', '//', '##', '#']
+    comment = ''
+    for symbol in commentSymbols:
+      symbolPosition = signals.find(symbol)
+      if symbolPosition != -1:
+        comment = signals[symbolPosition + len(symbol):].strip()
+        signals = signals[:symbolPosition].strip()
+        signals = signals.upper()
+
+    """Filter out all non-alphanumeric characters and whitespace"""
+    signals = filter(str.isalnum, signals).upper()
+
+    """Codes for columns, rows and special signals will be stored
+    separately and sorted on output"""
+    columns = []
+    rows = []
+    special_signals = []
+
+    """First, detect special signals: 0005, 0075, S"""
+    for special in ['0005', '0075', 'S']:
+      if signals.find(special) != -1:
+        special_signals.append(special)
+        signals = signals.replace(special, '')
+
+    """Look for any numbers between 14 and 100, strip them"""
+    for n in range(100, 14, -1):
+      signals = signals.replace(str(n), '')
+
+    """From remaining numbers, determine row numbers"""
+    for n in range(15, 0, -1):
+      pos = signals.find(str(n))
+      if pos > -1:
+        rows.append(str(n))
+      signals = signals.replace(str(n), '')
+
+    """Treat signals as a list and filter it, dump all letters beyond N
+    (S was taken care of earlier). That will be the column signals."""
+    columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), list(signals))
+
+    """Join all the signal lists into one and return a list containing
+    the signals, as well as a comment."""
+    resultSignals = columns + rows + special_signals
+    return [resultSignals, comment]
+
+
+
+class Actions(Parsing):
+  """Actions the user can do in this software"""
 
 
   def cast_composition(self, filename):
@@ -152,7 +210,7 @@ class Actions(object):
 
       """Parse the row, return a list of signals, or None if there's
       only a comment in the row"""
-      outcome = signals_parser(line)
+      outcome = self.signals_parser(line)
 
       """The outcome is a list: [signals (list), comment (str)]
       Both can be empty"""
@@ -177,7 +235,6 @@ class Actions(object):
     self.menu()
 
 
-
   def punch_composition(self, filename):
     """Punching routine.
     When punching, the input file is read forwards. An additional line
@@ -196,7 +253,7 @@ class Actions(object):
 
         """Parse the row, return a list of signals, or None if there's
         only a comment in the row"""
-        outcome = signals_parser(line)
+        outcome = self.signals_parser(line)
 
         """The outcome is a list: [signals (list), comment (str)]
         Both can be empty"""
@@ -227,7 +284,6 @@ class Actions(object):
     self.menu()
 
 
-
   def line_test(self):
     """Test all valves and composition caster's inputs to check
     if everything works and is properly connected. Signals will be tested
@@ -246,7 +302,6 @@ class Actions(object):
     self.menu()
 
 
-
   def cast_sorts(self):
     """Sorts casting routine, based on the position in diecase.
     Ask user about the diecase row & column, as well as number of sorts."""
@@ -256,7 +311,7 @@ class Actions(object):
     print('\n')
     if signals == '':
       signals = 'G5'
-    outcome = signals_parser(signals)
+    outcome = self.signals_parser(signals)
 
     """We need only a sequence of signals, no comments"""
     combination = outcome[0]
@@ -326,7 +381,6 @@ class Actions(object):
         finishedChoice = ''
 
 
-
   def lock_on_position(self):
     """This function allows us to give the program a specific combination
     of Monotype codes, and will keep the valves on until we press return
@@ -336,7 +390,7 @@ class Actions(object):
     signals = ''
     while signals == '':
       signals = raw_input('Enter the signals to send to the machine: ')
-    combination = signals_parser(signals)[0]
+    combination = self.signals_parser(signals)[0]
     if len(combination) > 0:
       print ' '.join(combination)
     self.activate_valves(combination)
@@ -352,21 +406,23 @@ class TextUI(object):
   """This class defines a text user interface, i.e. what you can do
   when operating the program from console."""
 
+
   def consoleUI(self):
     """Main loop definition. All exceptions should be caught here.
     Also, ensure cleaning up after exit."""
     try:
       self.menu()
-#    except (IOError, NameError):
-#      raw_input('\nInput file not chosen or wrong input file name. '
-#                              'Press return to go to main menu.\n')
-#      self.menu()
+    except (IOError, NameError):
+      raw_input('\nInput file not chosen or wrong input file name. '
+                              'Press return to go to main menu.\n')
+      self.menu()
     except KeyboardInterrupt:
       print('\nTerminated by user.')
       exit()
     finally:
       print('Goodbye!')
       self.deactivate_valves()
+
 
   def tab_complete(text, state):
     """This function enables tab key auto-completion when you
@@ -380,10 +436,10 @@ class TextUI(object):
   """Set up an empty ribbon file name first"""
   inputFileName = ''
 
+
   def enter_filename(self):
     """Enter the ribbon filename"""
     self.inputFileName = raw_input('\n Enter the ribbon file name: ')
-
 
 
   def menu(self):
@@ -456,85 +512,10 @@ class Console(Hardware, Actions, TextUI):
     self.consoleUI()
 
 
-def signals_parser(originalSignals):
-  """Parses an input string, passes only A-N, 1-14, 0005, S, 0075.
-  Prints any comments to screen."""
-
-  """We need to work on strings. Convert any lists, integers etc."""
-  signals = str(originalSignals)
-
-  """This is a comment parser. It looks for any comment symbols defined
-  here - e.g. **, *, ##, #, // etc. - and prints the comment to screen.
-  If it's an inline comment (placed after combination), we cast this
-  combination. If a line in file contains a comment only, we cast nothing.
-  So, we need an empty line if we want to cast O15 (place the comment above)."""
-  commentSymbols = ['**', '*', '//', '##', '#']
-  comment = ''
-  for symbol in commentSymbols:
-    symbolPosition = signals.find(symbol)
-    if symbolPosition != -1:
-      comment = signals[symbolPosition + len(symbol):].strip()
-      signals = signals[:symbolPosition].strip()
-      signals = signals.upper()
-
-  """Filter out all non-alphanumeric characters and whitespace"""
-  signals = filter(str.isalnum, signals).upper()
-
-  """Codes for columns, rows and special signals will be stored
-  separately and sorted on output"""
-  columns = []
-  rows = []
-  special_signals = []
-
-  """First, detect special signals: 0005, 0075, S"""
-  for special in ['0005', '0075', 'S']:
-    if signals.find(special) != -1:
-      special_signals.append(special)
-      signals = signals.replace(special, '')
-
-  """Look for any numbers between 14 and 100, strip them"""
-  for n in range(100, 14, -1):
-    signals = signals.replace(str(n), '')
-
-  """From remaining numbers, determine row numbers"""
-  for n in range(15, 0, -1):
-    pos = signals.find(str(n))
-    if pos > -1:
-      rows.append(str(n))
-    signals = signals.replace(str(n), '')
-
-  """Treat signals as a list and filter it, dump all letters beyond N
-  (S was taken care of earlier). That will be the column signals."""
-  columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), list(signals))
-
-  """Join all the signal lists into one and return a list containing
-  the signals, as well as a comment."""
-  resultSignals = columns + rows + special_signals
-  return [resultSignals, comment]
-
-
 
 """Do the main loop."""
 if __name__ == "__main__":
 
-  """Set up interface:
-  photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65"""
+  """Set up the console-based interface:
+  I/O params: photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65"""
   monotype = Console(17, 0x20, 0x21, 65)
-
-
-
-
-  """Main loop definition. All exceptions should be caught here.
-  Also, ensure cleaning up after exit.
-  try:
-    interface.menu()
-#  except (IOError, NameError):
-#    raw_input('\nInput file not chosen or wrong input file name. '
-#                              'Press return to go to main menu.\n')
-#    interface.menu()
-  except KeyboardInterrupt:
-    print('\nTerminated by user.')
-    exit()
-  finally:
-    print('Goodbye!')
-    interface.deactivate_valves()"""
