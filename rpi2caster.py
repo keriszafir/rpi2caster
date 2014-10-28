@@ -15,23 +15,16 @@ import wiringpi2 as wiringpi
 
 
 class Hardware(object):
-
-  def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
-    self.photocellGPIO = photocellGPIO
-    self.mcp0Address = mcp0Address
-    self.mcp1Address = mcp1Address
-    self.pinBase = pinBase
+  """A class which stores all methods related to the interface and
+  caster itself"""
 
 
-
-  def input_setup(self):
-    print self.photocellGPIO
-    """Input configuration
+  def setup(self):
+    """Input configuration:
     We need to set up the sysfs interface before (powerbuttond.py -
     a daemon running on boot with root privileges takes care of it).
     In the future,  we'll add configurable GPIO numbers. Why store the
     device config in the program source, if we can use a .conf file?"""
-
     gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.photocellGPIO
     self.valueFileName = gpioSysfsPath + 'value'
     self.edgeFileName = gpioSysfsPath + 'edge'
@@ -41,8 +34,8 @@ class Hardware(object):
       print('%s: file does not exist or cannot be read. '
          'You must export the GPIO no %i as input first!'
               % (self.valueFileName, self.photocellGPIO))
-
       exit()
+
     """Check if the interrupts are generated for photocell GPIO
     for both rising and falling edge:"""
     with open(self.edgeFileName, 'r') as edgeFile:
@@ -52,10 +45,7 @@ class Hardware(object):
         % (self.edgeFileName, self.photocellGPIO))
         exit()
 
-
-
-  def output_setup(self):
-    """Output configuration
+    """Output configuration:
     Setup the wiringPi MCP23017 chips for valve outputs:"""
     wiringpi.mcp23017Setup(self.pinBase, self.mcp0Address)
     wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
@@ -64,19 +54,12 @@ class Hardware(object):
              '12', '13', '14', '0005', '0075', 'A', 'B', 'C', 'D', 'E',
              'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'S', 'O15']
 
+    """Set all I/O lines as outputs - mode 1"""
     for pin in pins:
       wiringpi.pinMode(pin,1)
 
     """Assign wiringPi pin numbers on MCP23017s to the Monotype control codes."""
     self.wiringPiPinNumber = dict(zip(signals, pins))
-
-    """old hard-wired assignment
-    wiringPiPinNumber = dict([('1', 65), ('2', 66), ('3', 67), ('4', 68), ('5', 69),
-      ('6', 70), ('7', 71), ('8', 72), ('9', 73), ('10', 74), ('11', 75), ('12', 76),
-      ('13', 77), ('14', 78), ('0005', 79), ('0075', 80), ('A', 81), ('B', 82),
-      ('C', 83), ('D', 84), ('E', 85), ('F', 86), ('G', 87), ('H', 88), ('I', 89),
-      ('J', 90), ('K', 91), ('L', 92), ('M', 93), ('N', 94), ('S', 95), ('O15', 96)])"""
-
 
 
   def send_signals_to_caster(self, signals, machineTimeout):
@@ -137,158 +120,35 @@ class Hardware(object):
       if choice.lower() == 'c':
         return True
       elif choice.lower() == 'm':
-        menu()
+        self.menu()
       elif choice.lower() == 'e':
-        deactivate_valves()
+        self.deactivate_valves()
         exit()
 
 
 
-def tab_complete(text, state):
-  """This function enables tab key auto-completion when you
-  enter the filename. Will definitely come in handy."""
-  return (glob.glob(text+'*')+[None])[state]
-readline.set_completer_delims(' \t\n;')
-readline.parse_and_bind('tab: complete')
-readline.set_completer(tab_complete)
+class Actions(object):
+  """Actions the user can do in this software"""
 
 
 
-"""We need this inside and outside menu"""
-global inputFileName
-inputFileName = ""
+  def cast_composition(self, filename):
+    """ Composition casting routine. The input file is read backwards -
+    last characters are cast first, after setting the justification."""
+
+    """Open a file with signals"""
+    with open(filename, 'rb') as ribbon:
+      contents = ribbon.readlines()
 
 
-
-def enter_filename():
-  """Enter the ribbon filename"""
-  global inputFileName
-  inputFileName = raw_input('\n Enter the ribbon file name: ')
-
-
-
-def menu():
-  """Main menu. On entering, clear the screen and turn any valves off."""
-  os.system('clear')
-  interface.deactivate_valves()
-  print('rpi2caster - CAT (Computer-Aided Typecasting) for Monotype '
-  'Composition or Type and Rule casters.\n\nThis program reads '
-  'a ribbon (input file) and casts the type on a Composition Caster, '
-  '\nor punches a paper tape with a Monotype keyboard\'s paper tower.\n')
-  ans = ''
-  while ans == '':
-    print ("""
-\t Main menu:
-
-\t 1. Load a ribbon file
-
-\t 2. Cast type from ribbon file
-
-\t 3. Punch a paper tape
-
-\t 4. Cast sorts
-
-\t 5. Test the valves and pinblocks
-
-\t 6. Lock the caster on a specified diecase position
-
-
-
-\t 0. Exit to shell
-
-""")
-
-    if inputFileName != '':
-      print('Input file name: %s\n' % os.path.realpath(inputFileName))
-
-    ans = raw_input('Choose an option: ')
-    if ans=='1':
-      enter_filename()
-      menu()
-    elif ans=='2':
-      cast_composition(inputFileName)
-    elif ans=='3':
-      punch_composition(inputFileName)
-    elif ans=='4':
-      cast_sorts()
-    elif ans=='5':
-      line_test()
-    elif ans=='6':
-      lock_on_position()
-
-    elif ans=='0':
-      print('\nGoodbye! :)\n')
-      exit()
-    else:
-      print('\nNo such option. Choose again.')
-      ans = ''
-
-
-
-
-
-
-def cast_composition(filename):
-  """ Composition casting routine. The input file is read backwards -
-  last characters are cast first, after setting the justification."""
-
-  """Open a file with signals"""
-  with open(filename, 'rb') as ribbon:
-    contents = ribbon.readlines()
-
-
-  """For casting, we need to read the file backwards"""
-  contents = reversed(contents)
-
-  """Wait until the operator confirms"""
-  print('\nThe combinations of Monotype signals will be displayed '
-                   'on screen while the machine casts the type.\n')
-  raw_input('\nInput file found. Press return to start casting.\n')
-  for line in contents:
-
-    """Parse the row, return a list of signals, or None if there's
-    only a comment in the row"""
-    outcome = signals_parser(line)
-
-    """The outcome is a list: [signals (list), comment (str)]
-    Both can be empty"""
-    signals = outcome[0]
-    comment = outcome[1]
-
-    """Print a comment if there is one"""
-    if len(comment) > 0:
-      print comment
-
-    """Cast an empty line, signals with comment, signals with no comment.
-    Don't cast a line with comment alone."""
-    if len(comment) == 0 or len(signals) > 0:
-      if len(signals) > 0:
-        print ' '.join(signals)
-      else:
-        print('O+15 - no signals')
-      interface.send_signals_to_caster(signals, 5)
-
-  """After punching is finished, notify the user:"""
-  raw_input('\nCasting finished. Press return to go to main menu. ')
-  main()
-
-
-
-def punch_composition(filename):
-  """Punching routine.
-  When punching, the input file is read forwards. An additional line
-  (O15) is switched on for operating the paper tower, if less than two
-  signals are found in a sequence."""
-
-  """Open a file with signals"""
-  with open(filename, 'rb') as ribbon:
+    """For casting, we need to read the file backwards"""
+    contents = reversed(contents)
 
     """Wait until the operator confirms"""
     print('\nThe combinations of Monotype signals will be displayed '
-              'on screen while the paper tower punches the ribbon.\n')
-    raw_input('\nInput file found. Turn on the air, fit the tape '
-           'on your paper tower and press return to start punching.\n')
-    for line in ribbon:
+                     'on screen while the machine casts the type.\n')
+    raw_input('\nInput file found. Press return to start casting.\n')
+    for line in contents:
 
       """Parse the row, return a list of signals, or None if there's
       only a comment in the row"""
@@ -303,145 +163,297 @@ def punch_composition(filename):
       if len(comment) > 0:
         print comment
 
-      """Punch an empty line, signals with comment, signals with no comment.
+      """Cast an empty line, signals with comment, signals with no comment.
       Don't cast a line with comment alone."""
       if len(comment) == 0 or len(signals) > 0:
-
-        """Determine if we need to turn O+15 on"""
-        if len(signals) < 2:
-          signals += ('O15',)
-        print ' '.join(signals)
-        interface.activate_valves(signals)
-
-        """The pace is arbitrary, let's set it to 200ms/200ms"""
-        time.sleep(0.2)
-        interface.deactivate_valves()
-        time.sleep(0.2)
-
-  """After punching is finished, notify the user:"""
-  raw_input('\nPunching finished. Press return to go to main menu. ')
-  main()
-
-
-
-def line_test():
-  """Test all valves and composition caster's inputs to check
-  if everything works and is properly connected. Signals will be tested
-  in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL,
-  MNH, MNK (feel free to add other important combinations!)"""
-  raw_input('This will check if the valves, pin blocks and 0005, S, '
-           '0075 mechanisms are working. Press return to continue... ')
-  for combination in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'],
-              ['5'], ['6'], ['7'], ['8'], ['9'], ['10'], ['11'], ['12'],
-              ['13'], ['14'], ['A'], ['B'], ['C'], ['D'], ['E'], ['F'],
-              ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
-              ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
-    print ' '.join(combination)
-    interface.send_signals_to_caster(combination, 60)
-  raw_input('\nTesting done. Press return to go to main menu. ')
-  main()
-
-
-
-def cast_sorts():
-  """Sorts casting routine, based on the position in diecase.
-  Ask user about the diecase row & column, as well as number of sorts."""
-  os.system('clear')
-  print('Calibration and Sort Casting:\n\n')
-  signals = raw_input('Enter column and row symbols (default: G 5, spacebar if O-15) ')
-  print('\n')
-  if signals == '':
-    signals = 'G5'
-  outcome = signals_parser(signals)
-
-  """We need only a sequence of signals, no comments"""
-  combination = outcome[0]
-
-  """O15 yields no signals, but we may want to cast it - check if we
-  entered spacebar"""
-  if len(combination) == 0 and signals != ' ':
-    print('\nRe-enter the sequence')
-    time.sleep(1)
-    cast_sorts()
-  n = raw_input('\nHow many sorts do you want to cast? (default: 10) ')
-  print('\n')
-
-  """Default to 10 if user enters non-positive number or letters"""
-  if not n.isdigit() or int(n) < 0:
-    n = '10'
-  n = int(n)
-
-  """Warn if we want to cast too many sorts from a single matrix"""
-  print ('\nWe\'ll cast it %i times.\n' % (n))
-  if n > 30:
-    print('\nWarning: you want to cast a single character more than '
-                  '30 times. This may lead to matrix overheating!\n')
-
-  """Ask user if the entered parameters are correct"""
-  choice = ''
-  while choice not in ['c', 'r', 'm', 'e']:
-    choice = raw_input('(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program? ')
-  else:
-    if choice.lower() == 'c':
-      """Cast the sorts: turn on the pump first."""
-      print('Starting the pump...')
-      interface.send_signals_to_caster(['N', 'K', '0075'], 5)
-      print('Casting characters...')
-      """Cast n combinations of row & column, one by one"""
-      for i in range(n):
-        if len(combination) > 0:
-          print ' '.join(combination)
+        if len(signals) > 0:
+          print ' '.join(signals)
         else:
           print('O+15 - no signals')
-        interface.send_signals_to_caster(combination, 5)
-      """After casting sorts we need to stop the pump"""
-      print('Stopping pump and putting line to the galley...')
-      interface.send_signals_to_caster(['0005', '0075'], 5)
-    elif choice.lower() == 'r':
-      cast_sorts()
-    elif choice.lower() == 'm':
-      menu()
-    elif choice.lower() == 'e':
-      interface.deactivate_valves()
-      exit()
+        self.send_signals_to_caster(signals, 5)
 
-  """Ask what to do after casting"""
-  print('\nFinished!')
-  finishedChoice = ''
-  while finishedChoice not in ['r', 'm', 'e']:
-    finishedChoice = raw_input('(R)epeat, go back to (M)enu or (E)xit program? ')
-    if finishedChoice.lower() == 'r':
-      cast_sorts()
-    elif finishedChoice.lower() == 'm':
-      menu()
-    elif finishedChoice.lower() == 'e':
-      interface.deactivate_valves()
-      exit()
+    """After punching is finished, notify the user:"""
+    raw_input('\nCasting finished. Press return to go to main menu. ')
+    self.menu()
+
+
+
+  def punch_composition(self, filename):
+    """Punching routine.
+    When punching, the input file is read forwards. An additional line
+    (O+15) is switched on for operating the paper tower, if less than two
+    signals are found in a sequence."""
+
+    """Open a file with signals"""
+    with open(filename, 'rb') as ribbon:
+
+      """Wait until the operator confirms"""
+      print('\nThe combinations of Monotype signals will be displayed '
+                'on screen while the paper tower punches the ribbon.\n')
+      raw_input('\nInput file found. Turn on the air, fit the tape '
+             'on your paper tower and press return to start punching.\n')
+      for line in ribbon:
+
+        """Parse the row, return a list of signals, or None if there's
+        only a comment in the row"""
+        outcome = signals_parser(line)
+
+        """The outcome is a list: [signals (list), comment (str)]
+        Both can be empty"""
+        signals = outcome[0]
+        comment = outcome[1]
+
+        """Print a comment if there is one"""
+        if len(comment) > 0:
+          print comment
+
+        """Punch an empty line, signals with comment, signals with no comment.
+        Don't punch a line with comment alone (prevents erroneous O+15's)."""
+        if len(comment) == 0 or len(signals) > 0:
+
+          """Determine if we need to turn O+15 on"""
+          if len(signals) < 2:
+            signals += ('O15',)
+          print ' '.join(signals)
+          self.activate_valves(signals)
+
+          """The pace is arbitrary, let's set it to 200ms/200ms"""
+          time.sleep(0.2)
+          self.deactivate_valves()
+          time.sleep(0.2)
+
+    """After punching is finished, notify the user:"""
+    raw_input('\nPunching finished. Press return to go to main menu. ')
+    self.menu()
+
+
+
+  def line_test(self):
+    """Test all valves and composition caster's inputs to check
+    if everything works and is properly connected. Signals will be tested
+    in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL,
+    MNH, MNK (feel free to add other important combinations!)"""
+    raw_input('This will check if the valves, pin blocks and 0005, S, '
+             '0075 mechanisms are working. Press return to continue... ')
+    for combination in [['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'], ['4'],
+                ['5'], ['6'], ['7'], ['8'], ['9'], ['10'], ['11'], ['12'],
+                ['13'], ['14'], ['A'], ['B'], ['C'], ['D'], ['E'], ['F'],
+                ['G'], ['H'], ['I'], ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
+                ['N', 'I'], ['N', 'L'], ['M', 'N', 'H'], ['M', 'N', 'K']]:
+      print ' '.join(combination)
+      self.send_signals_to_caster(combination, 60)
+    raw_input('\nTesting done. Press return to go to main menu. ')
+    self.menu()
+
+
+
+  def cast_sorts(self):
+    """Sorts casting routine, based on the position in diecase.
+    Ask user about the diecase row & column, as well as number of sorts."""
+    os.system('clear')
+    print('Calibration and Sort Casting:\n\n')
+    signals = raw_input('Enter column and row symbols (default: G 5, spacebar if O-15) ')
+    print('\n')
+    if signals == '':
+      signals = 'G5'
+    outcome = signals_parser(signals)
+
+    """We need only a sequence of signals, no comments"""
+    combination = outcome[0]
+
+    """O15 yields no signals, but we may want to cast it - check if we
+    entered spacebar"""
+    if len(combination) == 0 and signals != ' ':
+      print('\nRe-enter the sequence')
+      time.sleep(1)
+      self.cast_sorts()
+    n = raw_input('\nHow many sorts do you want to cast? (default: 10) ')
+    print('\n')
+
+    """Default to 10 if user enters non-positive number or letters"""
+    if not n.isdigit() or int(n) < 0:
+      n = '10'
+    n = int(n)
+
+    """Warn if we want to cast too many sorts from a single matrix"""
+    print ('\nWe\'ll cast it %i times.\n' % (n))
+    if n > 30:
+      print('\nWarning: you want to cast a single character more than '
+                    '30 times. This may lead to matrix overheating!\n')
+
+    """Ask user if the entered parameters are correct"""
+    choice = ''
+    while choice not in ['c', 'r', 'm', 'e']:
+      choice = raw_input('(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program? ')
     else:
-      print('\nNo such option. Choose again.')
-      finishedChoice = ''
+      if choice.lower() == 'c':
+        """Cast the sorts: turn on the pump first."""
+        print('Starting the pump...')
+        self.send_signals_to_caster(['N', 'K', '0075'], 5)
+        print('Casting characters...')
+        """Cast n combinations of row & column, one by one"""
+        for i in range(n):
+          if len(combination) > 0:
+            print ' '.join(combination)
+          else:
+            print('O+15 - no signals')
+          self.send_signals_to_caster(combination, 5)
+        """After casting sorts we need to stop the pump"""
+        print('Stopping pump and putting line to the galley...')
+        self.send_signals_to_caster(['0005', '0075'], 5)
+      elif choice.lower() == 'r':
+        self.cast_sorts()
+      elif choice.lower() == 'm':
+        self.menu()
+      elif choice.lower() == 'e':
+        self.deactivate_valves()
+        exit()
+
+    """Ask what to do after casting"""
+    print('\nFinished!')
+    finishedChoice = ''
+    while finishedChoice not in ['r', 'm', 'e']:
+      finishedChoice = raw_input('(R)epeat, go back to (M)enu or (E)xit program? ')
+      if finishedChoice.lower() == 'r':
+        self.cast_sorts()
+      elif finishedChoice.lower() == 'm':
+        self.menu()
+      elif finishedChoice.lower() == 'e':
+        self.deactivate_valves()
+        exit()
+      else:
+        print('\nNo such option. Choose again.')
+        finishedChoice = ''
 
 
 
-def lock_on_position():
-  """This function allows us to give the program a specific combination
-  of Monotype codes, and will keep the valves on until we press return
-  (useful for calibration). It also checks the signals' validity"""
+  def lock_on_position(self):
+    """This function allows us to give the program a specific combination
+    of Monotype codes, and will keep the valves on until we press return
+    (useful for calibration). It also checks the signals' validity"""
 
-  """Let the user enter a combo:"""
-  signals = ''
-  while signals == '':
-    signals = raw_input('Enter the signals to send to the machine: ')
-  combination = signals_parser(signals)[0]
-  if len(combination) > 0:
-    print ' '.join(combination)
-  interface.activate_valves(combination)
+    """Let the user enter a combo:"""
+    signals = ''
+    while signals == '':
+      signals = raw_input('Enter the signals to send to the machine: ')
+    combination = signals_parser(signals)[0]
+    if len(combination) > 0:
+      print ' '.join(combination)
+    self.activate_valves(combination)
 
-  """Wait until user decides to stop sending those signals to valves:"""
-  raw_input('Press return to stop and go back to main menu. ')
-  interface.deactivate_valves()
-  main()
+    """Wait until user decides to stop sending those signals to valves:"""
+    raw_input('Press return to stop and go back to main menu. ')
+    self.deactivate_valves()
+    self.menu()
 
+
+
+class TextUI(object):
+  """This class defines a text user interface, i.e. what you can do
+  when operating the program from console."""
+
+  def consoleUI(self):
+    """Main loop definition. All exceptions should be caught here.
+    Also, ensure cleaning up after exit."""
+    try:
+      self.menu()
+#    except (IOError, NameError):
+#      raw_input('\nInput file not chosen or wrong input file name. '
+#                              'Press return to go to main menu.\n')
+#      self.menu()
+    except KeyboardInterrupt:
+      print('\nTerminated by user.')
+      exit()
+    finally:
+      print('Goodbye!')
+      self.deactivate_valves()
+
+  def tab_complete(text, state):
+    """This function enables tab key auto-completion when you
+    enter the filename. Will definitely come in handy."""
+    return (glob.glob(text+'*')+[None])[state]
+
+  readline.set_completer_delims(' \t\n;')
+  readline.parse_and_bind('tab: complete')
+  readline.set_completer(tab_complete)
+
+  """Set up an empty ribbon file name first"""
+  inputFileName = ''
+
+  def enter_filename(self):
+    """Enter the ribbon filename"""
+    self.inputFileName = raw_input('\n Enter the ribbon file name: ')
+
+
+
+  def menu(self):
+    """Main menu. On entering, clear the screen and turn any valves off."""
+    os.system('clear')
+    self.deactivate_valves()
+    print('rpi2caster - CAT (Computer-Aided Typecasting) for Monotype '
+    'Composition or Type and Rule casters.\n\nThis program reads '
+    'a ribbon (input file) and casts the type on a Composition Caster, '
+    '\nor punches a paper tape with a Monotype keyboard\'s paper tower.\n')
+    ans = ''
+    while ans == '':
+      print ("""
+  \t Main menu:
+
+  \t 1. Load a ribbon file
+
+  \t 2. Cast type from ribbon file
+
+  \t 3. Punch a paper tape
+
+  \t 4. Cast sorts
+
+  \t 5. Test the valves and pinblocks
+
+  \t 6. Lock the caster on a specified diecase position
+
+
+
+  \t 0. Exit to shell
+
+  """)
+
+      if self.inputFileName != '':
+        print('Input file name: %s\n' % os.path.realpath(self.inputFileName))
+
+      ans = raw_input('Choose an option: ')
+      if ans=='1':
+        self.enter_filename()
+        self.menu()
+      elif ans=='2':
+        self.cast_composition(self.inputFileName)
+      elif ans=='3':
+        self.punch_composition(self.inputFileName)
+      elif ans=='4':
+        self.cast_sorts()
+      elif ans=='5':
+        self.line_test()
+      elif ans=='6':
+        self.lock_on_position()
+
+      elif ans=='0':
+        exit()
+      else:
+        print('\nNo such option. Choose again.')
+        ans = ''
+
+
+
+class Console(Hardware, Actions, TextUI):
+  """Use this class for instantiating text-based console user interface"""
+
+  def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
+    self.photocellGPIO = photocellGPIO
+    self.mcp0Address = mcp0Address
+    self.mcp1Address = mcp1Address
+    self.pinBase = pinBase
+
+    self.setup()
+    self.consoleUI()
 
 
 def signals_parser(originalSignals):
@@ -502,26 +514,27 @@ def signals_parser(originalSignals):
 
 
 
-def main():
+"""Do the main loop."""
+if __name__ == "__main__":
+
+  """Set up interface:
+  photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65"""
+  monotype = Console(17, 0x20, 0x21, 65)
+
+
+
+
   """Main loop definition. All exceptions should be caught here.
-  Also, ensure cleaning up after exit."""
+  Also, ensure cleaning up after exit.
   try:
-    menu()
-  except (IOError, NameError):
-    raw_input('\nInput file not chosen or wrong input file name. '
-                              'Press return to go to main menu.\n')
-    main()
+    interface.menu()
+#  except (IOError, NameError):
+#    raw_input('\nInput file not chosen or wrong input file name. '
+#                              'Press return to go to main menu.\n')
+#    interface.menu()
   except KeyboardInterrupt:
-    print("Terminated by user.")
+    print('\nTerminated by user.')
     exit()
   finally:
-    interface.deactivate_valves()
-
-"""Do the main loop."""
-
-"""Set up interface:
-photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65"""
-interface = Hardware(17, 0x20, 0x21, 65)
-interface.input_setup()
-interface.output_setup()
-main()
+    print('Goodbye!')
+    interface.deactivate_valves()"""
