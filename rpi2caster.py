@@ -194,6 +194,9 @@ class Parsing(object):
     (S was taken care of earlier). That will be the column signals."""
     columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), list(signals))
 
+    """Make sure no signal appears more than once, and sort them"""
+    columns = sorted(set(columns))
+
     """Return a list containing the signals, as well as a comment."""
     return [columns + rows + special_signals, comment]
 
