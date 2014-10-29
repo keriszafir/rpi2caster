@@ -18,6 +18,14 @@ class Hardware(object):
   """A class which stores all methods related to the interface and
   caster itself"""
 
+  def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
+    self.photocellGPIO = photocellGPIO
+    self.mcp0Address = mcp0Address
+    self.mcp1Address = mcp1Address
+    self.pinBase = pinBase
+
+    self.setup()
+
 
   def setup(self):
     """Input configuration:
@@ -161,7 +169,9 @@ class Parsing(object):
 
     """Codes for columns, rows and special signals will be stored
     separately and sorted on output"""
-    columns = rows = special_signals = []
+    columns = []
+    rows = []
+    special_signals = []
 
     """First, detect special signals: 0005, 0075, S"""
     for special in ['0005', '0075', 'S']:
@@ -493,13 +503,9 @@ class TextUI(object):
 class Console(Hardware, Actions, TextUI):
   """Use this class for instantiating text-based console user interface"""
 
-  def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
-    self.photocellGPIO = photocellGPIO
-    self.mcp0Address = mcp0Address
-    self.mcp1Address = mcp1Address
-    self.pinBase = pinBase
+  def __init__(self, photocellGPIO=17, mcp0Address=0x20, mcp1Address=0x21, pinBase=65):
+    Hardware.__init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase)
 
-    self.setup()
     self.consoleUI()
 
 
@@ -507,6 +513,8 @@ class Console(Hardware, Actions, TextUI):
 """Do the main loop."""
 if __name__ == "__main__":
 
-  """Set up the console-based interface:
-  I/O params: photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65"""
-  monotype = Console(17, 0x20, 0x21, 65)
+  """Create the 'monotype' object of a console class:
+  Set up the console-based interface with default I/O params:
+  photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65
+  Give values to override if using a dual interface"""
+  monotype = Console()
