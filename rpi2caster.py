@@ -10,7 +10,10 @@ After the photocell is lit (low state on input), the valves are
 turned off and the program moves on to the next line."""
 
 import sys, os, time, string, readline, glob, select
-import wiringpi2 as wiringpi
+try:
+  import wiringpi2 as wiringpi
+finally:
+  pass
 
 global DebugMode
 DebugMode = False
@@ -20,6 +23,7 @@ class Hardware(object):
   caster itself"""
 
   def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
+
     self.photocellGPIO = photocellGPIO
     self.mcp0Address = mcp0Address
     self.mcp1Address = mcp1Address
