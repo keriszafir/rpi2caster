@@ -12,6 +12,9 @@ turned off and the program moves on to the next line."""
 import sys, os, time, string, readline, glob, select
 try:
   import wiringpi2 as wiringpi
+except ImportError:
+  print('wiringPi2 not installed! It\'s OK for testing, but you MUST install it if you want to cast!')
+  time.sleep(1)
 finally:
   pass
 
