@@ -12,7 +12,8 @@ turned off and the program moves on to the next line."""
 import sys, os, time, string, readline, glob, select
 import wiringpi2 as wiringpi
 
-
+global DebugMode
+DebugMode = False
 
 class Hardware(object):
   """A class which stores all methods related to the interface and
@@ -136,6 +137,38 @@ class Hardware(object):
       elif choice.lower() == 'e':
         self.deactivate_valves()
         exit()
+
+
+
+class DryRun(object):
+  """A class which allows to test rpi2caster without an actual interface"""
+
+  def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
+    print 'Photocell GPIO: ',photocellGPIO
+    print 'MCP23017 chip addresses: ',mcp0Address,', ',mcp1Address
+    print 'MCP23017 pin base: ',pinBase
+    time.sleep(1)
+
+  def send_signals_to_caster(self, signals, machineTimeout):
+    """Just send signals, as we don't have a photocell"""
+    raw_input('Sensor ON - press [ENTER]')
+    self.activate_valves(signals)
+    raw_input('Sensor OFF - press [ENTER]')
+    self.deactivate_valves()
+
+
+  def activate_valves(self, signals):
+    """If there are any signals, print them out"""
+    if len(signals) != 0:
+      print 'The valves: ',' '.join(signals),' would be activated now.'
+
+  def deactivate_valves(self):
+    """No need to do anything"""
+    print 'The valves would be deactivated now.'
+
+  def machine_stopped(self):
+    """This function should never be called in dry-run mode"""
+    print 'Oops! Something went wrong and the "machine stopped" function was called...'
 
 
 
@@ -417,9 +450,13 @@ class TextUI(object):
     try:
       self.menu()
     except (IOError, NameError):
-      raw_input('\nInput file not chosen or wrong input file name. '
+      if DebugMode == True:
+        print('Debug mode: see what happened.')
+        raise
+      else:
+        raw_input('\nInput file not chosen or wrong input file name. '
                               'Press return to go to main menu.\n')
-      self.menu()
+        self.menu()
     except KeyboardInterrupt:
       print('\nTerminated by user.')
       exit()
@@ -454,6 +491,8 @@ class TextUI(object):
     'Composition or Type and Rule casters.\n\nThis program reads '
     'a ribbon (input file) and casts the type on a Composition Caster, '
     '\nor punches a paper tape with a Monotype keyboard\'s paper tower.\n')
+    if DebugMode:
+      print('\nThe program is now in debugging mode!\n')
     ans = ''
     while ans == '':
       print ("""
@@ -511,13 +550,9 @@ class Console(Hardware, Actions, TextUI):
 
     self.consoleUI()
 
-
-
-"""Do the main loop."""
-if __name__ == "__main__":
-
-  """Create the 'monotype' object of a console class:
-  Set up the console-based interface with default I/O params:
-  photocell GPIO 17, MCP23017s at 0x20 and 0x21, pin base 65
-  Give values to override if using a dual interface"""
-  monotype = Console()
+class Testing(DryRun, Actions, TextUI):
+  def __init__(self, photocellGPIO=17, mcp0Address=0x20, mcp1Address=0x21, pinBase=65):
+    global DebugMode
+    DebugMode = True
+    DryRun.__init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase)
+    self.consoleUI()
