@@ -77,6 +77,37 @@ class Hardware(object):
     """Assign wiringPi pin numbers on MCP23017s to the Monotype control codes."""
     self.wiringPiPinNumber = dict(zip(signals, pins))
 
+  def detect_rotation(self):
+    """Detects if the machine is rotating"""
+    """count machine cycles, initial 0, target 3"""
+    cycles = 0
+    cycles_max = 3
+    """let's give it 30 seconds timeout"""
+    time_start = time.time()
+    time_max = 30
+    """check for photocell signals until timeout or target is reached"""
+    with open(self.valueFileName, 'r') as gpiostate:
+      while time.time() <= time_start + time_max and cycles <= cycles_max:
+        photocellSignals = select.epoll()
+        photocellSignals.register(gpiostate, select.POLLPRI)
+        events = photocellSignals.poll(0.5)
+        if events:
+          gpiostate.seek(0)
+          photocellState = int(gpiostate.read())
+          previousState = 0
+          if photocellState == 1 and previousState == 0:
+            previousState = 1
+            cycles += 1
+          elif photocellState == 0 and previousState == 1:
+            previousState = 0
+      else:
+        if cycles > cycles_max:
+          print('\nOkay, the machine is running...\n')
+          return True
+        else:
+          self.machine_stopped()
+          self.detect_rotation()
+          return False
 
   def send_signals_to_caster(self, signals, machineTimeout):
     """Casting - the pace is dictated by the machine (via photocell)."""
@@ -87,7 +118,7 @@ class Hardware(object):
 
       """Detect events on a photocell input and cast all signals in a row.
       Ask the user what to do if the machine is stopped (no events)."""
-      while 1:
+      while True:
         """polling for interrupts"""
         events = po.poll(machineTimeout)
         if events:
@@ -260,8 +291,10 @@ class Actions(Parsing):
 
     """Wait until the operator confirms"""
     print('\nThe combinations of Monotype signals will be displayed '
-                     'on screen while the machine casts the type.\n')
-    raw_input('\nInput file found. Press return to start casting.\n')
+    'on screen while the machine casts the type.\nTurn on the machine '
+    'and the program will start automatically.\n')
+    #raw_input('\nInput file found. Press return to start casting.\n')
+    self.detect_rotation()
     for line in contents:
 
       """Parse the row, return a list of signals and a comment.
@@ -386,6 +419,9 @@ class Actions(Parsing):
       choice = raw_input('(C)ontinue, (R)epeat, go back to (M)enu or (E)xit program? ')
     else:
       if choice.lower() == 'c':
+        """Check if the machine is running"""
+        print('Start the machine...')
+        self.detect_rotation()
         """Cast the sorts: turn on the pump first."""
         print('Starting the pump...')
         self.send_signals_to_caster(['N', 'K', '0075'], 5)
@@ -398,7 +434,7 @@ class Actions(Parsing):
             print('O+15 - no signals')
           self.send_signals_to_caster(parsedSignals, 5)
         """After casting sorts we need to stop the pump"""
-        print('Stopping pump and putting line to the galley...')
+        print('Stopping the pump and putting line to the galley...')
         self.send_signals_to_caster(['0005', '0075'], 5)
       elif choice.lower() == 'r':
         self.cast_sorts()
