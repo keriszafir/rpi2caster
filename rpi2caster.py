@@ -303,7 +303,7 @@ class CasterConfig(object):
   """Read/write caster & interface configuration"""
 
 
-  def database_add_caster(self, serialNumber, machineName, machineType,
+  def add_caster(self, serialNumber, machineName, machineType,
                             justification, diecaseFormat, interfaceID):
     """Register a new caster"""
     db = sqlite3.connect('database/monotype.db')
@@ -320,24 +320,26 @@ class CasterConfig(object):
     db.commit()
     db.close()
 
-  def database_caster_by_name(self, machineName):
+  def caster_by_name(self, machineName):
     """Get caster parameters for a caster with a given name"""
     db = sqlite3.connect('database/monotype.db')
     cursor = db.cursor()
-    caster = cursor.execute('SELECT * FROM machine_settings WHERE caster_name = %s' % machineName)
+    cursor.execute('SELECT * FROM machine_settings WHERE caster_name = %s' % machineName)
+    caster = cursor.fetchone()
     database.close()
     return caster
 
-  def database_caster_by_serial(self, machineSerial):
+  def caster_by_serial(self, machineSerial):
     """Get caster parameters for a caster with a given serial No"""
     db = sqlite3.connect('database/monotype.db')
     cursor = db.cursor()
-    caster = cursor.execute('SELECT * FROM machine_settings WHERE caster_serial = %s' % machineSerial)
+    cursor.execute('SELECT * FROM machine_settings WHERE caster_serial = %s' % machineSerial)
+    caster = cursor.fetchone()
     database.close()
     return caster
 
 
-  def database_add_interface(self, interfaceID, interfaceName, emergencyGPIO,
+  def add_interface(self, interfaceID, interfaceName, emergencyGPIO,
                             photocellGPIO, mcp0Address, mcp1Address, pinBase):
     """Register a new interface, i.e. I2C expander params + emergency stop GPIO + photocell GPIO"""
     db = sqlite3.connect('database/monotype.db')
@@ -348,17 +350,20 @@ class CasterConfig(object):
     mcp1_address blob, pin_base integer)')
     cursor.execute('INSERT INTO interface_settings \
     (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
-    mcp1_address,pin_base) VALUES (interfaceID, interfaceName, emergencyGPIO, \
-    photocellGPIO, mcp0Address, mcp1Address, pinBase)')
+    mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %i, %i, %i)' % interfaceID,
+    interfaceName, emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase)
     db.commit()
     db.close()
 
-  def database_get_interface(self, interfaceID=0):
+  def get_interface(self, interfaceID=0):
     """Get interface parameters for a given ID, most typically 0 for a RPi with a single interface"""
     db = sqlite3.connect('database/monotype.db')
     cursor = db.cursor()
-    interface = cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
+    cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
+    interface = cursor.fetchone()
     db.close()
+    """returns a list: [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
+    mcp0Address, mcp1Address, pinBase] """
     return interface
 
 
