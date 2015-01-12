@@ -17,6 +17,13 @@ except ImportError:
   time.sleep(1)
 finally:
   pass
+try:
+  import sqlite3
+except ImportError:
+    print('You must install sqlite3 database and python-sqlite2 package.')
+    exit()
+finally:
+  pass
 
 global DebugMode
 DebugMode = False
@@ -181,10 +188,8 @@ class Hardware(object):
 class DryRun(object):
   """A class which allows to test rpi2caster without an actual interface"""
 
-  def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
-    print 'Photocell GPIO: ',photocellGPIO
-    print 'MCP23017 chip addresses: ',mcp0Address,', ',mcp1Address
-    print 'MCP23017 pin base: ',pinBase
+  def __init__(self):
+    print 'Testing rpi2caster without an actual caster or interface. Debug mode ON.'
     time.sleep(1)
 
   def send_signals_to_caster(self, signals, machineTimeout):
@@ -204,9 +209,32 @@ class DryRun(object):
     """No need to do anything"""
     print 'The valves would be deactivated now.'
 
+  def detect_rotation(self):
+    print 'Now, the program would check if the machine is rotating.\n'
+    startTime = time.time()
+    while time.time() < startTime + 5:
+      answer = raw_input('Press return (to simulate rotation) '
+                    'or wait 5sec (to simulate machine off)\n')
+    else:
+      if answer is None:
+        self.machine_stopped()
+        self.detect_rotation()
+
   def machine_stopped(self):
-    """This function should never be called in dry-run mode"""
-    print 'Oops! Something went wrong and the "machine stopped" function was called...'
+    """This allows us to choose whether we want to continue, return to menu
+    or exit if the machine stops during casting. It's just a simulation here."""
+    choice = ""
+    while choice not in ['c', 'm', 'e']:
+      choice = raw_input('Machine not running! Check what\'s going on.'
+                   '\n(C)ontinue, return to (M)enu or (E)xit program.')
+    else:
+      if choice.lower() == 'c':
+        return True
+      elif choice.lower() == 'm':
+        self.menu()
+      elif choice.lower() == 'e':
+        self.deactivate_valves()
+        exit()
 
 
 
@@ -233,7 +261,6 @@ class Parsing(object):
       if symbolPosition != -1:
         comment = signals[symbolPosition + len(symbol):].strip()
         signals = signals[:symbolPosition].strip()
-      #  signals = signals.upper()
 
     """Filter out all non-alphanumeric characters and whitespace"""
     signals = filter(str.isalnum, signals).upper()
@@ -270,6 +297,62 @@ class Parsing(object):
 
     """Return a list containing the signals, as well as a comment."""
     return [columns + rows + special_signals, comment]
+
+
+class CasterConfig(object):
+  """Read/write caster & interface configuration"""
+
+
+  def database_add_caster(self, serialNumber, machineName, machineType,
+                            justification, diecaseFormat, interfaceID):
+    """Function for registering a new caster"""
+    database = sqlite3.connect('database/monotype.db')
+    """Make sure that the table exists, if not - create it"""
+    database.execute('create table if not exists machine_settings \
+    (serial_number integer, machine_name text, machine_type text, \
+    justification text, diecase_format text, interface_id integer)')
+
+    """Create an entry for the caster in the database"""
+    database.execute('insert into machine_settings (serial_number,machine_name,\
+    machine_type,justification,diecase_format) values (%i, %s, %s, %s, %s)'
+    % serialNumber, machineName, machineType, justification, diecaseFormat, interfaceID)
+    database.close()
+
+  def database_caster_by_name(self, machineName):
+    """Get caster parameters for a caster with a given name"""
+    database = sqlite3.connect('database/monotype.db')
+    caster = database.execute('select * from machine_settings where caster_name = %s' % machineName)
+    database.close()
+    return caster
+
+  def database_caster_by_serial(self, machineSerial):
+    """Get caster parameters for a caster with a given serial No"""
+    database = sqlite3.connect('database/monotype.db')
+    caster = database.execute('select * from machine_settings where caster_serial = %s' % machineSerial)
+    database.close()
+    return caster
+
+
+  def database_add_interface(self, interfaceID, interfaceName, emergencyGPIO,
+                            photocellGPIO, mcp0Address, mcp1Address, pinBase):
+    """Register a new interface, i.e. I2C expander + emergency stop + photocell GPIOs"""
+    database = sqlite3.connect('database/monotype.db')
+    database.execute('create table if not exists interface_settings \
+    (interface_id integer, interface_name text, emergency_gpio integer, \
+    photocell_gpio integer, mcp0_address blob, \
+    mcp1_address blob, pin_base integer)')
+    database.execute('insert into interface_settings \
+    (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
+    mcp1_address,pin_base) values (interfaceID, interfaceName, emergencyGPIO, \
+    photocellGPIO, mcp0Address, mcp1Address, pinBase)')
+    database.close()
+
+  def database_get_interface(self, interfaceID=0):
+    """Get interface parameters for a given ID, most typically 0 for a RPi with a single interface"""
+    database = sqlite3.connect('database/monotype.db')
+    interface = database.execute('select * from interface_settings where interface_id = %i' % interfaceID)
+    database.close()
+    return interface
 
 
 
@@ -584,7 +667,6 @@ class TextUI(object):
         ans = ''
 
 
-
 class Console(Hardware, Actions, TextUI):
   """Use this class for instantiating text-based console user interface"""
 
@@ -594,8 +676,20 @@ class Console(Hardware, Actions, TextUI):
     self.consoleUI()
 
 class Testing(DryRun, Actions, TextUI):
-  def __init__(self, photocellGPIO=17, mcp0Address=0x20, mcp1Address=0x21, pinBase=65):
+  """A class for testing the program without an actual caster/interface"""
+  def __init__(self):
     global DebugMode
     DebugMode = True
-    DryRun.__init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase)
+    DryRun.__init__(self)
     self.consoleUI()
+
+class WebInterface(Hardware, Actions):
+  """Use this class for instantiating text-based console user interface"""
+
+  def __init__(self, photocellGPIO=17, mcp0Address=0x20, mcp1Address=0x21, pinBase=65):
+    Hardware.__init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase)
+
+    self.webUI()
+
+  def webUI(self):
+    """This is a placeholder for web interface method. Nothing yet..."""
