@@ -305,53 +305,60 @@ class CasterConfig(object):
 
   def database_add_caster(self, serialNumber, machineName, machineType,
                             justification, diecaseFormat, interfaceID):
-    """Function for registering a new caster"""
-    database = sqlite3.connect('database/monotype.db')
+    """Register a new caster"""
+    db = sqlite3.connect('database/monotype.db')
+    cursor = db.cursor()
     """Make sure that the table exists, if not - create it"""
-    database.execute('create table if not exists machine_settings \
-    (serial_number integer, machine_name text, machine_type text, \
+    cursor.execute('CREATE TABLE IF NOT EXISTS machine_settings \
+    (serial_number integer primary key, machine_name text, machine_type text, \
     justification text, diecase_format text, interface_id integer)')
 
     """Create an entry for the caster in the database"""
-    database.execute('insert into machine_settings (serial_number,machine_name,\
-    machine_type,justification,diecase_format) values (%i, %s, %s, %s, %s)'
+    cursor.execute('INSERT INTO machine_settings (serial_number,machine_name,\
+    machine_type,justification,diecase_format) VALUES (%i, %s, %s, %s, %s)'
     % serialNumber, machineName, machineType, justification, diecaseFormat, interfaceID)
-    database.close()
+    db.commit()
+    db.close()
 
   def database_caster_by_name(self, machineName):
     """Get caster parameters for a caster with a given name"""
-    database = sqlite3.connect('database/monotype.db')
-    caster = database.execute('select * from machine_settings where caster_name = %s' % machineName)
+    db = sqlite3.connect('database/monotype.db')
+    cursor = db.cursor()
+    caster = cursor.execute('SELECT * FROM machine_settings WHERE caster_name = %s' % machineName)
     database.close()
     return caster
 
   def database_caster_by_serial(self, machineSerial):
     """Get caster parameters for a caster with a given serial No"""
-    database = sqlite3.connect('database/monotype.db')
-    caster = database.execute('select * from machine_settings where caster_serial = %s' % machineSerial)
+    db = sqlite3.connect('database/monotype.db')
+    cursor = db.cursor()
+    caster = cursor.execute('SELECT * FROM machine_settings WHERE caster_serial = %s' % machineSerial)
     database.close()
     return caster
 
 
   def database_add_interface(self, interfaceID, interfaceName, emergencyGPIO,
                             photocellGPIO, mcp0Address, mcp1Address, pinBase):
-    """Register a new interface, i.e. I2C expander + emergency stop + photocell GPIOs"""
-    database = sqlite3.connect('database/monotype.db')
-    database.execute('create table if not exists interface_settings \
-    (interface_id integer, interface_name text, emergency_gpio integer, \
+    """Register a new interface, i.e. I2C expander params + emergency stop GPIO + photocell GPIO"""
+    db = sqlite3.connect('database/monotype.db')
+    cursor = db.cursor()
+    cursor.execute('CREATE TABLE IF NOT EXISTS interface_settings \
+    (interface_id integer primary key, interface_name text, emergency_gpio integer, \
     photocell_gpio integer, mcp0_address blob, \
     mcp1_address blob, pin_base integer)')
-    database.execute('insert into interface_settings \
+    cursor.execute('INSERT INTO interface_settings \
     (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
-    mcp1_address,pin_base) values (interfaceID, interfaceName, emergencyGPIO, \
+    mcp1_address,pin_base) VALUES (interfaceID, interfaceName, emergencyGPIO, \
     photocellGPIO, mcp0Address, mcp1Address, pinBase)')
-    database.close()
+    db.commit()
+    db.close()
 
   def database_get_interface(self, interfaceID=0):
     """Get interface parameters for a given ID, most typically 0 for a RPi with a single interface"""
-    database = sqlite3.connect('database/monotype.db')
-    interface = database.execute('select * from interface_settings where interface_id = %i' % interfaceID)
-    database.close()
+    db = sqlite3.connect('database/monotype.db')
+    cursor = db.cursor()
+    interface = cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
+    db.close()
     return interface
 
 
