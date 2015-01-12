@@ -300,71 +300,94 @@ class Parsing(object):
 
 
 class CasterConfig(object):
-  """Read/write caster & interface configuration"""
+  """Read/write caster & interface configuration from/to sqlite3 database"""
 
 
   def add_caster(self, serialNumber, machineName, machineType,
                             justification, diecaseFormat, interfaceID):
     """Register a new caster"""
-    db = sqlite3.connect('database/monotype.db')
-    cursor = db.cursor()
-    """Make sure that the table exists, if not - create it"""
-    cursor.execute('CREATE TABLE IF NOT EXISTS machine_settings \
-    (serial_number integer primary key, machine_name text, machine_type text, \
-    justification text, diecase_format text, interface_id integer)')
+    with sqlite3.connect('database/monotype.db') as db:
+      cursor = db.cursor()
+      """Make sure that the table exists, if not - create it"""
+      cursor.execute('CREATE TABLE IF NOT EXISTS machine_settings \
+      (serial_number integer primary key, machine_name text, machine_type text, \
+      justification text, diecase_format text, interface_id integer)')
 
-    """Create an entry for the caster in the database"""
-    cursor.execute('INSERT INTO machine_settings (serial_number,machine_name,\
-    machine_type,justification,diecase_format) VALUES (%i, %s, %s, %s, %s)'
-    % serialNumber, machineName, machineType, justification, diecaseFormat, interfaceID)
-    db.commit()
-    db.close()
+      """Create an entry for the caster in the database"""
+      cursor.execute('INSERT INTO machine_settings (serial_number,machine_name,\
+      machine_type,justification,diecase_format) VALUES (%i, %s, %s, %s, %s)'
+      % serialNumber, machineName, machineType, justification, diecaseFormat, interfaceID)
+      db.commit()
+
+  def list_casters(self):
+    """List all casters stored in database"""
+    print('\nSerial No, name, type, justification, diecase format, interface ID\n')
+    with sqlite3.connect('database/monotype.db') as db:
+      cursor = db.cursor()
+      cursor.execute('SELECT * FROM machine_settings')
+      while True:
+        caster = cursor.fetchone()
+        if caster is not None:
+          print '   '.join(caster)
+        else:
+          break
 
   def caster_by_name(self, machineName):
     """Get caster parameters for a caster with a given name"""
-    db = sqlite3.connect('database/monotype.db')
-    cursor = db.cursor()
-    cursor.execute('SELECT * FROM machine_settings WHERE caster_name = %s' % machineName)
-    caster = cursor.fetchone()
-    database.close()
-    return caster
+    with sqlite3.connect('database/monotype.db') as db:
+      cursor = db.cursor()
+      cursor.execute('SELECT * FROM machine_settings WHERE caster_name = %s' % machineName)
+      caster = cursor.fetchone()
+      """returns a list: [machineSerial, machineName, machineType, justification, diecaseFormat]"""
+      return caster
 
   def caster_by_serial(self, machineSerial):
     """Get caster parameters for a caster with a given serial No"""
-    db = sqlite3.connect('database/monotype.db')
-    cursor = db.cursor()
-    cursor.execute('SELECT * FROM machine_settings WHERE caster_serial = %s' % machineSerial)
-    caster = cursor.fetchone()
-    database.close()
-    return caster
+    with sqlite3.connect('database/monotype.db') as db:
+      cursor = db.cursor()
+      cursor.execute('SELECT * FROM machine_settings WHERE caster_serial = %s' % machineSerial)
+      caster = cursor.fetchone()
+      """returns a list: [machineSerial, machineName, machineType, justification, diecaseFormat]"""
+      return caster
 
 
   def add_interface(self, interfaceID, interfaceName, emergencyGPIO,
                             photocellGPIO, mcp0Address, mcp1Address, pinBase):
     """Register a new interface, i.e. I2C expander params + emergency stop GPIO + photocell GPIO"""
-    db = sqlite3.connect('database/monotype.db')
-    cursor = db.cursor()
-    cursor.execute('CREATE TABLE IF NOT EXISTS interface_settings \
-    (interface_id integer primary key, interface_name text, emergency_gpio integer, \
-    photocell_gpio integer, mcp0_address blob, \
-    mcp1_address blob, pin_base integer)')
-    cursor.execute('INSERT INTO interface_settings \
-    (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
-    mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %i, %i, %i)' % interfaceID,
-    interfaceName, emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase)
-    db.commit()
-    db.close()
+    with sqlite3.connect('database/monotype.db') as db:
+      cursor = db.cursor()
+      cursor.execute('CREATE TABLE IF NOT EXISTS interface_settings \
+      (interface_id integer primary key, interface_name text, emergency_gpio integer, \
+      photocell_gpio integer, mcp0_address blob, \
+      mcp1_address blob, pin_base integer)')
+      cursor.execute('INSERT INTO interface_settings \
+      (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
+      mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %i, %i, %i)' % interfaceID,
+      interfaceName, emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase)
+      db.commit()
 
   def get_interface(self, interfaceID=0):
     """Get interface parameters for a given ID, most typically 0 for a RPi with a single interface"""
-    db = sqlite3.connect('database/monotype.db')
-    cursor = db.cursor()
-    cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
-    interface = cursor.fetchone()
-    db.close()
-    """returns a list: [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
-    mcp0Address, mcp1Address, pinBase] """
-    return interface
+    with sqlite3.connect('database/monotype.db') as db:
+      cursor = db.cursor()
+      cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
+      interface = cursor.fetchone()
+      """returns a list: [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
+      mcp0Address, mcp1Address, pinBase] """
+      return interface
+
+  def list_interfaces(self):
+    """List all casters stored in database"""
+    print('\nID, name, emergency GPIO, photocell GPIO, MCP0 addr, MCP1 addr, pin base:\n')
+    with sqlite3.connect('database/monotype.db') as db:
+      cursor = db.cursor()
+      cursor.execute('SELECT * FROM interface_settings')
+      while True:
+        caster = cursor.fetchone()
+        if interface is not None:
+          print '   '.join(interface)
+        else:
+          break
 
 
 
