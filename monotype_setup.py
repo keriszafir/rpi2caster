@@ -19,7 +19,7 @@ def add_caster(revalidate=False):
     justification = ''
     diecaseFormat = ''
     interfaceID = ''
-  
+
   """Check if the serial No is numeric - we must ensure that the value in db is integer"""
   if serialNumber.isdigit():
     serialNumber = int(serialNumber)
@@ -55,7 +55,7 @@ def add_caster(revalidate=False):
     if interfaceID == '':
       interfaceID = '0'
     revalidate += 1
-  
+
   if revalidate:
     add_caster(True)
   else:

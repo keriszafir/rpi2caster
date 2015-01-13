@@ -9,22 +9,34 @@ the solenoid valves respective to the Monotype control codes.
 After the photocell is lit (low state on input), the valves are
 turned off and the program moves on to the next line."""
 
-import sys, os, time, string, readline, glob, select
+"""typical libs, used by most routines"""
+import sys
+import os
+import time
+import string
+
+"""used by auto-complete in enter_filename"""
+import readline
+import glob
+
+"""essential for polling the photocell IRQ"""
+import select
+
+"""MCP23017 driver & hardware abstraction layer library"""
 try:
   import wiringpi2 as wiringpi
 except ImportError:
   print('wiringPi2 not installed! It\'s OK for testing, but you MUST install it if you want to cast!')
   time.sleep(1)
-finally:
-  pass
+
+"""rpi2caster uses sqlite3 database for storing caster configuration, diecase & matrix data"""
 try:
   import sqlite3
 except ImportError:
     print('You must install sqlite3 database and python-sqlite2 package.')
     exit()
-finally:
-  pass
 
+"""this determines whether some exceptions will be caught or thrown to stderr, off by default"""
 global DebugMode
 DebugMode = False
 
@@ -303,92 +315,172 @@ class CasterConfig(object):
   """Read/write caster & interface configuration from/to sqlite3 database"""
 
 
-  def add_caster(self, serialNumber, machineName, machineType,
+  def add_caster(self, serialNumber, casterName, casterType,
                             justification, diecaseFormat, interfaceID):
     """Register a new caster"""
     with sqlite3.connect('database/monotype.db') as db:
-      cursor = db.cursor()
-      """Make sure that the table exists, if not - create it"""
-      cursor.execute('CREATE TABLE IF NOT EXISTS machine_settings \
-      (serial_number integer primary key, machine_name text, machine_type text, \
-      justification text, diecase_format text, interface_id integer)')
+      try:
+        cursor = db.cursor()
+        """Make sure that the table exists, if not - create it"""
+        cursor.execute('CREATE TABLE IF NOT EXISTS caster_settings \
+        (serial_number integer primary key, caster_name text, caster_type text, \
+        justification text, diecase_format text, interface_id integer)')
 
-      """Create an entry for the caster in the database"""
-      cursor.execute('INSERT INTO machine_settings (serial_number,machine_name,\
-      machine_type,justification,diecase_format) VALUES (%i, %s, %s, %s, %s)'
-      % serialNumber, machineName, machineType, justification, diecaseFormat, interfaceID)
-      db.commit()
+        """Create an entry for the caster in the database"""
+        cursor.execute('INSERT INTO caster_settings (serial_number,caster_name,\
+        caster_type,justification,diecase_format) VALUES (%i, %s, %s, %s, %s)'
+        % serialNumber, casterName, casterType, justification, diecaseFormat, interfaceID)
+        db.commit()
+      finally:
+        pass
 
   def list_casters(self):
     """List all casters stored in database"""
-    print('\nSerial No, name, type, justification, diecase format, interface ID\n')
     with sqlite3.connect('database/monotype.db') as db:
-      cursor = db.cursor()
-      cursor.execute('SELECT * FROM machine_settings')
-      while True:
-        caster = cursor.fetchone()
-        if caster is not None:
-          print '   '.join(caster)
-        else:
-          break
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM caster_settings')
+        print('\nSerial No, name, type, justification, diecase format, interface ID\n')
+        while True:
+          caster = cursor.fetchone()
+          if caster is not None:
+            print '   '.join(caster)
+          else:
+            break
+      except sqlite3.OperationalError:
+        if not DebugMode:
+          print('Error: caster_settings table does not exist in database - not configured yet?')
+      finally:
+        pass
 
-  def caster_by_name(self, machineName):
+  def caster_by_name(self, casterName):
     """Get caster parameters for a caster with a given name"""
     with sqlite3.connect('database/monotype.db') as db:
-      cursor = db.cursor()
-      cursor.execute('SELECT * FROM machine_settings WHERE caster_name = %s' % machineName)
-      caster = cursor.fetchone()
-      """returns a list: [machineSerial, machineName, machineType, justification, diecaseFormat]"""
-      return caster
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM caster_settings WHERE caster_name = %s' % casterName)
+        caster = cursor.fetchone()
+        """returns a list: [casterSerial, casterName, casterType, justification, diecaseFormat]"""
+        return caster
+      except sqlite3.OperationalError:
+        if not DebugMode:
+          print('Error: cannot retrieve caster settings!')
 
-  def caster_by_serial(self, machineSerial):
+  def caster_by_serial(self, casterSerial):
     """Get caster parameters for a caster with a given serial No"""
     with sqlite3.connect('database/monotype.db') as db:
-      cursor = db.cursor()
-      cursor.execute('SELECT * FROM machine_settings WHERE caster_serial = %s' % machineSerial)
-      caster = cursor.fetchone()
-      """returns a list: [machineSerial, machineName, machineType, justification, diecaseFormat]"""
-      return caster
-
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM caster_settings WHERE caster_serial = %s' % casterSerial)
+        caster = cursor.fetchone()
+        """returns a list: [casterSerial, casterName, casterType, justification, diecaseFormat]"""
+        return caster
+      except sqlite3.OperationalError:
+        if not DebugMode:
+          print('Error: cannot retrieve caster settings!')
 
   def add_interface(self, interfaceID, interfaceName, emergencyGPIO,
                             photocellGPIO, mcp0Address, mcp1Address, pinBase):
     """Register a new interface, i.e. I2C expander params + emergency stop GPIO + photocell GPIO"""
     with sqlite3.connect('database/monotype.db') as db:
-      cursor = db.cursor()
-      cursor.execute('CREATE TABLE IF NOT EXISTS interface_settings \
-      (interface_id integer primary key, interface_name text, emergency_gpio integer, \
-      photocell_gpio integer, mcp0_address blob, \
-      mcp1_address blob, pin_base integer)')
-      cursor.execute('INSERT INTO interface_settings \
-      (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
-      mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %i, %i, %i)' % interfaceID,
-      interfaceName, emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase)
-      db.commit()
+      try:
+        cursor = db.cursor()
+        cursor.execute('CREATE TABLE IF NOT EXISTS interface_settings \
+        (interface_id integer primary key, interface_name text, emergency_gpio integer, \
+        photocell_gpio integer, mcp0_address blob, \
+        mcp1_address blob, pin_base integer)')
+        cursor.execute('INSERT INTO interface_settings \
+        (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
+        mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %i, %i, %i)' % interfaceID,
+        interfaceName, emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase)
+        db.commit()
+      finally:
+        pass
 
   def get_interface(self, interfaceID=0):
     """Get interface parameters for a given ID, most typically 0 for a RPi with a single interface"""
     with sqlite3.connect('database/monotype.db') as db:
-      cursor = db.cursor()
-      cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
-      interface = cursor.fetchone()
-      """returns a list: [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
-      mcp0Address, mcp1Address, pinBase] """
-      return interface
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
+        interface = cursor.fetchone()
+        """returns a list: [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
+        mcp0Address, mcp1Address, pinBase] """
+        return interface
+      except sqlite3.OperationalError:
+        if not DebugMode:
+          print('Error: cannot retrieve interface settings!')
 
   def list_interfaces(self):
     """List all casters stored in database"""
-    print('\nID, name, emergency GPIO, photocell GPIO, MCP0 addr, MCP1 addr, pin base:\n')
     with sqlite3.connect('database/monotype.db') as db:
-      cursor = db.cursor()
-      cursor.execute('SELECT * FROM interface_settings')
-      while True:
-        caster = cursor.fetchone()
-        if interface is not None:
-          print '   '.join(interface)
-        else:
-          break
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM interface_settings')
+        print('\nID, name, emergency GPIO, photocell GPIO, MCP0 addr, MCP1 addr, pin base:\n')
+        while True:
+          caster = cursor.fetchone()
+          if interface is not None:
+            print '   '.join(interface)
+          else:
+            break
+      except sqlite3.OperationalError:
+        if not DebugMode:
+          print('Error: interface_settings table not found in database - not configured yet?')
+      finally:
+        pass
 
+
+  def get_wedge(self, wedgeID, setWidth):
+    """Check if we have a wedge with a given ID in our collection"""
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM wedges WHERE wedge_id = %s AND set_width = %f' % wedgeID, setWidth)
+        wedge = cursor.fetchone()
+        if wedge is None:
+          print('No wedge %s %f found in database!' % wedgeID, setWidth)
+          return False
+        else:
+          print('Wedge found in database - OK')
+          return wedge
+      except sqlite3.OperationalError:
+        if not DebugMode:
+          print('Error: cannot get wedge - does the table exist?')
+      finally:
+        pass
+
+
+  def delete_wedge(self, wedgeID, setWidth):
+    """Delete a wedge from the database"""
+    if get_wedge(wedgeID, setWidth):
+      with sqlite3.connect('database/monotype.db') as db:
+        try:
+          cursor = db.cursor()
+          cursor.execute('DELETE FROM wedges WHERE wedge_id = %s AND set_width = %f' % wedgeID, setWidth)
+        except sqlite3.OperationalError:
+          if not DebugMode:
+            print('Error: cannot delete wedge - does the table exist?')
+
+
+  def list_wedges(self):
+    """List all wedges stored in database"""
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM wedges')
+        print('\nWedge No, set width, unit values for all steps\n')
+        while True:
+          wedge = cursor.fetchone()
+          if wedge is not None:
+            print '   '.join(caster)
+          else:
+            break
+      except sqlite3.OperationalError:
+        if not DebugMode:
+          print('Error: wedges table does not exist in database - not configured yet?')
+      finally:
+        pass
 
 
 class Actions(Parsing):
