@@ -84,7 +84,7 @@ def add_caster(casterSerial='', casterName='', casterType='',
     print('Caster serial number: %i \n' % casterSerial)
     print('Caster name: %s \n' % casterName)
     print('Caster type: %s \n' % casterType)
-    print('Unit adding: % \n' % unitAdding)
+    print('Unit adding: %s \n' % str(unitAdding))
     print('Diecase system: %s \n' % diecaseSystem)
     print('Interface ID for this caster: %i \n' % interfaceID)
 
