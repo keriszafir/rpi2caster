@@ -69,7 +69,7 @@ def add_caster(casterSerial='', casterName='', casterType='',
     revalidate += 1
 
   """Choose the interface ID"""
-  if interfaceID.isdigit() in range(4):
+  if interfaceID.isdigit() and int(interfaceID) in range(4):
     interfaceID = int(interfaceID)
   else:
     interfaceID = raw_input('Raspberry interface number for this machine. Can be 0, 1, 2, 3. Default 0: ')
