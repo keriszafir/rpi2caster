@@ -64,8 +64,8 @@ def add_caster(casterSerial='', casterName='', casterType='',
     revalidate += 1
 
   """Choose the diecase format the machine is using, and validate the choice"""
-  if diecaseFormat not in ['norm15', 'norm17', 'hmn', 'kmn', 'shift']:
-    diecaseFormat = raw_input('Diecase format this machine works with: norm15 = 15x15, norm17 = 15x17, hmn, kmn, shift = unit-shift: ')
+  if diecaseSustem not in ['norm15', 'norm17', 'hmn', 'kmn', 'shift']:
+    diecaseSystem = raw_input('Diecase format this machine works with: norm15 = 15x15, norm17 = 15x17, hmn, kmn, shift = unit-shift: ')
     revalidate += 1
 
   """Choose the interface ID"""
