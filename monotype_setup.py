@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import os
 import sys
+import json
 from rpi2caster import CasterConfig
 
 try:
@@ -22,17 +23,17 @@ def conv_hex(s):
   n = int(s, 16)
   return hex(n)
 
-def add_caster(serialNumber='', casterName='', casterType='',
-               justification='', diecaseFormat='', interfaceID=''):
+def add_caster(casterSerial='', casterName='', casterType='',
+               unitAdding='', diecaseSystem='', interfaceID=''):
   """Add a caster. The function will pass at least twice - until all data is entered correctly"""
   """Reset revalidation"""
   revalidate = False
 
   """Check if the serial No is numeric - we must ensure that the value in db is integer"""
-  if serialNumber.isdigit():
-    serialNumber = int(serialNumber)
+  if casterSerial.isdigit():
+    casterSerial = int(casterSerial)
   else:
-    serialNumber = raw_input('Enter the serial number of your caster, digits only: ')
+    casterSerial = raw_input('Enter the serial number of your caster, digits only: ')
     revalidate += 1
 
   """Enter a string for machine name"""
@@ -41,13 +42,25 @@ def add_caster(serialNumber='', casterName='', casterType='',
     revalidate += 1
 
   """Choose the machine type - and validate the choice. Case insensitive; value stored in db as uppercase"""
-  if casterType not in ['CC', 'LC', 'K']:
-    casterType = raw_input('What type is the machine? CC = composition caster, LC = type & rule / large comp. caster, K = keyboard: ').upper()
+  if casterType not in ['comp', 'large_comp']:
+    casterType = raw_input('What type is the machine? 1 = composition caster, 2 = type & rule / large comp. caster: ')
+    if casterType == '1':
+      casterType = 'comp'
+    elif casterType == '2':
+      casterType = 'large_comp'
+    else:
+      casterType = ''
     revalidate += 1
 
-  """Choose the justification mode the machine is using, and validate the choice"""
-  if justification not in ('norm', 'alt'):
-    justification = raw_input('Justification mode: norm = 0005, 0075; alt = NJ, NK: ')
+  """Choose if the machine has unit adding or not"""
+  if unitAdding not in (True, False):
+    unitAdding = raw_input('Does the caster use unit adding attachment? 1 - yes, 0 - no: ')
+    if unitAdding == '0':
+      unitAdding = False
+    elif unitAdding == '1':
+      unitAdding = True
+    else:
+      unitAdding = ''
     revalidate += 1
 
   """Choose the diecase format the machine is using, and validate the choice"""
@@ -56,10 +69,10 @@ def add_caster(serialNumber='', casterName='', casterType='',
     revalidate += 1
 
   """Choose the interface ID"""
-  if interfaceID.isdigit():
+  if interfaceID.isdigit() in range(4):
     interfaceID = int(interfaceID)
   else:
-    interfaceID = raw_input('Raspberry interface number for this machine. Usually 0: ')
+    interfaceID = raw_input('Raspberry interface number for this machine. Can be 0, 1, 2, 3. Default 0: ')
     if interfaceID == '':
       interfaceID = '0'
     revalidate += 1
@@ -68,36 +81,39 @@ def add_caster(serialNumber='', casterName='', casterType='',
 
 
   if not revalidate:
-    print('Caster serial number: %i \n' % serialNumber)
+    print('Caster serial number: %i \n' % casterSerial)
     print('Caster name: %s \n' % casterName)
     print('Caster type: %s \n' % casterType)
-    print('Justification mode: %s \n' % justification)
-    print('Diecase format: %s \n' % diecaseFormat)
+    print('Unit adding: % \n' % unitAdding)
+    print('Diecase system: %s \n' % diecaseSystem)
     print('Interface ID for this caster: %i \n' % interfaceID)
 
     ans = raw_input('\nCommit? [y/n]')
 
     if ans.lower() == 'y':
-      config.add_caster(serialNumber, casterName, casterType,
-      justification, diecaseFormat, interfaceID)
+      config.add_caster(casterSerial, casterName, casterType,
+      unitAdding, diecaseSystem, interfaceID)
       menu()
 
     elif ans.lower() == 'n':
       add_caster()
 
   else:
-    add_caster(serialNumber, casterName, casterType, justification,
-               diecaseFormat, interfaceID)
+    """Recursively call this function to revalidate parameters:"""
+    add_caster(casterSerial, casterName, casterType, unitAdding,
+               diecaseSystem, interfaceID)
 
 
-def add_interface(interfaceID='', interfaceName='', emergencyGPIO='',
+def add_interface(ID='', interfaceName='', emergencyGPIO='',
         photocellGPIO='', mcp0Address='', mcp1Address='', pinBase=''):
 
   """Check if the serial No is numeric - we must ensure that the value in db is integer"""
-  if interfaceID.isdigit() and int(interfaceID) >= 0:
-    interfaceID = int(interfaceID)
+  if ID.isdigit() and int(ID) in range(4):
+    ID = int(ID)
   else:
-    serialNumber = raw_input('Enter the interface ID, positive number: ')
+    ID = raw_input('Enter the interface ID: 0, 1, 2, 3, 4; default 0: ')
+    if ID == '':
+      ID = 0
     revalidate += 1
 
   """Enter a string for interface name"""
@@ -143,7 +159,7 @@ def add_interface(interfaceID='', interfaceName='', emergencyGPIO='',
 
 
   if not revalidate:
-    print('Interface ID: %i \n' % interfaceID)
+    print('Interface ID: %i \n' % ID)
     print('Interface name: %s \n' % interfaceName)
     print('Emergency GPIO: %i \n' % emergencyGPIO)
     print('Photocell GPIO: %i \n' % photocellGPIO)
@@ -154,7 +170,7 @@ def add_interface(interfaceID='', interfaceName='', emergencyGPIO='',
     ans = raw_input('\nCommit? [y/n]')
 
     if ans.lower() == 'y':
-      CasterConfig.add_interface(interfaceID, interfaceName, emergencyGPIO,
+      CasterConfig.add_interface(ID, interfaceName, emergencyGPIO,
       photocellGPIO, mcp0Address, mcp1Address, pinBase)
       menu()
     elif ans.lower() == 'n':

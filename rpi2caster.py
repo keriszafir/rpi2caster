@@ -141,7 +141,7 @@ class CasterConfig(object):
         """Create an entry for the caster in the database"""
         cursor.execute(
         'INSERT INTO caster_settings (caster_serial,caster_name,caster_type,\
-        unit_adding,diecase_system,interface_id) VALUES (%i, %s, %s, %s, %s)'
+        unit_adding,diecase_system,interface_id) VALUES (%i, %s, %s, %i, %s, %i)'
         % casterSerial, casterName, casterType, int(unitAdding),
         diecaseSystem, interfaceID
         )
@@ -323,7 +323,7 @@ class CasterConfig(object):
     with sqlite3.connect('database/monotype.db') as db:
       try:
         cursor = db.cursor()
-        cursor.execute('SELECT * FROM caster_settings WHERE caster_serial = %s' % casterSerial)
+        cursor.execute('SELECT * FROM caster_settings WHERE id = %i' % ID)
         caster = cursor.fetchone()
         if caster is not None:
           return caster
@@ -387,14 +387,14 @@ class CasterConfig(object):
         cursor = db.cursor()
         """Create the table first:"""
         cursor.execute(
-        'CREATE TABLE IF NOT EXISTS interface_settings (interface_id \
+        'CREATE TABLE IF NOT EXISTS interface_settings (id \
         integer primary key, interface_name text, emergency_gpio integer \
         unique, photocell_gpio integer unique not_null, mcp0_address \
         text unique not_null, mcp1_address text unique not_null, \
         pin_base integer unique not_null)'
         )
         """Then add an entry:"""
-        cursor.execute('INSERT INTO interface_settings (interface_id,\
+        cursor.execute('INSERT INTO interface_settings (id,\
         interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
         mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %s, %s, %i)'
         % interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
@@ -439,8 +439,7 @@ class CasterConfig(object):
       try:
         cursor = db.cursor()
         cursor.execute(
-        'SELECT * FROM interface_settings WHERE interface_id = %i'
-        % interfaceID
+        'SELECT * FROM interface_settings WHERE id = %i' % interfaceID
         )
         interface = cursor.fetchone()
         if interface is not None:
@@ -540,7 +539,7 @@ class CasterConfig(object):
         """Then add an entry:"""
         cursor.execute(
         'INSERT INTO wedges (wedge_id,set_width,old_pica,steps) \
-        VALUES (%s, %f, %i, %i, %l)'
+        VALUES (%s, %f, %i, %s)'
         % wedgeID, setWidth, int(oldPica), json.dumps(steps)
         )
         db.commit()
