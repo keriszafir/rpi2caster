@@ -109,11 +109,12 @@ Some of the dependencies will be marked as "(repo)". This means that you can ins
 	This is required for rpi2caster, it takes care of communicating with MCP23017 via I2C.
 5. i2c-tools (repo) - this provides i2cdetect which is used for finding the I2C device address, and i2cset, i2cdump and i2cget, for debugging.
 	libi2c-dev depends on i2c-tools, so this will already be installed in step 3.
-6. python-smbus (repo), Python SMBus & I2C library, wiringpi2 probably depends on it
-7. python-setuptools (repo) - wiringpi2-python depends on it
+6. python-smbus (repo), Python SMBus & I2C library, wiringpi2 probably depends on it.
+7. python-setuptools (repo) - wiringpi2-python depends on it.
 8. WiringPi2-Python - you can install it from GitHub. Instructions at https://github.com/WiringPi/WiringPi2-Python/blob/master/README
 	Now you can also use python-pip to install it with a command: sudo pip install wiringpi2.
-9. gpio - command line utility for GPIO setup & management, it's included in wiringPi2. powerbuttond.py depends on it
+9. gpio - command line utility for GPIO setup & management, it's included in wiringPi2. powerbuttond.py depends on it.
+10. sqlite3, python-pysqlite2 (repo) - rpi2caster depends on a sqlite3 database, used for storing caster & interface parameters, diecases and wedges.
 
 
 Garbage removal

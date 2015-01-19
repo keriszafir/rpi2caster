@@ -1,6 +1,8 @@
 #!/usr/bin/python
 
-""" Monotype composition caster & keyboard paper tower control program.
+"""rpi2caster - control a Monotype composition caster with Raspberry Pi.
+
+Monotype composition caster & keyboard paper tower control program.
 The program reads a "ribbon" file, then waits for the user to start
 casting or punching the paper tape. In the casting mode, during each
 machine cycle, the photocell is lit (high state) or obscured (low).
@@ -9,102 +11,821 @@ the solenoid valves respective to the Monotype control codes.
 After the photocell is lit (low state on input), the valves are
 turned off and the program moves on to the next line."""
 
-"""typical libs, used by most routines"""
+"""Typical libs, used by most routines:"""
 import sys
 import os
 import time
 import string
 
-"""used by auto-complete in enter_filename"""
+"""Used for serializing lists stored in database, and for communicating
+with the web application (in the future):"""
+import json
+
+"""These libs are used by file name autocompletion:"""
 import readline
 import glob
 
-"""essential for polling the photocell IRQ"""
+"""Essential for polling the photocell for state change:"""
 import select
 
-"""MCP23017 driver & hardware abstraction layer library"""
+"""MCP23017 driver & hardware abstraction layer library:"""
 try:
   import wiringpi2 as wiringpi
 except ImportError:
-  print('wiringPi2 not installed! It\'s OK for testing, but you MUST install it if you want to cast!')
+  print('wiringPi2 not installed! It is OK for testing, \
+  but you MUST install it if you want to cast!')
   time.sleep(1)
 
-"""rpi2caster uses sqlite3 database for storing caster configuration, diecase & matrix data"""
+"""rpi2caster uses sqlite3 database for storing caster, interface,
+wedge, diecase & matrix parameters:"""
 try:
   import sqlite3
 except ImportError:
     print('You must install sqlite3 database and python-sqlite2 package.')
     exit()
 
-"""this determines whether some exceptions will be caught or thrown to stderr, off by default"""
+"""This determines whether some exceptions will be caught
+or thrown to stderr, off by default:"""
 global DebugMode
 DebugMode = False
 
-class Hardware(object):
-  """A class which stores all methods related to the interface and
-  caster itself"""
 
-  def __init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase):
+class CasterConfig(object):
+  """CasterConfig:
 
-    self.photocellGPIO = photocellGPIO
-    self.mcp0Address = mcp0Address
-    self.mcp1Address = mcp1Address
-    self.pinBase = pinBase
+  Read/write caster & interface configuration from/to sqlite3 database"""
+
+
+  def add_caster(self, casterSerial, casterName, casterType,
+                 unitAdding, diecaseSystem, interfaceID=0):
+
+    """add_caster(self, casterSerial, casterName, casterType,
+                  unitAdding, diecaseSystem, interfaceID=0)
+
+    Register a new caster in the database.
+
+    The function uses a SQL query to create a new entry for a caster
+    with parameters passed as arguments.
+
+    Explanation of input parameters:
+
+    casterSerial: caster's serial number (on nameplate on paper tower),
+
+    casterName: a string for a caster's name,
+
+    casterType: the type of composition caster:
+        comp (composition caster),
+        large_comp (large comp. caster, a.k.a. type & rule caster)
+
+    unitAdding: determines if the unit adding attachment is on,
+        or turned off / not present; if on - justification mode is changed,
+        so 0005 is replaced by NJ, 0075 by NK, double justification is NJK;
+
+        possible options: True (UA on), False (UA off / not present)
+
+    diecaseSystem: what diecases the machine supports, possible options:
+        norm15 (15x15),
+        norm17 (15x17 NI, NL),
+        hmn (16x17 HMN),
+        kmn (16x17 KMN),
+        shift (16x17 unit-shift - D signal activates unit shift,
+               EF is used for accessing column D of a diecase)
+
+    interfaceID: the interface ID, i.e. a set of MCP23017 chips and
+        photocell & emergency stop GPIO lines the caster uses.
+
+        Must be integer - default: 0
+
+    If we want to use a single Raspberry Pi with several valvesets
+    connected at the same time, we have to configure more interfaces.
+    Each interface consists of 32 solenoid valves, two MCP23017 I/O,
+    expanders, four ULN2803 drivers, a photocell (with its GPIO pin)
+    and an emergency stop button (with its GPIO pin as well).
+
+    Each MCP23017 MUST have its unique I2C address, which is set by
+    tying pins A0, A1 and A2 to 3V3 or GND. Typically, you tie all
+    pins to GND on the first chip (a.k.a. mcp0), and tie A0 to 3V3,
+    A1 and A2 to GND on the second chip (a.k.a. mcp1) for interface id=0.
+    The hex addresses of the chips mcp0 and mcp1 will be 0x20 and 0x21
+    respectively. See the table below.
+
+    If you configure additional interfaces, it's best to order the
+    MCP23017 chips' addresses ascending, i.e.
+
+    interfaceID    mcp0 pin    mcp1 pin    mcp0     mcp1
+                   A2,A1,A0    A2,A1,A0    addr     addr
+
+    0              000         001         0x20     0x21
+    1              010         011         0x22     0x23
+    2              100         101         0x24     0x25
+    3              110         111         0x26     0x27
+
+    0 means pin tied to GND and 1 means pin tied to 3V3.
+
+    We can define up to 4 interfaces per Raspberry, because maximum
+    of 8 MCP23017 chips can work on a single I2C bus, and there are
+    two MCP23017s per interface.
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+
+        """Make sure that the table exists, if not - create it"""
+        cursor.execute(
+        'CREATE TABLE IF NOT EXISTS caster_settings (id integer primary_key, \
+        caster_serial integer, caster_name text, caster_type text, \
+        unit_adding integer, diecase_system text, interface_id integer)'
+        )
+
+        """Create an entry for the caster in the database"""
+        cursor.execute(
+        'INSERT INTO caster_settings (caster_serial,caster_name,caster_type,\
+        unit_adding,diecase_system,interface_id) VALUES (%i, %s, %s, %s, %s)'
+        % casterSerial, casterName, casterType, int(unitAdding),
+        diecaseSystem, interfaceID
+        )
+        db.commit()
+      finally:
+        pass
+
+  def list_casters(self):
+    """list_casters(self):
+
+    List all casters stored in database, or display a message
+    if the table does not exist.
+
+    Explanation of columns:
+
+    ID: unique caster entry's ID
+
+    casterSerial: caster's serial number (on nameplate on paper tower),
+
+    casterName: a string for a caster's name,
+
+    casterType: the type of composition caster:
+        comp (composition caster),
+        large_comp (large comp. caster, a.k.a. type & rule caster)
+
+    unitAdding: determines if the unit adding attachment is on,
+        or turned off / not present; if on - justification mode is changed,
+        so 0005 is replaced by NJ, 0075 by NK, double justification is NJK;
+
+        possible options: True (UA on), False (UA off / not present)
+
+    diecaseSystem: what diecases the machine supports, possible options:
+        norm15 (15x15),
+        norm17 (15x17 NI, NL),
+        hmn (16x17 HMN),
+        kmn (16x17 KMN),
+        shift (16x17 unit-shift - D signal activates unit shift,
+               EF is used for accessing column D of a diecase)
+
+    interfaceID: the interface ID, i.e. a set of MCP23017 chips and
+        photocell & emergency stop GPIO lines the caster uses.
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM caster_settings')
+        print('\nID, serial No, name, type, unit adding, diecase system, \
+        interface ID\n')
+        """loop over rows unless an empty row is found, then stop"""
+        while True:
+          caster = cursor.fetchone()
+          if caster is not None:
+            print '   '.join(caster)
+          else:
+            break
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print('Error: caster_settings table does not exist in database \
+          - not configured yet?\n')
+      finally:
+        pass
+
+  def caster_by_name(self, casterName):
+    """caster_by_name(self, casterName):
+
+    Get caster parameters for a caster with a given name.
+
+    The function returns a list: [ID, casterSerial, casterName,
+    casterType, unitAdding, diecaseSystem, interfaceID]
+    for the first caster with a specified name.
+
+    Explanation of parameters:
+
+    ID: unique caster entry's ID
+
+    casterSerial: caster's serial number (on nameplate on paper tower),
+
+    casterName: a string for a caster's name,
+
+    casterType: the type of composition caster:
+        comp (composition caster),
+        large_comp (large comp. caster, a.k.a. type & rule caster)
+
+    unitAdding: determines if the unit adding attachment is on,
+        or turned off / not present; if on - justification mode is changed,
+        so 0005 is replaced by NJ, 0075 by NK, double justification is NJK;
+
+        possible options: True (UA on), False (UA off / not present)
+
+    diecaseSystem: what diecases the machine supports, possible options:
+        norm15 (15x15),
+        norm17 (15x17 NI, NL),
+        hmn (16x17 HMN),
+        kmn (16x17 KMN),
+        shift (16x17 unit-shift - D signal activates unit shift,
+               EF is used for accessing column D of a diecase)
+
+    interfaceID: the interface ID, i.e. a set of MCP23017 chips and
+        photocell & emergency stop GPIO lines the caster uses.
+
+    If no caster matches, the function returns False.
+    """
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute(
+        'SELECT * FROM caster_settings WHERE caster_name = %s' % casterName
+        )
+        caster = cursor.fetchone()
+
+        """Check if the function found anything:"""
+        if caster is not None:
+          return caster
+        else:
+          print('No casters found!\n')
+          return False
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print('Error: cannot retrieve caster settings!\n')
+        return False
+
+
+  def caster_by_id(self, ID=0):
+    """caster_by_id(self, ID=0)
+
+    Caster by ID number:
+
+    Get caster parameters for a caster with a given ID number (unique).
+
+    If the ID number is not supplied, the function assumes 0 -
+    which is OK, if we have a single caster without configuration changes.
+
+    We can add more caster entries with add_caster, and get configuration
+    for any them by its ID. That is useful in case we have several casters,
+    or multiple configurations for a single caster in our database
+    (that happens if we frequently turn unit shift or unit adding
+    on or off - these attachments change the way caster interprets some
+    signals, i.e. 0005 and 0075 are no longer used for justification).
+
+    The function returns a list: [ID, casterSerial, casterName,
+    casterType, unitAdding, diecaseSystem, interfaceID]
+    for the caster with a specified ID.
+
+    Explanation of parameters:
+
+    ID: unique caster entry's ID
+
+    casterSerial: caster's serial number (on nameplate on paper tower),
+
+    casterName: a string for a caster's name,
+
+    casterType: the type of composition caster:
+        comp (composition caster),
+        large_comp (large comp. caster, a.k.a. type & rule caster)
+
+    unitAdding: determines if the unit adding attachment is on,
+        or turned off / not present; if on - justification mode is changed,
+        so 0005 is replaced by NJ, 0075 by NK, double justification is NJK;
+
+        possible options: True (UA on), False (UA off / not present)
+
+    diecaseSystem: what diecases the machine supports, possible options:
+        norm15 (15x15),
+        norm17 (15x17 NI, NL),
+        hmn (16x17 HMN),
+        kmn (16x17 KMN),
+        shift (16x17 unit-shift - D signal activates unit shift,
+               EF is used for accessing column D of a diecase)
+
+    interfaceID: the interface ID, i.e. a set of MCP23017 chips and
+        photocell & emergency stop GPIO lines the caster uses.
+
+    If no caster is found, the function returns False.
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM caster_settings WHERE caster_serial = %s' % casterSerial)
+        caster = cursor.fetchone()
+        if caster is not None:
+          return caster
+        else:
+          print('No casters found!\n')
+          return False
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print('Error: cannot retrieve caster settings!')
+        return False
+
+
+  def add_interface(self, interfaceName, emergencyGPIO,
+                    photocellGPIO, mcp0Address, mcp1Address, pinBase):
+    """add_interface(self, interfaceID, interfaceName, emergencyGPIO,
+                     photocellGPIO, mcp0Address, mcp1Address, pinBase):
+
+    Registers a Raspberry Pi to Monotype caster interface.
+
+    Use arguments to register a new interface, i.e. I2C expander params,
+    emergency stop GPIO and photocell GPIO. The function uses a SQL query
+    to add an entry to the database.
+
+    Arguments:
+
+    interfaceID - integer (0...3), auto-incremented, unique
+
+    interfaceName - string, name for an interface (e.g. "caster1")
+
+    emergencyGPIO - emergency button GPIO (Broadcom number), integer,
+        must be unique, can be null
+
+    photocellGPIO - photocell GPIO (Broadcom number), integer, must be
+        unique, cannot be null
+
+    mcp0Address - mcp0 (first MCP23017) I2C address, hex number
+        (e.g. 0x20), must be unique, cannot be null
+
+    mcp1Address - mcp1 (second MCP23017) I2C address, hex number
+        (e.g. 0x21), must be unique, cannot be null
+
+    pinBase - integer, base number for pins supplied by the first
+        MCP23017 chip (i.e. mcp0). Must be unique, cannot be null.
+        Minimum: 65 (0...64 are used by system, so they are reserved).
+
+        Each interface uses 32 pins.
+
+        If you are using multiple interfaces per Raspberry, you SHOULD
+        assign the following pin bases to each interface:
+
+        interfaceID    pinBase
+
+        0              65
+        1              97          (pinBase0 + 32)
+        2              129         (pinBase1 + 32)
+        3              161         (pinBase2 + 32)
+    """
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        """Create the table first:"""
+        cursor.execute(
+        'CREATE TABLE IF NOT EXISTS interface_settings (interface_id \
+        integer primary key, interface_name text, emergency_gpio integer \
+        unique, photocell_gpio integer unique not_null, mcp0_address \
+        text unique not_null, mcp1_address text unique not_null, \
+        pin_base integer unique not_null)'
+        )
+        """Then add an entry:"""
+        cursor.execute('INSERT INTO interface_settings (interface_id,\
+        interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
+        mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %s, %s, %i)'
+        % interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
+        json.dumps(mcp0Address), json.dumps(mcp1Address), pinBase
+        )
+        db.commit()
+      finally:
+        pass
+
+  def get_interface(self, interfaceID=0):
+    """
+    Get interface:
+
+    Return parameters for an interface with a given ID, most typically 0
+    for a Raspberry Pi with a single interface (2xMCP23017 & 4xULN2803).
+
+    If no arguments are supplied, get parameters for interface_id == 0.
+
+    This function returns a list: [interfaceID, interfaceName,
+    emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase].
+
+    Interface parameters:
+
+    interfaceID - interface ID (0...3)
+
+    interfaceName - name for an interface (e.g. "caster1")
+
+    emergencyGPIO - emergency button GPIO (Broadcom number)
+
+    photocellGPIO - photocell GPIO (Broadcom number)
+
+    mcp0Address - mcp0 (first MCP23017) I2C address, hex number
+        (e.g. 0x20)
+
+    mcp1Address - mcp1 (second MCP23017) I2C address, hex number
+        (e.g. 0x21)
+
+    pinBase - integer, base number for pins supplied by the first
+        MCP23017 chip (i.e. mcp0).
+    """
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute(
+        'SELECT * FROM interface_settings WHERE interface_id = %i'
+        % interfaceID
+        )
+        interface = cursor.fetchone()
+        if interface is not None:
+          interface = list(interface)
+          """Correction to return proper hex values for I2C addresses:"""
+          interface[4] = hex(json.loads(interface[4]))
+          interface[5] = hex(json.loads(interface[5]))
+          return interface
+        else:
+          print('No interface with a given ID found!\n')
+          return False
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print('Error: cannot retrieve interface settings!')
+
+  def list_interfaces(self):
+    """List interfaces:
+
+    List all interfaces stored in database with their parameters.
+
+
+    Interface parameters:
+
+    ID - interface ID (0...3)
+
+    name - name for an interface (e.g. "caster1")
+
+    emergency GPIO - emergency button GPIO (Broadcom number)
+
+    photocell GPIO - photocell GPIO (Broadcom number)
+
+    mcp0 addr - mcp0 (first MCP23017) I2C address, hex number
+        (e.g. 0x20)
+
+    mcp1 addr - mcp1 (second MCP23017) I2C address, hex number
+        (e.g. 0x21)
+
+    pin base - integer, base number for pins supplied by the first
+        MCP23017 chip (i.e. mcp0).
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM interface_settings')
+        print('\nID, name, emergency GPIO, photocell GPIO, MCP0 addr, MCP1 addr, pin base:\n')
+        while True:
+          interface = cursor.fetchone()
+          if interface is not None:
+            interface = list(interface)
+            """Correction to return proper hex values for I2C addresses:"""
+            interface[4] = hex(json.loads(interface[4]))
+            interface[5] = hex(json.loads(interface[5]))
+            print '   '.join(interface)
+          else:
+            break
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print('Error: interface_settings table not found in database - not configured yet?')
+      finally:
+        pass
+
+  def add_wedge(self, wedgeID, setWidth, oldPica, steps):
+    """add_wedge(self, wedgeID, setWidth, oldPica, steps):
+
+    Registers a wedge in our database.
+
+    Arguments:
+
+    wedgeID - wedge's number, e.g. S5 or 1160. String, cannot be null.
+
+    setWidth - set width of a wedge, e.g. 9.75. Float, cannot be null.
+
+    oldPica - determines if it's an old pica system (i.e. 1pica = 0.1667")
+        If the wedge has "E" at the end of its number (e.g. 5-12E), then
+        it's an old-pica wedge.
+        1, True, 0, False.
+
+    steps - a list with unit values for each of the wedge's steps.
+        Not null.
+
+    An additional column, id, will be created and auto-incremented.
+    This will be an unique identifier of a wedge.
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        """Create the table first:"""
+        cursor.execute(
+        'CREATE TABLE IF NOT EXISTS wedges (id primary_key, \
+        wedge_id text not_null, set_width real not_null, \
+        old_pica integer not_null, steps text not_null)'
+        )
+        """Then add an entry:"""
+        cursor.execute(
+        'INSERT INTO wedges (wedge_id,set_width,old_pica,steps) \
+        VALUES (%s, %f, %i, %i, %l)'
+        % wedgeID, setWidth, int(oldPica), json.dumps(steps)
+        )
+        db.commit()
+      finally:
+        pass
+
+
+  def get_wedge(self, wedgeID, setWidth):
+    """get_wedge(self, wedgeID, setWidth):
+
+    Checks if a wedge with given ID and set width is registered in database.
+
+    If so, returns:
+    ID - unique, int (e.g. 0),
+    wedgeID - string (e.g. S5) - wedge name
+    setWidth - float (e.g. 9.75) - set width,
+    oldPica - bool - whether this is an old-pica ("E") wedge or not,
+    steps - list of unit values for all wedge's steps.
+
+    Else, returns False.
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM wedges WHERE wedge_id = %s \
+                      AND set_width = %f' % wedgeID, setWidth)
+        wedge = cursor.fetchone()
+        if wedge is None:
+          print('No wedge %s - %f found in database!' % wedgeID, setWidth)
+          return False
+        else:
+          print('Wedge found in database - OK')
+          """Change return value of oldPica to boolean:"""
+          wedge[3] = bool(wedge[3])
+          """Change return value of steps to list:"""
+          wedge[4] = json.loads(wedge[4])
+          return wedge
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print('Error: cannot get wedge - does the table exist?')
+      finally:
+        pass
+
+
+  def delete_wedge(self, ID):
+    """delete_wedge(self, ID):
+
+    Deletes a wedge with given unique ID from the database
+    (useful in case we no longer have the wedge).
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute(
+        'DELETE FROM wedges WHERE id = %i' % ID
+        )
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print('Error: cannot delete wedge - does the table exist?')
+
+
+  def list_wedges(self):
+    """list_wedges(self):
+
+    Lists all wedges stored in database, with their step unit values.
+
+    Prints the following to stdout:
+
+    ID - unique, int (e.g. 0),
+    wedgeID - string (e.g. S5) - wedge name
+    setWidth - float (e.g. 9.75) - set width,
+    oldPica - bool - whether this is an old-pica ("E") wedge or not,
+    steps - list of unit values for all wedge's steps.
+    """
+
+    with sqlite3.connect('database/monotype.db') as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('SELECT * FROM wedges')
+        print(
+        '\nid, wedgeID, set width, old pica, unit values for all steps:\n'
+        )
+        while True:
+          wedge = cursor.fetchone()
+          if wedge is not None:
+            wedge[3] = bool(wedge[3])
+            """Change return value of steps to list:"""
+            wedge[4] = json.loads(wedge[4])
+            print '   '.join(wedge)
+          else:
+            break
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        if not DebugMode:
+          print(
+          'Error: wedges table does not exist - not configured yet?'
+          )
+      finally:
+        pass
+
+
+class Monotype(CasterConfig):
+  """Monotype class:
+
+  A class which stores all methods related to the interface and
+  caster itself."""
+
+  def __init__(self, casterName):
+    """Setup routine:
+
+    After the class is instantiated, this method reads caster data
+    from database and fetches a list of caster parameters: [serialNumber,
+    casterName, casterType, justification, diecaseFormat, interfaceID].
+    """
+    #self.casterName = casterName
+    casterParameters = self.caster_by_name(casterName)
+
+    """Parse the obtained parameters:"""
+    self.serialNumber = casterParameters[0]
+    self.casterName = casterParameters[1]
+    self.casterType = casterParameters[2]
+    self.justification = casterParameters[3]
+    self.diecaseFormat = casterParameters[4]
+    self.interfaceID = casterParameters[5]
+
+    """
+    Then, the interface ID is looked up in the database, and interface
+    parameters are known: [interfaceID, interfaceName, emergencyGPIO,
+    photocellGPIO, mcp0Address, mcp1Address, pinBase]
+    """
+    interfaceParameters = self.get_interface(self.interfaceID)
+
+    """Parse the obtained parameters:"""
+    self.interfaceName = interfaceParameters[1]
+    self.emergencyGPIO = interfaceParameters[2]
+    self.photocellGPIO = interfaceParameters[3]
+    self.mcp0Address = interfaceParameters[4]
+    self.mcp1Address = interfaceParameters[5]
+    self.pinBase = interfaceParameters[6]
 
     self.setup()
 
 
   def setup(self):
     """Input configuration:
+
     We need to set up the sysfs interface before (powerbuttond.py -
     a daemon running on boot with root privileges takes care of it).
-    In the future,  we'll add configurable GPIO numbers. Why store the
-    device config in the program source, if we can use a .conf file?"""
+    """
     gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.photocellGPIO
     self.valueFileName = gpioSysfsPath + 'value'
     self.edgeFileName = gpioSysfsPath + 'edge'
 
-    """Check if the photocell GPIO has been configured:"""
+
+    """Check if the photocell GPIO has been configured - file can be read:"""
     if not os.access(self.valueFileName, os.R_OK):
       print('%s: file does not exist or cannot be read. '
          'You must export the GPIO no %i as input first!'
               % (self.valueFileName, self.photocellGPIO))
       exit()
 
-    """Check if the interrupts are generated for photocell GPIO
+
+    """Ensure that the interrupts are generated for photocell GPIO
     for both rising and falling edge:"""
     with open(self.edgeFileName, 'r') as edgeFile:
       if (edgeFile.read()[:4] != 'both'):
-        print('%s: file does not exist, cannot be read or the interrupt '
-        'on GPIO no %i is not set to "both". Check the system config.'
+        print('%s: file does not exist, cannot be read or the interrupt \
+        on GPIO no %i is not set to "both". Check the system config.'
         % (self.edgeFileName, self.photocellGPIO))
         exit()
 
+
     """Output configuration:
-    Setup the wiringPi MCP23017 chips for valve outputs:"""
+
+    Setup the wiringPi MCP23017 chips for valve outputs:
+    """
     wiringpi.mcp23017Setup(self.pinBase, self.mcp0Address)
     wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
     pins = range(self.pinBase, self.pinBase + 32)
-    signals = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',
-             '12', '13', '14', '0005', '0075', 'A', 'B', 'C', 'D', 'E',
-             'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'S', 'O15']
-
-    """Set all I/O lines as outputs - mode 1"""
+    """Set all I/O lines on MCP23017s as outputs - mode = 1"""
     for pin in pins:
       wiringpi.pinMode(pin,1)
 
-    """Assign wiringPi pin numbers on MCP23017s to the Monotype control codes."""
+
+    """This list defines the names and order of Monotype control signals
+    that will be assigned to 32 MCP23017 outputs and solenoid valves.
+    You may want to change it, depending on how you wired the valves
+    in hardware (e.g. you can fix interchanged lines by swapping signals).
+
+    Monotype ribbon perforations are arranged as follows:
+
+    NMLKJIHGF S ED  0075    CBA 123456789 10 11 12 13 14  0005
+                   (large)                               (large)
+
+    O15 is absent in ribbon, and is only used by the keyboard's paper tower.
+    It's recommended to assign it to the first or last output line.
+
+    You'll probably want to assign your outputs in one of these orders:
+
+    a) alphanumerically:
+
+    mcp0 bank A | mcp0 bank B                | mcp1 bank A | mcp1 bank B
+    ---------------------------------------------------------------------
+    12345678    | 9 10 11 12 13 14 0005 0075 | ABCDEFGH    | IJKLMN S O15
+    """
+    signalsA = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11',
+             '12', '13', '14', '0005', '0075', 'A', 'B', 'C', 'D', 'E',
+             'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'S', 'O15']
+
+    """
+    b) according to Monotype codes:
+
+    mcp0 bank A | mcp0 bank B     | mcp1 bank A | mcp1 bank B
+    -----------------------------------------------------------------------
+    NMLKJIHG    | F S ED 0075 CBA | 12345678    | 9 10 11 12 13 14 0005 O15
+    """
+    signalsB = ['N', 'M', 'L', 'K', 'J', 'I', 'H', 'G', 'F', 'S', 'E',
+             'D', '0075', 'C', 'B', 'A', '1', '2', '3', '4', '5', '6',
+             '7', '8', '9', '10', '11', '12', '13', '14', '0005', 'O15']
+
+    """
+    c) grouping odd and even Monotype signals in valve units,
+    where first MCP controls odd signals (upper/lower paper tower inputs
+    if you use V air connection block) and second MCP controls even signals:
+
+    mcp0 bank A   | mcp0 bank B      | mcp1 bank A | mcp1 bank B
+    --------------------------------------------------------------------
+    NLJHFE 0075 B | 13579 11 13 0005 | MKIGSDCA    | 2468 10 12 14 O15
+    """
+    signalsC = ['N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', '1', '3', '5',
+             '7', '9', '11', '13', '0005', 'M', 'K', 'I', 'G', 'S', 'D',
+             'C', 'A', '2', '4', '6', '8', '10', '12', '14', 'O15']
+
+    """
+    d) grouping odd and even Monotype signals in valve units,
+    where first MCP controls left half of signals - N...A,
+    and second MCP controls right half - 1...0005:
+
+    mcp0 bank A   | mcp0 bank B | mcp1 bank A      | mcp1 bank B
+    --------------------------------------------------------------------
+    NLJGFE 0075 B | MKIHSDCA    | 13579 11 13 0005 | 2468 10 12 14 O15
+    """
+    signalsD = ['N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', 'M', 'K',
+              'I', 'G', 'S', 'D', 'C', 'A','1', '3', '5', '7', '9', '11',
+              '13', '0005',  '2', '4', '6', '8', '10', '12', '14', 'O15']
+
+
+    """mcp0 is the MCP23017 with lower address (e.g. 0x20), mcp1 - the chip
+    with higher address (e.g. 0x21). If you're using DIP or SOIC chips,
+    I/O bank A uses physical pin numbers 21...18, bank B is 1...8.
+    See datasheet for further info."""
+
+
+    """Choose one of predefined orders or define a brand new one:"""
+    signals = signalsA
+
+    """Assign wiringPi pin numbers on MCP23017s to the Monotype
+    control signals defined earlier.
+    """
     self.wiringPiPinNumber = dict(zip(signals, pins))
 
+
   def detect_rotation(self):
-    """Detects if the machine is rotating"""
-    """count machine cycles, initial 0, target 3"""
+    """
+    Detect rotation:
+
+    Checks if the machine is running by counting pulses on a photocell
+    input. One pass of a while loop is a single cycle. If cycles_max
+    value is exceeded in a time <= time_max, the program assumes that
+    the caster is rotating and it can start controlling the machine.
+    """
     cycles = 0
     cycles_max = 3
-    """let's give it 30 seconds timeout"""
+    """Let's give it 30 seconds timeout."""
     time_start = time.time()
     time_max = 30
-    """check for photocell signals until timeout or target is reached"""
+
+    """
+    Check for photocell signals, keep checking until max time is exceeded
+    or target number of cycles is reached:
+    """
     with open(self.valueFileName, 'r') as gpiostate:
       while time.time() <= time_start + time_max and cycles <= cycles_max:
         photocellSignals = select.epoll()
@@ -129,14 +850,35 @@ class Hardware(object):
           return False
 
   def send_signals_to_caster(self, signals, machineTimeout):
-    """Casting - the pace is dictated by the machine (via photocell)."""
+    """
+    Send signals to caster:
+
+    When casting, the pace is dictated by the caster and its RPM. Thus,
+    we can't arbitrarily set the intervals between valve ON and OFF
+    signals. We need to get feedback from the machine, and we can use
+    contact switch (unreliable in the long run), magnet & reed switch
+    (not precise enough) or a photocell + LED (very precise).
+    We can use a paper tower's operating lever for obscuring the sensor
+    (like John Cornelisse did), or we can use a partially obscured disc
+    attached to the caster's shaft (like Bill Welliver did).
+    Both ways are comparable; the former can be integrated with the
+    valve block assembly, and the latter allows for very precise tweaking
+    of duty cycle (bright/dark area ratio) and phase shift (disc's position
+    relative to 0 degrees caster position).
+    """
     with open(self.valueFileName, 'r') as gpiostate:
       po = select.epoll()
       po.register(gpiostate, select.POLLPRI)
       previousState = 0
 
-      """Detect events on a photocell input and cast all signals in a row.
-      Ask the user what to do if the machine is stopped (no events)."""
+      """
+      Detect events on a photocell input, and if a rising or falling edge
+      is detected, determine the input's logical state (high or low).
+      If high - check if it was previously low to be sure. Then send
+      all signals passed as an argument (tuple or list).
+      In the next cycle, turn all the valves off and exit the loop.
+      Set the previous state each time the valves are turned on or off.
+      """
       while True:
         """polling for interrupts"""
         events = po.poll(machineTimeout)
@@ -145,7 +887,7 @@ class Hardware(object):
           gpiostate.seek(0)
           photocellState = int(gpiostate.read())
 
-          if photocellState == 1:
+          if photocellState == 1 and previousState == 0:
             """there's a signal from photocell - let the air in"""
             self.activate_valves(signals)
             previousState = 1
@@ -157,15 +899,20 @@ class Hardware(object):
             break
 
         else:
-          """if machine isn't working, notify the user"""
+          """Ask the user what to do if the machine is stopped (no events)."""
           self.machine_stopped()
 
 
   def activate_valves(self, signals):
-    """ Activates the valves corresponding to Monotype signals found
-    in an array fed to the function. The input array "signals" can contain
+    """Activate valves:
+
+    Activates the solenoid valves connected with interface's outputs,
+    as specified in the "signals" argument (tuple or list).
+    The input array "signals" can contain
     lowercase (a, b, g, s...) or uppercase (A, B, G, S...) descriptions.
-    Do nothing if the function receives an empty sequence."""
+    Do nothing if the function receives an empty sequence, which will
+    occur if we cast with the matrix found at position O15.
+    """
     if len(signals) != 0:
       for monotypeSignal in signals:
         pin = self.wiringPiPinNumber[monotypeSignal]
@@ -173,15 +920,21 @@ class Hardware(object):
 
 
   def deactivate_valves(self):
-    """Turn all valves off to avoid erroneous operation,
-    esp. in case of program termination."""
+    """Deactivate valves:
+
+    Turn all valves off after casting/punching any character.
+    Call this function to avoid outputs staying turned on if something
+    goes wrong, esp. in case of abnormal program termination."""
     for pin in range(self.pinBase, self.pinBase + 32):
       wiringpi.digitalWrite(pin,0)
 
 
   def machine_stopped(self):
-    """This allows us to choose whether we want to continue, return to menu
-    or exit if the machine stops during casting."""
+    """Machine stopped menu:
+
+    This allows us to choose whether we want to continue, return to menu
+    or exit if the machine stops during casting.
+    """
     choice = ""
     while choice not in ['c', 'm', 'e']:
       choice = raw_input('Machine not running! Check what\'s going on.'
@@ -198,10 +951,22 @@ class Hardware(object):
 
 
 class DryRun(object):
-  """A class which allows to test rpi2caster without an actual interface"""
+  """Dry Run:
+
+  A class which allows to test rpi2caster without an actual interface
+  or caster. Most functionality will be developped without an access
+  to the machine.
+  """
 
   def __init__(self):
-    print 'Testing rpi2caster without an actual caster or interface. Debug mode ON.'
+    """Instantiation:
+
+    A lot simpler than "real" operation; we don't set up the GPIO lines
+    nor interrupt polling files We'll use substitute routines that
+    emulate caster-related actions.
+    """
+    print('Testing rpi2caster without an actual caster or interface. \
+    Debug mode ON.')
     time.sleep(1)
 
   def send_signals_to_caster(self, signals, machineTimeout):
@@ -215,25 +980,28 @@ class DryRun(object):
   def activate_valves(self, signals):
     """If there are any signals, print them out"""
     if len(signals) != 0:
-      print 'The valves: ',' '.join(signals),' would be activated now.'
+      print('The valves: ',' '.join(signals),' would be activated now.')
 
   def deactivate_valves(self):
     """No need to do anything"""
-    print 'The valves would be deactivated now.'
+    print('The valves would be deactivated now.')
 
   def detect_rotation(self):
-    print 'Now, the program would check if the machine is rotating.\n'
+    """FIXME: implement raw input breaking on timeout"""
+    print('Now, the program would check if the machine is rotating.\n')
     startTime = time.time()
     while time.time() < startTime + 5:
       answer = raw_input('Press return (to simulate rotation) '
-                    'or wait 5sec (to simulate machine off)\n')
+                         'or wait 5sec (to simulate machine off)\n')
     else:
       if answer is None:
         self.machine_stopped()
         self.detect_rotation()
 
   def machine_stopped(self):
-    """This allows us to choose whether we want to continue, return to menu
+    """Machine stopped menu - the same as in actual casting.
+
+    This allows us to choose whether we want to continue, return to menu
     or exit if the machine stops during casting. It's just a simulation here."""
     choice = ""
     while choice not in ['c', 'm', 'e']:
@@ -309,178 +1077,6 @@ class Parsing(object):
 
     """Return a list containing the signals, as well as a comment."""
     return [columns + rows + special_signals, comment]
-
-
-class CasterConfig(object):
-  """Read/write caster & interface configuration from/to sqlite3 database"""
-
-
-  def add_caster(self, serialNumber, casterName, casterType,
-                            justification, diecaseFormat, interfaceID):
-    """Register a new caster"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        """Make sure that the table exists, if not - create it"""
-        cursor.execute('CREATE TABLE IF NOT EXISTS caster_settings \
-        (serial_number integer primary key, caster_name text, caster_type text, \
-        justification text, diecase_format text, interface_id integer)')
-
-        """Create an entry for the caster in the database"""
-        cursor.execute('INSERT INTO caster_settings (serial_number,caster_name,\
-        caster_type,justification,diecase_format) VALUES (%i, %s, %s, %s, %s)'
-        % serialNumber, casterName, casterType, justification, diecaseFormat, interfaceID)
-        db.commit()
-      finally:
-        pass
-
-  def list_casters(self):
-    """List all casters stored in database"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('SELECT * FROM caster_settings')
-        print('\nSerial No, name, type, justification, diecase format, interface ID\n')
-        while True:
-          caster = cursor.fetchone()
-          if caster is not None:
-            print '   '.join(caster)
-          else:
-            break
-      except sqlite3.OperationalError:
-        if not DebugMode:
-          print('Error: caster_settings table does not exist in database - not configured yet?')
-      finally:
-        pass
-
-  def caster_by_name(self, casterName):
-    """Get caster parameters for a caster with a given name"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('SELECT * FROM caster_settings WHERE caster_name = %s' % casterName)
-        caster = cursor.fetchone()
-        """returns a list: [casterSerial, casterName, casterType, justification, diecaseFormat]"""
-        return caster
-      except sqlite3.OperationalError:
-        if not DebugMode:
-          print('Error: cannot retrieve caster settings!')
-
-  def caster_by_serial(self, casterSerial):
-    """Get caster parameters for a caster with a given serial No"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('SELECT * FROM caster_settings WHERE caster_serial = %s' % casterSerial)
-        caster = cursor.fetchone()
-        """returns a list: [casterSerial, casterName, casterType, justification, diecaseFormat]"""
-        return caster
-      except sqlite3.OperationalError:
-        if not DebugMode:
-          print('Error: cannot retrieve caster settings!')
-
-  def add_interface(self, interfaceID, interfaceName, emergencyGPIO,
-                            photocellGPIO, mcp0Address, mcp1Address, pinBase):
-    """Register a new interface, i.e. I2C expander params + emergency stop GPIO + photocell GPIO"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('CREATE TABLE IF NOT EXISTS interface_settings \
-        (interface_id integer primary key, interface_name text, emergency_gpio integer, \
-        photocell_gpio integer, mcp0_address blob, \
-        mcp1_address blob, pin_base integer)')
-        cursor.execute('INSERT INTO interface_settings \
-        (interface_id,interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
-        mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %i, %i, %i)' % interfaceID,
-        interfaceName, emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase)
-        db.commit()
-      finally:
-        pass
-
-  def get_interface(self, interfaceID=0):
-    """Get interface parameters for a given ID, most typically 0 for a RPi with a single interface"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('SELECT * FROM interface_settings WHERE interface_id = %i' % interfaceID)
-        interface = cursor.fetchone()
-        """returns a list: [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
-        mcp0Address, mcp1Address, pinBase] """
-        return interface
-      except sqlite3.OperationalError:
-        if not DebugMode:
-          print('Error: cannot retrieve interface settings!')
-
-  def list_interfaces(self):
-    """List all casters stored in database"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('SELECT * FROM interface_settings')
-        print('\nID, name, emergency GPIO, photocell GPIO, MCP0 addr, MCP1 addr, pin base:\n')
-        while True:
-          caster = cursor.fetchone()
-          if interface is not None:
-            print '   '.join(interface)
-          else:
-            break
-      except sqlite3.OperationalError:
-        if not DebugMode:
-          print('Error: interface_settings table not found in database - not configured yet?')
-      finally:
-        pass
-
-
-  def get_wedge(self, wedgeID, setWidth):
-    """Check if we have a wedge with a given ID in our collection"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('SELECT * FROM wedges WHERE wedge_id = %s AND set_width = %f' % wedgeID, setWidth)
-        wedge = cursor.fetchone()
-        if wedge is None:
-          print('No wedge %s %f found in database!' % wedgeID, setWidth)
-          return False
-        else:
-          print('Wedge found in database - OK')
-          return wedge
-      except sqlite3.OperationalError:
-        if not DebugMode:
-          print('Error: cannot get wedge - does the table exist?')
-      finally:
-        pass
-
-
-  def delete_wedge(self, wedgeID, setWidth):
-    """Delete a wedge from the database"""
-    if get_wedge(wedgeID, setWidth):
-      with sqlite3.connect('database/monotype.db') as db:
-        try:
-          cursor = db.cursor()
-          cursor.execute('DELETE FROM wedges WHERE wedge_id = %s AND set_width = %f' % wedgeID, setWidth)
-        except sqlite3.OperationalError:
-          if not DebugMode:
-            print('Error: cannot delete wedge - does the table exist?')
-
-
-  def list_wedges(self):
-    """List all wedges stored in database"""
-    with sqlite3.connect('database/monotype.db') as db:
-      try:
-        cursor = db.cursor()
-        cursor.execute('SELECT * FROM wedges')
-        print('\nWedge No, set width, unit values for all steps\n')
-        while True:
-          wedge = cursor.fetchone()
-          if wedge is not None:
-            print '   '.join(caster)
-          else:
-            break
-      except sqlite3.OperationalError:
-        if not DebugMode:
-          print('Error: wedges table does not exist in database - not configured yet?')
-      finally:
-        pass
 
 
 class Actions(Parsing):
@@ -658,7 +1254,8 @@ class Actions(Parsing):
     print('\nFinished!')
     finishedChoice = ''
     while finishedChoice not in ['r', 'm', 'e']:
-      finishedChoice = raw_input('(R)epeat, go back to (M)enu or (E)xit program? ')
+      finishedChoice = raw_input(
+                      '(R)epeat, go back to (M)enu or (E)xit program? ')
       if finishedChoice.lower() == 'r':
         self.cast_sorts()
       elif finishedChoice.lower() == 'm':
@@ -691,10 +1288,19 @@ class Actions(Parsing):
     self.menu()
 
 
-
 class TextUI(object):
   """This class defines a text user interface, i.e. what you can do
   when operating the program from console."""
+
+
+  """file name auto-complete"""
+  def tab_complete(text, state):
+    """This function enables tab key auto-completion when you
+    enter the filename. Will definitely come in handy."""
+    return (glob.glob(text+'*')+[None])[state]
+  readline.set_completer_delims(' \t\n;')
+  readline.parse_and_bind('tab: complete')
+  readline.set_completer(tab_complete)
 
 
   def consoleUI(self):
@@ -717,15 +1323,6 @@ class TextUI(object):
       print('Goodbye!')
       self.deactivate_valves()
 
-
-  def tab_complete(text, state):
-    """This function enables tab key auto-completion when you
-    enter the filename. Will definitely come in handy."""
-    return (glob.glob(text+'*')+[None])[state]
-
-  readline.set_completer_delims(' \t\n;')
-  readline.parse_and_bind('tab: complete')
-  readline.set_completer(tab_complete)
 
   """Set up an empty ribbon file name first"""
   inputFileName = ''
@@ -794,11 +1391,28 @@ class TextUI(object):
         ans = ''
 
 
-class Console(Hardware, Actions, TextUI):
-  """Use this class for instantiating text-based console user interface"""
+class Console(Monotype, Actions, TextUI):
+  """Use this class for instantiating text-based console user interface."""
 
-  def __init__(self, photocellGPIO=17, mcp0Address=0x20, mcp1Address=0x21, pinBase=65):
-    Hardware.__init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase)
+  def __init__(self, casterName):
+    """instantiate config for the caster"""
+    webCasterConfig = CasterConfig
+
+    """get casting interface ID from database"""
+    interfaceID = webCasterConfig.caster_by_name(casterName)[-1]
+
+    """get interface parameters"""
+    interfaceParameters = webCasterConfig.get_interface(interfaceID)
+
+    """assign results to variables passed further"""
+    [interfaceID, interfaceName, emergencyGPIO, photocellGPIO, mcp0Address,
+    mcp1Address, pinBase] = (interfaceParameters[i] for i in range(7))
+
+    """display interface name and ID"""
+    print('Using interface "%s", ID: %i' % interfaceName, interfaceID)
+
+    """set up hardware with obtained interface parameters"""
+    Monotype.__init__(self, casterName)
 
     self.consoleUI()
 
@@ -810,11 +1424,28 @@ class Testing(DryRun, Actions, TextUI):
     DryRun.__init__(self)
     self.consoleUI()
 
-class WebInterface(Hardware, Actions):
+class WebInterface(Monotype, Actions):
   """Use this class for instantiating text-based console user interface"""
 
-  def __init__(self, photocellGPIO=17, mcp0Address=0x20, mcp1Address=0x21, pinBase=65):
-    Hardware.__init__(self, photocellGPIO, mcp0Address, mcp1Address, pinBase)
+  def __init__(self, casterName):
+    """instantiate config for the caster"""
+    webCasterConfig = CasterConfig
+
+    """get casting interface ID from database"""
+    interfaceID = webCasterConfig.caster_by_name(casterName)[-1]
+
+    """get interface parameters"""
+    interfaceParameters = webCasterConfig.get_interface(interfaceID)
+
+    """assign results to variables passed further"""
+    [interfaceID, interfaceName, emergencyGPIO, photocellGPIO, mcp0Address,
+    mcp1Address, pinBase] = (interfaceParameters[i] for i in range(7))
+
+    """display interface name and ID"""
+    print('Using interface "%s", ID: %i' % interfaceName, interfaceID)
+
+    """set up hardware with obtained interface parameters"""
+    Monotype.__init__(self, casterName)
 
     self.webUI()
 
