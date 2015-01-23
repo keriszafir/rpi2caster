@@ -1465,7 +1465,7 @@ class Console(Monotype, Actions, TextUI):
 
     """get casting interface ID from database;
     we need the last item returned by the function, hence [-1]"""
-    interfaceID = config.caster_by_name(casterName)[-1]
+    interfaceID = casterSetup.caster_by_name(casterName)[-1]
 
     """get interface parameters"""
     interfaceParameters = casterSetup.get_interface(interfaceID)
@@ -1518,5 +1518,5 @@ class WebInterface(Monotype, Actions):
   def webUI(self):
     """This is a placeholder for web interface method. Nothing yet..."""
 
-if __name__ == __main__:
+if __name__ == '__main__':
   casting = Console('mkart-cc')
