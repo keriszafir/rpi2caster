@@ -16,12 +16,12 @@ def is_hex(s):
   try:
     int(s, 16)
     return True
-  except ValueError:
+  except (TypeError, ValueError):
     return False
 
 def conv_hex(s):
   n = int(s, 16)
-  return hex(n)
+  return n
 
 def add_caster(casterSerial='', casterName='', casterType='',
                unitAdding='', diecaseSystem='', interfaceID=''):
@@ -39,17 +39,25 @@ def add_caster(casterSerial='', casterName='', casterType='',
   if str(casterSerial).isdigit():
     casterSerial = int(casterSerial)
   else:
-    casterSerial = raw_input('Enter the serial number of your caster: ')
+    casterSerial = raw_input(
+                   'Enter the serial number of your caster: '
+                   )
     revalidate = True
 
   """Enter a string for machine name"""
   if not casterName:
-    casterName = raw_input('Enter the name you use for this machine: ')
+    casterName = raw_input(
+                 'Enter the name you use for this machine: '
+                 )
     revalidate = True
 
-  """Choose the machine type - and validate the choice. Case insensitive; value stored in db as uppercase"""
+  """Choose the machine type - and validate the choice.
+  Case insensitive; value stored in db as uppercase"""
   if casterType not in ['comp', 'large_comp']:
-    casterType = raw_input('What type is the machine? 1 = composition caster, 2 = type & rule / large comp. caster: ')
+    casterType = raw_input(
+                 'What type is the machine? 1 = composition caster, '
+                 '2 = type & rule caster / large composition caster: '
+                 )
     if casterType == '1':
       casterType = 'comp'
     elif casterType == '2':
@@ -60,7 +68,10 @@ def add_caster(casterSerial='', casterName='', casterType='',
 
   """Choose if the machine has unit adding or not"""
   if unitAdding not in (True, False):
-    unitAdding = raw_input('Does the caster use unit adding attachment? 1 - yes, 0 - no: ')
+    unitAdding = raw_input(
+                 'Does the caster use unit adding attachment? '
+                 '1 - yes, 0 - no: '
+                 )
     if unitAdding == '0':
       unitAdding = False
     elif unitAdding == '1':
@@ -69,10 +80,14 @@ def add_caster(casterSerial='', casterName='', casterType='',
       unitAdding = ''
     revalidate = True
 
-  """Choose the diecase format the machine is using, and validate the choice"""
+  """Choose the diecase format the machine is using,
+  and validate the choice"""
   dcsystems = ['norm15', 'norm17', 'hmn', 'kmn', 'shift']
   if diecaseSystem not in dcsystems:
-    diecaseSystem = raw_input('Diecase format this machine works with: 0 for 15x15, 1 for 15x17, 2 for HMN, 3 for KMN, 4 for unit-shift. \nDefault is 15x17: ')
+    diecaseSystem = raw_input(
+                    'Diecase format this machine works with: '
+                    '0 for 15x15, 1 for 15x17, 2 for HMN, 3 for KMN, '
+                    '4 for unit-shift. \nDefault is 15x17: ')
     if diecaseSystem == '0':
       diecaseSystem = dcsystems[0]
     elif diecaseSystem == '1':
@@ -91,7 +106,10 @@ def add_caster(casterSerial='', casterName='', casterType='',
   if str(interfaceID).isdigit() and int(interfaceID) in range(4):
     interfaceID = int(interfaceID)
   else:
-    interfaceID = raw_input('Raspberry interface number for this machine. Can be 0, 1, 2, 3. Default 0: ')
+    interfaceID = raw_input(
+                  'Raspberry interface number for this machine. '
+                  'Can be 0, 1, 2, 3. Default 0: '
+                  )
     if interfaceID == '':
       interfaceID = '0'
     revalidate = True
@@ -128,56 +146,93 @@ def add_caster(casterSerial='', casterName='', casterType='',
 
 def add_interface(ID='', interfaceName='', emergencyGPIO='',
         photocellGPIO='', mcp0Address='', mcp1Address='', pinBase=''):
+  """add_interface(ID, interfaceName, emergencyGPIO, photocellGPIO,
+                   mcp0Address, mcp1Address, pinBase):
 
-  """Check if the serial No is numeric - we must ensure that the value in db is integer"""
-  if ID.isdigit() and int(ID) in range(4):
+  Adds a Raspberry Pi I2C+GPIO interface parameters to the database.
+  A single Raspberry can work with up to four interfaces -
+  it's uncommon, but possible, and may come in handy if you have
+  several casters that you want to control with several sets of valves.
+  """
+
+
+  """Reset revalidation; if everything is OK, the data can be written
+  to the database. Else, the add_caster function will recurse into itself
+  with entered data as arguments. The user will have to re-enter
+  any parameter which does not match the expected values or type."""
+  revalidate = False
+
+  """Check if the serial No is numeric -
+  we must ensure that the value in db is integer"""
+  if str(ID).isdigit() and int(ID) in range(4):
     ID = int(ID)
   else:
-    ID = raw_input('Enter the interface ID: 0, 1, 2, 3, 4; default 0: ')
+    ID = raw_input(
+         'Enter the interface ID: 0, 1, 2, 3, 4; default 0: '
+         )
     if ID == '':
       ID = 0
-    revalidate += 1
+    revalidate = True
 
   """Enter a string for interface name"""
   if not interfaceName:
-    interfaceName = raw_input('Enter the name you use for this interface: ')
-    revalidate += 1
+    interfaceName = raw_input(
+                    'Enter the name you use for this interface: '
+                    )
+    revalidate = True
 
   """Emergency button GPIO for this interface"""
-  if emergencyGPIO.isdigit() and int(emergencyGPIO) > 3:
+  if str(emergencyGPIO).isdigit() and int(emergencyGPIO) > 3:
     emergencyGPIO = int(emergencyGPIO)
   else:
-    emergencyGPIO = raw_input('Enter the emergency button GPIO - BCM number: ')
-    revalidate += 1
+    emergencyGPIO = raw_input(
+                    'Enter the emergency button GPIO - BCM number: '
+                    )
+    revalidate = True
 
   """Photocell GPIO for this interface"""
-  if photocellGPIO.isdigit() and int(photocellGPIO) > 3 and photocellGPIO != emergencyGPIO:
+  if str(photocellGPIO).isdigit() and int(photocellGPIO) > 3 and photocellGPIO != emergencyGPIO:
     photocellGPIO = int(photocellGPIO)
   else:
-    emergencyGPIO = raw_input('Enter the photocell GPIO - BCM number: ')
-    revalidate += 1
+    photocellGPIO = raw_input(
+                    'Enter the photocell GPIO - BCM number: '
+                    )
+    revalidate = True
 
   """First MCP23017 address for this interface, typically 0x20:"""
   if is_hex(mcp0Address):
     mcp0Address = conv_hex(mcp0Address)
   else:
-    mcp0Address = raw_input('Enter the first MCP23017 I2C address - hex, typically 20: ')
-    revalidate += 1
+    mcp0Address = raw_input(
+                  'Enter the first MCP23017 I2C address - hexadecimal. '
+                  'Default 0x20: '
+                  )
+    if mcp0Address == '':
+      mcp0Address = '0x20'
+    revalidate = True
 
   """Second MCP23017 address for this interface, typically 0x21:"""
-  if is_hex(mcp0Address):
-    mcp0Address = conv_hex(mcp0Address)
+  if is_hex(mcp1Address):
+    mcp1Address = conv_hex(mcp1Address)
   else:
-    mcp0Address = raw_input('Enter the second MCP23017 I2C address - hex, typically 21: ')
-    revalidate += 1
+    mcp1Address = raw_input(
+                  'Enter the second MCP23017 I2C address - hexadecimal. '
+                  'Default 0x21: ')
+    if mcp1Address == '':
+      mcp1Address = '0x21'
+    revalidate = True
 
   """Pin base for GPIOs on MCP23017. Typically 65 for first interface,
   97 for second, 129 for third. 0 to 64 are RESERVED, we can't use them!"""
-  if pinBase.isdigit() and int(pinBase) > 64:
+  if str(pinBase).isdigit() and int(pinBase) > 64:
     pinBase = int(pinBase)
   else:
-    pinBase = raw_input('Enter the photocell GPIO - BCM number: ')
-    revalidate += 1
+    pinBase = raw_input(
+              'Enter the pin base for GPIOs on MCP23017 chips. '
+              'Default 65: ')
+    if pinBase == '':
+      pinBase = 65
+    revalidate = True
 
 
   if not revalidate:
@@ -192,36 +247,113 @@ def add_interface(ID='', interfaceName='', emergencyGPIO='',
     ans = raw_input('\nCommit? [y/n]')
 
     if ans.lower() == 'y':
-      CasterConfig.add_interface(ID, interfaceName, emergencyGPIO,
+      config.add_interface(ID, interfaceName, emergencyGPIO,
       photocellGPIO, mcp0Address, mcp1Address, pinBase)
       menu()
     elif ans.lower() == 'n':
-      add_caster(False)
+      add_interface()
   else:
-    add_interface(interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
+    add_interface(ID, interfaceName, emergencyGPIO, photocellGPIO,
     mcp0Address, mcp1Address, pinBase)
 
 
-def add_wedge():
+def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
   """Used for adding wedges"""
-  """TODO!"""
+
+
+
+  """Reset revalidation; if everything is OK, the data can be written
+  to the database. Else, the add_caster function will recurse into itself
+  with entered data as arguments. The user will have to re-enter
+  any parameter which does not match the expected values or type."""
+  revalidate = False
+
+  """Check if the serial No is numeric -
+  we must ensure that the value in db is integer"""
+  if wedgeName == '':
+    wedgeName = raw_input(
+                         'Enter the wedge name, e.g. S5 '
+                         '(very typical, default): '
+                        )
+    if wedgeName == '':
+      wedgeName = 'S5'
+    revalidate = True
+
+  """Enter a set width"""
+  try:
+    setWidth = float(setWidth)
+  except ValueError:
+    setWidth = raw_input(
+                        'Enter the wedge set width as decimal, '
+                        'e.g. 9.75E: '
+                        )
+
+    """Determine if it's an old pica wedge - E is present:"""
+    if setWidth[-1].upper() == 'E':
+      setWidth = setWidth[:-1]
+      oldPica = True
+    else:
+      oldPica = False
+    revalidate = True
+
+  """Enter the wedge steps:"""
+  if not steps:
+    rawSteps = raw_input(
+                        'Enter the wedge unit values for steps 1...16, '
+                        'separated by commas. If empty, entering values '
+                        'for wedge S5 (very typical): '
+                        )
+    if rawSteps == '':
+      rawSteps = '5,6,7,8,9,9,9,10,10,11,12,13,14,15,18,18'
+    rawSteps = rawSteps.split(',')
+    steps = []
+    """Now we need to be sure that all spaces are stripped:"""
+    for step in rawSteps:
+      step = int(step.strip())
+      steps.append(step)
+
+  if not revalidate:
+    print('Wedge: %s \n' % wedgeName)
+    print('Set width: %f \n' % setWidth)
+    print('Is it an old pica ("E") wedge?: %s \n' % str(oldPica))
+
+    """Loop over all unit values in wedge's steps and display them:"""
+    for i, step in zip(range(len(steps)), steps):
+      print('Step %i unit value: %i \n' % (i+1, step))
+
+    ans = raw_input('\nCommit? [y/n]')
+
+    if ans.lower() == 'y':
+      config.add_wedge(wedgeName, setWidth, oldPica, steps)
+      raw_input('Wedge added successfully!')
+      menu()
+    elif ans.lower() == 'n':
+      add_wedge()
+  else:
+    add_wedge(wedgeName, setWidth, oldPica, steps)
+
   menu()
 
 
 def delete_caster():
+  """Ask for ID and delete the caster"""
   ID = raw_input('Enter the caster ID to delete: ')
   if ID.isdigit():
     config.delete_caster(int(ID))
   menu()
 
 def delete_interface():
-  """Used for deleting an interface from database"""
-  """TODO!"""
+  """Ask for ID and delete the interface"""
+  ID = raw_input('Enter the interface ID to delete: ')
+  if ID.isdigit():
+    config.delete_interface(int(ID))
   menu()
 
 def delete_wedge():
   """Used for deleting a wedge from database"""
-  """TODO!"""
+  ID = raw_input('Enter the wedge ID to delete: ')
+  if ID.isdigit():
+    config.delete_wedge(int(ID))
   menu()
 
 

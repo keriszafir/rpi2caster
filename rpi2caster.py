@@ -211,11 +211,12 @@ class DatabaseBackend(object):
         interface ID\n')
         """loop over rows unless an empty row is found, then stop"""
         while True:
-          caster = cursor.fetchall()
-          if caster != '':
-            for row in caster:
-              print row
-            return True
+          caster = cursor.fetchone()
+          if caster is not None:
+            caster = list(caster)
+            for item in caster:
+              print item, '   ',
+            print ''
           else:
             break
       except sqlite3.OperationalError:
@@ -267,11 +268,12 @@ class DatabaseBackend(object):
 
     If no caster matches, the function returns False.
     """
+
     with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute(
-        'SELECT * FROM caster_settings WHERE caster_name = %s' % casterName
+        'SELECT * FROM caster_settings WHERE caster_name=?', [casterName]
         )
         caster = cursor.fetchone()
 
@@ -367,7 +369,7 @@ class DatabaseBackend(object):
     with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
-        cursor.execute('DELETE FROM caster_settings WHERE id=?',ID)
+        cursor.execute('DELETE FROM caster_settings WHERE id=?', [ID])
         db.commit()
         print('Caster id=%i successfully deleted' % ID)
         return True
@@ -379,7 +381,7 @@ class DatabaseBackend(object):
         return False
 
 
-  def add_interface(self, interfaceName, emergencyGPIO,
+  def add_interface(self, interfaceID, interfaceName, emergencyGPIO,
                     photocellGPIO, mcp0Address, mcp1Address, pinBase):
     """add_interface(self, interfaceID, interfaceName, emergencyGPIO,
                      photocellGPIO, mcp0Address, mcp1Address, pinBase):
@@ -426,8 +428,8 @@ class DatabaseBackend(object):
     """
 
     """Data we want to write to the database:"""
-    data = (int(interfaceID), interfaceName, emergencyGPIO, photocellGPIO,
-        json.dumps(mcp0Address), json.dumps(mcp1Address), pinBase)
+    data = (interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
+        int(mcp0Address), int(mcp1Address), pinBase)
 
     with sqlite3.connect(self.databasePath) as db:
       try:
@@ -439,8 +441,8 @@ class DatabaseBackend(object):
                       'interface_name TEXT UNIQUE, '
                       'emergency_gpio INTEGER UNIQUE, '
                       'photocell_gpio INTEGER UNIQUE NOT NULL, '
-                      'mcp0_address TEXT UNIQUE NOT NULL, '
-                      'mcp1_address TEXT UNIQUE NOT NULL, '
+                      'mcp0_address INTEGER UNIQUE NOT NULL, '
+                      'mcp1_address INTEGER UNIQUE NOT NULL, '
                       'pin_base INTEGER UNIQUE NOT NULL)'
                        )
         """Then add an entry:"""
@@ -544,9 +546,11 @@ class DatabaseBackend(object):
           if interface is not None:
             interface = list(interface)
             """Correction to return proper hex values for I2C addresses:"""
-            interface[4] = hex(json.loads(interface[4]))
-            interface[5] = hex(json.loads(interface[5]))
-            print '   '.join(interface)
+            interface[4] = hex(interface[4])
+            interface[5] = hex(interface[5])
+            for item in interface:
+              print item, '   ',
+            print ''
           else:
             break
       except sqlite3.OperationalError:
@@ -558,14 +562,14 @@ class DatabaseBackend(object):
       finally:
         pass
 
-  def add_wedge(self, wedgeID, setWidth, oldPica, steps):
-    """add_wedge(self, wedgeID, setWidth, oldPica, steps):
+  def add_wedge(self, wedgeName, setWidth, oldPica, steps):
+    """add_wedge(self, wedgeName, setWidth, oldPica, steps):
 
     Registers a wedge in our database.
 
     Arguments:
 
-    wedgeID - wedge's number, e.g. S5 or 1160. String, cannot be null.
+    wedgeName - wedge's number, e.g. S5 or 1160. String, cannot be null.
 
     setWidth - set width of a wedge, e.g. 9.75. Float, cannot be null.
 
@@ -581,34 +585,45 @@ class DatabaseBackend(object):
     This will be an unique identifier of a wedge.
     """
 
+    data = (wedgeName, setWidth, str(oldPica), json.dumps(steps))
+
     with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         """Create the table first:"""
         cursor.execute(
-        'CREATE TABLE IF NOT EXISTS wedges (id primary_key, \
-        wedge_id text not_null, set_width real not_null, \
-        old_pica integer not_null, steps text not_null)'
-        )
+                      'CREATE TABLE IF NOT EXISTS wedges '
+                      '(id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
+                      'wedge_id TEXT NOT NULL, '
+                      'set_width REAL NOT NULL, '
+                      'old_pica TEXT NOT NULL, '
+                      'steps TEXT NOT NULL)'
+                      )
+
         """Then add an entry:"""
         cursor.execute(
-        'INSERT INTO wedges (wedge_id,set_width,old_pica,steps) \
-        VALUES (%s, %f, %i, %s)'
-        % wedgeID, setWidth, int(oldPica), json.dumps(steps)
-        )
+                      'INSERT INTO wedges '
+                      '(wedge_id,set_width,old_pica,steps) '
+                      'VALUES (?, ?, ?, ?)', data
+                      )
         db.commit()
+      except:
+        """In debug mode we get the exact exception code & stack trace."""
+        print('Database error:')
+        if DebugMode:
+          raise
       finally:
         pass
 
 
-  def get_wedge(self, wedgeID, setWidth):
-    """get_wedge(self, wedgeID, setWidth):
+  def wedge_by_name_and_width(self, wedgeName, setWidth):
+    """wedge_by_name_and_width(wedgeName, setWidth):
 
-    Checks if a wedge with given ID and set width is registered in database.
+    Looks up a wedge with given ID and set width in database.
 
-    If so, returns:
+    If wedge is registeres, function returns:
     ID - unique, int (e.g. 0),
-    wedgeID - string (e.g. S5) - wedge name
+    wedgeName - string (e.g. S5) - wedge name
     setWidth - float (e.g. 9.75) - set width,
     oldPica - bool - whether this is an old-pica ("E") wedge or not,
     steps - list of unit values for all wedge's steps.
@@ -619,14 +634,56 @@ class DatabaseBackend(object):
     with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
-        cursor.execute('SELECT * FROM wedges WHERE wedge_id = %s \
-                      AND set_width = %f' % wedgeID, setWidth)
+        cursor.execute(
+                      'SELECT * FROM wedges WHERE wedge_id = ? '
+                      'AND set_width = ?', [wedgeName, setWidth])
         wedge = cursor.fetchone()
         if wedge is None:
-          print('No wedge %s - %f found in database!' % wedgeID, setWidth)
+          print('No wedge %s - %f found in database!' % wedgeName, setWidth)
           return False
         else:
-          print('Wedge found in database - OK')
+          wedge = list(wedge)
+          print('Wedge %s - %f found in database - OK' % wedgeName, setWidth)
+          """Change return value of oldPica to boolean:"""
+          wedge[3] = bool(wedge[3])
+          """Change return value of steps to list:"""
+          wedge[4] = json.loads(wedge[4])
+          return wedge
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        print('Error: cannot get wedge - not configured yet?\n')
+        if DebugMode:
+          raise
+      finally:
+        pass
+
+  def wedge_by_id(self, ID):
+    """wedge_by_id(ID):
+
+    Gets parameters for a wedge with given ID.
+
+    If so, returns:
+    ID - unique, int (e.g. 0),
+    wedgeName - string (e.g. S5) - wedge name
+    setWidth - float (e.g. 9.75) - set width,
+    oldPica - bool - whether this is an old-pica ("E") wedge or not,
+    steps - list of unit values for all wedge's steps.
+
+    Else, returns False.
+    """
+
+    with sqlite3.connect(self.databasePath) as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute(
+                      'SELECT * FROM wedges WHERE id = ? ', [ID]
+                      )
+        wedge = cursor.fetchone()
+        if wedge is None:
+          print('Wedge not found!')
+          return False
+        else:
+          wedge = list(wedge)
           """Change return value of oldPica to boolean:"""
           wedge[3] = bool(wedge[3])
           """Change return value of steps to list:"""
@@ -668,7 +725,7 @@ class DatabaseBackend(object):
     Prints the following to stdout:
 
     ID - unique, int (e.g. 0),
-    wedgeID - string (e.g. S5) - wedge name
+    wedgeName - string (e.g. S5) - wedge name
     setWidth - float (e.g. 9.75) - set width,
     oldPica - bool - whether this is an old-pica ("E") wedge or not,
     steps - list of unit values for all wedge's steps.
@@ -679,15 +736,17 @@ class DatabaseBackend(object):
         cursor = db.cursor()
         cursor.execute('SELECT * FROM wedges')
         print(
-        '\nid, wedgeID, set width, old pica, unit values for all steps:\n'
+        '\nid, wedge name, set width, old pica, unit values for all steps:\n'
         )
         while True:
           wedge = cursor.fetchone()
           if wedge is not None:
-            wedge[3] = bool(wedge[3])
+            wedge = list(wedge)
             """Change return value of steps to list:"""
             wedge[4] = json.loads(wedge[4])
-            print '   '.join(wedge)
+            for item in wedge:
+              print item, '   ',
+            print ''
           else:
             break
       except sqlite3.OperationalError:
@@ -746,9 +805,9 @@ class Monotype(DatabaseBackend):
     self.interfaceName = interfaceParameters[1]
     self.emergencyGPIO = interfaceParameters[2]
     self.photocellGPIO = interfaceParameters[3]
-    self.mcp0Address = interfaceParameters[4]
-    self.mcp1Address = interfaceParameters[5]
-    self.pinBase = interfaceParameters[6]
+    self.mcp0Address   = interfaceParameters[4]
+    self.mcp1Address   = interfaceParameters[5]
+    self.pinBase       = interfaceParameters[6]
     """
 
 
@@ -760,7 +819,7 @@ class Monotype(DatabaseBackend):
 
     gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
     self.gpioValueFileName = gpioSysfsPath + 'value'
-    self.gpioEdgeFileName = gpioSysfsPath + 'edge'
+    self.gpioEdgeFileName  = gpioSysfsPath + 'edge'
 
 
     """Check if the photocell GPIO has been configured - file can be read:"""
@@ -775,9 +834,11 @@ class Monotype(DatabaseBackend):
     for both rising and falling edge:"""
     with open(self.gpioEdgeFileName, 'r') as edgeFile:
       if (edgeFile.read()[:4] != 'both'):
-        print('%s: file does not exist, cannot be read or the interrupt \
-        on GPIO no %i is not set to "both". Check the system config.'
-        % (self.gpioEdgeFileName, photocellGPIO))
+        print('%s: file does not exist, cannot be read, '
+        'or the interrupt on GPIO no %i is not set to "both". '
+        'Check the system config.'
+        % (self.gpioEdgeFileName, photocellGPIO)
+        )
         exit()
 
 
@@ -785,7 +846,7 @@ class Monotype(DatabaseBackend):
 
     Setup the wiringPi MCP23017 chips for valve outputs:
     """
-    wiringpi.mcp23017Setup(pinBase, mcp0Address)
+    wiringpi.mcp23017Setup(pinBase,      mcp0Address)
     wiringpi.mcp23017Setup(pinBase + 16, mcp1Address)
     pins = range(pinBase, pinBase + 32)
     """Set all I/O lines on MCP23017s as outputs - mode = 1"""
@@ -1455,8 +1516,8 @@ class TextUI(object):
         ans = ''
 
 
-class Console(Monotype, Actions, TextUI):
-  """Use this class for instantiating text-based console user interface."""
+class ConsoleInterface(Actions, TextUI):
+  """Use this class for text-based console user interface."""
 
   def __init__(self, casterName):
     """instantiate config for the caster"""
@@ -1465,14 +1526,20 @@ class Console(Monotype, Actions, TextUI):
 
     """get casting interface ID from database;
     we need the last item returned by the function, hence [-1]"""
-    interfaceID = casterSetup.caster_by_name(casterName)[-1]
+    casterParameters = casterSetup.caster_by_name(casterName)
+    interfaceID = casterParameters[-1]
+
+    """when debugging, display additional info:"""
+    if DebugMode:
+      print casterParameters
+      print'Interface ID: ', interfaceID
 
     """get interface parameters"""
     interfaceParameters = casterSetup.get_interface(interfaceID)
 
     """assign results to variables passed further"""
-    [interfaceID, interfaceName, emergencyGPIO, photocellGPIO, mcp0Address,
-    mcp1Address, pinBase] = (interfaceParameters[i] for i in range(7))
+    [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
+    mcp0Address, mcp1Address, pinBase] = interfaceParameters
 
     """display interface name and ID"""
     print('Using interface "%s", ID: %i' % interfaceName, interfaceID)
@@ -1495,7 +1562,7 @@ class WebInterface(Monotype, Actions):
 
   def __init__(self, casterName):
     """instantiate config for the caster"""
-    webCasterConfig = DatabaseBackend
+    webCasterConfig = DatabaseBackend()
 
     """get casting interface ID from database"""
     interfaceID = webCasterConfig.caster_by_name(casterName)[-1]
@@ -1518,5 +1585,10 @@ class WebInterface(Monotype, Actions):
   def webUI(self):
     """This is a placeholder for web interface method. Nothing yet..."""
 
+
+"""And now, for something completely different...
+Initialize the console interface when running the program directly."""
+
 if __name__ == '__main__':
-  casting = Console('mkart-cc')
+  DebugMode = True
+  casting = ConsoleInterface('mkart-cc')
