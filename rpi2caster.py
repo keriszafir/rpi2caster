@@ -50,10 +50,14 @@ global DebugMode
 DebugMode = False
 
 
-class CasterConfig(object):
-  """CasterConfig:
+class DatabaseBackend(object):
+  """DatabaseBackend:
 
-  Read/write caster & interface configuration from/to sqlite3 database"""
+  Read/write data for casters, interfaces, diecases, matrices and wedges
+  from/to designated sqlite3 database"""
+
+  def __init__(self, databasePath='database/monotype.db'):
+    self.databasePath = databasePath
 
 
   def add_caster(self, casterSerial, casterName, casterType,
@@ -127,25 +131,39 @@ class CasterConfig(object):
     two MCP23017s per interface.
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    data = (int(casterSerial), casterName, casterType,
+            int(unitAdding), diecaseSystem, int(interfaceID))
+
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
 
         """Make sure that the table exists, if not - create it"""
         cursor.execute(
-        'CREATE TABLE IF NOT EXISTS caster_settings (id integer primary_key, \
-        caster_serial integer, caster_name text, caster_type text, \
-        unit_adding integer, diecase_system text, interface_id integer)'
-        )
+                      'CREATE TABLE IF NOT EXISTS caster_settings ('
+                      'id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
+                      'caster_serial INTEGER NOT NULL, '
+                      'caster_name TEXT UNIQUE NOT NULL, '
+                      'caster_type TEXT NOT NULL, '
+                      'unit_adding INTEGER NOT NULL, '
+                      'diecase_system TEXT NOT NULL, '
+                      'interface_id INTEGER NOT NULL)'
+                      )
 
         """Create an entry for the caster in the database"""
         cursor.execute(
-        'INSERT INTO caster_settings (caster_serial,caster_name,caster_type,\
-        unit_adding,diecase_system,interface_id) VALUES (%i, %s, %s, %i, %s, %i)'
-        % casterSerial, casterName, casterType, int(unitAdding),
-        diecaseSystem, interfaceID
-        )
+                      'INSERT INTO caster_settings '
+                      '(caster_serial, caster_name, '
+                      'caster_type, unit_adding, '
+                      'diecase_system, interface_id) '
+                      'VALUES (?, ?, ?, ?, ?, ?)', data
+                      )
         db.commit()
+      except:
+        """In debug mode we get the exact exception code & stack trace."""
+        print('Database error:')
+        if DebugMode:
+          raise
       finally:
         pass
 
@@ -185,7 +203,7 @@ class CasterConfig(object):
         photocell & emergency stop GPIO lines the caster uses.
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute('SELECT * FROM caster_settings')
@@ -193,16 +211,19 @@ class CasterConfig(object):
         interface ID\n')
         """loop over rows unless an empty row is found, then stop"""
         while True:
-          caster = cursor.fetchone()
-          if caster is not None:
-            print '   '.join(caster)
+          caster = cursor.fetchall()
+          if caster != '':
+            for row in caster:
+              print row
+            return True
           else:
             break
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print('Error: caster_settings table does not exist in database \
-          - not configured yet?\n')
+        print('Error: caster_settings table does not exist in database '
+              '- not configured yet?\n')
+        if DebugMode:
+          raise
       finally:
         pass
 
@@ -246,7 +267,7 @@ class CasterConfig(object):
 
     If no caster matches, the function returns False.
     """
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute(
@@ -262,8 +283,9 @@ class CasterConfig(object):
           return False
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print('Error: cannot retrieve caster settings!\n')
+        print('Error: cannot retrieve caster settings!\n')
+        if DebugMode:
+          raise
         return False
 
 
@@ -320,7 +342,7 @@ class CasterConfig(object):
     If no caster is found, the function returns False.
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute('SELECT * FROM caster_settings WHERE id = %i' % ID)
@@ -332,8 +354,28 @@ class CasterConfig(object):
           return False
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print('Error: cannot retrieve caster settings!')
+        print('Error: cannot retrieve caster settings!\n')
+        if DebugMode:
+          raise
+        return False
+
+  def delete_caster(self, ID):
+    """delete_caster(self, ID):
+
+    Deletes a caster with a given ID from database.
+    """
+    with sqlite3.connect(self.databasePath) as db:
+      try:
+        cursor = db.cursor()
+        cursor.execute('DELETE FROM caster_settings WHERE id=?',ID)
+        db.commit()
+        print('Caster id=%i successfully deleted' % ID)
+        return True
+      except sqlite3.OperationalError:
+        """In debug mode we get the exact exception code & stack trace."""
+        print('Error: cannot delete caster!\n')
+        if DebugMode:
+          raise
         return False
 
 
@@ -382,27 +424,36 @@ class CasterConfig(object):
         2              129         (pinBase1 + 32)
         3              161         (pinBase2 + 32)
     """
-    with sqlite3.connect('database/monotype.db') as db:
+
+    """Data we want to write to the database:"""
+    data = (int(interfaceID), interfaceName, emergencyGPIO, photocellGPIO,
+        json.dumps(mcp0Address), json.dumps(mcp1Address), pinBase)
+
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         """Create the table first:"""
         cursor.execute(
-        'CREATE TABLE IF NOT EXISTS interface_settings (id \
-        integer primary key, interface_name text, emergency_gpio integer \
-        unique, photocell_gpio integer unique not_null, mcp0_address \
-        text unique not_null, mcp1_address text unique not_null, \
-        pin_base integer unique not_null)'
-        )
+                      'CREATE TABLE IF NOT EXISTS interface_settings '
+                      '(id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
+                      'interface_name TEXT UNIQUE, '
+                      'emergency_gpio INTEGER UNIQUE, '
+                      'photocell_gpio INTEGER UNIQUE NOT NULL, '
+                      'mcp0_address TEXT UNIQUE NOT NULL, '
+                      'mcp1_address TEXT UNIQUE NOT NULL, '
+                      'pin_base INTEGER UNIQUE NOT NULL)'
+                       )
         """Then add an entry:"""
-        cursor.execute('INSERT INTO interface_settings (id,\
-        interface_name,emergency_gpio,photocell_gpio,mcp0_address,\
-        mcp1_address,pin_base) VALUES (%i, %s, %i, %i, %s, %s, %i)'
-        % interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
-        json.dumps(mcp0Address), json.dumps(mcp1Address), pinBase
-        )
+        cursor.execute(
+                      'INSERT INTO interface_settings (id,'
+                      'interface_name,emergency_gpio,photocell_gpio,'
+                      'mcp0_address,mcp1_address,pin_base) '
+                      'VALUES (?, ?, ?, ?, ?, ?, ?)', data
+                       )
         db.commit()
       finally:
         pass
+
 
   def get_interface(self, interfaceID=0):
     """
@@ -435,7 +486,7 @@ class CasterConfig(object):
     pinBase - integer, base number for pins supplied by the first
         MCP23017 chip (i.e. mcp0).
     """
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute(
@@ -453,8 +504,9 @@ class CasterConfig(object):
           return False
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print('Error: cannot retrieve interface settings!')
+        print('Error: cannot retrieve interface settings!\n')
+        if DebugMode:
+          raise
 
   def list_interfaces(self):
     """List interfaces:
@@ -482,7 +534,7 @@ class CasterConfig(object):
         MCP23017 chip (i.e. mcp0).
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute('SELECT * FROM interface_settings')
@@ -499,8 +551,10 @@ class CasterConfig(object):
             break
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print('Error: interface_settings table not found in database - not configured yet?')
+        print('Error: interface_settings table not found '
+              'in database - not configured yet?\n')
+        if DebugMode:
+          raise
       finally:
         pass
 
@@ -527,7 +581,7 @@ class CasterConfig(object):
     This will be an unique identifier of a wedge.
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         """Create the table first:"""
@@ -562,7 +616,7 @@ class CasterConfig(object):
     Else, returns False.
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute('SELECT * FROM wedges WHERE wedge_id = %s \
@@ -580,8 +634,9 @@ class CasterConfig(object):
           return wedge
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print('Error: cannot get wedge - does the table exist?')
+        print('Error: cannot get wedge - not configured yet?\n')
+        if DebugMode:
+          raise
       finally:
         pass
 
@@ -593,7 +648,7 @@ class CasterConfig(object):
     (useful in case we no longer have the wedge).
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute(
@@ -601,9 +656,9 @@ class CasterConfig(object):
         )
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print('Error: cannot delete wedge - does the table exist?')
-
+        print('Error: cannot delete wedge - not configured yet?\n')
+        if DebugMode:
+          raise
 
   def list_wedges(self):
     """list_wedges(self):
@@ -619,7 +674,7 @@ class CasterConfig(object):
     steps - list of unit values for all wedge's steps.
     """
 
-    with sqlite3.connect('database/monotype.db') as db:
+    with sqlite3.connect(self.databasePath) as db:
       try:
         cursor = db.cursor()
         cursor.execute('SELECT * FROM wedges')
@@ -637,15 +692,14 @@ class CasterConfig(object):
             break
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
-        if not DebugMode:
-          print(
-          'Error: wedges table does not exist - not configured yet?'
-          )
+        print('Error: cannot list wedges - not configured yet?\n')
+        if DebugMode:
+          raise
       finally:
         pass
 
 
-class Monotype(CasterConfig):
+class Monotype(DatabaseBackend):
   """Monotype class:
 
   A class which stores all methods related to the interface and
@@ -662,57 +716,68 @@ class Monotype(CasterConfig):
     casterParameters = self.caster_by_name(casterName)
 
     """Parse the obtained parameters:"""
-    self.serialNumber = casterParameters[0]
-    self.casterName = casterParameters[1]
-    self.casterType = casterParameters[2]
-    self.justification = casterParameters[3]
-    self.diecaseFormat = casterParameters[4]
-    self.interfaceID = casterParameters[5]
+
+    [casterID, casterSerial, casterName,
+    casterType, unitAdding, diecaseSystem,
+    interfaceID] = casterParameters
+
+    """
+    self.casterID      = casterParameters[0]
+    self.casterSerial  = casterParameters[1]
+    self.casterName    = casterParameters[2]
+    self.casterType    = casterParameters[3]
+    self.unitAdding    = casterParameters[4]
+    self.diecaseSystem = casterParameters[5]
+    self.interfaceID   = casterParameters[6]
+    """
 
     """
     Then, the interface ID is looked up in the database, and interface
     parameters are known: [interfaceID, interfaceName, emergencyGPIO,
     photocellGPIO, mcp0Address, mcp1Address, pinBase]
     """
-    interfaceParameters = self.get_interface(self.interfaceID)
+    interfaceParameters = self.get_interface(interfaceID)
+
+    [interfaceName, emergencyGPIO, photocellGPIO,
+    mcp0Address, mcp1Address, pinBase] = interfaceParameters
 
     """Parse the obtained parameters:"""
+    """
     self.interfaceName = interfaceParameters[1]
     self.emergencyGPIO = interfaceParameters[2]
     self.photocellGPIO = interfaceParameters[3]
     self.mcp0Address = interfaceParameters[4]
     self.mcp1Address = interfaceParameters[5]
     self.pinBase = interfaceParameters[6]
+    """
 
-    self.setup()
 
-
-  def setup(self):
-    """Input configuration:
+    """On init, do the input configuration:
 
     We need to set up the sysfs interface before (powerbuttond.py -
     a daemon running on boot with root privileges takes care of it).
     """
-    gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.photocellGPIO
-    self.valueFileName = gpioSysfsPath + 'value'
-    self.edgeFileName = gpioSysfsPath + 'edge'
+
+    gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
+    self.gpioValueFileName = gpioSysfsPath + 'value'
+    self.gpioEdgeFileName = gpioSysfsPath + 'edge'
 
 
     """Check if the photocell GPIO has been configured - file can be read:"""
-    if not os.access(self.valueFileName, os.R_OK):
+    if not os.access(self.gpioValueFileName, os.R_OK):
       print('%s: file does not exist or cannot be read. '
          'You must export the GPIO no %i as input first!'
-              % (self.valueFileName, self.photocellGPIO))
+              % (self.gpioValueFileName, photocellGPIO))
       exit()
 
 
     """Ensure that the interrupts are generated for photocell GPIO
     for both rising and falling edge:"""
-    with open(self.edgeFileName, 'r') as edgeFile:
+    with open(self.gpioEdgeFileName, 'r') as edgeFile:
       if (edgeFile.read()[:4] != 'both'):
         print('%s: file does not exist, cannot be read or the interrupt \
         on GPIO no %i is not set to "both". Check the system config.'
-        % (self.edgeFileName, self.photocellGPIO))
+        % (self.gpioEdgeFileName, photocellGPIO))
         exit()
 
 
@@ -720,9 +785,9 @@ class Monotype(CasterConfig):
 
     Setup the wiringPi MCP23017 chips for valve outputs:
     """
-    wiringpi.mcp23017Setup(self.pinBase, self.mcp0Address)
-    wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
-    pins = range(self.pinBase, self.pinBase + 32)
+    wiringpi.mcp23017Setup(pinBase, mcp0Address)
+    wiringpi.mcp23017Setup(pinBase + 16, mcp1Address)
+    pins = range(pinBase, pinBase + 32)
     """Set all I/O lines on MCP23017s as outputs - mode = 1"""
     for pin in pins:
       wiringpi.pinMode(pin,1)
@@ -825,7 +890,7 @@ class Monotype(CasterConfig):
     Check for photocell signals, keep checking until max time is exceeded
     or target number of cycles is reached:
     """
-    with open(self.valueFileName, 'r') as gpiostate:
+    with open(self.gpioValueFileName, 'r') as gpiostate:
       while time.time() <= time_start + time_max and cycles <= cycles_max:
         photocellSignals = select.epoll()
         photocellSignals.register(gpiostate, select.POLLPRI)
@@ -865,7 +930,7 @@ class Monotype(CasterConfig):
     of duty cycle (bright/dark area ratio) and phase shift (disc's position
     relative to 0 degrees caster position).
     """
-    with open(self.valueFileName, 'r') as gpiostate:
+    with open(self.gpioValueFileName, 'r') as gpiostate:
       po = select.epoll()
       po.register(gpiostate, select.POLLPRI)
       previousState = 0
@@ -1395,13 +1460,15 @@ class Console(Monotype, Actions, TextUI):
 
   def __init__(self, casterName):
     """instantiate config for the caster"""
-    webCasterConfig = CasterConfig
+    casterSetup = DatabaseBackend()
 
-    """get casting interface ID from database"""
-    interfaceID = webCasterConfig.caster_by_name(casterName)[-1]
+
+    """get casting interface ID from database;
+    we need the last item returned by the function, hence [-1]"""
+    interfaceID = config.caster_by_name(casterName)[-1]
 
     """get interface parameters"""
-    interfaceParameters = webCasterConfig.get_interface(interfaceID)
+    interfaceParameters = casterSetup.get_interface(interfaceID)
 
     """assign results to variables passed further"""
     [interfaceID, interfaceName, emergencyGPIO, photocellGPIO, mcp0Address,
@@ -1411,7 +1478,7 @@ class Console(Monotype, Actions, TextUI):
     print('Using interface "%s", ID: %i' % interfaceName, interfaceID)
 
     """set up hardware with obtained interface parameters"""
-    Monotype.__init__(self, casterName)
+    caster = Monotype(casterName)
 
     self.consoleUI()
 
@@ -1428,7 +1495,7 @@ class WebInterface(Monotype, Actions):
 
   def __init__(self, casterName):
     """instantiate config for the caster"""
-    webCasterConfig = CasterConfig
+    webCasterConfig = DatabaseBackend
 
     """get casting interface ID from database"""
     interfaceID = webCasterConfig.caster_by_name(casterName)[-1]
@@ -1450,3 +1517,6 @@ class WebInterface(Monotype, Actions):
 
   def webUI(self):
     """This is a placeholder for web interface method. Nothing yet..."""
+
+if __name__ == __main__:
+  casting = Console('mkart-cc')

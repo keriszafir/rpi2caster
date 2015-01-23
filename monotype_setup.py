@@ -2,7 +2,7 @@
 import os
 import sys
 import json
-from rpi2caster import CasterConfig
+from rpi2caster import DatabaseBackend
 
 try:
   import sqlite3
@@ -25,21 +25,27 @@ def conv_hex(s):
 
 def add_caster(casterSerial='', casterName='', casterType='',
                unitAdding='', diecaseSystem='', interfaceID=''):
-  """Add a caster. The function will pass at least twice - until all data is entered correctly"""
-  """Reset revalidation"""
+  """Add a caster. The function will pass at least twice -
+  until all data is entered correctly"""
+
+  """Reset revalidation; if everything is OK, the data can be written
+  to the database. Else, the add_caster function will recurse into itself
+  with entered data as arguments. The user will have to re-enter
+  any parameter which does not match the expected values or type."""
   revalidate = False
 
-  """Check if the serial No is numeric - we must ensure that the value in db is integer"""
-  if casterSerial.isdigit():
+  """Check if the serial No is numeric - we must ensure
+  that the value in db is integer"""
+  if str(casterSerial).isdigit():
     casterSerial = int(casterSerial)
   else:
-    casterSerial = raw_input('Enter the serial number of your caster, digits only: ')
-    revalidate += 1
+    casterSerial = raw_input('Enter the serial number of your caster: ')
+    revalidate = True
 
   """Enter a string for machine name"""
   if not casterName:
     casterName = raw_input('Enter the name you use for this machine: ')
-    revalidate += 1
+    revalidate = True
 
   """Choose the machine type - and validate the choice. Case insensitive; value stored in db as uppercase"""
   if casterType not in ['comp', 'large_comp']:
@@ -50,7 +56,7 @@ def add_caster(casterSerial='', casterName='', casterType='',
       casterType = 'large_comp'
     else:
       casterType = ''
-    revalidate += 1
+    revalidate = True
 
   """Choose if the machine has unit adding or not"""
   if unitAdding not in (True, False):
@@ -61,25 +67,36 @@ def add_caster(casterSerial='', casterName='', casterType='',
       unitAdding = True
     else:
       unitAdding = ''
-    revalidate += 1
+    revalidate = True
 
   """Choose the diecase format the machine is using, and validate the choice"""
-  if diecaseSystem not in ['norm15', 'norm17', 'hmn', 'kmn', 'shift']:
-    diecaseSystem = raw_input('Diecase format this machine works with: norm15 = 15x15, norm17 = 15x17, hmn, kmn, shift = unit-shift: ')
-    revalidate += 1
+  dcsystems = ['norm15', 'norm17', 'hmn', 'kmn', 'shift']
+  if diecaseSystem not in dcsystems:
+    diecaseSystem = raw_input('Diecase format this machine works with: 0 for 15x15, 1 for 15x17, 2 for HMN, 3 for KMN, 4 for unit-shift. \nDefault is 15x17: ')
+    if diecaseSystem == '0':
+      diecaseSystem = dcsystems[0]
+    elif diecaseSystem == '1':
+      diecaseSystem = dcsystems[1]
+    elif diecaseSystem == '2':
+      diecaseSystem = dcsystems[2]
+    elif diecaseSystem == '3':
+      diecaseSystem = dcsystems[3]
+    elif diecaseSystem == '4':
+      diecaseSystem = dcsystems[4]
+    else:
+      diecaseSystem = dcsystems[1]
+    revalidate = True
 
   """Choose the interface ID"""
-  if interfaceID.isdigit() and int(interfaceID) in range(4):
+  if str(interfaceID).isdigit() and int(interfaceID) in range(4):
     interfaceID = int(interfaceID)
   else:
     interfaceID = raw_input('Raspberry interface number for this machine. Can be 0, 1, 2, 3. Default 0: ')
     if interfaceID == '':
       interfaceID = '0'
-    revalidate += 1
+    revalidate = True
 
-
-
-
+  """Now we can list entered data and ask for user's confirmation:"""
   if not revalidate:
     print('Caster serial number: %i \n' % casterSerial)
     print('Caster name: %s \n' % casterName)
@@ -91,17 +108,22 @@ def add_caster(casterSerial='', casterName='', casterType='',
     ans = raw_input('\nCommit? [y/n]')
 
     if ans.lower() == 'y':
-      config.add_caster(casterSerial, casterName, casterType,
-      unitAdding, diecaseSystem, interfaceID)
+      config.add_caster(
+        casterSerial, casterName, casterType,
+        unitAdding, diecaseSystem, interfaceID
+        )
       menu()
 
     elif ans.lower() == 'n':
+      """Add caster again"""
       add_caster()
 
   else:
     """Recursively call this function to revalidate parameters:"""
-    add_caster(casterSerial, casterName, casterType, unitAdding,
-               diecaseSystem, interfaceID)
+    add_caster(
+      casterSerial, casterName, casterType,
+      unitAdding, diecaseSystem, interfaceID
+      )
 
 
 def add_interface(ID='', interfaceName='', emergencyGPIO='',
@@ -187,8 +209,9 @@ def add_wedge():
 
 
 def delete_caster():
-  """Used for deleting a caster from database"""
-  """TODO!"""
+  ID = raw_input('Enter the caster ID to delete: ')
+  if ID.isdigit():
+    config.delete_caster(int(ID))
   menu()
 
 def delete_interface():
@@ -236,6 +259,8 @@ def menu():
 \t 8. Add wedge
 \t 9. Delete wedge
 
+\t 10. Add a comp. caster no 28539, name 'mkart-cc', unit adding off, norm17 diecase
+
 \t 0. Exit to shell
 
 """)
@@ -277,6 +302,10 @@ def menu():
       delete_wedge()
       raw_input('\nPress return to go back to menu.\n')
       menu()
+    elif ans=='10':
+      add_caster(28539, 'mkart-cc', 'comp', False, 'norm17', 0)
+      raw_input('\nCaster added. Press return to go back to menu.\n')
+      menu()
 
     elif ans=='0':
       exit()
@@ -285,5 +314,5 @@ def menu():
       ans = ''
 
 
-config = CasterConfig()
+config = DatabaseBackend()
 menu()
