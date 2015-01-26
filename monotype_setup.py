@@ -258,15 +258,73 @@ def add_interface(ID='', interfaceName='', emergencyGPIO='',
 
 
 def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
-  """Used for adding wedges"""
+  """add_wedge(wedgeName, setWidth, oldPica, steps)
+
+  Used for adding wedges.
+
+  Can be called with or without arguments.
+
+  wedgeName - string - series name for a wedge (e.g. S5, S111)
+  setWidth  - float - set width of a particular wedge (e.g. 9.75)
+  oldPica - boolean - True if the wedge is European old pica
+            ("E" after set width number), False otherwise
+  steps - string with unit values for steps - e.g. '5,6,7,8,9,9,9...,16'
+
+  If called without arguments, the function runs at least twice.
+  The first time is for entering data, the second (and further) times
+  are for validating and correcting the data entered earlier.
+  When all data passes validation ("revalidate" flag remains False),
+  user is asked if everything is correct and can commit values
+  to the database."""
 
 
-
-  """Reset revalidation; if everything is OK, the data can be written
-  to the database. Else, the add_caster function will recurse into itself
-  with entered data as arguments. The user will have to re-enter
-  any parameter which does not match the expected values or type."""
+  """
+  Reset revalidation: it's necessary to set the "revalidate" flag
+  to False at the beginning.
+  if everything is OK, the data can be written to the database.
+  In case of empty/wrong values, the validation is failed and user
+  has to enter or re-enter the value. The "revalidate" flag is set
+  to True. After all values are collected, the add_caster function
+  will recurse into itself with entered data as arguments.
+  If everything is correct, the user will be able to commit the data
+  to the database. If not, the user must re-enter
+  any parameter which does not match the expected values or type.
+  """
   revalidate = False
+
+
+  """
+  Let's define unit values for some known wedges.
+  This is a dictionary, so you get values (string)
+  by referring via key (string), feel free to add any unit values
+  for the wedges not listed.
+
+  This data will be useful when adding a wedge. The setup program
+  will look up a wedge by its name, then get unit values.
+  """
+  wedgeData = { 'S5'   : '5,6,7,8,9,9,9,10,10,11,12,13,14,15,18,18',
+                'S96'  : '5,6,7,8,9,9,10,10,11,12,13,14,15,16,18,18',
+                'S111' : '5,6,7,8,8,8,9,9,9,9,10,12,12,13,15,15',
+                'S334' : '5,6,7,8,9,9,10,10,11,11,13,14,15,16,18,18',
+                'S344' : '5,6,7,9,9,9,10,11,11,12,12,13,14,15,16,16',
+                'S377' : '5,6,7,8,8,9,9,10,10,11,12,13,14,15,18,18',
+                'S409' : '5,6,7,8,8,9,9,10,10,11,12,13,14,15,16,16',
+                'S467' : '5,6,7,8,8,9,9,9,10,11,12,13,14,15,18,18',
+                'S486' : '5,7,6,8,9,11,10,10,13,12,14,15,15,18,16,16',
+                'S526' : '5,6,7,8,9,9,10,10,11,12,13,14,15,17,18,18',
+                'S536' : '5,6,7,8,9,9,10,10,11,12,13,14,15,17,18,18',
+                'S562' : '5,6,7,8,9,9,9,10,11,12,13,14,15,17,18,18',
+                'S607' : '5,6,7,8,9,9,9,9,10,11,12,13,14,15,18,18',
+                'S611' : '6,6,7,9,9,10,11,11,12,12,13,14,15,16,18,18',
+                'S674' : '5,6,7,8,8,9,9,9,10,10,11,12,13,14,15,18',
+                'S724' : '5,6,7,8,8,9,9,10,10,11,13,14,15,16,18,18',
+                'S990' : '5,5,6,7,8,9,9,9,9,10,10,11,13,14,18,18',
+                'S1063': '5,6,8,9,9,9,9,10,12,12,13,14,15,15,18,18',
+                'S1329': '4,5,7,8,9,9,9,9,10,10,11,12,12,13,15,15',
+                'S1331': '4,5,7,8,8,9,9,9,9,10,11,12,12,13,15,15',
+                'S1406': '4,5,6,7,8,8,9,9,9,9,10,10,11,12,13,15',
+                'MONOSPACE' : '9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9',
+              }
 
   """Check if the serial No is numeric -
   we must ensure that the value in db is integer"""
@@ -277,6 +335,9 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
                         )
     if wedgeName == '':
       wedgeName = 'S5'
+    elif wedgeName[0].upper() != 'S':
+      wedgeName = 'S' + wedgeName
+    wedgeName = wedgeName.upper()
     revalidate = True
 
   """Enter a set width"""
@@ -298,11 +359,14 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
 
   """Enter the wedge steps:"""
   if not steps:
-    rawSteps = raw_input(
-                        'Enter the wedge unit values for steps 1...16, '
-                        'separated by commas. If empty, entering values '
-                        'for wedge S5 (very typical): '
-                        )
+    try:
+      rawSteps = wedgeData[wedgeName]
+    except (KeyError, ValueError):
+      rawSteps = raw_input(
+                          'Enter the wedge unit values for steps 1...16, '
+                          'separated by commas. If empty, entering values '
+                          'for wedge S5 (very common): '
+                          )
     if rawSteps == '':
       rawSteps = '5,6,7,8,9,9,9,10,10,11,12,13,14,15,18,18'
     rawSteps = rawSteps.split(',')
@@ -325,13 +389,13 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
 
     if ans.lower() == 'y':
       config.add_wedge(wedgeName, setWidth, oldPica, steps)
-      raw_input('Wedge added successfully!')
-      menu()
+      print('Wedge added successfully!')
     elif ans.lower() == 'n':
       add_wedge()
   else:
     add_wedge(wedgeName, setWidth, oldPica, steps)
 
+  raw_input('[Enter] to return to the menu:')
   menu()
 
 
@@ -353,7 +417,13 @@ def delete_wedge():
   """Used for deleting a wedge from database"""
   ID = raw_input('Enter the wedge ID to delete: ')
   if ID.isdigit():
-    config.delete_wedge(int(ID))
+    ID = int(ID)
+    if config.wedge_by_id(ID):
+      config.delete_wedge(ID)
+      print('Wedge deleted successfully!')
+  else:
+    print('Wedge name not correct!')
+  raw_input('[Enter] to return to menu...')
   menu()
 
 
