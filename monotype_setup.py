@@ -24,17 +24,15 @@ def conv_hex(s):
   return n
 
 def commit_menu(message, options):
-  """A simple recursive menu where user is asked what to do.
+  """A simple menu where user is asked what to do.
   Wrong choice points to the menu.
 
   Message: string displayed on screen;
   options: a list or tuple of strings - options."""
-  ans = raw_input(message)
-  if ans.lower() in options:
-    return ans
-  else:
-    ans = commit_menu(message, options)
-    return ans
+  ans = ''
+  while ans not in options:
+    ans = raw_input(message)
+  return ans
 
 
 def add_caster(casterSerial='', casterName='', casterType='',
@@ -507,8 +505,7 @@ def delete_wedge():
   ID = raw_input('Enter the wedge ID to delete: ')
   if ID.isdigit():
     ID = int(ID)
-    if config.wedge_by_id(ID):
-      config.delete_wedge(ID)
+    if config.delete_wedge(ID):
       print('Wedge deleted successfully.')
   else:
     print('Wedge name must be a number!')
