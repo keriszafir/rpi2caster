@@ -23,6 +23,20 @@ def conv_hex(s):
   n = int(s, 16)
   return n
 
+def commit_menu(message, options):
+  """A simple recursive menu where user is asked what to do.
+  Wrong choice points to the menu.
+
+  Message: string displayed on screen;
+  options: a list or tuple of strings - options."""
+  ans = raw_input(message)
+  if ans.lower() in options:
+    return ans
+  else:
+    ans = commit_menu(message, options)
+    return ans
+
+
 def add_caster(casterSerial='', casterName='', casterType='',
                unitAdding='', diecaseSystem='', interfaceID=''):
   """Add a caster. The function will pass at least twice -
@@ -123,18 +137,26 @@ def add_caster(casterSerial='', casterName='', casterType='',
     print('Diecase system: %s \n' % diecaseSystem)
     print('Interface ID for this caster: %i \n' % interfaceID)
 
-    ans = raw_input('\nCommit? [y/n]')
-
+    ans = commit_menu('\nCommit? [y] - yes, save caster to database, '
+                      '[n] - no, enter values again, '
+                      'or [m] to return to main menu.',
+                      ['y', 'n', 'm']
+                      )
     if ans.lower() == 'y':
-      config.add_caster(
-        casterSerial, casterName, casterType,
-        unitAdding, diecaseSystem, interfaceID
-        )
+      if config.add_caster(casterSerial, casterName,
+                           casterType, unitAdding,
+                           diecaseSystem, interfaceID):
+        print('Caster added successfully.')
+      else:
+        print('Failed to add caster!')
+      raw_input('[Enter] to return to the menu:')
+      menu()
+    elif ans.lower() == 'n':
+      raw_input('Enter parameters again from scratch... ')
+      add_caster()
+    elif ans.lower() == 'm':
       menu()
 
-    elif ans.lower() == 'n':
-      """Add caster again"""
-      add_caster()
 
   else:
     """Recursively call this function to revalidate parameters:"""
@@ -244,14 +266,27 @@ def add_interface(ID='', interfaceName='', emergencyGPIO='',
     print('MCP1 Address: %s \n' % mcp1Address)
     print('Pin base: %i \n' % pinBase)
 
-    ans = raw_input('\nCommit? [y/n]')
 
+    ans = commit_menu('\nCommit? [y] - yes, save interface to database, '
+                      '[n] - no, enter values again, '
+                      'or [m] to return to main menu.',
+                      ['y', 'n', 'm']
+                      )
     if ans.lower() == 'y':
-      config.add_interface(ID, interfaceName, emergencyGPIO,
-      photocellGPIO, mcp0Address, mcp1Address, pinBase)
+      if config.add_interface(ID, interfaceName, emergencyGPIO,
+                              photocellGPIO, mcp0Address,
+                              mcp1Address, pinBase):
+        print('Interface added successfully.')
+      else:
+        print('Failed to add interface!')
+      raw_input('[Enter] to return to the menu:')
       menu()
     elif ans.lower() == 'n':
+      raw_input('Enter parameters again from scratch... ')
       add_interface()
+    elif ans.lower() == 'm':
+      menu()
+
   else:
     add_interface(ID, interfaceName, emergencyGPIO, photocellGPIO,
     mcp0Address, mcp1Address, pinBase)
@@ -326,8 +361,15 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
                 'MONOSPACE' : '9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9',
               }
 
-  """Check if the serial No is numeric -
-  we must ensure that the value in db is integer"""
+  """In this program, all wedges have the "S" (for stopbar) letter
+  at the beginning of their designation. However, the user can enter
+  a designation with or without "S", so check if it's there, and
+  append if needed (only for numeric designations - not the "monospace"
+  or other text values!)
+
+  If no name is given, assume that the user means the S5 wedge, which is
+  very common and most casting workshops have a few of them.
+  """
   if wedgeName == '':
     wedgeName = raw_input(
                          'Enter the wedge name, e.g. S5 '
@@ -335,12 +377,18 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
                         )
     if wedgeName == '':
       wedgeName = 'S5'
-    elif wedgeName[0].upper() != 'S':
+    elif wedgeName[0].upper() != 'S' and wedgeName.isdigit():
       wedgeName = 'S' + wedgeName
     wedgeName = wedgeName.upper()
     revalidate = True
 
-  """Enter a set width"""
+  """
+  Enter a set width, float. If the width ends with "E", it's an
+  old-pica (1pica = 0.1667") wedge for European foundries, thus E.
+  Apparently, there were no cicero/Didot wedges, all was in picas.
+  E will be stripped, and the program will determine whether it's
+  an old pica wedge or not.
+  """
   try:
     setWidth = float(setWidth)
   except ValueError:
@@ -357,7 +405,7 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
       oldPica = False
     revalidate = True
 
-  """Enter the wedge steps:"""
+  """Enter the wedge unit values for steps 1...15 (and optionally 16):"""
   if not steps:
     try:
       rawSteps = wedgeData[wedgeName]
@@ -371,10 +419,27 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
       rawSteps = '5,6,7,8,9,9,9,10,10,11,12,13,14,15,18,18'
     rawSteps = rawSteps.split(',')
     steps = []
-    """Now we need to be sure that all spaces are stripped:"""
+    """
+    Now we need to be sure that all whitespace is stripped and
+    the value written to database is a list of integers:
+    """
     for step in rawSteps:
       step = int(step.strip())
       steps.append(step)
+    """
+    Display warning if the number of steps is anything other than
+    15 or 16 (15 is most common, 16 was used for HMN and KMN systems):
+    """
+    if len(steps) < 15:
+      print('Warning - the wedge you entered has less than 15 steps! \n'
+            'This is almost certainly a mistake.\n'
+           )
+    elif len(steps) > 16:
+      print('Warning - the wedge you entered has more than 16 steps! \n'
+            'This is almost certainly a mistake.\n'
+           )
+    else:
+      print 'The wedge has ', len(steps), 'steps. That is OK.'
 
   if not revalidate:
     print('Wedge: %s \n' % wedgeName)
@@ -385,33 +450,57 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
     for i, step in zip(range(len(steps)), steps):
       print('Step %i unit value: %i \n' % (i+1, step))
 
-    ans = raw_input('\nCommit? [y/n]')
-
+    ans = commit_menu('\nCommit? [y] - yes, save wedge to database, '
+                      '[n] - no, enter values again, '
+                      'or [m] to return to main menu.',
+                      ['y', 'n', 'm']
+                      )
     if ans.lower() == 'y':
-      config.add_wedge(wedgeName, setWidth, oldPica, steps)
-      print('Wedge added successfully!')
+      if config.add_wedge(wedgeName, setWidth, oldPica, steps):
+        print('Wedge added successfully.')
+      else:
+        print('Failed to add wedge!')
+      raw_input('[Enter] to return to the menu:')
+      menu()
     elif ans.lower() == 'n':
+      raw_input('Enter parameters again from scratch... ')
       add_wedge()
+    elif ans.lower() == 'm':
+      menu()
+    """If everything is OK and user confirms, add data to the database."""
   else:
+    """Recurse into add_wedge with obtained data to re-check it"""
     add_wedge(wedgeName, setWidth, oldPica, steps)
 
-  raw_input('[Enter] to return to the menu:')
-  menu()
+
 
 
 def delete_caster():
   """Ask for ID and delete the caster"""
   ID = raw_input('Enter the caster ID to delete: ')
   if ID.isdigit():
-    config.delete_caster(int(ID))
+    ID = int(ID)
+    if config.caster_by_id(ID):
+      config.delete_caster(ID)
+      print('Caster deleted successfully.')
+  else:
+    print('Caster ID must be a number!')
+  raw_input('[Enter] to return to menu...')
   menu()
 
 def delete_interface():
   """Ask for ID and delete the interface"""
   ID = raw_input('Enter the interface ID to delete: ')
   if ID.isdigit():
-    config.delete_interface(int(ID))
+    ID = int(ID)
+    if config.get_interface(ID):
+      config.delete_interface(ID)
+      print('Interface deleted successfully.')
+  else:
+    print('Interface ID must be a number!')
+  raw_input('[Enter] to return to menu...')
   menu()
+
 
 def delete_wedge():
   """Used for deleting a wedge from database"""
@@ -420,9 +509,9 @@ def delete_wedge():
     ID = int(ID)
     if config.wedge_by_id(ID):
       config.delete_wedge(ID)
-      print('Wedge deleted successfully!')
+      print('Wedge deleted successfully.')
   else:
-    print('Wedge name not correct!')
+    print('Wedge name must be a number!')
   raw_input('[Enter] to return to menu...')
   menu()
 

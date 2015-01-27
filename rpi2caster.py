@@ -67,6 +67,7 @@ class DatabaseBackend(object):
                   unitAdding, diecaseSystem, interfaceID=0)
 
     Register a new caster in the database.
+    Returns True if successful, False otherwise.
 
     The function uses a SQL query to create a new entry for a caster
     with parameters passed as arguments.
@@ -159,13 +160,14 @@ class DatabaseBackend(object):
                       'VALUES (?, ?, ?, ?, ?, ?)', data
                       )
         db.commit()
+        return True
       except:
         """In debug mode we get the exact exception code & stack trace."""
         print('Database error:')
         if DebugMode:
           raise
-      finally:
-        pass
+        return False
+
 
   def list_casters(self):
     """list_casters(self):
@@ -371,7 +373,6 @@ class DatabaseBackend(object):
         cursor = db.cursor()
         cursor.execute('DELETE FROM caster_settings WHERE id=?', [ID])
         db.commit()
-        print('Caster id=%i successfully deleted' % ID)
         return True
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
@@ -387,6 +388,7 @@ class DatabaseBackend(object):
                      photocellGPIO, mcp0Address, mcp1Address, pinBase):
 
     Registers a Raspberry Pi to Monotype caster interface.
+    Returns True if successful, False otherwise.
 
     Use arguments to register a new interface, i.e. I2C expander params,
     emergency stop GPIO and photocell GPIO. The function uses a SQL query
@@ -453,8 +455,13 @@ class DatabaseBackend(object):
                       'VALUES (?, ?, ?, ?, ?, ?, ?)', data
                        )
         db.commit()
-      finally:
-        pass
+        return True
+      except:
+        """In debug mode we get the exact exception code & stack trace."""
+        print('Database error:')
+        if DebugMode:
+          raise
+        return False
 
 
   def get_interface(self, interfaceID=0):
@@ -492,23 +499,21 @@ class DatabaseBackend(object):
       try:
         cursor = db.cursor()
         cursor.execute(
-        'SELECT * FROM interface_settings WHERE id = %i' % interfaceID
+        'SELECT * FROM interface_settings WHERE id = ?', [interfaceID]
         )
         interface = cursor.fetchone()
         if interface is not None:
           interface = list(interface)
-          """Correction to return proper hex values for I2C addresses:"""
-          interface[4] = hex(json.loads(interface[4]))
-          interface[5] = hex(json.loads(interface[5]))
           return interface
         else:
           print('No interface with a given ID found!\n')
           return False
-      except sqlite3.OperationalError:
+      except:
         """In debug mode we get the exact exception code & stack trace."""
         print('Error: cannot retrieve interface settings!\n')
         if DebugMode:
           raise
+        return False
 
   def list_interfaces(self):
     """List interfaces:
@@ -566,6 +571,7 @@ class DatabaseBackend(object):
     """add_wedge(self, wedgeName, setWidth, oldPica, steps):
 
     Registers a wedge in our database.
+    Returns True if successful, False otherwise.
 
     Arguments:
 
@@ -607,13 +613,14 @@ class DatabaseBackend(object):
                       'VALUES (?, ?, ?, ?)', data
                       )
         db.commit()
+        return True
       except:
         """In debug mode we get the exact exception code & stack trace."""
         print('Database error:')
         if DebugMode:
           raise
-      finally:
-        pass
+        return False
+
 
 
   def wedge_by_name_and_width(self, wedgeName, setWidth):
@@ -709,7 +716,7 @@ class DatabaseBackend(object):
       try:
         cursor = db.cursor()
         cursor.execute(
-        'DELETE FROM wedges WHERE id = %i' % ID
+        'DELETE FROM wedges WHERE id = ?', [ID]
         )
       except sqlite3.OperationalError:
         """In debug mode we get the exact exception code & stack trace."""
@@ -764,31 +771,49 @@ class Monotype(DatabaseBackend):
   A class which stores all methods related to the interface and
   caster itself."""
 
-  def __init__(self, casterName):
+  def __init__(self, casterName, databasePath):
+    """__init__(casterName):
+
+    Creates a caster object for a given caster name.
+    Looks the caster up in a database and gets its parameters,
+    as well as interface parameters.
+    """
+    self.caster_setup(casterName, databasePath)
+
+
+  def caster_setup(self, casterName, databasePath):
+    self.casterName = casterName
+    self.databasePath = databasePath
+
+    if DebugMode:
+      print 'Using caster: ', self.casterName
+
+    """Create a database setup object:"""
+    #casterSetup = DatabaseBackend()
+
+
     """Setup routine:
 
     After the class is instantiated, this method reads caster data
     from database and fetches a list of caster parameters: [serialNumber,
     casterName, casterType, justification, diecaseFormat, interfaceID].
     """
-    #self.casterName = casterName
-    casterParameters = self.caster_by_name(casterName)
+    casterParameters = self.caster_by_name(self.casterName)
 
-    """Parse the obtained parameters:"""
-
-    [casterID, casterSerial, casterName,
-    casterType, unitAdding, diecaseSystem,
-    interfaceID] = casterParameters
-
+    """Get casting interface ID from the parameters;
+    we need the last item returned, hence [-1]
     """
-    self.casterID      = casterParameters[0]
-    self.casterSerial  = casterParameters[1]
-    self.casterName    = casterParameters[2]
-    self.casterType    = casterParameters[3]
-    self.unitAdding    = casterParameters[4]
-    self.diecaseSystem = casterParameters[5]
-    self.interfaceID   = casterParameters[6]
-    """
+    interfaceID = casterParameters[-1]
+
+    """When debugging, display all caster info:"""
+    if DebugMode:
+      print 'Caster parameters: ', casterParameters
+      print 'Interface ID: ', interfaceID
+
+    """Unpack (assign to list items) the obtained parameters:"""
+    [self.casterID, self.casterSerial, self.casterName,
+    self.casterType, self.unitAdding, self.diecaseSystem,
+    self.interfaceID] = casterParameters
 
     """
     Then, the interface ID is looked up in the database, and interface
@@ -797,18 +822,14 @@ class Monotype(DatabaseBackend):
     """
     interfaceParameters = self.get_interface(interfaceID)
 
-    [interfaceName, emergencyGPIO, photocellGPIO,
-    mcp0Address, mcp1Address, pinBase] = interfaceParameters
+    """Print the parameters for debugging:"""
+    if DebugMode:
+      print 'Interface parameters: ', interfaceParameters
 
-    """Parse the obtained parameters:"""
-    """
-    self.interfaceName = interfaceParameters[1]
-    self.emergencyGPIO = interfaceParameters[2]
-    self.photocellGPIO = interfaceParameters[3]
-    self.mcp0Address   = interfaceParameters[4]
-    self.mcp1Address   = interfaceParameters[5]
-    self.pinBase       = interfaceParameters[6]
-    """
+    """Unpack (assign to list items) the obtained parameters:"""
+    [interfaceID, interfaceName, emergencyGPIO,
+    photocellGPIO, mcp0Address, mcp1Address,
+    self.pinBase] = interfaceParameters
 
 
     """On init, do the input configuration:
@@ -816,7 +837,6 @@ class Monotype(DatabaseBackend):
     We need to set up the sysfs interface before (powerbuttond.py -
     a daemon running on boot with root privileges takes care of it).
     """
-
     gpioSysfsPath = '/sys/class/gpio/gpio%s/' % photocellGPIO
     self.gpioValueFileName = gpioSysfsPath + 'value'
     self.gpioEdgeFileName  = gpioSysfsPath + 'edge'
@@ -846,9 +866,9 @@ class Monotype(DatabaseBackend):
 
     Setup the wiringPi MCP23017 chips for valve outputs:
     """
-    wiringpi.mcp23017Setup(pinBase,      mcp0Address)
-    wiringpi.mcp23017Setup(pinBase + 16, mcp1Address)
-    pins = range(pinBase, pinBase + 32)
+    wiringpi.mcp23017Setup(self.pinBase,      mcp0Address)
+    wiringpi.mcp23017Setup(self.pinBase + 16, mcp1Address)
+    pins = range(self.pinBase, self.pinBase + 32)
     """Set all I/O lines on MCP23017s as outputs - mode = 1"""
     for pin in pins:
       wiringpi.pinMode(pin,1)
@@ -930,6 +950,13 @@ class Monotype(DatabaseBackend):
     control signals defined earlier.
     """
     self.wiringPiPinNumber = dict(zip(signals, pins))
+
+    if DebugMode:
+      print 'Signals arrangement: ',
+      for sig in signals:
+        print sig,
+      print '\n'
+      raw_input('Press Enter to continue... ')
 
 
   def detect_rotation(self):
@@ -1072,6 +1099,10 @@ class Monotype(DatabaseBackend):
       elif choice.lower() == 'e':
         self.deactivate_valves()
         exit()
+
+  def __exit__(self):
+    """On exit, turn all the valves off"""
+    self.deactivate_valves()
 
 
 
@@ -1413,9 +1444,14 @@ class Actions(Parsing):
     self.menu()
 
 
-class TextUI(object):
-  """This class defines a text user interface, i.e. what you can do
-  when operating the program from console."""
+
+class TextUserInterface(Actions, Monotype):
+  """Use this class for text-based console user interface."""
+
+  def __init__(self, casterName, databasePath='database/monotype.db'):
+    """instantiate config for the caster"""
+    self.caster_setup(casterName, databasePath)
+    self.consoleUI()
 
 
   """file name auto-complete"""
@@ -1516,46 +1552,14 @@ class TextUI(object):
         ans = ''
 
 
-class ConsoleInterface(Actions, TextUI):
-  """Use this class for text-based console user interface."""
-
-  def __init__(self, casterName):
-    """instantiate config for the caster"""
-    casterSetup = DatabaseBackend()
-
-
-    """get casting interface ID from database;
-    we need the last item returned by the function, hence [-1]"""
-    casterParameters = casterSetup.caster_by_name(casterName)
-    interfaceID = casterParameters[-1]
-
-    """when debugging, display additional info:"""
-    if DebugMode:
-      print casterParameters
-      print'Interface ID: ', interfaceID
-
-    """get interface parameters"""
-    interfaceParameters = casterSetup.get_interface(interfaceID)
-
-    """assign results to variables passed further"""
-    [interfaceID, interfaceName, emergencyGPIO, photocellGPIO,
-    mcp0Address, mcp1Address, pinBase] = interfaceParameters
-
-    """display interface name and ID"""
-    print('Using interface "%s", ID: %i' % interfaceName, interfaceID)
-
-    """set up hardware with obtained interface parameters"""
-    caster = Monotype(casterName)
-
-    self.consoleUI()
-
-class Testing(DryRun, Actions, TextUI):
+class Testing(DryRun, TextUserInterface):
   """A class for testing the program without an actual caster/interface"""
   def __init__(self):
     global DebugMode
     DebugMode = True
     DryRun.__init__(self)
     self.consoleUI()
+
 
 class WebInterface(Monotype, Actions):
   """Use this class for instantiating text-based console user interface"""
@@ -1590,5 +1594,5 @@ class WebInterface(Monotype, Actions):
 Initialize the console interface when running the program directly."""
 
 if __name__ == '__main__':
-  DebugMode = True
-  casting = ConsoleInterface('mkart-cc')
+
+  casting = TextUserInterface('mkart-cc')
