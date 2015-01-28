@@ -19,7 +19,10 @@ import string
 
 """Used for serializing lists stored in database, and for communicating
 with the web application (in the future):"""
-import json
+try:
+  import json
+except ImportError:
+  import simplejson as json
 
 """These libs are used by file name autocompletion:"""
 import readline
@@ -50,8 +53,8 @@ global DebugMode
 DebugMode = False
 
 
-class DatabaseBackend(object):
-  """DatabaseBackend(databasePath):
+class Database(object):
+  """Database(databasePath):
 
   Read/write data for casters, interfaces, diecases, matrices and wedges
   from/to designated sqlite3 database.
@@ -63,6 +66,10 @@ class DatabaseBackend(object):
 
   def __init__(self, databasePath='database/monotype.db'):
     self.databasePath = databasePath
+
+
+  def __enter__(self):
+    return self
 
 
   def add_caster(self, casterSerial, casterName, casterType,
@@ -826,8 +833,12 @@ class DatabaseBackend(object):
         return False
 
 
+  def __exit__(self, *args):
+    pass
+
+
 class Monotype(object):
-  """Monotype(casterName, databasePath):
+  """Monotype(casterName, database):
 
   A class which stores all methods related to the interface and
   caster itself."""
@@ -843,9 +854,16 @@ class Monotype(object):
     self.casterName = casterName
     self.database = database
 
+
+  def __enter__(self):
+
     if DebugMode:
       print 'Using caster: ', self.casterName
+    self.setup()
+    return self
 
+
+  def setup(self):
 
     """Setup routine:
 
@@ -1039,10 +1057,10 @@ class Monotype(object):
       for sig in signals:
         print sig,
       print '\n'
-    """The program has displayed caster-related debug info,
-    now it is time for the user to read it and press Enter to proceed.
+      """The program has displayed caster-related debug info,
+      now it is time for the user to read it and press Enter to proceed.
 
-    Normally, user goes directly to the main menu."""
+      Normally, user goes directly to the main menu."""
       raw_input('Press Enter to continue... ')
 
 
@@ -1094,6 +1112,7 @@ class Monotype(object):
           self.machine_stopped()
           self.detect_rotation()
           return False
+
 
   def send_signals_to_caster(self, signals, machineTimeout=5):
     """
@@ -1207,13 +1226,13 @@ class Monotype(object):
       if choice.lower() == 'c':
         return True
       elif choice.lower() == 'm':
-        self.menu()
+        pass
       elif choice.lower() == 'e':
         self.deactivate_valves()
         exit()
 
 
-  def __exit__(self):
+  def __exit__(self, *args):
     """On exit, turn all the valves off"""
     self.deactivate_valves()
 
@@ -1228,6 +1247,9 @@ class MonotypeSimulation(object):
   """
 
   def __init__(self):
+    pass
+
+  def __enter__(self):
     """Instantiation:
 
     A lot simpler than "real" operation; we don't set up the GPIO lines
@@ -1240,6 +1262,8 @@ class MonotypeSimulation(object):
                )
     global DebugMode
     DebugMode = True
+    return self
+
 
   def send_signals_to_caster(self, signals, machineTimeout):
     """Just send signals, as we don't have a photocell"""
@@ -1254,9 +1278,11 @@ class MonotypeSimulation(object):
     if len(signals) != 0:
       print('The valves: ',' '.join(signals),' would be activated now.')
 
+
   def deactivate_valves(self):
     """No need to do anything"""
     print('The valves would be deactivated now.')
+
 
   def detect_rotation(self):
     """FIXME: implement raw input breaking on timeout"""
@@ -1269,6 +1295,7 @@ class MonotypeSimulation(object):
       if answer is None:
         self.machine_stopped()
         self.detect_rotation()
+
 
   def machine_stopped(self):
     """Machine stopped menu - the same as in actual casting.
@@ -1289,23 +1316,54 @@ class MonotypeSimulation(object):
         exit()
 
 
+  def __exit__(self, *args):
+    self.deactivate_valves()
+
+
 
 class Parsing(object):
+  def __init__(self):
+    pass
+
+  def __enter__(self):
+    return self
+
   """This class contains file- and line-parsing methods"""
 
 
   def signals_parser(self, originalSignals):
-    """Parses an input string, passes only A-N, 1-14, 0005, S, 0075.
-    Prints any comments to screen."""
+    """signals_parser(originalSignals):
+
+    Parses an input string, and returns a list with two elements:
+
+    -the Monotype signals found in a line: A-N, 1-14, 0005, S, 0075.
+    -any comments delimited by symbols from commentSymbols list.
+    """
 
     """We need to work on strings. Convert any lists, integers etc."""
     signals = str(originalSignals)
 
-    """This is a comment parser. It looks for any comment symbols defined
-    here - e.g. **, *, ##, #, // etc. - and prints the comment to screen.
-    If it's an inline comment (placed after combination), we cast this
-    combination. If a line in file contains a comment only, we cast nothing.
-    So, we need an empty line if we want to cast O15 (place the comment above)."""
+    """This is a comment parser. It looks for any comment symbols
+    defined here - e.g. **, *, ##, #, // etc. - and saves the comment
+    to return it later on.
+
+    If it's an inline comment (placed after Monotype code combination),
+    this combination will be returned for casting.
+
+    If a line in file contains a comment only, returns no combination.
+
+    If we want to cast O15, we have to feed an empty line
+    (place the comment above).
+
+    Example:
+
+    ********
+    O15 //comment         <-- casts from O+15 matrix, displays comment
+                          <-- casts from O+15 matrix
+    //comment             <-- displays comment
+    0005 5 //comment      <-- sets 0005 justification wedge to 5,
+                              turns pump off, displays comment
+    """
     commentSymbols = ['**', '*', '//', '##', '#']
     comment = ''
     for symbol in commentSymbols:
@@ -1351,18 +1409,25 @@ class Parsing(object):
     return [columns + rows + special_signals, comment]
 
 
+  def __exit__(self, *args):
+    pass
+
+
+
 class Actions(object):
   """Actions the user can do in this software"""
 
-  def __init__(self, userInterface, caster):
+  def __init__(self, caster):
     """Instantiate dependent objects: caster, parser;
 
     link back to the user interface, because we want to use
     functions defined there.
     """
     self.parser = Parsing()
-    self.userInterface = userInterface
     self.caster = caster
+
+  def __enter__(self):
+    return self
 
 
   def cast_composition(self, filename):
@@ -1377,7 +1442,7 @@ class Actions(object):
     """For casting, we need to read the file backwards"""
     contents = reversed(contents)
 
-    """Wait until the operator confirms"""
+    """Display a little explanation:"""
     print(
           '\nThe combinations of Monotype signals will be displayed '
           'on screen while the machine casts the type.\n'
@@ -1385,8 +1450,14 @@ class Actions(object):
           'start automatically.\n'
           )
 
-    #raw_input('\nInput file found. Press return to start casting.\n')
+    """Check if the machine is running - don't do anything when
+    it's not rotating yet!"""
     self.caster.detect_rotation()
+
+    """Read the reversed file contents, line by line, then parse
+    the lines, display comments & code combinations, and feed the
+    combinations to the caster:
+    """
     for line in contents:
 
       """Parse the row, return a list of signals and a comment.
@@ -1406,37 +1477,54 @@ class Actions(object):
           print('O+15 - no signals')
         self.caster.send_signals_to_caster(signals)
 
-    """After punching is finished, notify the user:"""
+    """After casting is finished, notify the user:"""
     raw_input('\nCasting finished. Press return to go to main menu. ')
-    self.userInterface.menu()
+
+    """End of function."""
 
 
   def punch_composition(self, filename):
-    """Punching routine.
+    """punch_composition(filename):
+
     When punching, the input file is read forwards. An additional line
-    (O+15) is switched on for operating the paper tower, if less than two
-    signals are found in a sequence."""
+    (O+15) is switched on for operating the paper tower, if less than
+    two signals are found in a sequence.
+    """
 
     """Open a file with signals"""
     with open(filename, 'rb') as ribbon:
 
-      """Wait until the operator confirms"""
+      """
+      Wait until the operator confirms.
+
+      We can't use automatic rotation detection like we do in
+      cast_composition, because keyboard's paper tower doesn't run
+      by itself - it must get air into tubes to operate, punches
+      the perforations, and doesn't give any feedback.
+      """
       print('\nThe combinations of Monotype signals will be displayed '
                 'on screen while the paper tower punches the ribbon.\n')
       raw_input('\nInput file found. Turn on the air, fit the tape '
              'on your paper tower and press return to start punching.\n')
       for line in ribbon:
 
-        """Parse the row, return a list of signals and a comment.
-        Both can have zero or positive length."""
+        """
+        Parse the row, return a list of signals and a comment.
+        Both can have zero or positive length.
+        """
         signals, comment = self.parser.signals_parser(line)
 
         """Print a comment if there is one - positive length"""
         if len(comment) > 0:
           print comment
 
-        """Punch an empty line, signals with comment, signals with no comment.
-        Don't punch a line with comment alone (prevents erroneous O+15's)."""
+        """
+        Punch an empty line, signals with comment, signals with
+        no comment.
+
+        Don't punch a line with nothing but comments
+        (prevents erroneous O+15's).
+        """
         if len(comment) == 0 or len(signals) > 0:
 
           """Determine if we need to turn O+15 on"""
@@ -1452,7 +1540,8 @@ class Actions(object):
 
     """After punching is finished, notify the user:"""
     raw_input('\nPunching finished. Press return to go to main menu. ')
-    self.userInterface.menu()
+
+    """End of function."""
 
 
   def line_test(self):
@@ -1476,11 +1565,14 @@ class Actions(object):
                     ['N', 'K', 'J'], ['M', 'N', 'H'], ['M', 'N', 'K']
                    ]
 
+    """Send all the combinations to the caster, one by one:"""
     for combination in combinations:
       print ' '.join(combination)
       self.caster.send_signals_to_caster(combination, 120)
+
     raw_input('\nTesting done. Press return to go to main menu. ')
-    self.userInterface.menu()
+
+    """End of function."""
 
 
   def cast_sorts(self):
@@ -1499,11 +1591,14 @@ class Actions(object):
     if signals == '':
       signals = 'G5'
 
-    """Parse the signals and return a list containing the parsed
-    signals and the comments:"""
+    """
+    Parse the signals and return a list containing the parsed
+    signals and the comments:
+    """
     [parsedSignals, comment] = self.parser.signals_parser(signals)
 
-    """O15 yields no signals, but we may want to cast it - check if we
+    """
+    O15 yields no signals, but we may want to cast it - check if we
     entered spacebar. If parsing yields no signals (for example,
     user entered a string with row > 16 or column > O), check
     if user entered spacebar. If it's not the case, user has to
@@ -1564,15 +1659,16 @@ class Actions(object):
       elif choice.lower() == 'r':
         self.cast_sorts()
       elif choice.lower() == 'm':
-        self.userInterface.menu()
+        pass
       elif choice.lower() == 'e':
         self.caster.deactivate_valves()
         exit()
 
     """Ask what to do after casting"""
     print('\nFinished!')
+
     finishedChoice = ''
-    while finishedChoice not in ['r', 'm', 'e']:
+    while finishedChoice.lower() not in ['r', 'm', 'e']:
       finishedChoice = raw_input(
                                  '(R)epeat, go back to (M)enu '
                                  'or (E)xit program? '
@@ -1580,10 +1676,11 @@ class Actions(object):
       if finishedChoice.lower() == 'r':
         self.cast_sorts()
       elif finishedChoice.lower() == 'm':
-        self.userInterface.menu()
+        pass
       elif finishedChoice.lower() == 'e':
         self.caster.deactivate_valves()
         exit()
+
       else:
         print('\nNo such option. Choose again.')
         finishedChoice = ''
@@ -1613,31 +1710,46 @@ class Actions(object):
     """Wait until user decides to stop sending those signals to valves:"""
     raw_input('Press return to stop and go back to main menu. ')
     self.caster.deactivate_valves()
-    self.userInterface.menu()
+
+    """End of function"""
+
+  def __exit__(self, *args):
+    pass
 
 
 
 class TextUserInterface(object):
-  """TextUserInterface:
+  """TextUserInterface(database, caster, actions):
 
   Use this class for text-based console user interface.
+
+  Database, caster and actions objects need to be created earlier
+  before instantiating this class.
+
   Suitable for controlling a caster from the local terminal or via SSH,
   supports UTF-8 too.
   """
 
-  def __init__(self, casterName, databasePath='database/monotype.db'):
-    """
-    Instantiate config for the caster and actions.
-    """
-    self.database = DatabaseBackend(databasePath)
-    self.caster = Monotype(casterName, self.database)
-    self.actions = Actions(self, self.caster)
+  def __init__(self, database, caster, actions):
+    """Use supplied objects for the database, caster and actions."""
+    self.database = database
+    self.caster = caster
+    self.actions = actions
+
+    #self.database = Database(databasePath)
+    #self.caster = Monotype(casterName, self.database)
+    #self.actions = Actions(self, self.caster)
+
+
+  def __enter__(self):
 
     """Set up an empty ribbon file name first"""
     self.inputFileName = ''
 
-    """Now call the consoleUI function, which wraps the menu:"""
-    self.consoleUI()
+    #"""Now call the consoleUI function, which wraps the menu:"""
+    #self.consoleUI()
+
+    return self
 
 
 
@@ -1660,16 +1772,16 @@ class TextUserInterface(object):
     Also, ensure cleaning up after exit.
     """
     try:
-      self.menu()
+      self.main_menu()
     except (IOError, NameError):
       raw_input(
-                  '\nInput file not chosen or wrong input file name. '
-                  'Press return to go to main menu.\n'
-                  )
+                '\nInput file not chosen or wrong input file name. '
+                'Press return to go to main menu.\n'
+                )
       if DebugMode == True:
         print('Debug mode: see what happened.')
         raise
-      self.menu()
+      self.main_menu()
 
     except KeyboardInterrupt:
       print('\nTerminated by user.')
@@ -1685,10 +1797,11 @@ class TextUserInterface(object):
                                    '\n Enter the ribbon file name: '
                                   )
 
-  def menu(self):
-    """Main menu. On entering, clear the screen and turn any valves off."""
+  def main_menu(self):
+    """Main menu. On entering, clear the screen."""
+
     os.system('clear')
-    self.caster.deactivate_valves()
+
     print(
           'rpi2caster - CAT (Computer-Aided Typecasting) for Monotype '
           'Composition or Type and Rule casters.\n\nThis program reads '
@@ -1696,11 +1809,12 @@ class TextUserInterface(object):
           'Caster, \nor punches a paper tape with a paper tower '
           'taken off a Monotype keyboard.\n'
           )
+
     if DebugMode:
       print('\nThe program is now in debugging mode!\n')
 
     ans = ''
-    while ans == '':
+    while not ans.isdigit() or int(ans) not in range(7):
       print ("""
   \t Main menu:
 
@@ -1726,25 +1840,52 @@ class TextUserInterface(object):
         print('Input file name: %s\n' % os.path.realpath(self.inputFileName))
 
       ans = raw_input('Choose an option: ')
-      if ans=='1':
-        self.enter_filename()
-        self.menu()
-      elif ans=='2':
-        self.actions.cast_composition(self.inputFileName)
-      elif ans=='3':
-        self.actions.punch_composition(self.inputFileName)
-      elif ans=='4':
-        self.actions.cast_sorts()
-      elif ans=='5':
-        self.actions.line_test()
-      elif ans=='6':
-        self.actions.lock_on_position()
 
-      elif ans=='0':
-        exit()
-      else:
-        print('\nNo such option. Choose again.')
-        ans = ''
+    ans = int(ans)
+
+    if ans == 1:
+      self.enter_filename()
+      #self.main_menu()
+
+    elif ans == 2:
+
+      self.actions.cast_composition(self.inputFileName)
+      #self.main_menu()
+
+    elif ans == 3:
+
+      self.actions.punch_composition(self.inputFileName)
+      #self.main_menu()
+
+    elif ans == 4:
+
+      self.actions.cast_sorts()
+      #self.main_menu()
+
+    elif ans == 5:
+
+      self.actions.line_test()
+      #self.menu()
+
+    elif ans == 6:
+
+      self.actions.lock_on_position()
+      #self.main_menu()
+
+    elif ans == 0:
+      exit()
+
+    else:
+      print('\nNo such option. Choose again.')
+      ans = ''
+
+    """After function ends, recurse into main menu:"""
+    self.main_menu()
+
+
+  def __exit__(self, *args):
+    """On exiting, turn all the valves off."""
+    self.caster.deactivate_valves()
 
 
 class Testing(object):
@@ -1754,13 +1895,21 @@ class Testing(object):
   Certain functions referring to the caster will be replaced with
   placeholder methods from the MonotypeSimulation class.
   """
-  def __init__(self):
+  def __init__(self, database, caster, actions, userInterface):
     """Instantiate a caster simulator object instead of a real caster;
     other functionality should remain unchanged"""
-    self.database = DatabaseBackend()
-    self.caster = MonotypeSimulation()
-    self.actions = Actions(self, self.caster)
-    self.consoleUI()
+    self.database = database
+    self.caster = caster
+    self.actions = actions
+    self.userInterface = userInterface
+
+
+  def __enter__(self):
+    pass
+
+
+  def __exit__(self, *args):
+    pass
 
 
 class WebInterface(object):
@@ -1768,20 +1917,24 @@ class WebInterface(object):
 
   Use this class for instantiating text-based console user interface"""
 
-  def __init__(self, casterName):
+  def __init__(self, database, caster, actions):
     """instantiate config for the caster"""
 
-    """set up hardware with obtained interface parameters"""
-    self.caster = Monotype(casterName)
-
-    """display interface name and ID"""
-    print('Using interface "%s", ID: %i' % interfaceName, interfaceID)
+    self.database = database
+    self.caster = caster
+    self.actions = actions
 
 
+  def __enter__(self):
     self.webUI()
+
 
   def webUI(self):
     """This is a placeholder for web interface method. Nothing yet..."""
+    pass
+
+  def __exit__(self, *args):
+    pass
 
 
 """And now, for something completely different...
@@ -1789,6 +1942,12 @@ Initialize the console interface when running the program directly."""
 
 if __name__ == '__main__':
 
-  global DebugMode
-  DebugMode = True
-  casting = TextUserInterface('mkart-cc')
+
+  database = Database('database/monotype.db')
+  caster = Monotype('mkart-cc', database)
+  actions = Actions(caster)
+  userInterface = TextUserInterface(database, caster, actions)
+
+
+  with database, caster, actions, userInterface:
+    userInterface.consoleUI()

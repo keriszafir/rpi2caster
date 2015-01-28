@@ -2,7 +2,7 @@
 import os
 import sys
 import json
-from rpi2caster import DatabaseBackend
+from rpi2caster import Database
 
 try:
   import sqlite3
@@ -28,7 +28,8 @@ def commit_menu(message, options):
   Wrong choice points to the menu.
 
   Message: string displayed on screen;
-  options: a list or tuple of strings - options."""
+  options: a list or tuple of strings - options.
+  """
   ans = ''
   while ans not in options:
     ans = raw_input(message)
@@ -37,8 +38,32 @@ def commit_menu(message, options):
 
 def add_caster(casterSerial='', casterName='', casterType='',
                unitAdding='', diecaseSystem='', interfaceID=''):
-  """Add a caster. The function will pass at least twice -
-  until all data is entered correctly"""
+  """add_caster(casterSerial, casterName, casterType,
+                unitAdding, diecaseSystem, interfaceID):
+
+  Adds a caster. The function will pass at least twice -
+  until all data is entered correctly.
+
+  It can be called with or without parameters:
+
+  casterSerial - int - serial number of a caster,
+  casterName - string - a user-friendly name to identify a caster,
+  casterType - string - 'comp' (composition caster),
+                        'large_comp' (large comp. / type&rule caster),
+  unitAdding - boolean - whether the caster has an unit adding
+                         attachment present and turned on, or off
+  diecaseSystem - string - diecase (matrix case) system the caster uses:
+                         'norm15' - 15x15 only,
+                         'norm17' - 15x17 NI, NL
+                         'hmn' - 16x17 HMN,
+                         'kmn' - 16x17 KMN,
+                         'shift' - 16x17 unit-shift.
+  interfaceID - int - ID of a Raspberry-Monotype interface this caster
+                         is connected to. Usually 0, but in certain cases
+                         you may want to add another interface to your
+                         Raspberry if you want to use multiple casters
+                         without detaching and attaching the valveblock.
+  """
 
   """Reset revalidation; if everything is OK, the data can be written
   to the database. Else, the add_caster function will recurse into itself
@@ -52,24 +77,26 @@ def add_caster(casterSerial='', casterName='', casterType='',
     casterSerial = int(casterSerial)
   else:
     casterSerial = raw_input(
-                   'Enter the serial number of your caster: '
-                   )
+                             'Enter the serial number of your caster: '
+                            )
     revalidate = True
 
   """Enter a string for machine name"""
   if not casterName:
     casterName = raw_input(
-                 'Enter the name you use for this machine: '
-                 )
+                           'Enter the name you use for this machine: '
+                          )
     revalidate = True
 
   """Choose the machine type - and validate the choice.
   Case insensitive; value stored in db as uppercase"""
-  if casterType not in ['comp', 'large_comp']:
+  while casterType not in ['comp', 'large_comp']:
     casterType = raw_input(
-                 'What type is the machine? 1 = composition caster, '
-                 '2 = type & rule caster / large composition caster: '
-                 )
+                           'What type is the machine? '
+                           '1 = composition caster, '
+                           '2 = type & rule caster / '
+                           'large composition caster: '
+                          )
     if casterType == '1':
       casterType = 'comp'
     elif casterType == '2':
@@ -79,11 +106,11 @@ def add_caster(casterSerial='', casterName='', casterType='',
     revalidate = True
 
   """Choose if the machine has unit adding or not"""
-  if unitAdding not in (True, False):
+  while unitAdding not in (True, False):
     unitAdding = raw_input(
-                 'Does the caster use unit adding attachment? '
-                 '1 - yes, 0 - no: '
-                 )
+                           'Does the caster use unit adding attachment? '
+                           '1 - yes, 0 - no: '
+                          )
     if unitAdding == '0':
       unitAdding = False
     elif unitAdding == '1':
@@ -95,11 +122,11 @@ def add_caster(casterSerial='', casterName='', casterType='',
   """Choose the diecase format the machine is using,
   and validate the choice"""
   dcsystems = ['norm15', 'norm17', 'hmn', 'kmn', 'shift']
-  if diecaseSystem not in dcsystems:
+  while diecaseSystem not in dcsystems:
     diecaseSystem = raw_input(
                     'Diecase format this machine works with: '
                     '0 for 15x15, 1 for 15x17, 2 for HMN, 3 for KMN, '
-                    '4 for unit-shift. \nDefault is 15x17: ')
+                    '4 for unit-shift: ')
     if diecaseSystem == '0':
       diecaseSystem = dcsystems[0]
     elif diecaseSystem == '1':
@@ -119,9 +146,10 @@ def add_caster(casterSerial='', casterName='', casterType='',
     interfaceID = int(interfaceID)
   else:
     interfaceID = raw_input(
-                  'Raspberry interface number for this machine. '
-                  'Can be 0, 1, 2, 3. Default 0: '
-                  )
+                            'Raspberry interface number '
+                            'for this machine. '
+                            'Can be 0, 1, 2, 3. Default is 0: '
+                           )
     if interfaceID == '':
       interfaceID = '0'
     revalidate = True
@@ -147,21 +175,18 @@ def add_caster(casterSerial='', casterName='', casterType='',
         print('Caster added successfully.')
       else:
         print('Failed to add caster!')
-      raw_input('[Enter] to return to the menu:')
-      menu()
     elif ans.lower() == 'n':
       raw_input('Enter parameters again from scratch... ')
       add_caster()
     elif ans.lower() == 'm':
-      menu()
-
+      pass
 
   else:
     """Recursively call this function to revalidate parameters:"""
     add_caster(
-      casterSerial, casterName, casterType,
-      unitAdding, diecaseSystem, interfaceID
-      )
+               casterSerial, casterName, casterType,
+               unitAdding, diecaseSystem, interfaceID
+              )
 
 
 def add_interface(ID='', interfaceName='', emergencyGPIO='',
@@ -188,8 +213,8 @@ def add_interface(ID='', interfaceName='', emergencyGPIO='',
     ID = int(ID)
   else:
     ID = raw_input(
-         'Enter the interface ID: 0, 1, 2, 3, 4; default 0: '
-         )
+                   'Enter the interface ID: 0, 1, 2, 3, 4; default 0: '
+                  )
     if ID == '':
       ID = 0
     revalidate = True
@@ -197,8 +222,9 @@ def add_interface(ID='', interfaceName='', emergencyGPIO='',
   """Enter a string for interface name"""
   if not interfaceName:
     interfaceName = raw_input(
-                    'Enter the name you use for this interface: '
-                    )
+                              'Enter the name you use '
+                              'for this interface: '
+                             )
     revalidate = True
 
   """Emergency button GPIO for this interface"""
@@ -206,8 +232,9 @@ def add_interface(ID='', interfaceName='', emergencyGPIO='',
     emergencyGPIO = int(emergencyGPIO)
   else:
     emergencyGPIO = raw_input(
-                    'Enter the emergency button GPIO - BCM number: '
-                    )
+                              'Enter the emergency button GPIO - '
+                              'BCM number: '
+                             )
     revalidate = True
 
   """Photocell GPIO for this interface"""
@@ -277,13 +304,11 @@ def add_interface(ID='', interfaceName='', emergencyGPIO='',
         print('Interface added successfully.')
       else:
         print('Failed to add interface!')
-      raw_input('[Enter] to return to the menu:')
-      menu()
     elif ans.lower() == 'n':
       raw_input('Enter parameters again from scratch... ')
       add_interface()
     elif ans.lower() == 'm':
-      menu()
+      pass
 
   else:
     add_interface(ID, interfaceName, emergencyGPIO, photocellGPIO,
@@ -458,19 +483,15 @@ def add_wedge(wedgeName='', setWidth='', oldPica='', steps=''):
         print('Wedge added successfully.')
       else:
         print('Failed to add wedge!')
-      raw_input('[Enter] to return to the menu:')
-      menu()
     elif ans.lower() == 'n':
       raw_input('Enter parameters again from scratch... ')
       add_wedge()
     elif ans.lower() == 'm':
-      menu()
+      pass
     """If everything is OK and user confirms, add data to the database."""
   else:
     """Recurse into add_wedge with obtained data to re-check it"""
     add_wedge(wedgeName, setWidth, oldPica, steps)
-
-
 
 
 def delete_caster():
@@ -483,8 +504,7 @@ def delete_caster():
       print('Caster deleted successfully.')
   else:
     print('Caster ID must be a number!')
-  raw_input('[Enter] to return to menu...')
-  menu()
+
 
 def delete_interface():
   """Ask for ID and delete the interface"""
@@ -496,8 +516,6 @@ def delete_interface():
       print('Interface deleted successfully.')
   else:
     print('Interface ID must be a number!')
-  raw_input('[Enter] to return to menu...')
-  menu()
 
 
 def delete_wedge():
@@ -509,8 +527,6 @@ def delete_wedge():
       print('Wedge deleted successfully.')
   else:
     print('Wedge name must be a number!')
-  raw_input('[Enter] to return to menu...')
-  menu()
 
 
 def list_casters():
@@ -529,71 +545,65 @@ def list_wedges():
 def menu():
   """Main menu. On entering, clear the screen and turn any valves off."""
   os.system('clear')
-  print('Setup program for rpi2caster\n')
+
   ans = ''
-  while ans == '':
-    print ("""
-\t Main menu:
+  while not ans.isdigit() or int(ans) not in range(11):
+    print (
+    """
+    Setup program for rpi2caster computer-aided typecasting.
 
-\t 1. List casters
-\t 2. Add caster
-\t 3. Delete caster
+    Main menu:
 
-\t 4. List interfaces
-\t 5. Add interface
-\t 6. Delete interface
+    1. List casters
+    2. Add caster
+    3. Delete caster
 
-\t 7. List wedges
-\t 8. Add wedge
-\t 9. Delete wedge
+    4. List interfaces
+    5. Add interface
+    6. Delete interface
 
-\t 10. Add a comp. caster no 28539, name 'mkart-cc', unit adding off, norm17 diecase
+    7. List wedges
+    8. Add wedge
+    9. Delete wedge
 
-\t 0. Exit to shell
+    10. Add a comp. caster no 28539, name 'mkart-cc', unit adding off, norm17 diecase
 
-""")
+    0. Exit to shell
+
+    """)
 
     ans = raw_input('Choose an option: ')
+
+
     if ans=='1':
       list_casters()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='2':
       add_caster()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='3':
       delete_caster()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='4':
       list_interfaces()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='5':
       add_interface()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='6':
       delete_interface()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='7':
       list_wedges()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='8':
       add_wedge()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='9':
       delete_wedge()
-      raw_input('\nPress return to go back to menu.\n')
-      menu()
+
     elif ans=='10':
       add_caster(28539, 'mkart-cc', 'comp', False, 'norm17', 0)
-      raw_input('\nCaster added. Press return to go back to menu.\n')
-      menu()
 
     elif ans=='0':
       exit()
@@ -601,6 +611,10 @@ def menu():
       print('\nNo such option. Choose again.')
       ans = ''
 
+  """After the function ends, go back to menu:"""
+  raw_input('\nPress return to go back to menu.\n')
+  menu()
 
-config = DatabaseBackend()
+
+config = Database()
 menu()
