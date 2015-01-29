@@ -1,18 +1,19 @@
 * comment
 ** comment
 // comment
-0005;0075
-0075
+0005 // Pump off!
+0005;0075 // Line to the galley!
 k;12
 c;10
 g;9
 h;8
 j;9
 b;7
-g;0075
-// Start the pump
+// Cast the composition
 g;2
 g;2
 // Cast spaces
-0005
-// Stop the pump, just in case
+0075, 8
+// Set the just. wedge 0075 and start the pump
+0005, 3
+// Set the justification wedge 0005

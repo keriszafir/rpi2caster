@@ -1478,7 +1478,7 @@ class Actions(object):
         self.caster.send_signals_to_caster(signals)
 
     """After casting is finished, notify the user:"""
-    raw_input('\nCasting finished. Press return to go to main menu. ')
+    print('\nCasting finished!')
 
     """End of function."""
 
@@ -1539,7 +1539,7 @@ class Actions(object):
           time.sleep(0.2)
 
     """After punching is finished, notify the user:"""
-    raw_input('\nPunching finished. Press return to go to main menu. ')
+    print('\nPunching finished!')
 
     """End of function."""
 
@@ -1570,7 +1570,7 @@ class Actions(object):
       print ' '.join(combination)
       self.caster.send_signals_to_caster(combination, 120)
 
-    raw_input('\nTesting done. Press return to go to main menu. ')
+    print('\nTesting finished!')
 
     """End of function."""
 
@@ -1708,7 +1708,7 @@ class Actions(object):
       self.caster.activate_valves(combination)
 
     """Wait until user decides to stop sending those signals to valves:"""
-    raw_input('Press return to stop and go back to main menu. ')
+    raw_input('Press return to stop. ')
     self.caster.deactivate_valves()
 
     """End of function"""
@@ -1736,21 +1736,12 @@ class TextUserInterface(object):
     self.caster = caster
     self.actions = actions
 
-    #self.database = Database(databasePath)
-    #self.caster = Monotype(casterName, self.database)
-    #self.actions = Actions(self, self.caster)
-
 
   def __enter__(self):
 
     """Set up an empty ribbon file name first"""
     self.inputFileName = ''
-
-    #"""Now call the consoleUI function, which wraps the menu:"""
-    #self.consoleUI()
-
     return self
-
 
 
   def tab_complete(text, state):
@@ -1793,99 +1784,217 @@ class TextUserInterface(object):
 
   def enter_filename(self):
     """Enter the ribbon filename"""
-    self.inputFileName = raw_input(
-                                   '\n Enter the ribbon file name: '
-                                  )
+    return raw_input('\n Enter the ribbon file name: ')
+
+
+  def menu(self, **kwargs):
+    """menu(
+            header=foo,
+            footer=bar,
+            options=[[choice1, text1, command1],
+                     [choice2, text2, command2], [...]
+                    ]
+            recursive=False):
+
+    A menu which takes three arguments:
+    header - string to be displayed above,
+    footer - string to be displayed below.,
+    options - a list of n lists of 3 options (n x 3 matrix), where:
+              [key, displayed_option_name, command]
+    recursive - determines whether the menu will call itself after
+                a command called by choice is executed entirely.
+
+    After choice is made, executes the command.
+    """
+
+    def pause_on_return(self, flag):
+      """If flag is True, the function pauses before return to menu:"""
+      if flag:
+        raw_input('\nPress Enter to go back to menu...')
+        self.menu(**kwargs)
+
+    def execute_command(self, command, flag):
+      try:
+        exec command in None
+        pause_on_return(self, flag)
+
+      except NameError:
+        print('Something went wrong!')
+        """Raise the exception only in debug mode:"""
+        if DebugMode:
+          raise
+
+
+    """Parse the keyword arguments. If argument is unset, assign
+    an empty string.
+    """
+    try:
+      header = kwargs['header']
+    except KeyError:
+      header = ''
+
+    try:
+      footer = kwargs['footer']
+    except KeyError:
+      footer = ''
+
+    try:
+      options = kwargs['options']
+    except KeyError:
+      options = ''
+
+    try:
+      recursive = kwargs['recursive']
+    except KeyError:
+      recursive = False
+
+    """Set up vars for conditional statements,
+     and lists for appending new items.
+
+     choices - options to be entered by user,
+     commands - commands to be executed after option is chosen,
+     pauses - flags indicating whether the program will be paused
+              on return to menu (waiting for user to press return):
+     """
+    yourChoice = ''
+    choices = []
+    commands = []
+    pauses = []
+
+    """Clear the screen, display header and add two empty lines:"""
+    os.system('clear')
+    if header:
+      print header
+      print('')
+
+    """Display all the options; construct the possible choices list:"""
+    for option in options:
+      if option:
+        """Non-empty option: parse it.
+        Print an indent first:
+        """
+        print('\t')
+
+        """Convert the choice and displayed name to string,
+        making it possible to use integers when calling the funtion:
+        """
+        choice = str(option[0])
+        displayedName = str(option[1])
+
+        """Check if there is a command for the menu entry,
+        if not - command will be an empty string:
+        """
+        try:
+          command = str(option[2])
+        except IndexError:
+          command = ''
+
+        """Check if the user is supposed to confirm on back to menu.
+        The last element in option is boolean or string.
+        If it is not set, make it False."""
+        try:
+          pause = option[3]
+        except IndexError:
+          pause = False
+
+        """Print a line with choice and description;
+        add the choice to choices list:
+        """
+        print choice, ' : ', displayedName
+        choices.append(choice)
+
+        """Add the command to commands list:"""
+        commands.append(command)
+
+        """Append the "pause after exit" flag to pauses list:"""
+        pauses.append(pause)
+
+      else:
+        """Empty option - useful if we want to display an empty line:"""
+        print option
+
+    """Print footer, if defined:"""
+    if footer:
+      print('')
+      print footer
+    print('\n')
+
+    """Associate commands with options;
+    associate pause-on-return flags with options:"""
+    optionsMenu = dict(zip(choices, commands))
+    pauseOnReturn = dict(zip(choices, pauses))
+
+    """Ask for user input:"""
+    while yourChoice not in choices:
+      yourChoice = raw_input('Your choice: ')
+    else:
+      """If valid option is chosen, try to execute command:"""
+      execute_command(self, optionsMenu[yourChoice],
+                      pauseOnReturn[yourChoice])
+
+    if recursive:
+      """Go back to this menu after the command is done:"""
+      pause_on_return(True)
+
+
+  def main_menu_additional_information(self):
+    """Displays additional info as a main menu footer:"""
+    if self.inputFileName != '':
+      return(
+             'Input file name: %s\n'
+             % os.path.realpath(self.inputFileName)
+            )
+
+
+  def DebugNotice(self):
+    """Prints a notice if the program is in debug mode:"""
+    if DebugMode:
+      return('\n\nThe program is now in debugging mode!')
+    else:
+      return ''
+
 
   def main_menu(self):
-    """Main menu. On entering, clear the screen."""
-
-    os.system('clear')
-
-    print(
-          'rpi2caster - CAT (Computer-Aided Typecasting) for Monotype '
-          'Composition or Type and Rule casters.\n\nThis program reads '
-          'a ribbon (input file) and casts the type on a Composition '
-          'Caster, \nor punches a paper tape with a paper tower '
-          'taken off a Monotype keyboard.\n'
-          )
-
-    if DebugMode:
-      print('\nThe program is now in debugging mode!\n')
-
-    ans = ''
-    while not ans.isdigit() or int(ans) not in range(7):
-      print ("""
-  \t Main menu:
-
-  \t 1. Load a ribbon file
-
-  \t 2. Cast type from ribbon file
-
-  \t 3. Punch a paper tape
-
-  \t 4. Cast sorts
-
-  \t 5. Test the valves and pinblocks
-
-  \t 6. Lock the caster on a specified diecase position
-
-
-
-  \t 0. Exit to shell
-
-  """)
-
-      if self.inputFileName != '':
-        print('Input file name: %s\n' % os.path.realpath(self.inputFileName))
-
-      ans = raw_input('Choose an option: ')
-
-    ans = int(ans)
-
-    if ans == 1:
-      self.enter_filename()
-      #self.main_menu()
-
-    elif ans == 2:
-
-      self.actions.cast_composition(self.inputFileName)
-      #self.main_menu()
-
-    elif ans == 3:
-
-      self.actions.punch_composition(self.inputFileName)
-      #self.main_menu()
-
-    elif ans == 4:
-
-      self.actions.cast_sorts()
-      #self.main_menu()
-
-    elif ans == 5:
-
-      self.actions.line_test()
-      #self.menu()
-
-    elif ans == 6:
-
-      self.actions.lock_on_position()
-      #self.main_menu()
-
-    elif ans == 0:
-      exit()
-
-    else:
-      print('\nNo such option. Choose again.')
-      ans = ''
-
-    """After function ends, recurse into main menu:"""
+    """Calls menu() with a header, footer and options.
+    Does not use the recursive feature of menu(), because the
+    additional information would not be displayed.
+    Instead, recursion is implemented in this function.
+    """
+    self.menu(
+              header = (
+                        'rpi2caster - CAT (Computer-Aided Typecasting) '
+                        'for Monotype Composition or Type and Rule casters.'
+                        '\n\n'
+                        'This program reads a ribbon (input file) '
+                        'and casts the type on a Composition Caster, \n'
+                        'or punches a paper tape with a paper tower '
+                        'taken off a Monotype keyboard.'
+                       ) + self.DebugNotice() + '\n\nMain Menu:',
+              footer = self.main_menu_additional_information(),
+              options = [
+                         [1, 'Load a ribbon file',
+                           'self.inputFileName = self.enter_filename()', True],
+                         [2, 'Cast composition',
+                           'self.actions.cast_composition(self.inputFileName)', True],
+                         [3, 'Punch a paper tape',
+                           'self.actions.punch_composition(self.inputFileName)', True],
+                         [4, 'Cast sorts',
+                           'self.actions.cast_sorts()', True],
+                         [5, 'Test the valves and pinblocks',
+                           'self.actions.line_test()', True],
+                         [6, 'Lock the caster on a specified diecase position',
+                           'self.actions.lock_on_position()'],
+                         [0, 'Exit program', 'exit()']
+                        ]
+              )
+    #raw_input('Press Enter to return to main menu...')
     self.main_menu()
 
 
   def __exit__(self, *args):
     """On exiting, turn all the valves off."""
     self.caster.deactivate_valves()
+
 
 
 class Testing(object):
@@ -1910,6 +2019,7 @@ class Testing(object):
 
   def __exit__(self, *args):
     pass
+
 
 
 class WebInterface(object):
@@ -1937,11 +2047,14 @@ class WebInterface(object):
     pass
 
 
+
 """And now, for something completely different...
 Initialize the console interface when running the program directly."""
 
 if __name__ == '__main__':
 
+
+  DebugMode = True
 
   database = Database('database/monotype.db')
   caster = Monotype('mkart-cc', database)
