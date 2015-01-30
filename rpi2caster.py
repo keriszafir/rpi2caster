@@ -53,6 +53,7 @@ global DebugMode
 DebugMode = False
 
 
+
 class Database(object):
   """Database(databasePath):
 
@@ -1923,7 +1924,8 @@ class Parsing(object):
   """This class contains file- and line-parsing methods"""
 
 
-  def signals_parser(self, originalSignals):
+  @staticmethod
+  def signals_parser(originalSignals):
     """signals_parser(originalSignals):
 
     Parses an input string, and returns a list with two elements:
@@ -2009,13 +2011,10 @@ class Parsing(object):
 class Actions(object):
   """Actions the user can do in this software"""
 
-  def __init__(self, caster):
-    """Instantiate dependent objects: caster, parser;
 
-    link back to the user interface, because we want to use
-    functions defined there.
+  def __init__(self, caster):
+    """Pass a caster object to use:
     """
-    self.parser = Parsing()
     self.caster = caster
 
   def __enter__(self):
@@ -2044,7 +2043,7 @@ class Actions(object):
 
     """Check if the machine is running - don't do anything when
     it's not rotating yet!"""
-    self.caster.detect_rotation()
+    caster.detect_rotation()
 
     """Read the reversed file contents, line by line, then parse
     the lines, display comments & code combinations, and feed the
@@ -2054,7 +2053,7 @@ class Actions(object):
 
       """Parse the row, return a list of signals and a comment.
       Both can have zero or positive length."""
-      signals, comment = self.parser.signals_parser(line)
+      signals, comment = Parsing.signals_parser(line)
 
       """Print a comment if there is one (positive length)"""
       if len(comment) > 0:
@@ -2067,7 +2066,7 @@ class Actions(object):
           print ' '.join(signals)
         else:
           print('O+15 - no signals')
-        self.caster.send_signals_to_caster(signals)
+        caster.send_signals_to_caster(signals)
 
     """After casting is finished, notify the user:"""
     print('\nCasting finished!')
@@ -2104,7 +2103,7 @@ class Actions(object):
         Parse the row, return a list of signals and a comment.
         Both can have zero or positive length.
         """
-        signals, comment = self.parser.signals_parser(line)
+        signals, comment = Parsing.signals_parser(line)
 
         """Print a comment if there is one - positive length"""
         if len(comment) > 0:
@@ -2123,11 +2122,11 @@ class Actions(object):
           if len(signals) < 2:
             signals += ('O15',)
           print ' '.join(signals)
-          self.caster.activate_valves(signals)
+          caster.activate_valves(signals)
 
           """The pace is arbitrary, let's set it to 200ms/200ms"""
           time.sleep(0.2)
-          self.caster.deactivate_valves()
+          caster.deactivate_valves()
           time.sleep(0.2)
 
     """After punching is finished, notify the user:"""
@@ -2160,7 +2159,7 @@ class Actions(object):
     """Send all the combinations to the caster, one by one:"""
     for combination in combinations:
       print ' '.join(combination)
-      self.caster.send_signals_to_caster(combination, 120)
+      caster.send_signals_to_caster(combination, 120)
 
     print('\nTesting finished!')
 
@@ -2187,7 +2186,7 @@ class Actions(object):
     Parse the signals and return a list containing the parsed
     signals and the comments:
     """
-    [parsedSignals, comment] = self.parser.signals_parser(signals)
+    [parsedSignals, comment] = Parsing.signals_parser(signals)
 
     """
     O15 yields no signals, but we may want to cast it - check if we
@@ -2229,11 +2228,13 @@ class Actions(object):
       if choice.lower() == 'c':
         """Check if the machine is running"""
         print('Start the machine...')
-        self.caster.detect_rotation()
+        caster.detect_rotation()
 
         """Cast the sorts: turn on the pump first."""
         print('Starting the pump...')
-        self.caster.send_signals_to_caster(['0075'])
+        caster.send_signals_to_caster(['0075'])
+
+        """Start casting characters"""
         print('Casting characters...')
 
         """Cast n combinations of row & column, one by one"""
@@ -2242,18 +2243,21 @@ class Actions(object):
             print ' '.join(parsedSignals)
           else:
             print('O+15 - no signals')
-          self.caster.send_signals_to_caster(parsedSignals)
+          caster.send_signals_to_caster(parsedSignals)
 
+        """Put the line to the galley:"""
+        print('Putting line to the galley...')
+        caster.send_signals_to_caster(['0005', '0075'])
         """After casting sorts we need to stop the pump"""
-        print('Stopping the pump and putting line to the galley...')
-        self.caster.send_signals_to_caster(['0005', '0075'])
+        print('Putting line to the galley...')
+        caster.send_signals_to_caster(['0005'])
 
       elif choice.lower() == 'r':
         self.cast_sorts()
       elif choice.lower() == 'm':
         pass
       elif choice.lower() == 'e':
-        self.caster.deactivate_valves()
+        self.cleanup()
         exit()
 
     """Ask what to do after casting"""
@@ -2270,7 +2274,7 @@ class Actions(object):
       elif finishedChoice.lower() == 'm':
         pass
       elif finishedChoice.lower() == 'e':
-        self.caster.deactivate_valves()
+        self.cleanup()
         exit()
 
       else:
@@ -2278,7 +2282,7 @@ class Actions(object):
         finishedChoice = ''
 
 
-  def lock_on_position(self):
+  def send_combination(self):
     """This function allows us to give the program a specific combination
     of Monotype codes, and will keep the valves on until we press return
     (useful for calibration). It also checks the signals' validity"""
@@ -2292,18 +2296,25 @@ class Actions(object):
 
     """Parse the combination, get the signals (first item returned
     by the parsing function):"""
-    combination = self.parser.signals_parser(signals)[0]
+    combination = Parsing.signals_parser(signals)[0]
 
     """Check if we get any signals at all, if so, turn the valves on:"""
     if combination:
       print ' '.join(combination)
-      self.caster.activate_valves(combination)
+      caster.activate_valves(combination)
 
     """Wait until user decides to stop sending those signals to valves:"""
     raw_input('Press return to stop. ')
-    self.caster.deactivate_valves()
+    caster.deactivate_valves()
 
     """End of function"""
+
+
+  def cleanup(self):
+    """Call deactivate_valves to make sure no lines stay turned on:
+    """
+    caster.deactivate_valves()
+
 
   def __exit__(self, *args):
     pass
@@ -2322,11 +2333,8 @@ class TextUserInterface(object):
   supports UTF-8 too.
   """
 
-  def __init__(self, database, caster, actions):
-    """Use supplied objects for the database, caster and actions."""
-    self.database = database
-    self.caster = caster
-    self.actions = actions
+  def __init__(self, actions):
+    pass
 
 
   def __enter__(self):
@@ -2371,28 +2379,20 @@ class TextUserInterface(object):
       exit()
     finally:
       print('Goodbye!')
-      self.caster.deactivate_valves()
+      actions.cleanup()
 
 
-  def enter_filename(self):
-    """Enter the ribbon filename"""
-    return raw_input('\n Enter the ribbon file name: ')
-
-
-  def menu(self, **kwargs):
+  @staticmethod
+  def menu(options, **kwargs):
     """menu(
+            options={'foo':'bar','baz':'qux'}
             header=foo,
             footer=bar,
-            options=[[choice1, text1, command1],
-                     [choice2, text2, command2], [...]
-                    ]
             recursive=False):
 
     A menu which takes three arguments:
     header - string to be displayed above,
     footer - string to be displayed below.,
-    options - a list of n lists of 3 options (n x 3 matrix), where:
-              [key, displayed_option_name, command]
     recursive - determines whether the menu will call itself after
                 a command called by choice is executed entirely.
 
@@ -2413,11 +2413,6 @@ class TextUserInterface(object):
       footer = ''
 
     try:
-      options = kwargs['options']
-    except KeyError:
-      options = ''
-
-    try:
       recursive = kwargs['recursive']
     except KeyError:
       recursive = False
@@ -2432,8 +2427,7 @@ class TextUserInterface(object):
      """
     yourChoice = ''
     choices = []
-    commands = []
-    pauses = []
+
 
     """Clear the screen, display header and add two empty lines:"""
     os.system('clear')
@@ -2442,50 +2436,23 @@ class TextUserInterface(object):
       print('')
 
     """Display all the options; construct the possible choices list:"""
-    for option in options:
-      if option:
-        """Non-empty option: parse it.
-        Print an indent first:
+
+    for choice in options:
+       if choice != 0:
+        """Print the option choice and displayed text:
         """
-        print('\t')
+        print '\t', choice, ' : ', options[choice], '\n'
+        choices.append(str(choice))
 
-        """Convert the choice and displayed name to string,
-        making it possible to use integers when calling the funtion:
-        """
-        choice = str(option[0])
-        displayedName = str(option[1])
+    try:
+      """If an option "0." is available, print it as a last one:"""
+      optionNumberZero = options[0]
+      print '\n'
+      print '\t', 0, ' : ', optionNumberZero
+      choices.append('0')
+    except KeyError:
+      pass
 
-        """Check if there is a command for the menu entry,
-        if not - command will be an empty string:
-        """
-        try:
-          command = str(option[2])
-        except IndexError:
-          command = ''
-
-        """Check if the user is supposed to confirm on back to menu.
-        The last element in option is boolean or string.
-        If it is not set, make it False."""
-        try:
-          pause = option[3]
-        except IndexError:
-          pause = False
-
-        """Print a line with choice and description;
-        add the choice to choices list:
-        """
-        print choice, ' : ', displayedName
-        choices.append(choice)
-
-        """Add the command to commands list:"""
-        commands.append(command)
-
-        """Append the "pause after exit" flag to pauses list:"""
-        pauses.append(pause)
-
-      else:
-        """Empty option - useful if we want to display an empty line:"""
-        print option
 
     """Print footer, if defined:"""
     if footer:
@@ -2493,52 +2460,45 @@ class TextUserInterface(object):
       print footer
     print('\n')
 
-    """Associate commands with options;
-    associate pause-on-return flags with options:"""
-    optionsMenu = dict(zip(choices, commands))
-    pauseOnReturn = dict(zip(choices, pauses))
-
     """Ask for user input:"""
     while yourChoice not in choices:
       yourChoice = raw_input('Your choice: ')
     else:
-      """If valid option is chosen, try to execute command:"""
-      self.execute_command(
-                           optionsMenu[yourChoice],
-                           pauseOnReturn[yourChoice]
-                          )
+      """Valid option is chosen, return integer if options were numbers,
+      else return string:
+      """
+      try:
+        return int(yourChoice)
+      except ValueError:
+        return yourChoice
+
     if recursive:
       """Go back to this menu after the command is done:"""
-      self.pause_on_return(True)
-
-  def pause_on_return(self, flag):
-    """If flag is True, the function pauses before return to menu:"""
-    if flag:
-      raw_input('\nPress Enter to go back to menu...')
-      self.menu(**kwargs)
-
-  def execute_command(self, command, flag):
-    try:
-      exec command
-      pause_on_return(self, flag)
-
-    except NameError:
-      print('Something went wrong!')
-      """Raise the exception only in debug mode:"""
-      if DebugMode:
-        raise
+      TextUserInterface.menu(options, kwargs)
 
 
-  def main_menu_additional_information(self):
+  def main_menu_additional_info(self):
     """Displays additional info as a main menu footer:"""
     if self.inputFileName != '':
       return(
-             'Input file name: %s\n'
-             % os.path.realpath(self.inputFileName)
+             'Input file name: ' + self.inputFileName
             )
 
 
-  def debug_notice(self):
+  def enter_filename(self):
+    """Enter the ribbon filename; check if the file is readable"""
+    fn = raw_input('\n Enter the ribbon file name: ')
+    fn = os.path.realpath(fn)
+    try:
+      with open(fn, 'r'):
+        return fn
+    except IOError:
+      raw_input('Wrong filename or file not readable!')
+      return ''
+
+
+  @staticmethod
+  def debug_notice():
     """Prints a notice if the program is in debug mode:"""
     if DebugMode:
       return('\n\nThe program is now in debugging mode!')
@@ -2547,12 +2507,33 @@ class TextUserInterface(object):
 
 
   def main_menu(self):
-    """Calls menu() with a header, footer and options.
+    """Calls menu() with options, a header and a footer.
     Does not use the recursive feature of menu(), because the
     additional information would not be displayed.
     Instead, recursion is implemented in this function.
     """
-    userInterface.menu(self,
+    options = {
+               1 : 'Load a ribbon file',
+               2 : 'Cast composition',
+               3 : 'Punch a paper tape',
+               4 : 'Cast sorts',
+               5 : 'Test the valves and pinblocks',
+               6 : 'Lock the caster on a specified diecase position',
+               0 : 'Exit program'
+              }
+
+    commands = {
+                1 : 'self.inputFileName = self.enter_filename()',
+                2 : 'actions.cast_composition(self.inputFileName)',
+                3 : 'actions.punch_composition(self.inputFileName)',
+                4 : 'actions.cast_sorts()',
+                5 : 'actions.line_test()',
+                6 : 'actions.send_combination()',
+                0 : 'exit()'
+               }
+
+    choice = TextUserInterface.menu(
+              options,
               header = (
                         'rpi2caster - CAT (Computer-Aided Typecasting) '
                         'for Monotype Composition or Type and Rule casters.'
@@ -2562,26 +2543,16 @@ class TextUserInterface(object):
                         'or punches a paper tape with a paper tower '
                         'taken off a Monotype keyboard.'
                        ) + self.debug_notice() + '\n\nMain Menu:',
-              footer = self.main_menu_additional_information(),
-              options = [
-                         [1, 'Load a ribbon file',
-                           'self.inputFileName = self.enter_filename()', True],
-                         [2, 'Cast composition',
-                           'self.actions.cast_composition(self.inputFileName)', True],
-                         [3, 'Punch a paper tape',
-                           'self.actions.punch_composition(self.inputFileName)', True],
-                         [4, 'Cast sorts',
-                           'self.actions.cast_sorts()', True],
-                         [5, 'Test the valves and pinblocks',
-                           'self.actions.line_test()', True],
-                         [6, 'Lock the caster on a specified diecase position',
-                           'self.actions.lock_on_position()'],
-                         [0, 'Exit program', 'exit()']
-                        ]
+
+              footer = self.main_menu_additional_info()
               )
+
+    exec commands[choice]
+
     #raw_input('Press Enter to return to main menu...')
     self.main_menu()
 
+  @staticmethod
   def simple_menu(message, options):
     """A simple menu where user is asked what to do.
     Wrong choice points back to the menu.
@@ -2597,7 +2568,7 @@ class TextUserInterface(object):
 
   def __exit__(self, *args):
     """On exiting, turn all the valves off."""
-    self.caster.deactivate_valves()
+    actions.cleanup()
 
 
 
@@ -2654,7 +2625,6 @@ class WebInterface(object):
 
 """And now, for something completely different...
 Initialize the console interface when running the program directly."""
-
 if __name__ == '__main__':
 
 
@@ -2663,7 +2633,7 @@ if __name__ == '__main__':
   database = Database('database/monotype.db')
   caster = Monotype('mkart-cc', database)
   actions = Actions(caster)
-  userInterface = TextUserInterface(database, caster, actions)
+  userInterface = TextUserInterface(actions)
 
 
   with database, caster, actions, userInterface:
