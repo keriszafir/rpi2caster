@@ -1915,13 +1915,10 @@ class MonotypeSimulation(object):
 
 
 class Parsing(object):
-  def __init__(self):
-    pass
-
-  def __enter__(self):
-    return self
-
-  """This class contains file- and line-parsing methods"""
+  """This class contains file- and line-parsing methods.
+  It contains static methods to be called by other functions only.
+  You cannot instantiate it.
+  """
 
 
   @staticmethod
@@ -2003,30 +2000,21 @@ class Parsing(object):
     return [columns + rows + special_signals, comment]
 
 
-  def __exit__(self, *args):
-    pass
-
-
 
 class Actions(object):
-  """Actions the user can do in this software"""
+  """Actions the user can do in this software.
+  This class contains only static methods to be called from elsewhere,
+  you cannot instantiate it.
+  """
 
 
-  def __init__(self, caster):
-    """Pass a caster object to use:
-    """
-    self.caster = caster
-
-  def __enter__(self):
-    return self
-
-
-  def cast_composition(self, filename):
+  @staticmethod
+  def cast_composition(filename):
     """ Composition casting routine. The input file is read backwards -
     last characters are cast first, after setting the justification."""
 
     """Open a file with signals"""
-    with open(filename, 'rb') as ribbon:
+    with open(filename, 'r') as ribbon:
       contents = ribbon.readlines()
 
 
@@ -2074,7 +2062,8 @@ class Actions(object):
     """End of function."""
 
 
-  def punch_composition(self, filename):
+  @staticmethod
+  def punch_composition(filename):
     """punch_composition(filename):
 
     When punching, the input file is read forwards. An additional line
@@ -2083,7 +2072,7 @@ class Actions(object):
     """
 
     """Open a file with signals"""
-    with open(filename, 'rb') as ribbon:
+    with open(filename, 'r') as ribbon:
 
       """
       Wait until the operator confirms.
@@ -2135,7 +2124,8 @@ class Actions(object):
     """End of function."""
 
 
-  def line_test(self):
+  @staticmethod
+  def line_test():
     """line_test():
 
     Tests all valves and composition caster's inputs to check
@@ -2166,7 +2156,8 @@ class Actions(object):
     """End of function."""
 
 
-  def cast_sorts(self):
+  @staticmethod
+  def cast_sorts():
     """cast_sorts():
 
     Sorts casting routine, based on the position in diecase.
@@ -2257,7 +2248,7 @@ class Actions(object):
       elif choice.lower() == 'm':
         pass
       elif choice.lower() == 'e':
-        self.cleanup()
+        caster.cleanup()
         exit()
 
     """Ask what to do after casting"""
@@ -2274,7 +2265,7 @@ class Actions(object):
       elif finishedChoice.lower() == 'm':
         pass
       elif finishedChoice.lower() == 'e':
-        self.cleanup()
+        caster.deactivate_valves()
         exit()
 
       else:
@@ -2282,7 +2273,8 @@ class Actions(object):
         finishedChoice = ''
 
 
-  def send_combination(self):
+  @staticmethod
+  def send_combination():
     """This function allows us to give the program a specific combination
     of Monotype codes, and will keep the valves on until we press return
     (useful for calibration). It also checks the signals' validity"""
@@ -2310,15 +2302,6 @@ class Actions(object):
     """End of function"""
 
 
-  def cleanup(self):
-    """Call deactivate_valves to make sure no lines stay turned on:
-    """
-    caster.deactivate_valves()
-
-
-  def __exit__(self, *args):
-    pass
-
 
 
 class TextUserInterface(object):
@@ -2333,7 +2316,7 @@ class TextUserInterface(object):
   supports UTF-8 too.
   """
 
-  def __init__(self, actions):
+  def __init__(self, caster):
     pass
 
 
@@ -2379,7 +2362,7 @@ class TextUserInterface(object):
       exit()
     finally:
       print('Goodbye!')
-      actions.cleanup()
+      caster.deactivate_valves()
 
 
   @staticmethod
@@ -2524,11 +2507,11 @@ class TextUserInterface(object):
 
     commands = {
                 1 : 'self.inputFileName = self.enter_filename()',
-                2 : 'actions.cast_composition(self.inputFileName)',
-                3 : 'actions.punch_composition(self.inputFileName)',
-                4 : 'actions.cast_sorts()',
-                5 : 'actions.line_test()',
-                6 : 'actions.send_combination()',
+                2 : 'Actions.cast_composition(self.inputFileName)',
+                3 : 'Actions.punch_composition(self.inputFileName)',
+                4 : 'Actions.cast_sorts()',
+                5 : 'Actions.line_test()',
+                6 : 'Actions.send_combination()',
                 0 : 'exit()'
                }
 
@@ -2568,7 +2551,7 @@ class TextUserInterface(object):
 
   def __exit__(self, *args):
     """On exiting, turn all the valves off."""
-    actions.cleanup()
+    caster.deactivate_valves()
 
 
 
@@ -2584,7 +2567,6 @@ class Testing(object):
     other functionality should remain unchanged"""
     self.database = database
     self.caster = caster
-    self.actions = actions
     self.userInterface = userInterface
 
 
@@ -2607,7 +2589,6 @@ class WebInterface(object):
 
     self.database = database
     self.caster = caster
-    self.actions = actions
 
 
   def __enter__(self):
@@ -2628,13 +2609,12 @@ Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
 
 
-  DebugMode = True
+  DebugMode = False
 
   database = Database('database/monotype.db')
   caster = Monotype('mkart-cc', database)
-  actions = Actions(caster)
-  userInterface = TextUserInterface(actions)
+  userInterface = TextUserInterface(caster)
 
 
-  with database, caster, actions, userInterface:
+  with database, caster, userInterface:
     userInterface.consoleUI()
