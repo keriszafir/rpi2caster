@@ -3,13 +3,39 @@
 """rpi2caster - control a Monotype composition caster with Raspberry Pi.
 
 Monotype composition caster & keyboard paper tower control program.
-The program reads a "ribbon" file, then waits for the user to start
-casting or punching the paper tape. In the casting mode, during each
-machine cycle, the photocell is lit (high state) or obscured (low).
-When high, the program reads a line from ribbon and turns on
-the solenoid valves respective to the Monotype control codes.
-After the photocell is lit (low state on input), the valves are
-turned off and the program moves on to the next line."""
+
+This program sends signals to the solenoid valves connected to the
+composition caster's (or keyboard's) paper tower. When casting,
+the program uses methods of the Monotype class and waits for the machine
+to send feedback (i.e. an "air bar down" signal), then turns on
+a group of valves. On the "air bar up" signal, valves are turned off and
+the program reads another code sequence, just like the original paper
+tower.
+
+In "punching" mode, the program sends code sequences to the paper tower
+(controlled by valves as well) in arbitrary time intervals, and there is
+no machine feedback.
+
+rpi2caster can also:
+-cast a user-specified number of sorts from a matrix with given
+coordinates (the "pump on", "pump off" and "line to the galley"
+code sequences will be issued automatically),
+-test all the valves, pneumatic connections and control mechanisms in a
+caster (i.e. pinblocks, 0005/S/0075 mechs, unit-adding & unit-shift valves
+and attachments), line by line,
+-send a user-defined combination of signals for a time as long as the user
+desires - just like piercing holes in a piece of ribbon and clamping the
+air bar down.
+
+During casting, the program automatically detects the machine movement,
+so no additional actions on user's part are required.
+
+In the future, the program will have an "emergency stop" feature.
+When an interrupt on a certain Raspberry Pi's GPIO is detected, the program
+stops sending codes to the caster and sends a 0005 combination instead.
+The pump is immediately stopped.
+"""
+
 
 """Typical libs, used by most routines:"""
 import sys
@@ -57,12 +83,27 @@ DebugMode = False
 class Database(object):
   """Database(databasePath):
 
-  Read/write data for casters, interfaces, diecases, matrices and wedges
-  from/to designated sqlite3 database.
+  A class containing all methods related to storing, retrieving
+  and deleting data from a SQLite3 database used for config.
+
+  We're using database because it's easy to access and modify with
+  third-party programs (like sqlite, sqlitebrowser or a Firefox plugin),
+  and there will be lots of data to store: diecase (matrix case)
+  properties, diecase layouts, wedge unit values, caster and interface
+  settings (although we may move them to config files - they're "system"
+  settings best left default, instead of "foundry" settings the user has
+  to set up before being able to cast, based on their type foundry's
+  inventory, which varies from one place to another).
+
+  Methods here are for reading/writing data for diecases, matrices,
+  wedges (and casters & interfaces) from/to designated sqlite3 database.
 
   Default database path is ./database/monotype.db - but you can
   override it by instantiating this class with a different name
-  as parameter.
+  passed as an argument. It is necessary that the user who's running
+  this program for setup has write access to the database file;
+  read access is enough for normal operation.
+  Usually you run setup with sudo.
   """
 
   def __init__(self, databasePath='database/monotype.db'):
@@ -1430,11 +1471,18 @@ class MonotypeConfiguration(object):
     pass
 
 
+
 class Monotype(object):
   """Monotype(casterName, database):
 
   A class which stores all methods related to the interface and
-  caster itself."""
+  caster itself.
+
+  This class MUST be instantiated with a caster name, and a
+  database object.
+
+  No static methods or class methods here.
+  """
 
   def __init__(self, casterName, database):
     """__init__(casterName, database):
@@ -1839,8 +1887,8 @@ class MonotypeSimulation(object):
   to the machine.
   """
 
-  def __init__(self):
-    pass
+  def __init__(self, casterName, database):
+    print 'In real world, you would now use caster called ', casterName
 
   def __enter__(self):
     """Instantiation:
@@ -2009,7 +2057,7 @@ class Actions(object):
 
 
   @staticmethod
-  def cast_composition(filename):
+  def cast_composition(caster, filename):
     """ Composition casting routine. The input file is read backwards -
     last characters are cast first, after setting the justification."""
 
@@ -2063,8 +2111,8 @@ class Actions(object):
 
 
   @staticmethod
-  def punch_composition(filename):
-    """punch_composition(filename):
+  def punch_composition(caster, filename):
+    """punch_composition(caster, filename):
 
     When punching, the input file is read forwards. An additional line
     (O+15) is switched on for operating the paper tower, if less than
@@ -2125,8 +2173,8 @@ class Actions(object):
 
 
   @staticmethod
-  def line_test():
-    """line_test():
+  def line_test(caster):
+    """line_test(caster):
 
     Tests all valves and composition caster's inputs to check
     if everything works and is properly connected. Signals will be tested
@@ -2157,8 +2205,8 @@ class Actions(object):
 
 
   @staticmethod
-  def cast_sorts():
-    """cast_sorts():
+  def cast_sorts(caster):
+    """cast_sorts(caster):
 
     Sorts casting routine, based on the position in diecase.
     Ask user about the diecase row & column, as well as number of sorts.
@@ -2189,7 +2237,7 @@ class Actions(object):
     if len(parsedSignals) == 0 and signals != ' ':
       print('\nRe-enter the sequence')
       time.sleep(1)
-      self.cast_sorts()
+      cast_sorts()
     n = raw_input(
                   '\nHow many sorts do you want to cast? (default: 10) '
                  )
@@ -2244,11 +2292,11 @@ class Actions(object):
         caster.send_signals_to_caster(['0005'])
 
       elif choice.lower() == 'r':
-        self.cast_sorts()
+        cast_sorts()
       elif choice.lower() == 'm':
         pass
       elif choice.lower() == 'e':
-        caster.cleanup()
+        caster.deactivate_valves()
         exit()
 
     """Ask what to do after casting"""
@@ -2274,7 +2322,7 @@ class Actions(object):
 
 
   @staticmethod
-  def send_combination():
+  def send_combination(caster):
     """This function allows us to give the program a specific combination
     of Monotype codes, and will keep the valves on until we press return
     (useful for calibration). It also checks the signals' validity"""
@@ -2303,20 +2351,20 @@ class Actions(object):
 
 
 
-
 class TextUserInterface(object):
-  """TextUserInterface(database, caster, actions):
+  """TextUserInterface(caster):
 
-  Use this class for text-based console user interface.
+  Use this class for creating a text-based console user interface.
 
-  Database, caster and actions objects need to be created earlier
-  before instantiating this class.
+  A caster object must be created before instantiating this class.
 
   Suitable for controlling a caster from the local terminal or via SSH,
   supports UTF-8 too.
   """
 
   def __init__(self, caster):
+    """On instantiating, we must specify which caster to use:"""
+    self.caster = caster
     pass
 
 
@@ -2362,7 +2410,7 @@ class TextUserInterface(object):
       exit()
     finally:
       print('Goodbye!')
-      caster.deactivate_valves()
+      self.caster.deactivate_valves()
 
 
   @staticmethod
@@ -2480,8 +2528,7 @@ class TextUserInterface(object):
       return ''
 
 
-  @staticmethod
-  def debug_notice():
+  def debug_notice(self):
     """Prints a notice if the program is in debug mode:"""
     if DebugMode:
       return('\n\nThe program is now in debugging mode!')
@@ -2507,11 +2554,11 @@ class TextUserInterface(object):
 
     commands = {
                 1 : 'self.inputFileName = self.enter_filename()',
-                2 : 'Actions.cast_composition(self.inputFileName)',
-                3 : 'Actions.punch_composition(self.inputFileName)',
-                4 : 'Actions.cast_sorts()',
-                5 : 'Actions.line_test()',
-                6 : 'Actions.send_combination()',
+                2 : 'Actions.cast_composition(self.caster, self.inputFileName)',
+                3 : 'Actions.punch_composition(self.caster, self.inputFileName)',
+                4 : 'Actions.cast_sorts(self.caster)',
+                5 : 'Actions.line_test(self.caster)',
+                6 : 'Actions.send_combination(self.caster)',
                 0 : 'exit()'
                }
 
@@ -2551,7 +2598,7 @@ class TextUserInterface(object):
 
   def __exit__(self, *args):
     """On exiting, turn all the valves off."""
-    caster.deactivate_valves()
+    self.caster.deactivate_valves()
 
 
 
@@ -2562,7 +2609,7 @@ class Testing(object):
   Certain functions referring to the caster will be replaced with
   placeholder methods from the MonotypeSimulation class.
   """
-  def __init__(self, database, caster, actions, userInterface):
+  def __init__(self, database, caster, userInterface):
     """Instantiate a caster simulator object instead of a real caster;
     other functionality should remain unchanged"""
     self.database = database
@@ -2608,13 +2655,9 @@ class WebInterface(object):
 Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
 
-
-  DebugMode = False
-
   database = Database('database/monotype.db')
   caster = Monotype('mkart-cc', database)
   userInterface = TextUserInterface(caster)
-
 
   with database, caster, userInterface:
     userInterface.consoleUI()
