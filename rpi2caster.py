@@ -1897,27 +1897,24 @@ class MonotypeSimulation(object):
     nor interrupt polling files We'll use substitute routines that
     emulate caster-related actions.
     """
-    raw_input(
-              'Testing rpi2caster without an actual caster or interface. '
-               'Debug mode ON.'
-               )
-    global DebugMode
+    print('Testing rpi2caster without an actual caster or interface. ')
+    raw_input('Press [ENTER] to continue...')
     DebugMode = True
     return self
 
 
-  def send_signals_to_caster(self, signals, machineTimeout):
+  def send_signals_to_caster(self, signals, machineTimeout=5):
     """Just send signals, as we don't have a photocell"""
-    raw_input('Sensor ON - press [ENTER]')
+    raw_input('Press [ENTER] to simulate sensor going ON')
     self.activate_valves(signals)
-    raw_input('Sensor OFF - press [ENTER]')
+    raw_input('Press [ENTER] to simulate sensor going OFF')
     self.deactivate_valves()
 
 
   def activate_valves(self, signals):
     """If there are any signals, print them out"""
     if len(signals) != 0:
-      print('The valves: ',' '.join(signals),' would be activated now.')
+      print 'The valves: ',' '.join(signals),' would be activated now.'
 
 
   def deactivate_valves(self):
@@ -1967,6 +1964,23 @@ class Parsing(object):
   It contains static methods to be called by other functions only.
   You cannot instantiate it.
   """
+
+
+  @staticmethod
+  def read_file(filename):
+    """Open a file with signals, test if it's readable
+    and return its contents:
+    """
+    try:
+      with open(filename, 'r') as ribbon:
+        contents = ribbon.readlines
+        return contents
+    except IOError:
+      raw_input(
+                'Error: The file cannot be read! '
+                '[ENTER] to go back to menu...'
+                )
+      return False
 
 
   @staticmethod
@@ -2061,12 +2075,14 @@ class Actions(object):
     """ Composition casting routine. The input file is read backwards -
     last characters are cast first, after setting the justification."""
 
-    """Open a file with signals"""
-    with open(filename, 'r') as ribbon:
-      contents = ribbon.readlines()
+    """Read the file contents:"""
+    contents = Parsing.read_file(filename)
 
+    """If file read failed, end here:"""
+    if not contents:
+      return False
 
-    """For casting, we need to read the file backwards"""
+    """For casting, we need to read the contents in reversed order:"""
     contents = reversed(contents)
 
     """Display a little explanation:"""
@@ -2119,52 +2135,55 @@ class Actions(object):
     two signals are found in a sequence.
     """
 
-    """Open a file with signals"""
-    with open(filename, 'r') as ribbon:
+    """Read the file contents:"""
+    contents = Parsing.read_file(filename)
+
+    """If file read failed, end here:"""
+    if not contents:
+      return False
+
+    """Wait until the operator confirms.
+
+    We can't use automatic rotation detection like we do in
+    cast_composition, because keyboard's paper tower doesn't run
+    by itself - it must get air into tubes to operate, punches
+    the perforations, and doesn't give any feedback.
+    """
+    print('\nThe combinations of Monotype signals will be displayed '
+              'on screen while the paper tower punches the ribbon.\n')
+    raw_input('\nInput file found. Turn on the air, fit the tape '
+           'on your paper tower and press return to start punching.\n')
+    for line in contents:
 
       """
-      Wait until the operator confirms.
-
-      We can't use automatic rotation detection like we do in
-      cast_composition, because keyboard's paper tower doesn't run
-      by itself - it must get air into tubes to operate, punches
-      the perforations, and doesn't give any feedback.
+      Parse the row, return a list of signals and a comment.
+      Both can have zero or positive length.
       """
-      print('\nThe combinations of Monotype signals will be displayed '
-                'on screen while the paper tower punches the ribbon.\n')
-      raw_input('\nInput file found. Turn on the air, fit the tape '
-             'on your paper tower and press return to start punching.\n')
-      for line in ribbon:
+      signals, comment = Parsing.signals_parser(line)
 
-        """
-        Parse the row, return a list of signals and a comment.
-        Both can have zero or positive length.
-        """
-        signals, comment = Parsing.signals_parser(line)
+      """Print a comment if there is one - positive length"""
+      if len(comment) > 0:
+        print comment
 
-        """Print a comment if there is one - positive length"""
-        if len(comment) > 0:
-          print comment
+      """
+      Punch an empty line, signals with comment, signals with
+      no comment.
 
-        """
-        Punch an empty line, signals with comment, signals with
-        no comment.
+      Don't punch a line with nothing but comments
+      (prevents erroneous O+15's).
+      """
+      if len(comment) == 0 or len(signals) > 0:
 
-        Don't punch a line with nothing but comments
-        (prevents erroneous O+15's).
-        """
-        if len(comment) == 0 or len(signals) > 0:
+        """Determine if we need to turn O+15 on"""
+        if len(signals) < 2:
+          signals += ('O15',)
+        print ' '.join(signals)
+        caster.activate_valves(signals)
 
-          """Determine if we need to turn O+15 on"""
-          if len(signals) < 2:
-            signals += ('O15',)
-          print ' '.join(signals)
-          caster.activate_valves(signals)
-
-          """The pace is arbitrary, let's set it to 200ms/200ms"""
-          time.sleep(0.2)
-          caster.deactivate_valves()
-          time.sleep(0.2)
+        """The pace is arbitrary, let's set it to 200ms/200ms"""
+        time.sleep(0.2)
+        caster.deactivate_valves()
+        time.sleep(0.2)
 
     """After punching is finished, notify the user:"""
     print('\nPunching finished!')
