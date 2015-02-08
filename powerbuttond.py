@@ -4,11 +4,13 @@ import os, sys, time, signal
 global photocellGPIO, shutdownbuttonGPIO, rebootbuttonGPIO, ledGPIO
 
 # initial config, use BCM GPIO numbers
+# the colours are for my prototype; "production"  interfaces will
+# have a PCB directly on top of RPi
 photocellGPIO      = 17    # black, don't confuse with GND!
 shutdownbuttonGPIO = 22    # brown
 rebootbuttonGPIO   = 23    # yellow
 emergencyGPIO      = 24    # not used yet - for future applications
-ledGPIO            = 18     # blue (to be deprecated - GPIO4 is 1Wire)
+ledGPIO            = 18    # blue
 
 def blink(n,speed):
   for i in range(0,n):
