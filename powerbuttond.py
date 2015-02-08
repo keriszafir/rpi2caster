@@ -8,7 +8,7 @@ photocellGPIO      = 17    # black, don't confuse with GND!
 shutdownbuttonGPIO = 22    # brown
 rebootbuttonGPIO   = 23    # yellow
 emergencyGPIO      = 24    # not used yet - for future applications
-ledGPIO            = 4     # blue (to be deprecated - GPIO4 is 1Wire)
+ledGPIO            = 18     # blue (to be deprecated - GPIO4 is 1Wire)
 
 def blink(n,speed):
   for i in range(0,n):
