@@ -2307,7 +2307,7 @@ class Actions(object):
         print('Putting line to the galley...')
         caster.send_signals_to_caster(['0005', '0075'])
         """After casting sorts we need to stop the pump"""
-        print('Putting line to the galley...')
+        print('Stopping the pump...')
         caster.send_signals_to_caster(['0005'])
 
       elif choice.lower() == 'r':
@@ -2427,6 +2427,7 @@ class Actions(object):
     caster.send_signals_to_caster(['0005'])
 
     """Finished. Return to menu."""
+    print('Procedure finished. Compare the lengths and adjust if needed.')
 
 
 
@@ -2450,7 +2451,7 @@ class TextUserInterface(object):
   def __enter__(self):
 
     """Set up an empty ribbon file name first"""
-    self.inputFileName = ''
+    self.ribbonFile = ''
     return self
 
 
@@ -2589,9 +2590,9 @@ class TextUserInterface(object):
 
   def main_menu_additional_info(self):
     """Displays additional info as a main menu footer:"""
-    if self.inputFileName != '':
+    if self.ribbonFile != '':
       return(
-             'Input file name: ' + self.inputFileName
+             'Input file name: ' + self.ribbonFile
             )
 
 
@@ -2621,6 +2622,7 @@ class TextUserInterface(object):
     additional information would not be displayed.
     Instead, recursion is implemented in this function.
     """
+    """Options: {option_name : description}"""
     options = {
                1 : 'Load a ribbon file',
                2 : 'Cast composition',
@@ -2632,15 +2634,16 @@ class TextUserInterface(object):
                0 : 'Exit program'
               }
 
+    """Commands: {option_name : [command_to_execute, pause_on_return]}"""
     commands = {
-                1 : 'self.inputFileName = self.enter_filename()',
-                2 : 'Actions.cast_composition(self.caster, self.inputFileName)',
-                3 : 'Actions.punch_composition(self.caster, self.inputFileName)',
-                4 : 'Actions.cast_sorts(self.caster)',
-                5 : 'Actions.line_test(self.caster)',
-                6 : 'Actions.send_combination(self.caster)',
-                7 : 'Actions.align_wedges(self.caster)',
-                0 : 'exit()'
+                1 : ['self.ribbonFile = self.enter_filename()'],
+                2 : ['Actions.cast_composition(self.caster, self.ribbonFile)'],
+                3 : ['Actions.punch_composition(self.caster, self.ribbonFile)'],
+                4 : ['Actions.cast_sorts(self.caster)'],
+                5 : ['Actions.line_test(self.caster)', True],
+                6 : ['Actions.send_combination(self.caster)', True],
+                7 : ['Actions.align_wedges(self.caster)', True],
+                0 : ['exit()']
                }
 
     choice = TextUserInterface.menu(
@@ -2658,9 +2661,13 @@ class TextUserInterface(object):
               footer = self.main_menu_additional_info()
               )
 
-    exec commands[choice]
 
-    #raw_input('Press Enter to return to main menu...')
+    """Call the function:"""
+    exec commands[choice][0]
+
+    """Check whether to display notice on returning to menu:"""
+    if commands[choice][1]:
+      raw_input('Press Enter to return to main menu...')
     self.main_menu()
 
   @staticmethod
