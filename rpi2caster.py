@@ -2369,6 +2369,52 @@ class Actions(object):
     """End of function"""
 
 
+  @staticmethod
+  def align_wedges(caster, spacePosition='G5'):
+    """align_wedges(caster, spacePosition='G5'):
+
+    Allows to align the justification wedges so that when you're
+    casting a 9-unit character with the S-needle at 0075:3 and 0005:8
+    (neutral position), the  width is the same.
+
+    It works like this:
+    1. 0075 - turn the pump on,
+    2. cast 10 spaces from the specified matrix (default: G9),
+    3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
+    4. cast 10 spaces with the S-needle from the same matrix,
+    5. put the line to the galley, then 0005 to turn the pump off.
+    """
+
+    """Parse the signals:"""
+    signals = Parsing.signals_parser(spacePosition)[0]
+
+    """Pump on:"""
+    caster.send_signals_to_caster(['0075'])
+
+    """Now cast some spaces:"""
+    for n in range(10):
+      caster.send_signals_to_caster(signals)
+
+    """Add the S signals to the combination:"""
+    signals.append('S')
+
+    """Put the line to the galley, set both wedges to 8:"""
+    caster.send_signals_to_caster(['0005', '0075', '8'])
+
+    """Set the 0075 wedge to 3 and turn the pump on:"""
+    caster.send_signals_to_caster(['0075', '3'])
+
+    """Cast the spaces with the S needle:"""
+    caster.send_signals_to_caster(signals)
+
+    """Line to the galley:"""
+    caster.send_signals_to_caster(['0005', '0075'])
+
+    """Pump off:"""
+    caster.send_signals_to_caster(['0005'])
+
+
+
 
 class TextUserInterface(object):
   """TextUserInterface(caster):
@@ -2568,6 +2614,7 @@ class TextUserInterface(object):
                4 : 'Cast sorts',
                5 : 'Test the valves and pinblocks',
                6 : 'Lock the caster on a specified diecase position',
+               7 : 'Calibrate the 0005 and 0075 wedges',
                0 : 'Exit program'
               }
 
@@ -2578,6 +2625,7 @@ class TextUserInterface(object):
                 4 : 'Actions.cast_sorts(self.caster)',
                 5 : 'Actions.line_test(self.caster)',
                 6 : 'Actions.send_combination(self.caster)',
+                7 : 'Actions.align_wedges(self.caster)',
                 0 : 'exit()'
                }
 
