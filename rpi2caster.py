@@ -2370,8 +2370,8 @@ class Actions(object):
 
 
   @staticmethod
-  def align_wedges(caster, spacePosition='G5'):
-    """align_wedges(caster, spacePosition='G5'):
+  def align_wedges(caster, space='G5'):
+    """align_wedges(caster, space='G5'):
 
     Allows to align the justification wedges so that when you're
     casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -2385,46 +2385,32 @@ class Actions(object):
     5. put the line to the galley, then 0005 to turn the pump off.
     """
 
-    """Parse the signals:"""
-    signals = Parsing.signals_parser(spacePosition)[0]
-
     """Print some info for the user:"""
     print('Transfer wedge calibration:\n\n'
           'This function will cast 10 spaces, then set the correction '
           'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
           'S-needle. You then have to compare the length of these two '
-          'sets of spaces. \nIf they are identical, all is OK. '
+          'sets. \nIf they are identical, all is OK. '
           'If not, you have to adjust the 52D wedge.\n\n'
           'Turn on the machine...')
 
     """Don't start until the machine is running:"""
     caster.detect_rotation()
 
-    """Pump on:"""
-    caster.send_signals_to_caster(['0075'])
+    combinations = (
+                    ['0075'] + [space] * 10 + ['0075 0005 8'] + ['0075 3'] +
+                    [space + 'S'] * 10 + ['0075 0005'] + ['0005']
+                   )
 
-    """Now cast some spaces:"""
-    for n in range(10):
-      caster.send_signals_to_caster(signals)
+    for sequence in combinations:
+      """Make a list out of the strings:"""
+      sequence = Parsing.signals_parser(sequence)[0]
 
-    """Add the S signals to the combination:"""
-    signals.append('S')
+      """Display the sequence on screen:"""
+      print(' '.join(sequence))
 
-    """Put the line to the galley, set both wedges to 8:"""
-    caster.send_signals_to_caster(['0005', '0075', '8'])
-
-    """Set the 0075 wedge to 3 and turn the pump on:"""
-    caster.send_signals_to_caster(['0075', '3'])
-
-    """Cast the spaces with the S needle:"""
-    for n in range(10):
-      caster.send_signals_to_caster(signals)
-
-    """Line to the galley:"""
-    caster.send_signals_to_caster(['0005', '0075'])
-
-    """Pump off:"""
-    caster.send_signals_to_caster(['0005'])
+      """Cast the sequence:"""
+      caster.send_signals_to_caster(sequence)
 
     """Finished. Return to menu."""
     print('Procedure finished. Compare the lengths and adjust if needed.')
