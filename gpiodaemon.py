@@ -38,10 +38,10 @@ def reboot(channel):
   shutdown(rebootbuttonGPIO, 'reboot')
 
 
-def shutdownButton():
+def wiringpi.PI_THREAD(shutdownButton):
   wiringpi.wiringPiISR(shutdownbuttonGPIO, 2, poweroff)
 
-def rebootButton():
+def wiringpi.PI_THREAD(shutdownButton):
   wiringpi.wiringPiISR(rebootbuttonGPIO, 2, reboot)
 
 
@@ -68,6 +68,7 @@ def gpio_setup():
   """Internal pull-up for buttons:"""
   wiringpi.pullUpDnControl(shutdownbuttonGPIO, 2)
   wiringpi.pullUpDnControl(rebootbuttonGPIO, 2)
+
   """LED output:"""
   wiringpi.pinMode(ledGPIO, 1)
   wiringpi.digitalWrite(ledGPIO, 1)
@@ -107,8 +108,8 @@ if __name__ == '__main__':
   signal.signal(signal.SIGTERM, signal_handler)
 
   """Do a threaded callback when one of buttons is pressed:"""
-  wiringpi.piThreadCreate('shutdownButton')
-  wiringpi.piThreadCreate('rebootButton')
+  wiringpi.piThreadCreate(shutdownButton)
+  wiringpi.piThreadCreate(rebootButton)
 
 
   # Do nothing and wait for interrupt from the reboot/shutdown buttons:
