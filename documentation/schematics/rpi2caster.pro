@@ -1,4 +1,4 @@
-update=nie, 8 lut 2015, 19:52:40
+update=pon, 9 lut 2015, 01:13:39
 version=1
 last_client=eeschema
 [cvpcb]
@@ -85,3 +85,5 @@ LibName28=atmel
 LibName29=contrib
 LibName30=valves
 LibName31=vreg
+LibName32=DS1882
+LibName33=maxim

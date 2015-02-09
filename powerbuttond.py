@@ -9,7 +9,7 @@ global photocellGPIO, shutdownbuttonGPIO, rebootbuttonGPIO, ledGPIO
 photocellGPIO      = 17    # black, don't confuse with GND!
 shutdownbuttonGPIO = 22    # brown
 rebootbuttonGPIO   = 23    # yellow
-emergencyGPIO      = 24    # not used yet - for future applications
+emergencyGPIO      = 24    # not used yet
 ledGPIO            = 18    # blue
 
 def blink(n,speed):
