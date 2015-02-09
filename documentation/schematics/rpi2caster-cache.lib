@@ -1,4 +1,4 @@
-EESchema-LIBRARY Version 2.3  Date: pon, 9 lut 2015, 02:08:26
+EESchema-LIBRARY Version 2.3  Date: pon, 9 lut 2015, 10:01:14
 #encoding utf-8
 #
 # CONN_2
@@ -133,6 +133,26 @@ S -40 20 40 -20 0 1 0 F
 P 4 0 1 0  60 30  60 -40  -60 -40  -60 30 N
 X ~ 1 0 100 80 D 40 40 1 1 P
 X ~ 2 0 -100 60 U 40 40 1 1 P
+ENDDRAW
+ENDDEF
+#
+# Csmall
+#
+DEF Csmall C 0 10 N Y 1 F N
+F0 "C" 25 50 30 H V L CNN
+F1 "Csmall" 25 -50 30 H V L CNN
+F2 "~" 0 0 60 H V C CNN
+F3 "~" 0 0 60 H V C CNN
+$FPLIST
+ SM*
+ C?
+ C1-1
+$ENDFPLIST
+DRAW
+P 2 0 1 0  50 -10  -50 -10 N
+P 2 0 1 0  50 10  -50 10 N
+X ~ 1 0 100 90 D 40 40 1 1 P
+X ~ 2 0 -100 90 U 40 40 1 1 P
 ENDDRAW
 ENDDEF
 #

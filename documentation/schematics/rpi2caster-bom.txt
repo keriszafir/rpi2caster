@@ -1,0 +1,38 @@
+C1               1000u/40V    
+C2               1000u/10V
+C3, C4           100n/63V   
+D1, D2           LED R
+D3               LED G       
+D4               LED Y         
+L1               100uH       
+P1               2-pole screw terminal       
+P2               20x2 goldpin header
+P3               20x2 goldpin
+P4               4x1 goldpin      
+P5               7x1 goldpin     
+P6               2-pole screw terminal       
+P7               4x1 goldpin      
+P8               7x1 goldpin     
+P9               10xR common B+ LED bar display
+P10              10xR common B+ LED bar display
+P11              4x1 goldpin      
+P12              40x2 goldpin
+P13              10xR common B+ LED bar display  
+P14              2-pole screw terminal       
+P15              10xR common B+ LED bar display
+Q2               BC557       
+R1, R2, R4, R6, 
+R7, R11...R45    10k         
+R3               3k3      
+R5               330R
+R8, R9, R13      10k         
+R10              3k3         
+R11              22k         
+R12              470R
+SW1, SW2         SPST pushbutton  
+SW3              emergency stop button, SPST
+U1               LM2576      
+U2, U3           MCP23017 
+U4...U7          ULN2803  
+U8               4x1 goldpin   
+
