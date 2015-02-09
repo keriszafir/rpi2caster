@@ -2388,6 +2388,18 @@ class Actions(object):
     """Parse the signals:"""
     signals = Parsing.signals_parser(spacePosition)[0]
 
+    """Print some info for the user:"""
+    print('Transfer wedge calibration:\n\n'
+          'This function will cast 10 spaces, then set the correction '
+          'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
+          'S-needle. You then have to compare the length of these two '
+          'sets of spaces. \nIf they are identical, all is OK. '
+          'If not, you have to adjust the 52D wedge.\n\n'
+          'Turn on the machine...')
+
+    """Don't start until the machine is running:"""
+    caster.detect_rotation()
+
     """Pump on:"""
     caster.send_signals_to_caster(['0075'])
 
@@ -2405,7 +2417,8 @@ class Actions(object):
     caster.send_signals_to_caster(['0075', '3'])
 
     """Cast the spaces with the S needle:"""
-    caster.send_signals_to_caster(signals)
+    for n in range(10):
+      caster.send_signals_to_caster(signals)
 
     """Line to the galley:"""
     caster.send_signals_to_caster(['0005', '0075'])
@@ -2413,6 +2426,7 @@ class Actions(object):
     """Pump off:"""
     caster.send_signals_to_caster(['0005'])
 
+    """Finished. Return to menu."""
 
 
 
