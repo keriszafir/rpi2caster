@@ -2655,8 +2655,11 @@ class TextUserInterface(object):
     exec commands[choice][0]
 
     """Check whether to display notice on returning to menu:"""
-    if commands[choice][1]:
-      raw_input('Press Enter to return to main menu...')
+    try:
+      if commands[choice][1]:
+        raw_input('Press Enter to return to main menu...')
+      except IndexError:
+        pass
     self.main_menu()
 
   @staticmethod
