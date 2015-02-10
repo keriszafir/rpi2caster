@@ -43,6 +43,9 @@ import os
 import time
 import string
 
+"""Config parser for reading the interface settings"""
+from ConfigParser import SafeConfigParser
+
 """Used for serializing lists stored in database, and for communicating
 with the web application (in the future):"""
 try:
