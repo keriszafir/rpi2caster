@@ -1975,8 +1975,11 @@ class Parsing(object):
     and return its contents:
     """
     try:
-      with open(filename, 'r') as ribbon:
-        contents = ribbon.readlines
+      contents = []
+      with open(filename, 'r') as inputFile:
+        contentsGenerator = inputFile.readlines()
+        for line in contentsGenerator:
+          contents.append(line)
         return contents
     except IOError:
       raw_input(
