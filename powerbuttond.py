@@ -6,8 +6,8 @@ global photocellGPIO, shutdownbuttonGPIO, rebootbuttonGPIO, ledGPIO
 ledGPIO = 0
 shutdownbuttonGPIO = 22
 rebootbuttonGPIO = 0
-photocellGPIO = 0
-emergencyGPIO = 0
+photocellGPIO = 17
+emergencyGPIO = 24
 
 """
 # initial config, use BCM GPIO numbers
@@ -37,7 +37,6 @@ def get_control_settings():
   except (ConfigParser.NoSectionError, TypeError, ValueError):
     """Return default parameters in case they can't be read from file:
     """
-    print 'Cannot read from file...'
     return [18, 22, 23]
 
 def blink(n,speed):
@@ -76,7 +75,6 @@ def shutdown(buttonGPIO, mode):
 try:
 
   [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO] = get_control_settings()
-  print [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO]
 # Set up the GPIO for button and green LED:
   gpio.setmode(gpio.BCM)
   gpio.setwarnings(False)
