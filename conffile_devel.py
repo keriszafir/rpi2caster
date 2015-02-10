@@ -96,23 +96,3 @@ def get_interface_settings(interfaceID=0):
   except (ValueError, TypeError):
     raise
     return False
-
-def get_control_settings():
-  """Read the GPIO settings from conffile, or revert to defaults
-  if they're not found:
-  """
-  config = ConfigParser.SafeConfigParser()
-  config.read('/etc/rpi2caster.conf')
-  try:
-    ledGPIO = config.get('Control', 'led_gpio')
-    shutdownbuttonGPIO = config.get('Control', 'shutdown_gpio')
-    rebootbuttonGPIO = config.get('Control', 'reboot_gpio')
-    ledGPIO = int(ledGPIO)
-    shutdownbuttonGPIO = int(shutdownbuttonGPIO)
-    rebootbuttonGPIO = int(rebootbuttonGPIO)
-    return [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO]
-  except (ConfigParser.NoSectionError, TypeError, ValueError):
-    """Return default parameters in case they can't be read from file:
-    """
-    print 'Cannot read from file...'
-    return [18, 22, 23]

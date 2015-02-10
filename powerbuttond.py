@@ -3,6 +3,11 @@ import RPi.GPIO as gpio
 import ConfigParser
 import os, sys, time, signal
 global photocellGPIO, shutdownbuttonGPIO, rebootbuttonGPIO, ledGPIO
+ledGPIO = 0
+shutdownbuttonGPIO = 22
+rebootbuttonGPIO = 0
+photocellGPIO = 0
+emergencyGPIO = 0
 
 """
 # initial config, use BCM GPIO numbers
@@ -69,7 +74,9 @@ def shutdown(buttonGPIO, mode):
     sys.exit()
 
 try:
-  get_control_settings()
+
+  [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO] = get_control_settings()
+  print [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO]
 # Set up the GPIO for button and green LED:
   gpio.setmode(gpio.BCM)
   gpio.setwarnings(False)
