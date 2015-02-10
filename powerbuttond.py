@@ -1,8 +1,10 @@
 #!/usr/bin/python
 import RPi.GPIO as gpio
+import ConfigParser
 import os, sys, time, signal
 global photocellGPIO, shutdownbuttonGPIO, rebootbuttonGPIO, ledGPIO
 
+"""
 # initial config, use BCM GPIO numbers
 # the colours are for my prototype; "production"  interfaces will
 # have a PCB directly on top of RPi
@@ -11,6 +13,27 @@ shutdownbuttonGPIO = 22    # brown
 rebootbuttonGPIO   = 23    # yellow
 emergencyGPIO      = 24    # not used yet
 ledGPIO            = 18    # blue
+"""
+
+def get_control_settings():
+  """Read the GPIO settings from conffile, or revert to defaults
+  if they're not found:
+  """
+  config = ConfigParser.SafeConfigParser()
+  config.read('/etc/rpi2caster.conf')
+  try:
+    ledGPIO = config.get('Control', 'led_gpio')
+    shutdownbuttonGPIO = config.get('Control', 'shutdown_gpio')
+    rebootbuttonGPIO = config.get('Control', 'reboot_gpio')
+    ledGPIO = int(ledGPIO)
+    shutdownbuttonGPIO = int(shutdownbuttonGPIO)
+    rebootbuttonGPIO = int(rebootbuttonGPIO)
+    return [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO]
+  except (ConfigParser.NoSectionError, TypeError, ValueError):
+    """Return default parameters in case they can't be read from file:
+    """
+    print 'Cannot read from file...'
+    return [18, 22, 23]
 
 def blink(n,speed):
   for i in range(0,n):
@@ -46,7 +69,7 @@ def shutdown(buttonGPIO, mode):
     sys.exit()
 
 try:
-
+  get_control_settings()
 # Set up the GPIO for button and green LED:
   gpio.setmode(gpio.BCM)
   gpio.setwarnings(False)

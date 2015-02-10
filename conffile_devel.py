@@ -116,5 +116,3 @@ def get_control_settings():
     """
     print 'Cannot read from file...'
     return [18, 22, 23]
-
-print get_interface_settings()
