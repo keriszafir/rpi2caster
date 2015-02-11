@@ -1675,16 +1675,18 @@ class Monotype(object):
   No static methods or class methods here.
   """
 
-  def __init__(self, casterName, database):
+  def __init__(self, casterName, confFilePath='/etc/rpi2caster.conf'):
     """__init__(casterName, database):
 
     Creates a caster object for a given caster name.
     Uses a database object obtained from upstream.
-    Looks the caster up in a database and gets its parameters,
-    as well as interface parameters.
+    Looks the caster up in a config file and gets its parameters,
+    then looks up the interface parameters.
     """
     self.casterName = casterName
-    self.database = database
+    self.interfaceID = 0
+    self.config = ConfigParser.SafeConfigParser()
+    self.config.read(confFilePath)
 
 
   def __enter__(self):
@@ -1700,51 +1702,45 @@ class Monotype(object):
     """Setup routine:
 
     After the class is instantiated, this method reads caster data
-    from database and fetches a list of caster parameters: [serialNumber,
-    casterName, casterType, justification, diecaseFormat, interfaceID].
-    """
-    casterParameters = self.database.caster_by_name(self.casterName)
+    from database and fetches a list of caster parameters:
+    [diecaseFormat, unitAdding, interfaceID].
 
+    Unpack (assign to list items) the obtained parameters.
+    The parameters will affect the whole object created from this class.
     """
-    Get casting interface ID from the parameters;
-    we need the last item returned, hence [-1]
-    """
-    interfaceID = casterParameters[-1]
+    [self.unitAdding, self.diecaseSystem,
+    self.interfaceID] = self.get_caster_settings()
 
     """When debugging, display all caster info:"""
     if DebugMode:
-      print 'Caster parameters: ', casterParameters
-      print 'Interface ID: ', interfaceID
+      print 'Caster parameters:'
+      print 'Diecase system: ', self.diecaseSystem
+      print 'Has unit-adding? : ', self.unitAdding
+      print 'Interface ID: ', self.interfaceID
 
-    """
-    Unpack (assign to list items) the obtained parameters.
-    The parameters will affect the whole object
-    created with this class.
-    """
-    [self.casterID, self.casterSerial, self.casterName,
-    self.casterType, self.unitAdding, self.diecaseSystem,
-    self.interfaceID] = casterParameters
 
     """
     Then, the interface ID is looked up in the database, and interface
-    parameters are known: [interfaceID, interfaceName, emergencyGPIO,
-    photocellGPIO, mcp0Address, mcp1Address, pinBase]
+    parameters are obtained:
+
+    [emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase]
+
+    Unpack (assign to list items) the obtained parameters.
+    The parameters will affect the whole object created with this class.
     """
-    interfaceParameters = self.database.get_interface(interfaceID)
+    [self.emergencyGPIO, self.photocellGPIO,
+    self.mcp0Address, self.mcp1Address,
+    self.pinBase] = self.get_interface_settings()
 
     """Print the parameters for debugging:"""
     if DebugMode:
-      print 'Interface parameters: ', interfaceParameters
+      print 'Interface parameters: '
+      print 'Emergency button GPIO: ', self.emergencyGPIO
+      print 'Photocell GPIO: ', self.photocellGPIO
+      print '1st MCP23017 I2C address: ', self.mcp0Address
+      print '2nd MCP23017 I2C address: ', self.mcp1Address
+      print 'MCP23017 pin base for GPIO numbering: ', self.pinBase
 
-    """
-    Unpack (assign to list items) the obtained parameters.
-    The parameters will affect the whole object
-    created with this class.
-    """
-    [self.interfaceID, self.interfaceName,
-    self.emergencyGPIO, self.photocellGPIO,
-    self.mcp0Address, self.mcp1Address,
-    self.pinBase] = interfaceParameters
 
 
     """On init, do the input configuration:
@@ -1895,12 +1891,67 @@ class Monotype(object):
       Normally, user goes directly to the main menu."""
       raw_input('Press Enter to continue... ')
 
-  def get_interface_settings(
-                             interfaceID=0,
-                             confFilePath='/etc/rpi2caster.conf'
-                             ):
-    """get_interface_settings(interfaceID=0,
-                              confFilePath='/etc/rpi2caster.conf'):
+
+  def get_caster_settings(self):
+    """get_caster_settings():
+
+    Reads the settings for a caster with self.casterName
+    from the config file (where it is represented by a section, whose
+    name is self.casterName).
+
+    The parameters returned are:
+    [diecase_system, unit_adding, interface_id]
+
+    where:
+    diecase_system - caster's diecase layout and a method of
+                     accessing 16th row, if applicable:
+                         norm15 - old 15x15,
+                         norm17 - 15x17 NI, NL,
+                         hmn    - 16x17 HMN (rare),
+                         kmn    - 16x17 KMN (rare),
+                         shift  - 16x17 unit-shift (most modern).
+    unit_adding [0, 1] - whether the machine has a unit-adding attachment,
+    interface_id [0, 1, 2, 3] - ID of the interface connected to the caster
+
+    """
+
+    try:
+      """Get caster parameters from conffile."""
+
+      unitAdding = self.config.get(self.casterName, 'unit_adding')
+      diecaseSystem = self.config.get(self.casterName, 'diecase_system')
+      interfaceID = self.config.get(self.casterName, 'interface_id')
+
+    except ConfigParser.NoSectionError:
+      """
+      If the caster is not configured, let's set up some sensible
+      default parameters so that casting is possible at all:
+
+      unit adding - off
+      diecase - 15x17
+      interface ID 0
+      """
+      unitAdding = 0
+      diecaseSystem = 'norm17'
+      interfaceID = 0
+
+    try:
+      """Now build a list of caster parameters that will be returned...
+      If the values cannot be converted to int, the function will
+      return False.
+      """
+      return [bool(unitAdding), diecaseSystem, int(interfaceID)]
+
+    except (ValueError, TypeError):
+      print('Incorrect interface parameters!')
+      if DebugMode:
+        raise
+      return False
+      exit()
+
+
+  def get_interface_settings(self):
+    """get_interface_settings():
 
     Reads a configuration file and gets interface parameters.
 
@@ -1957,19 +2008,19 @@ class Monotype(object):
     2              131         (pinBase1 + 32)
     3              164         (pinBase2 + 32)
 
+
+    The interface ID is an attribute of an object.
     """
-    interfaceName = 'Interface' + str(interfaceID)
-    config = ConfigParser.SafeConfigParser()
-    config.read(confFilePath)
+    interfaceName = 'Interface' + str(self.interfaceID)
     try:
       """Check if the interface is active, else return False"""
       trueAliases = ['true', '1', 'on', 'yes']
-      if config.get(interfaceName, 'active').lower() in trueAliases:
-        emergencyGPIO = config.get(interfaceName, 'emergency_gpio')
-        photocellGPIO = config.get(interfaceName, 'photocell_gpio')
-        mcp0Address = config.get(interfaceName, 'mcp0_address')
-        mcp1Address = config.get(interfaceName, 'mcp1_address')
-        pinBase = config.get(interfaceName, 'pin_base')
+      if self.config.get(interfaceName, 'active').lower() in trueAliases:
+        emergencyGPIO = self.config.get(interfaceName, 'emergency_gpio')
+        photocellGPIO = self.config.get(interfaceName, 'photocell_gpio')
+        mcp0Address = self.config.get(interfaceName, 'mcp0_address')
+        mcp1Address = self.config.get(interfaceName, 'mcp1_address')
+        pinBase = self.config.get(interfaceName, 'pin_base')
 
       else:
         print('Interface ID=', interfaceID, 'is deactivated. Exiting...')
@@ -2003,7 +2054,7 @@ class Monotype(object):
         with having the desired interface configured):
         """
         print('The desired interface is not set up in %s' % confFilePath)
-        print('Add a section %s with parameters!' % ('Interface' + interfaceID)
+        print('Add a section %s with parameters!' % ('Interface' + interfaceID))
         exit()
 
     try:
@@ -2013,13 +2064,12 @@ class Monotype(object):
       """
       return [int(emergencyGPIO), int(photocellGPIO),
               int(mcp0Address, 16), int(mcp1Address, 16), int(pinBase)]
-      exit()
 
     except (ValueError, TypeError):
       print('Incorrect interface parameters!')
       if DebugMode:
         raise
-      return False
+      exit()
 
 
   def detect_rotation(self):
@@ -3053,7 +3103,7 @@ Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
 
   database = Database('database/monotype.db')
-  caster = Monotype('mkart-cc', database)
+  caster = Monotype('mkart-cc')
   userInterface = TextUserInterface(caster)
 
   with database, caster, userInterface:
