@@ -44,7 +44,7 @@ import time
 import string
 
 """Config parser for reading the interface settings"""
-from ConfigParser import SafeConfigParser
+import ConfigParser
 
 """Used for serializing lists stored in database, and for communicating
 with the web application (in the future):"""
@@ -80,6 +80,197 @@ except ImportError:
 or thrown to stderr, off by default:"""
 global DebugMode
 DebugMode = False
+
+
+
+class Typesetter(object):
+  """Typesetter:
+
+  This class contains all methods related to typesetting, i.e. converting
+  an input text to a sequence of Monotype codes to be read by the casting
+  interface. This class is to be instantiated, so that all data
+  and buffers are contained within an object and isolated from other
+  typesetting sessions.
+  """
+
+  def __init__(self):
+    pass
+
+
+  def __enter__(self):
+    pass
+
+
+  def calculate_wedges(self, setWidth, units):
+    """calculate_wedges(setWidth, units):
+
+    Calculate the 0005 and 0075 wedge positions based on the unit width
+    difference (positive or negative) for the given set width.
+
+    Since one step of 0075 wedge is 15 steps of 0005, we'll get a total
+    would-be number of 0005 steps, then floor-divide it by 15 to get the
+    0075 steps, and modulo-divide by 15 to get 0005 steps.
+
+    If number of 0075 steps or 0005 steps is 0, we'll set 1 instead,
+    because the wedge cannot have a "0" position.
+
+    The function returns a list: [pos0075, pos0005].
+
+    Maths involved may be a bit daunting, but it's not rocket science...
+    First, we need to derive the width in inches of 1 unit 1 set:
+
+    1p [pica] = 1/6" = 0.1667" (old pica), or alternatively:
+    1p = 0.1660" (new pica - closer to the Fournier system).
+    1p = 12pp [pica-points]. So, 1pp = 1/12p * 1/6["/p] = 1/72".
+
+    In continental Europe, they used ciceros and Didot points:
+    1c = 0.1776"
+    1c = 12D - so, 1D = 0.0148"
+
+    A set number of the type is the width of an em (i.e., widest char).
+    It can, but doesn't have to, be the same as the type size in pp.
+    Set numbers were multiples of 1/4, so we can have 9.75, 10, 11.25 etc.
+
+    For example, 327-12D Times New Roman is 12set (so, it's very close),
+    but condensed type will have a lower set number.
+
+    And 1 Monotype fundamental unit is defined as 1/18em. Thus, the width
+    of 1 unit 1 set = 1/18 pp; 1 unit multi-set = setWidth/18 pp.
+
+    All things considered, let's convert the unit to inches:
+
+    Old pica:
+    W(1u 1set) = 1/18 * 1/72" = 1/1296"
+
+    The width in inches  of a given no of units at a given set size is:
+    W = s * u / 1296
+    (s - set width, u - no of units)
+
+    Now, we go on to explaining what the S-needle does.
+    It's used for modifying (adding/subtracting) the width of a character
+    to make it wider or narrower, if it's needed (for example, looser or
+    tighter spaces when justifying a line).
+
+    When S is disengaged (e.g. G5), the lower transfer wedge (62D)
+    is in action. The justification wedges (10D, 11D) have nothing to do,
+    and the character width depends solely on the matrix's row and its
+    corresponding unit value.
+
+    Suppose we're using a S5 wedge, and the unit values are as follows:
+    row   1 2 3 4 5 6 7 8  9  10 11 12 13 14 15 16
+    units 5 6 7 8 9 9 9 10 10 11 12 13 14 15 18 18
+    (unless unit-shift is engaged)
+
+    The S5 wedge moves with a matrix case, and for row 1, the characters
+    will be 5 units wide. So, the width will be:
+    W(5u) = setWidth * 5/1296 = 0.003858" * setWidth.
+
+    Now, we want to cast the character with the S-needle.
+    Instead of the lower transfer wedge 62D, the upper transfer wedge 52D
+    together with justification wedges 10D & 11D affect the character's
+    width. The 10D is a coarse justification wedge and adds/subtracts
+    0.0075" per step; the 11D is a fine justification wedge and changes
+    width by 0.0005" per step. The wedges can have one of 15 positions.
+
+    Notice that 0.0075 = 15 x 0.0005 (so, 0.0005 at 15 equals 0.0075 at 1).
+    Position 0 or >15 is not possible.S
+
+    Also notice that 0.0005" precision would mean a resolution of 2000dpi -
+    beat that, Hewlett-Packard! :).
+
+    Now, we can divide the character's width in inches by by 0.0005
+    (or multiply by 2000) and we get a number of 0005 wedge steps
+    to cast the character with the S needle. It'll probably be more than
+    15, so we need to floor-divide the number to get 0075 wedge steps,
+    and modulo-divide it to get 0005 steps:
+
+    steps = W * 2000          (round that to integer)
+    steps0075 = steps // 15   (floor-divide)
+    steps0005 = steps % 15    (modulo-divide)
+
+    The equivalent 0005 and 0075 wedge positions for a 5-unit character
+    in the 1st row (if we decide to cast it with the S-needle) will be:
+
+    steps = 5/1296 * 2000 * setWidth
+
+    (so it is proportional to set width).
+    For example, consider the 5 unit 12 set type, and we have:
+
+    steps = 5 * 12 * 2000 / 1296 = 92.6
+    so, steps = 92
+    steps // 15 = 6
+    steps % 15 = 2
+
+    So, the 0075 wedge will be at pos. 6 and 0005 will be at 3.
+
+    If any of the wedge step numbers is 0, set 1 instead (a wedge must
+    be in position 1...15).
+
+
+
+    """
+    steps = 2000/1296 * setWidth * units
+    steps = int(steps)
+    steps0075 = steps // 15
+    steps0005 = steps % 15
+    if not steps0075:
+      steps0075 = 1
+    if not steps0005:
+      steps0005 = 1
+    return [steps0075, steps0005]
+
+
+  def calculate_line_length(self, lineLength, measurement='oldPica'):
+
+    """calculate_line_length(lineLength, measurement='oldPica'):
+
+    Calculates the line length in Monotype fundamental (1-set) units.
+    The "length" parameter is in old-pica (0.1667") by default,
+    but this can be changed with the "measurement" parameter.
+    """
+
+    """Check if the measurement is one of the following:
+    oldPica, newPica, cicero
+    If not, throw an error.
+    """
+
+    inWidth = {
+               'oldPica' : 0.1667,
+               'newPica' : 0.1660,
+               'cicero'  : 0.1776
+              }
+    if measurement not in inWidth:
+      print('Incorrect unit designation!')
+      return False
+
+    """Base em width is a width (in inches) of a single em -
+    which, by the Monotype convention, is defined as 18 units 12 set.
+
+    Use old-pica (0.1667") value for European cicero system;
+    for pica systems, use their respective values.
+    """
+    if measurement == 'cicero':
+      baseEmWidth = inWidth['oldPica']
+    else:
+      baseEmWidth = inWidth[measurement]
+
+    """To calculate the inch width of a fundamental unit (1-unit 1-set),
+    we need to divide the (old or new) pica length in inches by 12*18 = 216:
+    """
+    fuWidth = baseEmWidth / 216
+
+    """Convert the line length in picas/ciceros to inches:"""
+    inLineLength = lineLength * inWidth[measurement]
+
+    """Now, we need to calculate how many units of a given set
+    the row will contain. Round that to an integer and return the result.
+    """
+    unitCount = round(inLineLength / fuWidth)
+    return unitCount
+
+
+  def __exit__(self, *args):
+    pass
 
 
 
