@@ -205,10 +205,8 @@ class Typesetter(object):
 
     If any of the wedge step numbers is 0, set 1 instead (a wedge must
     be in position 1...15).
-
-
-
     """
+
     steps = 2000/1296 * setWidth * units
     steps = int(steps)
     steps0075 = steps // 15
@@ -221,7 +219,6 @@ class Typesetter(object):
 
 
   def calculate_line_length(self, lineLength, measurement='oldPica'):
-
     """calculate_line_length(lineLength, measurement='oldPica'):
 
     Calculates the line length in Monotype fundamental (1-set) units.
@@ -1897,6 +1894,132 @@ class Monotype(object):
 
       Normally, user goes directly to the main menu."""
       raw_input('Press Enter to continue... ')
+
+  def get_interface_settings(
+                             interfaceID=0,
+                             confFilePath='/etc/rpi2caster.conf'
+                             ):
+    """get_interface_settings(interfaceID=0,
+                              confFilePath='/etc/rpi2caster.conf'):
+
+    Reads a configuration file and gets interface parameters.
+
+    If the config file is correct, it returns a list:
+    [emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase]
+
+    emergencyGPIO - BCM number for emergency stop button GPIO
+    photocellGPIO - BCM number for photocell GPIO
+    mcp0Address   - I2C address for 1st MCP23017
+    mcp1Address   - I2C address for 2nd MCP23017
+    pinBase       - pin numbering base for GPIO outputs on MCP23017
+
+    Multiple interfaces attached to a single Raspberry Pi:
+
+    It's possible to use up to four interfaces (i.e. 2xMCP23017, 4xULN2803)
+    for a single Raspberry. It can be used for operating multiple casters,
+    or a caster and a keyboard's paper tower, simultaneously (without
+    detaching a valve block from the paper tower and moving it elsewhere).
+
+    These interfaces should be identified by numbers: 0, 1, 2, 3.
+
+    Each of the MCP23017 chips has to have unique I2C addresses. They are
+    set by pulling the A0, A1, A2 pins up (to 3.3V) or down (to GND).
+    There are 2^3 = 8 possible addresses, and an interface uses two chips,
+    so you can use up to four interfaces.
+
+    It's best to order the MCP23017 chips' addresses ascending, i.e.
+
+    interfaceID    mcp0 pin    mcp1 pin    mcp0     mcp1
+                   A2,A1,A0    A2,A1,A0    addr     addr
+
+    0              000         001         0x20     0x21
+    1              010         011         0x22     0x23
+    2              100         101         0x24     0x25
+    3              110         111         0x26     0x27
+
+    where 0 means the pin is pulled down, and 1 means pin pulled up.
+
+    As for pinBase parameter, it's the wiringPi's way of identifying GPIOs
+    on MCP23017 extenders. WiringPi is an abstraction layer which allows
+    you to control (read/write) pins on MCP23017 just like you do it on
+    typical Raspberry Pi's GPIO pins. Thus you don't have to send bytes
+    to registers.
+    The initial 64 GPIO numbers are reserved for Broadcom SoC, so the lowest
+    pin base you can use is 65. Each interface (2xMCP23017) uses 32 pins.
+
+    If you are using multiple interfaces per Raspberry, you SHOULD
+    assign the following pin bases to each interface:
+
+    interfaceID    pinBase
+
+    0              65
+    1              98          (pinBase0 + 32)
+    2              131         (pinBase1 + 32)
+    3              164         (pinBase2 + 32)
+
+    """
+    interfaceName = 'Interface' + str(interfaceID)
+    config = ConfigParser.SafeConfigParser()
+    config.read(confFilePath)
+    try:
+      """Check if the interface is active, else return False"""
+      trueAliases = ['true', '1', 'on', 'yes']
+      if config.get(interfaceName, 'active').lower() in trueAliases:
+        emergencyGPIO = config.get(interfaceName, 'emergency_gpio')
+        photocellGPIO = config.get(interfaceName, 'photocell_gpio')
+        mcp0Address = config.get(interfaceName, 'mcp0_address')
+        mcp1Address = config.get(interfaceName, 'mcp1_address')
+        pinBase = config.get(interfaceName, 'pin_base')
+
+      else:
+        print('Interface ID=', interfaceID, 'is deactivated. Exiting...')
+        exit()
+
+    except ConfigParser.NoSectionError:
+      """
+      The interface might not be set up in conffile in two cases:
+         -it's a default interface with default GPIO numbers,
+         -it's not a default interface, but it's not configured
+          (missing section in conffile).
+
+      We need to differentiate between those two cases;
+      in first case, we fall back on hard-coded defaults,
+      in second case, we throw an error and exit.
+      """
+      if interfaceID == 0:
+        """Notify the user in debug mode:"""
+        if DebugMode:
+          print(
+                'The interface is not set up in conffile, '
+                'but its ID is 0. Falling back to default settings.'
+               )
+        emergencyGPIO = 18
+        photocellGPIO = 24
+        mcp0Address = 0x20
+        mcp1Address = 0x21
+        pinBase = 65
+      else:
+        """Notify an user and exit (casting would be impossible
+        with having the desired interface configured):
+        """
+        print('The desired interface is not set up in %s' % confFilePath)
+        print('Add a section %s with parameters!' % ('Interface' + interfaceID)
+        exit()
+
+    try:
+      """Now build a list of interface parameters that will be returned...
+      If the values cannot be converted to int, the function will
+      return False.
+      """
+      return [int(emergencyGPIO), int(photocellGPIO),
+              int(mcp0Address, 16), int(mcp1Address, 16), int(pinBase)]
+      exit()
+
+    except (ValueError, TypeError):
+      print('Incorrect interface parameters!')
+      if DebugMode:
+        raise
+      return False
 
 
   def detect_rotation(self):
