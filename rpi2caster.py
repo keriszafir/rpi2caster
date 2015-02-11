@@ -805,7 +805,7 @@ class Monotype(object):
   No static methods or class methods here.
   """
 
-  def __init__(self, casterName, confFilePath='/etc/rpi2caster.conf'):
+  def __init__(self, casterName='Monotype', confFilePath='/etc/rpi2caster.conf'):
     """__init__(casterName, database):
 
     Creates a caster object for a given caster name.
@@ -821,8 +821,6 @@ class Monotype(object):
 
   def __enter__(self):
 
-    if DebugMode:
-      print 'Using caster: ', self.casterName
     self.caster_setup()
     return self
 
@@ -843,10 +841,11 @@ class Monotype(object):
 
     """When debugging, display all caster info:"""
     if DebugMode:
-      print 'Caster parameters:'
+      print 'Using caster: ', self.casterName, '\n'
+      print 'Caster parameters:\n'
       print 'Diecase system: ', self.diecaseSystem
       print 'Has unit-adding? : ', self.unitAdding
-      print 'Interface ID: ', self.interfaceID
+      print '\nInterface ID: ', self.interfaceID
 
 
     """
@@ -864,7 +863,7 @@ class Monotype(object):
 
     """Print the parameters for debugging:"""
     if DebugMode:
-      print 'Interface parameters: '
+      print '\nInterface parameters:\n'
       print 'Emergency button GPIO: ', self.emergencyGPIO
       print 'Photocell GPIO: ', self.photocellGPIO
       print '1st MCP23017 I2C address: ', self.mcp0Address
@@ -1011,7 +1010,7 @@ class Monotype(object):
 
     """Print signals order for debugging:"""
     if DebugMode:
-      print 'Signals arrangement: ',
+      print '\nSignals arrangement: ',
       for sig in signals:
         print sig,
       print '\n'
