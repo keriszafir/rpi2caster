@@ -2119,16 +2119,39 @@ class TextUserInterface(object):
                0 : 'Exit program'
               }
 
-    """Commands: {option_name : [command_to_execute, pause_on_return]}"""
+    """Declare local functions for menu options:"""
+    def choose_ribbon_filename():
+      self.ribbonFile = self.enter_filename()
+    def cast_composition():
+      Actions.cast_composition(self.caster, self.ribbonFile)
+      hold_on_exit()
+    def punch_composition():
+      Actions.punch_composition(self.caster, self.ribbonFile)
+      hold_on_exit()
+    def cast_sorts():
+      Actions.cast_sorts(self.caster)
+    def line_test():
+      Actions.line_test(self.caster)
+    def send_combination():
+      Actions.send_combination(self.caster)
+      hold_on_exit()
+    def align_wedges():
+      Actions.align_wedges(self.caster)
+      hold_on_exit()
+    def exit_program():
+      exit()
+
+
+    """Commands: {option_name : function}"""
     commands = {
-                1 : ['self.ribbonFile = self.enter_filename()'],
-                2 : ['Actions.cast_composition(self.caster, self.ribbonFile)'],
-                3 : ['Actions.punch_composition(self.caster, self.ribbonFile)'],
-                4 : ['Actions.cast_sorts(self.caster)'],
-                5 : ['Actions.line_test(self.caster)', True],
-                6 : ['Actions.send_combination(self.caster)', True],
-                7 : ['Actions.align_wedges(self.caster)', True],
-                0 : ['exit()']
+                1 : choose_ribbon_filename,
+                2 : cast_composition,
+                3 : punch_composition,
+                4 : cast_sorts,
+                5 : line_test,
+                6 : send_combination,
+                7 : align_wedges,
+                0 : exit_program
                }
 
     choice = TextUserInterface.menu(
@@ -2148,15 +2171,12 @@ class TextUserInterface(object):
 
 
     """Call the function:"""
-    exec commands[choice][0]
+    commands[choice]()
 
-    """Check whether to display notice on returning to menu:"""
-    try:
-      if commands[choice][1]:
-        raw_input('Press Enter to return to main menu...')
-    except IndexError:
-      pass
-    self.main_menu()
+    """Sometimes we need to display notice on returning to menu:"""
+    def hold_on_exit():
+      raw_input('Press Enter to return to main menu...')
+      self.main_menu()
 
   @staticmethod
   def simple_menu(message, options):
