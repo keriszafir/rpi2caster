@@ -5,8 +5,8 @@ import rpi2caster
 rpi2caster.DebugMode = True
 
 
-database = rpi2caster.Database('database/monotype.db')
-caster = rpi2caster.MonotypeSimulation('mkart-cc', database)
+database = rpi2caster.Database()
+caster = rpi2caster.MonotypeSimulation()
 userInterface = rpi2caster.TextUserInterface(caster)
 
 

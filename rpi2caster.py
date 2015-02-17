@@ -297,8 +297,28 @@ class Database(object):
   Usually you run setup with sudo.
   """
 
-  def __init__(self, databasePath='database/monotype.db'):
-    self.databasePath = databasePath
+  def __init__(self, databasePath='', confFilePath='/etc/rpi2caster.conf'):
+    """Initialize conffile:"""
+    config = ConfigParser.SafeConfigParser()
+    config.read(confFilePath)
+
+    """Look database path up in conffile:"""
+    try:
+      configDatabasePath = config.get('Database', 'path')
+    except ConfigParser.NoSectionError:
+      configDatabasePath = ''
+
+    if databasePath:
+      """Use path from function call, if it's there:"""
+      self.databasePath = databasePath
+
+    elif configDatabasePath:
+      """Use path stored in conffile:"""
+      self.databasePath = configDatabasePath
+
+    else:
+      """Revert to hardcoded local default:"""
+      self.databasePath = 'database/monotype.db'
 
 
   def __enter__(self):
@@ -805,23 +825,44 @@ class Monotype(object):
   No static methods or class methods here.
   """
 
-  def __init__(self, casterName='Monotype', confFilePath='/etc/rpi2caster.conf'):
-    """__init__(casterName, database):
+  def __init__(
+               self, casterName='Monotype',
+               confFilePath='/etc/rpi2caster.conf'
+               ):
+    """__init__(casterName, confFilePath):
 
     Creates a caster object for a given caster name.
-    Uses a database object obtained from upstream.
-    Looks the caster up in a config file and gets its parameters,
+    Uses a conffile to look the caster up and get its parameters,
     then looks up the interface parameters.
+
+    Reverts to hardcoded defaults if no config matches:
+    caster - "Monotype" (if no name is given),
+    interface ID 0,
+    unit-adding disabled,
+    diecase format 15x17.
     """
+
+    """Default caster parameters:"""
     self.casterName = casterName
     self.interfaceID = 0
+    self.unitAdding = 0
+    self.diecaseSystem = 'norm17'
+
+    """Default interface parameters:"""
+    self.emergencyGPIO = 18
+    self.photocellGPIO = 24
+    self.mcp0Address = 0x20
+    self.mcp1Address = 0x21
+    self.pinBase = 65
+
+    """Initialize config:"""
     self.config = ConfigParser.SafeConfigParser()
     self.config.read(confFilePath)
 
+    """Run the setup now:"""
+    self.caster_setup()
 
   def __enter__(self):
-
-    self.caster_setup()
     return self
 
 
@@ -833,11 +874,11 @@ class Monotype(object):
     from database and fetches a list of caster parameters:
     [diecaseFormat, unitAdding, interfaceID].
 
-    Unpack (assign to list items) the obtained parameters.
-    The parameters will affect the whole object created from this class.
+    In case there is no data, the function will run on default settings.
     """
-    [self.unitAdding, self.diecaseSystem,
-    self.interfaceID] = self.get_caster_settings()
+    settings = self.get_caster_settings_from_conffile()
+    if settings:
+      [self.unitAdding, self.diecaseSystem, self.interfaceID] = settings
 
     """When debugging, display all caster info:"""
     if DebugMode:
@@ -854,12 +895,14 @@ class Monotype(object):
 
     [emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase]
 
-    Unpack (assign to list items) the obtained parameters.
+    Try to override defaults with the parameters from conffile.
     The parameters will affect the whole object created with this class.
     """
-    [self.emergencyGPIO, self.photocellGPIO,
-    self.mcp0Address, self.mcp1Address,
-    self.pinBase] = self.get_interface_settings()
+    interfaceSettings = self.get_interface_settings_from_conffile()
+    if interfaceSettings:
+      [self.emergencyGPIO, self.photocellGPIO,
+      self.mcp0Address, self.mcp1Address,
+      self.pinBase] = interfaceSettings
 
     """Print the parameters for debugging:"""
     if DebugMode:
@@ -870,8 +913,6 @@ class Monotype(object):
       print '2nd MCP23017 I2C address: ', self.mcp1Address
       print 'MCP23017 pin base for GPIO numbering: ', self.pinBase
 
-
-
     """On init, do the input configuration:
 
     We need to set up the sysfs interface before (powerbuttond.py -
@@ -880,7 +921,6 @@ class Monotype(object):
     gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.photocellGPIO
     self.gpioValueFileName = gpioSysfsPath + 'value'
     self.gpioEdgeFileName  = gpioSysfsPath + 'edge'
-
 
     """Check if the photocell GPIO has been configured - file can be read:"""
     if not os.access(self.gpioValueFileName, os.R_OK):
@@ -904,7 +944,6 @@ class Monotype(object):
               )
         exit()
 
-
     """Output configuration:
 
     Setup the wiringPi MCP23017 chips for valve outputs:
@@ -917,7 +956,6 @@ class Monotype(object):
     """Set all I/O lines on MCP23017s as outputs - mode = 1"""
     for pin in pins:
       wiringpi.pinMode(pin,1)
-
 
     """This list defines the names and order of Monotype control signals
     that will be assigned to 32 MCP23017 outputs and solenoid valves.
@@ -1021,8 +1059,8 @@ class Monotype(object):
       raw_input('Press Enter to continue... ')
 
 
-  def get_caster_settings(self):
-    """get_caster_settings():
+  def get_caster_settings_from_conffile(self):
+    """get_caster_settings_from_conffile():
 
     Reads the settings for a caster with self.casterName
     from the config file (where it is represented by a section, whose
@@ -1050,37 +1088,20 @@ class Monotype(object):
       unitAdding = self.config.get(self.casterName, 'unit_adding')
       diecaseSystem = self.config.get(self.casterName, 'diecase_system')
       interfaceID = self.config.get(self.casterName, 'interface_id')
-
-    except ConfigParser.NoSectionError:
-      """
-      If the caster is not configured, let's set up some sensible
-      default parameters so that casting is possible at all:
-
-      unit adding - off
-      diecase - 15x17
-      interface ID 0
-      """
-      unitAdding = 0
-      diecaseSystem = 'norm17'
-      interfaceID = 0
-
-    try:
-      """Now build a list of caster parameters that will be returned...
-      If the values cannot be converted to int, the function will
-      return False.
-      """
+      """Time to return the data:"""
       return [bool(unitAdding), diecaseSystem, int(interfaceID)]
 
-    except (ValueError, TypeError):
-      print('Incorrect interface parameters!')
+    except (ConfigParser.NoSectionError, ValueError, TypeError):
+      """
+      In case of shit happening, return None and fall back on defaults."""
+      print('Incorrect caster parameters. Using hardcoded defaults.')
       if DebugMode:
         raise
-      return False
-      exit()
+      return None
 
 
-  def get_interface_settings(self):
-    """get_interface_settings():
+  def get_interface_settings_from_conffile(self):
+    """get_interface_settings_from_conffile():
 
     Reads a configuration file and gets interface parameters.
 
@@ -1142,7 +1163,7 @@ class Monotype(object):
     """
     interfaceName = 'Interface' + str(self.interfaceID)
     try:
-      """Check if the interface is active, else return False"""
+      """Check if the interface is active, else return None"""
       trueAliases = ['true', '1', 'on', 'yes']
       if self.config.get(interfaceName, 'active').lower() in trueAliases:
         emergencyGPIO = self.config.get(interfaceName, 'emergency_gpio')
@@ -1151,54 +1172,26 @@ class Monotype(object):
         mcp1Address = self.config.get(interfaceName, 'mcp1_address')
         pinBase = self.config.get(interfaceName, 'pin_base')
 
+        """Return parameters:"""
+        return [int(emergencyGPIO), int(photocellGPIO),
+                int(mcp0Address, 16), int(mcp1Address, 16),
+                int(pinBase)]
       else:
-        print('Interface ID=', interfaceID, 'is deactivated. Exiting...')
-        exit()
+        """This happens if the interface is inactive in conffile:"""
+        print(
+              'Interface ID=', interfaceID, 'is marked as inactive. '
+              'We cannot use it - reverting to defaults'
+              )
+        return None
 
-    except ConfigParser.NoSectionError:
+    except (ConfigParser.NoSectionError, ValueError, TypeError):
       """
-      The interface might not be set up in conffile in two cases:
-         -it's a default interface with default GPIO numbers,
-         -it's not a default interface, but it's not configured
-          (missing section in conffile).
-
-      We need to differentiate between those two cases;
-      in first case, we fall back on hard-coded defaults,
-      in second case, we throw an error and exit.
+      In case of shit happening, return None and fall back on defaults.
       """
-      if interfaceID == 0:
-        """Notify the user in debug mode:"""
-        if DebugMode:
-          print(
-                'The interface is not set up in conffile, '
-                'but its ID is 0. Falling back to default settings.'
-               )
-        emergencyGPIO = 18
-        photocellGPIO = 24
-        mcp0Address = 0x20
-        mcp1Address = 0x21
-        pinBase = 65
-      else:
-        """Notify an user and exit (casting would be impossible
-        with having the desired interface configured):
-        """
-        print('The desired interface is not set up in %s' % confFilePath)
-        print('Add a section %s with parameters!' % ('Interface' + interfaceID))
-        exit()
-
-    try:
-      """Now build a list of interface parameters that will be returned...
-      If the values cannot be converted to int, the function will
-      return False.
-      """
-      return [int(emergencyGPIO), int(photocellGPIO),
-              int(mcp0Address, 16), int(mcp1Address, 16), int(pinBase)]
-
-    except (ValueError, TypeError):
-      print('Incorrect interface parameters!')
+      print('Incorrect interface parameters. Using hardcoded defaults.')
       if DebugMode:
         raise
-      exit()
+      return None
 
 
   def detect_rotation(self):
@@ -1383,11 +1376,12 @@ class MonotypeSimulation(object):
   to the machine.
   """
 
-  def __init__(self, casterName, database):
-    print 'In real world, you would now use caster called ', casterName
+  def __init__(self, casterName='Monotype Simulator', configFileName=''):
+    self.casterName = casterName
+    print 'Using caster: ', self.casterName
 
   def __enter__(self):
-    """Instantiation:
+    """Entering the context:
 
     A lot simpler than "real" operation; we don't set up the GPIO lines
     nor interrupt polling files We'll use substitute routines that
@@ -1422,13 +1416,13 @@ class MonotypeSimulation(object):
     """FIXME: implement raw input breaking on timeout"""
     print('Now, the program would check if the machine is rotating.\n')
     startTime = time.time()
-    while time.time() < startTime + 5:
-      answer = raw_input('Press return (to simulate rotation) '
+    answer = None
+    while answer is None and time.time() < (startTime + 5):
+      answer = raw_input('Press [ENTER] (to simulate rotation) '
                          'or wait 5sec (to simulate machine off)\n')
     else:
-      if answer is None:
-        self.machine_stopped()
-        self.detect_rotation()
+      self.machine_stopped()
+      self.detect_rotation()
 
 
   def machine_stopped(self):
@@ -2170,13 +2164,14 @@ class TextUserInterface(object):
               )
 
 
-    """Call the function:"""
+    """Call the function and returnn to menu:"""
     commands[choice]()
+    self.main_menu()
 
     """Sometimes we need to display notice on returning to menu:"""
     def hold_on_exit():
       raw_input('Press Enter to return to main menu...')
-      self.main_menu()
+
 
   @staticmethod
   def simple_menu(message, options):
@@ -2251,7 +2246,7 @@ class WebInterface(object):
 Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
 
-  database = Database('database/monotype.db')
+  database = Database()
   caster = Monotype('mkart-cc')
   userInterface = TextUserInterface(caster)
 
