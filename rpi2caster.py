@@ -559,7 +559,7 @@ class Database(object):
     pass
 
 
-class MonotypeConfiguration(object):
+class Inventory(object):
   """A "job" class for configuring the Monotype workshop inventory:
 
   -wedges
@@ -568,6 +568,8 @@ class MonotypeConfiguration(object):
   """
 
   def __init__(self, database, userInterface):
+
+    self.debugMode = False
     """Connect to a specified database:"""
     self.database = database
     self.userInterface = userInterface
@@ -817,7 +819,7 @@ class MonotypeConfiguration(object):
 
 
 class Monotype(object):
-  """Monotype(casterName, database):
+  """Monotype(job, casterName, confFilePath):
 
   A class which stores all methods related to the interface and
   caster itself.
@@ -829,11 +831,10 @@ class Monotype(object):
   """
 
   def __init__(
-               self, casterName='Monotype',
+               self, job, casterName='Monotype',
                confFilePath='/etc/rpi2caster.conf'
                ):
-    """__init__(casterName, confFilePath):
-
+    """
     Creates a caster object for a given caster name.
     Uses a conffile to look the caster up and get its parameters,
     then looks up the interface parameters.
@@ -862,6 +863,9 @@ class Monotype(object):
     self.config = ConfigParser.SafeConfigParser()
     self.config.read(confFilePath)
 
+    """Set up a job context:"""
+    self.job = job
+
     """Run the setup now:"""
     self.caster_setup()
 
@@ -884,7 +888,7 @@ class Monotype(object):
       [self.unitAdding, self.diecaseSystem, self.interfaceID] = settings
 
     """When debugging, display all caster info:"""
-    if DebugMode:
+    if self.job.debugMode:
       print 'Using caster: ', self.casterName, '\n'
       print 'Caster parameters:\n'
       print 'Diecase system: ', self.diecaseSystem
@@ -908,7 +912,7 @@ class Monotype(object):
       self.pinBase] = interfaceSettings
 
     """Print the parameters for debugging:"""
-    if DebugMode:
+    if self.job.debugMode:
       print '\nInterface parameters:\n'
       print 'Emergency button GPIO: ', self.emergencyGPIO
       print 'Photocell GPIO: ', self.photocellGPIO
@@ -1050,7 +1054,7 @@ class Monotype(object):
     self.wiringPiPinNumber = dict(zip(signals, pins))
 
     """Print signals order for debugging:"""
-    if DebugMode:
+    if self.job.debugMode:
       print '\nSignals arrangement: ',
       for sig in signals:
         print sig,
@@ -1098,7 +1102,7 @@ class Monotype(object):
       """
       In case of shit happening, return None and fall back on defaults."""
       print('Incorrect caster parameters. Using hardcoded defaults.')
-      if DebugMode:
+      if self.job.debugMode:
         raise
       return None
 
@@ -1192,7 +1196,7 @@ class Monotype(object):
       In case of shit happening, return None and fall back on defaults.
       """
       print('Incorrect interface parameters. Using hardcoded defaults.')
-      if DebugMode:
+      if self.job.debugMode:
         raise
       return None
 
@@ -1359,9 +1363,8 @@ class Monotype(object):
       if choice.lower() == 'c':
         return True
       elif choice.lower() == 'm':
-        pass
+        self.job.userInterface.main_menu()
       elif choice.lower() == 'e':
-        self.deactivate_valves()
         exit()
 
 
@@ -1379,20 +1382,15 @@ class MonotypeSimulation(object):
   to the machine.
   """
 
-  def __init__(self, casterName='Monotype Simulator', configFileName=''):
+  def __init__(self, job, casterName='Monotype Simulator', configFileName=''):
+    self.job = job
     self.casterName = casterName
-    print 'Using caster: ', self.casterName
-
-  def __enter__(self):
-    """Entering the context:
-
-    A lot simpler than "real" operation; we don't set up the GPIO lines
-    nor interrupt polling files We'll use substitute routines that
-    emulate caster-related actions.
-    """
+    print 'Using hypothetical caster: ', self.casterName
     print('Testing rpi2caster without an actual caster or interface. ')
     raw_input('Press [ENTER] to continue...')
-    DebugMode = True
+    self.job.debugMode = True
+
+  def __enter__(self):
     return self
 
 
@@ -1441,14 +1439,13 @@ class MonotypeSimulation(object):
       if choice.lower() == 'c':
         return True
       elif choice.lower() == 'm':
-        self.menu()
+        self.job.userInterface.main_menu()
       elif choice.lower() == 'e':
-        self.deactivate_valves()
         exit()
 
 
   def __exit__(self, *args):
-    self.deactivate_valves()
+    pass
 
 
 
@@ -1573,7 +1570,7 @@ class Casting(object):
   """
 
   def __init__(self):
-    pass
+    self.debugMode = False
 
   def __enter__(self):
     return self
@@ -1590,7 +1587,7 @@ class Casting(object):
     """
 
     """Read the file contents:"""
-    contents = Parsing.read_file(self.filename)
+    contents = Parsing.read_file(self.ribbonFile)
 
     """If file read failed, end here:"""
     if not contents:
@@ -1874,7 +1871,7 @@ class RibbonPunching(object):
   """Job class for punching the paper tape (ribbon)."""
 
   def __init__(self):
-    pass
+    self.debugMode = False
 
   def __enter__(self):
     return self
@@ -1892,7 +1889,7 @@ class RibbonPunching(object):
     """
 
     """Read the file contents:"""
-    contents = Parsing.read_file(self.filename)
+    contents = Parsing.read_file(self.ribbonFile)
 
     """If file read failed, end here:"""
     if not contents:
@@ -2124,38 +2121,41 @@ class TextUserInterface(object):
                0 : 'Exit program'
               }
 
+
+    """Sometimes we need to display notice on returning to menu:"""
+    def hold_on_exit():
+      raw_input('Press Enter to return to main menu...')
+
     """Declare local functions for menu options:"""
     def choose_ribbon_filename():
       self.job.ribbonFile = self.enter_filename()
     def cast_composition():
-      self.job.cast_composition(self.job.caster, self.job.ribbonFile)
+      self.job.cast_composition()
       hold_on_exit()
     def punch_composition():
-      self.job.punch_composition(self.job.caster, self.job.ribbonFile)
+      self.job.punch_composition()
       hold_on_exit()
     def cast_sorts():
-      self.job.cast_sorts(self.job.caster)
+      self.job.cast_sorts()
     def line_test():
-      self.job.line_test(self.job.caster)
+      self.job.line_test()
     def send_combination():
-      self.job.send_combination(self.job.caster)
+      self.job.send_combination()
       hold_on_exit()
     def align_wedges():
-      self.job.align_wedges(self.job.caster)
+      self.job.align_wedges()
       hold_on_exit()
     def exit_program():
       exit()
 
-
-    def debug_notice(self):
+    def debug_notice():
       """Prints a notice if the program is in debug mode:"""
       if self.job.debugMode:
         return('\n\nThe program is now in debugging mode!')
       else:
         return ''
 
-
-    def main_menu_additional_info(self):
+    def main_menu_additional_info():
       """Displays additional info as a main menu footer:"""
       if self.job.ribbonFile != '':
         return(
@@ -2194,10 +2194,6 @@ class TextUserInterface(object):
     """Call the function and returnn to menu:"""
     commands[choice]()
     self.main_menu()
-
-    """Sometimes we need to display notice on returning to menu:"""
-    def hold_on_exit():
-      raw_input('Press Enter to return to main menu...')
 
 
   def simple_menu(self, message, options):
@@ -2260,9 +2256,9 @@ class WebInterface(object):
 Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
 
-  job = Casting(job)
-  job.database = Database()
-  job.caster = Monotype('mkart-cc', job)
+  job = Casting()
+  job.database = Database(job)
+  job.caster = Monotype(job, 'mkart-cc')
   job.userInterface = TextUserInterface(job)
 
   with job, database, caster, userInterface:

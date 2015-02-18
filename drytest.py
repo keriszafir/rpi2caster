@@ -2,13 +2,10 @@
 import rpi2caster
 
 
-rpi2caster.DebugMode = True
+job = rpi2caster.Casting()
+job.database = rpi2caster.Database(job)
+job.caster = rpi2caster.MonotypeSimulation(job)
+job.userInterface = rpi2caster.TextUserInterface(job)
 
-
-database = rpi2caster.Database()
-caster = rpi2caster.MonotypeSimulation()
-userInterface = rpi2caster.TextUserInterface(caster)
-
-
-with database, caster, userInterface:
-  userInterface.consoleUI()
+with job:
+  job.userInterface.consoleUI()
