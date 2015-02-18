@@ -76,11 +76,6 @@ except ImportError:
     print('You must install sqlite3 database and python-sqlite2 package.')
     exit()
 
-"""This determines whether some exceptions will be caught
-or thrown to stderr, off by default:"""
-global DebugMode
-DebugMode = False
-
 
 
 class Typesetter(object):
@@ -297,7 +292,10 @@ class Database(object):
   Usually you run setup with sudo.
   """
 
-  def __init__(self, databasePath='', confFilePath='/etc/rpi2caster.conf'):
+  def __init__(self, job, databasePath='', confFilePath='/etc/rpi2caster.conf'):
+    """Set up the job context:"""
+    self.job = job
+
     """Initialize conffile:"""
     config = ConfigParser.SafeConfigParser()
     config.read(confFilePath)
@@ -377,7 +375,7 @@ class Database(object):
       except:
         """In debug mode we get the exact exception code & stack trace."""
         print('Database error: cannot add wedge!')
-        if DebugMode:
+        if self.job.debugMode:
           raise
         return False
 
@@ -432,7 +430,7 @@ class Database(object):
       except:
         """In debug mode we get the exact exception code & stack trace."""
         print('Database error: cannot get wedge!')
-        if DebugMode:
+        if self.job.debugMode:
           raise
 
 
@@ -476,7 +474,7 @@ class Database(object):
       except:
         """In debug mode we get the exact exception code & stack trace."""
         print('Database error: cannot get wedge!')
-        if DebugMode:
+        if self.job.debugMode:
           raise
 
 
@@ -501,7 +499,7 @@ class Database(object):
         except:
           """In debug mode we get the exact exception code & stack trace."""
           print('Database error: cannot delete wedge!')
-          if DebugMode:
+          if self.job.debugMode:
             raise
           return False
     else:
@@ -552,7 +550,7 @@ class Database(object):
       except:
         """In debug mode we get the exact exception code & stack trace."""
         print('Database error: cannot list wedges!')
-        if DebugMode:
+        if self.job.debugMode:
           raise
         return False
 
@@ -562,6 +560,12 @@ class Database(object):
 
 
 class MonotypeConfiguration(object):
+  """A "job" class for configuring the Monotype workshop inventory:
+
+  -wedges
+  -diecases
+  -diecase layouts.
+  """
 
   def __init__(self, database, userInterface):
     """Connect to a specified database:"""
@@ -775,7 +779,7 @@ class MonotypeConfiguration(object):
     ID = raw_input('Enter the wedge ID to delete: ')
     if ID.isdigit():
       ID = int(ID)
-      if database.delete_wedge(ID):
+      if self.job.database.delete_wedge(ID):
         print('Wedge deleted successfully.')
     else:
       print('Wedge name must be a number!')
@@ -783,11 +787,11 @@ class MonotypeConfiguration(object):
 
   def list_wedges(self):
     """lists all wedges we have"""
-    database.list_wedges()
+    self.job.database.list_wedges()
 
 
   def main_menu(self):
-    self.userInterface.menu  (
+    self.job.userInterface.menu  (
           header = (
                     'Setup utility for rpi2caster CAT. '
                     '\nMain menu:'
@@ -804,8 +808,7 @@ class MonotypeConfiguration(object):
                      [8, 'Add wedge', 'self.add_wedge()'],
                      [9, 'Delete wedge', 'self.delete_wedge()'],
                      [0, 'Exit program', 'exit()']
-                    ],
-          recursive = True
+                    ]
                 )
 
   def __exit__(self, *args):
@@ -1556,20 +1559,38 @@ class Parsing(object):
 
 
 
-class Actions(object):
-  """Actions the user can do in this software.
-  This class contains only static methods to be called from elsewhere,
-  you cannot instantiate it.
+class Casting(object):
+  """
+  Casting:
+
+  A "job" class. Job-wide variables include caster (and its parameters),
+  interface (and its parameters), database, config, ribbon filename.
+
+  All methods related to operating a composition caster:
+  -casting composition and sorts,
+  -testing and calibrating the caster,
+  -testing the interface
   """
 
+  def __init__(self):
+    pass
 
-  @staticmethod
-  def cast_composition(caster, filename):
-    """ Composition casting routine. The input file is read backwards -
-    last characters are cast first, after setting the justification."""
+  def __enter__(self):
+    return self
+
+  def __exit__(self, *args):
+    pass
+
+
+  def cast_composition(self):
+    """cast_composition()
+
+    Composition casting routine. The input file is read backwards -
+    last characters are cast first, after setting the justification.
+    """
 
     """Read the file contents:"""
-    contents = Parsing.read_file(filename)
+    contents = Parsing.read_file(self.filename)
 
     """If file read failed, end here:"""
     if not contents:
@@ -1588,7 +1609,7 @@ class Actions(object):
 
     """Check if the machine is running - don't do anything when
     it's not rotating yet!"""
-    caster.detect_rotation()
+    self.caster.detect_rotation()
 
     """Read the reversed file contents, line by line, then parse
     the lines, display comments & code combinations, and feed the
@@ -1611,7 +1632,7 @@ class Actions(object):
           print ' '.join(signals)
         else:
           print('O+15 - no signals')
-        caster.send_signals_to_caster(signals)
+        self.caster.send_signals_to_caster(signals)
 
     """After casting is finished, notify the user:"""
     print('\nCasting finished!')
@@ -1619,9 +1640,251 @@ class Actions(object):
     """End of function."""
 
 
-  @staticmethod
-  def punch_composition(caster, filename):
-    """punch_composition(caster, filename):
+  def line_test(self):
+    """line_test():
+
+    Tests all valves and composition caster's inputs to check
+    if everything works and is properly connected. Signals will be tested
+    in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL,
+    EF, NJ, NK, NKJ, MNH, MNK (feel free to add other combinations!)
+    """
+    raw_input('This will check if the valves, pin blocks and 0005, S, '
+             '0075 mechanisms are working. Press return to continue... ')
+
+    combinations = [
+                    ['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'],
+                    ['4'], ['5'], ['6'], ['7'], ['8'], ['9'], ['10'],
+                    ['11'], ['12'], ['13'], ['14'], ['A'], ['B'],
+                    ['C'], ['D'], ['E'], ['F'], ['G'], ['H'], ['I'],
+                    ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
+                    ['N', 'I'], ['N', 'L'], ['N', 'J'], ['N', 'K'], ['E', 'F'],
+                    ['N', 'K', 'J'], ['M', 'N', 'H'], ['M', 'N', 'K']
+                   ]
+
+    """Send all the combinations to the caster, one by one:"""
+    for combination in combinations:
+      print ' '.join(combination)
+      self.caster.send_signals_to_caster(combination, 120)
+
+    print('\nTesting finished!')
+
+    """End of function."""
+
+
+  def cast_sorts(self):
+    """cast_sorts():
+
+    Sorts casting routine, based on the position in diecase.
+    Ask user about the diecase row & column, as well as number of sorts.
+    """
+    os.system('clear')
+    print('Calibration and Sort Casting:\n\n')
+    signals = raw_input(
+                        'Enter column and row symbols '
+                        '(default: G 5, spacebar if O-15) '
+                       )
+    print('\n')
+    if signals == '':
+      signals = 'G5'
+
+    """
+    Parse the signals and return a list containing the parsed
+    signals and the comments:
+    """
+    [parsedSignals, comment] = Parsing.signals_parser(signals)
+
+    """
+    O15 yields no signals, but we may want to cast it - check if we
+    entered spacebar. If parsing yields no signals (for example,
+    user entered a string with row > 16 or column > O), check
+    if user entered spacebar. If it's not the case, user has to
+    enter the combination again.
+    """
+    if len(parsedSignals) == 0 and signals != ' ':  # if not parsedSignals ??
+      print('\nRe-enter the sequence')
+      time.sleep(1)
+      cast_sorts()                                  # recurse - test it!!!
+    n = raw_input(
+                  '\nHow many sorts do you want to cast? (default: 10) '
+                 )
+    print('\n')
+
+    """Default to 10 if user enters non-positive number or letters"""
+    if not n.isdigit() or int(n) < 0:
+      n = '10'
+    n = int(n)
+
+    """Warn if we want to cast too many sorts from a single matrix"""
+    print ("\nWe'll cast it %i times.\n" % n)
+    if n > 10:
+      print(
+            'Warning: you want to cast a single character more than '
+            '10 times. This may lead to matrix overheating!\n'
+           )
+
+    """Ask user if the entered parameters are correct"""
+    choice = ''                                         # use simple menu from UI object
+    while choice not in ['c', 'r', 'm', 'e']:
+      choice = raw_input(
+                         '[C]ontinue, [R]epeat, go back to [M]enu '
+                         'or [E]xit program? '
+                        )
+    else:
+      if choice.lower() == 'c':
+
+        # Move it to another function (will be useful for casting spaces!)
+
+        """Check if the machine is running"""
+        print('Start the machine...')
+        self.caster.detect_rotation()
+
+        """Cast the sorts: turn on the pump first."""
+        print('Starting the pump...')
+        self.caster.send_signals_to_caster(['0075'])
+
+        """Start casting characters"""
+        print('Casting characters...')
+
+        """Cast n combinations of row & column, one by one"""
+        for i in range(n):
+          if len(parsedSignals) > 0:
+            print ' '.join(parsedSignals)
+          else:
+            print('O+15 - no signals')
+          self.caster.send_signals_to_caster(parsedSignals)
+
+        """Put the line to the galley:"""
+        print('Putting line to the galley...')
+        self.caster.send_signals_to_caster(['0005', '0075'])
+        """After casting sorts we need to stop the pump"""
+        print('Stopping the pump...')
+        self.caster.send_signals_to_caster(['0005'])
+
+
+      elif choice.lower() == 'r':
+        cast_sorts()                         # not sure if it'll work
+      elif choice.lower() == 'm':
+        pass
+      elif choice.lower() == 'e':
+        self.caster.deactivate_valves()
+        exit()                                   # Better to call UI's method
+
+    """Ask what to do after casting"""
+    print('\nFinished!')                         # Deprecate std i/o in functions
+
+# Use simple menu from UI
+
+    finishedChoice = ''
+    while finishedChoice.lower() not in ['r', 'm', 'e']:
+      finishedChoice = raw_input(
+                                 '(R)epeat, go back to (M)enu '
+                                 'or (E)xit program? '
+                                )
+      if finishedChoice.lower() == 'r':
+        cast_sorts()                            # not sure if it'll work
+      elif finishedChoice.lower() == 'm':
+        pass
+      elif finishedChoice.lower() == 'e':
+        self.caster.deactivate_valves()
+        exit()                                  # call UI's exit method
+
+      else:   # deprecated
+        print('\nNo such option. Choose again.')
+        finishedChoice = ''
+
+
+  def send_combination(self):
+    """send_combination():
+
+    This function allows us to give the program a specific combination
+    of Monotype codes, and will keep the valves on until we press return
+    (useful for calibration). It also checks the signals' validity.
+    """
+
+    """Let the user enter a combo:"""
+    signals = ''
+    while signals == '':
+      signals = raw_input(
+                          'Enter the signals to send to the machine: '
+                         )
+
+    """Parse the combination, get the signals (first item returned
+    by the parsing function):"""
+    combination = Parsing.signals_parser(signals)[0]
+
+    """Check if we get any signals at all, if so, turn the valves on:"""
+    if combination:
+      print ' '.join(combination)
+      self.caster.activate_valves(combination)
+
+    """Wait until user decides to stop sending those signals to valves:"""
+    raw_input('Press return to stop. ')
+    self.caster.deactivate_valves()
+    """End of function"""
+
+
+  def align_wedges(self, space='G5'):
+    """align_wedges(space='G5'):
+
+    Allows to align the justification wedges so that when you're
+    casting a 9-unit character with the S-needle at 0075:3 and 0005:8
+    (neutral position), the  width is the same.
+
+    It works like this:
+    1. 0075 - turn the pump on,
+    2. cast 10 spaces from the specified matrix (default: G9),
+    3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
+    4. cast 10 spaces with the S-needle from the same matrix,
+    5. put the line to the galley, then 0005 to turn the pump off.
+    """
+
+    """Print some info for the user:"""
+    print('Transfer wedge calibration:\n\n'
+          'This function will cast 10 spaces, then set the correction '
+          'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
+          'S-needle. You then have to compare the length of these two '
+          'sets. \nIf they are identical, all is OK. '
+          'If not, you have to adjust the 52D wedge.\n\n'
+          'Turn on the machine...')
+
+    """Don't start until the machine is running:"""
+    self.caster.detect_rotation()
+
+    combinations = (
+                    ['0075'] + [space] * 10 + ['0075 0005 8'] + ['0075 3'] +
+                    [space + 'S'] * 10 + ['0075 0005'] + ['0005']
+                   )
+
+    for sequence in combinations:
+      """Make a list out of the strings:"""
+      sequence = Parsing.signals_parser(sequence)[0]
+
+      """Display the sequence on screen:"""
+      print(' '.join(sequence))
+
+      """Cast the sequence:"""
+      self.caster.send_signals_to_caster(sequence)
+
+    """Finished. Return to menu."""
+    print('Procedure finished. Compare the lengths and adjust if needed.')
+
+
+
+class RibbonPunching(object):
+  """Job class for punching the paper tape (ribbon)."""
+
+  def __init__(self):
+    pass
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, *args):
+    pass
+
+
+  def punch_composition(self):
+    """punch_composition():
 
     When punching, the input file is read forwards. An additional line
     (O+15) is switched on for operating the paper tower, if less than
@@ -1629,7 +1892,7 @@ class Actions(object):
     """
 
     """Read the file contents:"""
-    contents = Parsing.read_file(filename)
+    contents = Parsing.read_file(self.filename)
 
     """If file read failed, end here:"""
     if not contents:
@@ -1671,11 +1934,11 @@ class Actions(object):
         if len(signals) < 2:
           signals += ('O15',)
         print ' '.join(signals)
-        caster.activate_valves(signals)
+        self.caster.activate_valves(signals)         # keyboard?
 
         """The pace is arbitrary, let's set it to 200ms/200ms"""
         time.sleep(0.2)
-        caster.deactivate_valves()
+        self.caster.deactivate_valves()              # keyboard?
         time.sleep(0.2)
 
     """After punching is finished, notify the user:"""
@@ -1684,234 +1947,9 @@ class Actions(object):
     """End of function."""
 
 
-  @staticmethod
-  def line_test(caster):
-    """line_test(caster):
-
-    Tests all valves and composition caster's inputs to check
-    if everything works and is properly connected. Signals will be tested
-    in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL,
-    EF, NJ, NK, NKJ, MNH, MNK (feel free to add other combinations!)
-    """
-    raw_input('This will check if the valves, pin blocks and 0005, S, '
-             '0075 mechanisms are working. Press return to continue... ')
-
-    combinations = [
-                    ['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'],
-                    ['4'], ['5'], ['6'], ['7'], ['8'], ['9'], ['10'],
-                    ['11'], ['12'], ['13'], ['14'], ['A'], ['B'],
-                    ['C'], ['D'], ['E'], ['F'], ['G'], ['H'], ['I'],
-                    ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
-                    ['N', 'I'], ['N', 'L'], ['N', 'J'], ['N', 'K'], ['E', 'F'],
-                    ['N', 'K', 'J'], ['M', 'N', 'H'], ['M', 'N', 'K']
-                   ]
-
-    """Send all the combinations to the caster, one by one:"""
-    for combination in combinations:
-      print ' '.join(combination)
-      caster.send_signals_to_caster(combination, 120)
-
-    print('\nTesting finished!')
-
-    """End of function."""
-
-
-  @staticmethod
-  def cast_sorts(caster):
-    """cast_sorts(caster):
-
-    Sorts casting routine, based on the position in diecase.
-    Ask user about the diecase row & column, as well as number of sorts.
-    """
-    os.system('clear')
-    print('Calibration and Sort Casting:\n\n')
-    signals = raw_input(
-                        'Enter column and row symbols '
-                        '(default: G 5, spacebar if O-15) '
-                       )
-    print('\n')
-    if signals == '':
-      signals = 'G5'
-
-    """
-    Parse the signals and return a list containing the parsed
-    signals and the comments:
-    """
-    [parsedSignals, comment] = Parsing.signals_parser(signals)
-
-    """
-    O15 yields no signals, but we may want to cast it - check if we
-    entered spacebar. If parsing yields no signals (for example,
-    user entered a string with row > 16 or column > O), check
-    if user entered spacebar. If it's not the case, user has to
-    enter the combination again.
-    """
-    if len(parsedSignals) == 0 and signals != ' ':
-      print('\nRe-enter the sequence')
-      time.sleep(1)
-      cast_sorts()
-    n = raw_input(
-                  '\nHow many sorts do you want to cast? (default: 10) '
-                 )
-    print('\n')
-
-    """Default to 10 if user enters non-positive number or letters"""
-    if not n.isdigit() or int(n) < 0:
-      n = '10'
-    n = int(n)
-
-    """Warn if we want to cast too many sorts from a single matrix"""
-    print ("\nWe'll cast it %i times.\n" % n)
-    if n > 10:
-      print(
-            'Warning: you want to cast a single character more than '
-            '10 times. This may lead to matrix overheating!\n'
-           )
-
-    """Ask user if the entered parameters are correct"""
-    choice = ''
-    while choice not in ['c', 'r', 'm', 'e']:
-      choice = raw_input(
-                         '(C)ontinue, (R)epeat, go back to (M)enu '
-                         'or (E)xit program? '
-                        )
-    else:
-      if choice.lower() == 'c':
-        """Check if the machine is running"""
-        print('Start the machine...')
-        caster.detect_rotation()
-
-        """Cast the sorts: turn on the pump first."""
-        print('Starting the pump...')
-        caster.send_signals_to_caster(['0075'])
-
-        """Start casting characters"""
-        print('Casting characters...')
-
-        """Cast n combinations of row & column, one by one"""
-        for i in range(n):
-          if len(parsedSignals) > 0:
-            print ' '.join(parsedSignals)
-          else:
-            print('O+15 - no signals')
-          caster.send_signals_to_caster(parsedSignals)
-
-        """Put the line to the galley:"""
-        print('Putting line to the galley...')
-        caster.send_signals_to_caster(['0005', '0075'])
-        """After casting sorts we need to stop the pump"""
-        print('Stopping the pump...')
-        caster.send_signals_to_caster(['0005'])
-
-      elif choice.lower() == 'r':
-        cast_sorts()
-      elif choice.lower() == 'm':
-        pass
-      elif choice.lower() == 'e':
-        caster.deactivate_valves()
-        exit()
-
-    """Ask what to do after casting"""
-    print('\nFinished!')
-
-    finishedChoice = ''
-    while finishedChoice.lower() not in ['r', 'm', 'e']:
-      finishedChoice = raw_input(
-                                 '(R)epeat, go back to (M)enu '
-                                 'or (E)xit program? '
-                                )
-      if finishedChoice.lower() == 'r':
-        self.cast_sorts()
-      elif finishedChoice.lower() == 'm':
-        pass
-      elif finishedChoice.lower() == 'e':
-        caster.deactivate_valves()
-        exit()
-
-      else:
-        print('\nNo such option. Choose again.')
-        finishedChoice = ''
-
-
-  @staticmethod
-  def send_combination(caster):
-    """This function allows us to give the program a specific combination
-    of Monotype codes, and will keep the valves on until we press return
-    (useful for calibration). It also checks the signals' validity"""
-
-    """Let the user enter a combo:"""
-    signals = ''
-    while signals == '':
-      signals = raw_input(
-                          'Enter the signals to send to the machine: '
-                         )
-
-    """Parse the combination, get the signals (first item returned
-    by the parsing function):"""
-    combination = Parsing.signals_parser(signals)[0]
-
-    """Check if we get any signals at all, if so, turn the valves on:"""
-    if combination:
-      print ' '.join(combination)
-      caster.activate_valves(combination)
-
-    """Wait until user decides to stop sending those signals to valves:"""
-    raw_input('Press return to stop. ')
-    caster.deactivate_valves()
-
-    """End of function"""
-
-
-  @staticmethod
-  def align_wedges(caster, space='G5'):
-    """align_wedges(caster, space='G5'):
-
-    Allows to align the justification wedges so that when you're
-    casting a 9-unit character with the S-needle at 0075:3 and 0005:8
-    (neutral position), the  width is the same.
-
-    It works like this:
-    1. 0075 - turn the pump on,
-    2. cast 10 spaces from the specified matrix (default: G9),
-    3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
-    4. cast 10 spaces with the S-needle from the same matrix,
-    5. put the line to the galley, then 0005 to turn the pump off.
-    """
-
-    """Print some info for the user:"""
-    print('Transfer wedge calibration:\n\n'
-          'This function will cast 10 spaces, then set the correction '
-          'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
-          'S-needle. You then have to compare the length of these two '
-          'sets. \nIf they are identical, all is OK. '
-          'If not, you have to adjust the 52D wedge.\n\n'
-          'Turn on the machine...')
-
-    """Don't start until the machine is running:"""
-    caster.detect_rotation()
-
-    combinations = (
-                    ['0075'] + [space] * 10 + ['0075 0005 8'] + ['0075 3'] +
-                    [space + 'S'] * 10 + ['0075 0005'] + ['0005']
-                   )
-
-    for sequence in combinations:
-      """Make a list out of the strings:"""
-      sequence = Parsing.signals_parser(sequence)[0]
-
-      """Display the sequence on screen:"""
-      print(' '.join(sequence))
-
-      """Cast the sequence:"""
-      caster.send_signals_to_caster(sequence)
-
-    """Finished. Return to menu."""
-    print('Procedure finished. Compare the lengths and adjust if needed.')
-
-
 
 class TextUserInterface(object):
-  """TextUserInterface(caster):
+  """TextUserInterface(job):
 
   Use this class for creating a text-based console user interface.
 
@@ -1921,16 +1959,17 @@ class TextUserInterface(object):
   supports UTF-8 too.
   """
 
-  def __init__(self, caster):
-    """On instantiating, we must specify which caster to use:"""
-    self.caster = caster
-    pass
-
-
-  def __enter__(self):
+  def __init__(self, job):
+    """
+    On instantiating, we must specify the job.
+    Then, we'll be able to reach its other sub-classes.
+    """
+    self.job = job
 
     """Set up an empty ribbon file name first"""
-    self.ribbonFile = ''
+    job.ribbonFile = ''
+
+  def __enter__(self):
     return self
 
 
@@ -1959,7 +1998,7 @@ class TextUserInterface(object):
                 '\nInput file not chosen or wrong input file name. '
                 'Press return to go to main menu.\n'
                 )
-      if DebugMode == True:
+      if self.job.debugMode:
         print('Debug mode: see what happened.')
         raise
       self.main_menu()
@@ -1969,22 +2008,18 @@ class TextUserInterface(object):
       exit()
     finally:
       print('Goodbye!')
-      self.caster.deactivate_valves()
+      self.job.caster.deactivate_valves()
 
 
-  @staticmethod
-  def menu(options, **kwargs):
+  def menu(self, options, **kwargs):
     """menu(
             options={'foo':'bar','baz':'qux'}
             header=foo,
-            footer=bar,
-            recursive=False):
+            footer=bar):
 
     A menu which takes three arguments:
     header - string to be displayed above,
     footer - string to be displayed below.,
-    recursive - determines whether the menu will call itself after
-                a command called by choice is executed entirely.
 
     After choice is made, executes the command.
     """
@@ -2002,10 +2037,6 @@ class TextUserInterface(object):
     except KeyError:
       footer = ''
 
-    try:
-      recursive = kwargs['recursive']
-    except KeyError:
-      recursive = False
 
     """Set up vars for conditional statements,
      and lists for appending new items.
@@ -2062,18 +2093,6 @@ class TextUserInterface(object):
       except ValueError:
         return yourChoice
 
-    if recursive:
-      """Go back to this menu after the command is done:"""
-      TextUserInterface.menu(options, kwargs)
-
-
-  def main_menu_additional_info(self):
-    """Displays additional info as a main menu footer:"""
-    if self.ribbonFile != '':
-      return(
-             'Input file name: ' + self.ribbonFile
-            )
-
 
   def enter_filename(self):
     """Enter the ribbon filename; check if the file is readable"""
@@ -2084,14 +2103,6 @@ class TextUserInterface(object):
         return fn
     except IOError:
       raw_input('Wrong filename or file not readable!')
-      return ''
-
-
-  def debug_notice(self):
-    """Prints a notice if the program is in debug mode:"""
-    if DebugMode:
-      return('\n\nThe program is now in debugging mode!')
-    else:
       return ''
 
 
@@ -2115,25 +2126,41 @@ class TextUserInterface(object):
 
     """Declare local functions for menu options:"""
     def choose_ribbon_filename():
-      self.ribbonFile = self.enter_filename()
+      self.job.ribbonFile = self.enter_filename()
     def cast_composition():
-      Actions.cast_composition(self.caster, self.ribbonFile)
+      self.job.cast_composition(self.job.caster, self.job.ribbonFile)
       hold_on_exit()
     def punch_composition():
-      Actions.punch_composition(self.caster, self.ribbonFile)
+      self.job.punch_composition(self.job.caster, self.job.ribbonFile)
       hold_on_exit()
     def cast_sorts():
-      Actions.cast_sorts(self.caster)
+      self.job.cast_sorts(self.job.caster)
     def line_test():
-      Actions.line_test(self.caster)
+      self.job.line_test(self.job.caster)
     def send_combination():
-      Actions.send_combination(self.caster)
+      self.job.send_combination(self.job.caster)
       hold_on_exit()
     def align_wedges():
-      Actions.align_wedges(self.caster)
+      self.job.align_wedges(self.job.caster)
       hold_on_exit()
     def exit_program():
       exit()
+
+
+    def debug_notice(self):
+      """Prints a notice if the program is in debug mode:"""
+      if self.job.debugMode:
+        return('\n\nThe program is now in debugging mode!')
+      else:
+        return ''
+
+
+    def main_menu_additional_info(self):
+      """Displays additional info as a main menu footer:"""
+      if self.job.ribbonFile != '':
+        return(
+               'Input file name: ' + self.job.ribbonFile
+              )
 
 
     """Commands: {option_name : function}"""
@@ -2148,7 +2175,7 @@ class TextUserInterface(object):
                 0 : exit_program
                }
 
-    choice = TextUserInterface.menu(
+    choice = self.menu(
               options,
               header = (
                         'rpi2caster - CAT (Computer-Aided Typecasting) '
@@ -2158,9 +2185,9 @@ class TextUserInterface(object):
                         'and casts the type on a Composition Caster, \n'
                         'or punches a paper tape with a paper tower '
                         'taken off a Monotype keyboard.'
-                       ) + self.debug_notice() + '\n\nMain Menu:',
+                       ) + debug_notice() + '\n\nMain Menu:',
 
-              footer = self.main_menu_additional_info()
+              footer = main_menu_additional_info()
               )
 
 
@@ -2173,8 +2200,7 @@ class TextUserInterface(object):
       raw_input('Press Enter to return to main menu...')
 
 
-  @staticmethod
-  def simple_menu(message, options):
+  def simple_menu(self, message, options):
     """A simple menu where user is asked what to do.
     Wrong choice points back to the menu.
 
@@ -2188,8 +2214,7 @@ class TextUserInterface(object):
 
 
   def __exit__(self, *args):
-    """On exiting, turn all the valves off."""
-    self.caster.deactivate_valves()
+    pass
 
 
 
@@ -2200,21 +2225,14 @@ class Testing(object):
   Certain functions referring to the caster will be replaced with
   placeholder methods from the MonotypeSimulation class.
   """
-  def __init__(self, database, caster, userInterface):
-    """Instantiate a caster simulator object instead of a real caster;
-    other functionality should remain unchanged"""
-    self.database = database
-    self.caster = caster
-    self.userInterface = userInterface
-
-
-  def __enter__(self):
+  def __init__(self):
     pass
 
+  def __enter__(self):
+    return self
 
   def __exit__(self, *args):
     pass
-
 
 
 class WebInterface(object):
@@ -2222,16 +2240,12 @@ class WebInterface(object):
 
   Use this class for instantiating text-based console user interface"""
 
-  def __init__(self, database, caster, actions):
+  def __init__(self, job):
     """instantiate config for the caster"""
-
-    self.database = database
-    self.caster = caster
-
+    self.job = job
 
   def __enter__(self):
-    self.webUI()
-
+    return self
 
   def webUI(self):
     """This is a placeholder for web interface method. Nothing yet..."""
@@ -2246,9 +2260,10 @@ class WebInterface(object):
 Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
 
-  database = Database()
-  caster = Monotype('mkart-cc')
-  userInterface = TextUserInterface(caster)
+  job = Casting(job)
+  job.database = Database()
+  job.caster = Monotype('mkart-cc', job)
+  job.userInterface = TextUserInterface(job)
 
-  with database, caster, userInterface:
+  with job, database, caster, userInterface:
     userInterface.consoleUI()
