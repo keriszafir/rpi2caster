@@ -1643,8 +1643,10 @@ class Casting(object):
     in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL,
     EF, NJ, NK, NKJ, MNH, MNK (feel free to add other combinations!)
     """
-    raw_input('This will check if the valves, pin blocks and 0005, S, '
-             '0075 mechanisms are working. Press return to continue... ')
+    self.userInterface.enter_data(
+          'This will check if the valves, pin blocks and 0005, S, '
+          '0075 mechanisms are working. Press return to continue... '
+         )
 
     combinations = [
                     ['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'],
@@ -1658,10 +1660,10 @@ class Casting(object):
 
     """Send all the combinations to the caster, one by one:"""
     for combination in combinations:
-      print ' '.join(combination)
+      self.userInterface.notify_user(' '.join(combination))
       self.caster.send_signals_to_caster(combination, 120)
 
-    print('\nTesting finished!')
+    self.userInterface.notify_user('\nTesting finished!')
 
     """End of function."""
 
@@ -1735,22 +1737,31 @@ class Casting(object):
     options[choice]()
 
 
-
-  def cast_code(self, combination, n=5):
+  def cast_code(self, combination, n=5, pos0075=3, pos0005=8):
     """
-    Casts n sorts from combination of signals (list).
-    Turns the pump on and off.
+    Casts n sorts from combination of signals (list),
+    with correction wedges if S needle is in action.
 
-    TODO: add unit +/- with 0005, 0075 wedges and S needle.
+    By default, it sets 0075 wedge to 3 and 0005 wedge to 8 (neutral).
+    Determines if single justification (0075 only) or double
+    justification (0005 + 0075) is used.
 
-    Check if the machine is running first:
+    Turns the pump on and off and casts the characters.
     """
+    pos0005 = str(pos0005)
+    pos0075 = str(pos0075)
+
+    """Check if the machine is running first:"""
     print('Start the machine...')
     self.caster.detect_rotation()
 
-    """Cast the sorts: turn on the pump first."""
+    """Cast the sorts: turn on the pump first (and line to the galley)."""
     print('Starting the pump...')
-    self.caster.send_signals_to_caster(['0075'])
+    self.caster.send_signals_to_caster(['0075', '0005', pos0005])
+
+    """If pos0005 != pos0075, we need double justification:"""
+    if pos0005 != pos0075:
+      self.caster.send_signals_to_caster(['0075', pos0075])
 
     """Start casting characters"""
     print('Casting characters...')
@@ -1766,6 +1777,7 @@ class Casting(object):
     """Put the line to the galley:"""
     print('Putting line to the galley...')
     self.caster.send_signals_to_caster(['0005', '0075'])
+
     """After casting sorts we need to stop the pump"""
     print('Stopping the pump...')
     self.caster.send_signals_to_caster(['0005'])
@@ -1782,9 +1794,9 @@ class Casting(object):
     """Let the user enter a combo:"""
     signals = ''
     while signals == '':
-      signals = raw_input(
-                          'Enter the signals to send to the machine: '
-                         )
+      signals = self.userInterface.enter_data(
+                      'Enter the signals to send to the machine: '
+                      )
 
     """Parse the combination, get the signals (first item returned
     by the parsing function):"""
@@ -1792,11 +1804,11 @@ class Casting(object):
 
     """Check if we get any signals at all, if so, turn the valves on:"""
     if combination:
-      print ' '.join(combination)
+      self.userInterface.notify_user(' '.join(combination))
       self.caster.activate_valves(combination)
 
     """Wait until user decides to stop sending those signals to valves:"""
-    raw_input('Press return to stop. ')
+    self.userInterface.enter_data('Press [Enter] to stop. ')
     self.caster.deactivate_valves()
     """End of function"""
 
@@ -1817,34 +1829,34 @@ class Casting(object):
     """
 
     """Print some info for the user:"""
-    print('Transfer wedge calibration:\n\n'
+    self.userInterface.notify_user(
+          'Transfer wedge calibration:\n\n'
           'This function will cast 10 spaces, then set the correction '
           'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
           'S-needle. You then have to compare the length of these two '
           'sets. \nIf they are identical, all is OK. '
           'If not, you have to adjust the 52D wedge.\n\n'
-          'Turn on the machine...')
+          'Turn on the machine...'
+          )
 
     """Don't start until the machine is running:"""
     self.caster.detect_rotation()
 
-    combinations = (
-                    ['0075'] + [space] * 10 + ['0075 0005 8'] + ['0075 3'] +
-                    [space + 'S'] * 10 + ['0075 0005'] + ['0005']
-                   )
+    """Parse the space combination:"""
+    space = Parsing.signals_parser(space)[0]
 
-    for sequence in combinations:
-      """Make a list out of the strings:"""
-      sequence = Parsing.signals_parser(sequence)[0]
+    """Cast 10 spaces without S:"""
+    self.userInterface.notify_user('Now casting with a normal wedge only.')
+    self.cast_code(space, 10)
 
-      """Display the sequence on screen:"""
-      print(' '.join(sequence))
-
-      """Cast the sequence:"""
-      self.caster.send_signals_to_caster(sequence)
+    """Cast 10 spaces with the S-needle:"""
+    self.userInterface.notify_user('Now casting with justification wedges...')
+    self.cast_code(space + ['S'], 10)
 
     """Finished. Return to menu."""
-    print('Procedure finished. Compare the lengths and adjust if needed.')
+    self.userInterface.notify_user(
+         'Procedure finished. Compare the lengths and adjust if needed.'
+         )
 
 
   def main_menu(self):
@@ -1867,28 +1879,7 @@ class Casting(object):
     """Declare local functions for menu options:"""
     def choose_ribbon_filename():
       self.ribbonFile = self.userInterface.enter_filename()
-
-    def cast_composition():
-      self.cast_composition()
-      self.userInterface.hold_on_exit()
-
-    def cast_sorts():
-      self.cast_sorts()
-      self.userInterface.hold_on_exit()
-
-    def line_test():
-      self.line_test()
-
-    def send_combination():
-      self.send_combination()
-      self.userInterface.hold_on_exit()
-
-    def align_wedges():
-      self.align_wedges()
-      self.userInterface.hold_on_exit()
-
-    def exit_program():
-      self.userInterface.exit_program()
+      self.main_menu()
 
     def debug_notice():
       """Prints a notice if the program is in debug mode:"""
@@ -1906,12 +1897,12 @@ class Casting(object):
     """Commands: {option_name : function}"""
     commands = {
                 1 : choose_ribbon_filename,
-                2 : cast_composition,
-                3 : cast_sorts,
-                4 : line_test,
-                5 : send_combination,
-                6 : align_wedges,
-                0 : exit_program
+                2 : self.cast_composition,
+                3 : self.cast_sorts,
+                4 : self.line_test,
+                5 : self.send_combination,
+                6 : self.align_wedges,
+                0 : self.userInterface.exit_program
                }
 
     choice = self.userInterface.menu( options,
@@ -1931,6 +1922,7 @@ class Casting(object):
 
     """Call the function and returnn to menu:"""
     commands[choice]()
+    self.userInterface.hold_on_exit()
     self.main_menu()
 
 
