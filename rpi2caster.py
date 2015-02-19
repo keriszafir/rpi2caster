@@ -93,7 +93,7 @@ class Typesetter(object):
 
 
   def __enter__(self):
-    pass
+    return self
 
 
   def calculate_wedges(self, setWidth, units):
@@ -303,7 +303,7 @@ class Database(object):
     """Look database path up in conffile:"""
     try:
       configDatabasePath = config.get('Database', 'path')
-    except ConfigParser.NoSectionError:
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
       configDatabasePath = ''
 
     if databasePath:
@@ -779,26 +779,40 @@ class Inventory(object):
 
   def main_menu(self):
 
-    options =
-    choice = self.userInterface.menu  (
-          header = (
-                    'Setup utility for rpi2caster CAT. '
-                    '\nMain menu:'
-                   ),
-          footer = '',
-          options = [
-                     [1, 'List casters', 'self.list_casters()'],
-                     [2, 'Add caster', 'self.add_caster()'],
-                     [3, 'Delete caster', 'self.delete_caster()'],
-                     [4, 'List interfaces', 'self.list_interfaces()'],
-                     [5, 'Add interface', 'self.add_interface()'],
-                     [6, 'Delete interface', 'self.delete_interface()'],
-                     [7, 'List wedges', 'self.list_wedges()'],
-                     [8, 'Add wedge', 'self.add_wedge()'],
-                     [9, 'Delete wedge', 'self.delete_wedge()'],
-                     [0, 'Exit program', 'exit()']
-                    ]
-                )
+    options = {
+               1 : 'List matrix cases',
+               2 : 'Show matrix case layout',
+               3 : 'Add a new, empty matrix case',
+               4 : 'Edit matrix case layout',
+               5 : 'Clear matrix case layout',
+               6 : 'Delete matrix case',
+               7 : 'List wedges',
+               8 : 'Add wedge',
+               9 : 'Delete wedge'
+              }
+
+    commands = {
+                1 : self.list_diecases,
+                2 : self.show_diecase_layout,
+                3 : self.add_diecase,
+                4 : self.edit_diecase,
+                5 : self.clear_diecase,
+                6 : self.delete_diecase,
+                7 : self.list_wedges,
+                8 : self.add_wedge,
+                9 : self.delete_wedge,
+                0 : self.userInterface.exit_program
+               }
+
+    choice = self.userInterface.menu (options,
+          header = ('Setup utility for rpi2caster CAT.\nMain menu:'),
+          footer = '')
+
+    """Execute it!"""
+    commands[choice]()
+    self.userInterface.hold_on_exit()
+    self.main_menu()
+
 
   def __exit__(self, *args):
     pass
@@ -1456,10 +1470,7 @@ class Parsing(object):
           contents.append(line)
         return contents
     except IOError:
-      raw_input(
-                'Error: The file cannot be read! '
-                '[ENTER] to go back to menu...'
-                )
+      print('Error: File cannot be read!')
       return False
 
 
@@ -1661,14 +1672,13 @@ class Casting(object):
     Sorts casting routine, based on the position in diecase.
     Ask user about the diecase row & column, as well as number of sorts.
     """
-    os.system('clear')
-    print('Calibration and Sort Casting:\n\n')
-    signals = raw_input(
-                        'Enter column and row symbols '
-                        '(default: G 5, spacebar if O-15) '
-                       )
-    print('\n')
-    if signals == '':
+    self.userInterface.clear()
+    self.userInterface.notify_user('Calibration and Sort Casting:\n\n')
+    signals = self.userInterface.enter_data(
+                    'Enter column and row symbols '
+                    '(default: G 5, spacebar if O-15)\n '
+                   )
+    if not signals:
       signals = 'G5'
 
     """
@@ -1684,97 +1694,81 @@ class Casting(object):
     if user entered spacebar. If it's not the case, user has to
     enter the combination again.
     """
-    if len(parsedSignals) == 0 and signals != ' ':  # if not parsedSignals ??
-      print('\nRe-enter the sequence')
+    if not parsedSignals and signals != ' ':
+      self.userInterface.notify_user('\nRe-enter the sequence')
       time.sleep(1)
-      cast_sorts()                                  # recurse - test it!!!
-    n = raw_input(
-                  '\nHow many sorts do you want to cast? (default: 10) '
-                 )
-    print('\n')
+      self.cast_sorts()
+    """Ask for number:"""
+    n = self.userInterface.enter_data(
+              '\nHow many sorts do you want to cast? (default: 10) \n'
+             )
 
-    """Default to 10 if user enters non-positive number or letters"""
+    """Default to 10 if user enters non-positive number or letters:"""
     if not n.isdigit() or int(n) < 0:
       n = '10'
     n = int(n)
+    self.userInterface.notify_user("\nWe'll cast it %i times.\n" % n)
 
     """Warn if we want to cast too many sorts from a single matrix"""
-    print ("\nWe'll cast it %i times.\n" % n)
     if n > 10:
-      print(
+      self.userInterface.notify_user(
             'Warning: you want to cast a single character more than '
             '10 times. This may lead to matrix overheating!\n'
            )
 
-    """Ask user if the entered parameters are correct"""
-    choice = ''                                         # use simple menu from UI object
-    while choice not in ['c', 'r', 'm', 'e']:
-      choice = raw_input(
-                         '[C]ontinue, [R]epeat, go back to [M]enu '
-                         'or [E]xit program? '
-                        )
-    else:
-      if choice.lower() == 'c':
+    """Use a simple menu to ask user if the entered parameters are correct"""
 
-        # Move it to another function (will be useful for casting spaces!)
+    def cast_it():
+      self.cast_code(parsedSignals, n)
+      self.userInterface.notify_user('Finished!')
 
-        """Check if the machine is running"""
-        print('Start the machine...')
-        self.caster.detect_rotation()
+    options = {
+               'C' : cast_it,
+               'R' : self.cast_sorts,
+               'M' : self.main_menu,
+               'E' : self.userInterface.exit_program
+              }
+    message = '[C]ontinue, [R]epeat, go back to [M]enu or [E]xit program? '
+    choice = self.userInterface.simple_menu(message, options).upper()
 
-        """Cast the sorts: turn on the pump first."""
-        print('Starting the pump...')
-        self.caster.send_signals_to_caster(['0075'])
-
-        """Start casting characters"""
-        print('Casting characters...')
-
-        """Cast n combinations of row & column, one by one"""
-        for i in range(n):
-          if len(parsedSignals) > 0:
-            print ' '.join(parsedSignals)
-          else:
-            print('O+15 - no signals')
-          self.caster.send_signals_to_caster(parsedSignals)
-
-        """Put the line to the galley:"""
-        print('Putting line to the galley...')
-        self.caster.send_signals_to_caster(['0005', '0075'])
-        """After casting sorts we need to stop the pump"""
-        print('Stopping the pump...')
-        self.caster.send_signals_to_caster(['0005'])
+    """Execute choice:"""
+    options[choice]()
 
 
-      elif choice.lower() == 'r':
-        cast_sorts()                         # not sure if it'll work
-      elif choice.lower() == 'm':
-        pass
-      elif choice.lower() == 'e':
-        self.caster.deactivate_valves()
-        exit()                                   # Better to call UI's method
 
-    """Ask what to do after casting"""
-    print('\nFinished!')                         # Deprecate std i/o in functions
+  def cast_code(self, combination, n=5):
+    """
+    Casts n sorts from combination of signals (list).
+    Turns the pump on and off.
 
-# Use simple menu from UI
+    TODO: add unit +/- with 0005, 0075 wedges and S needle.
 
-    finishedChoice = ''
-    while finishedChoice.lower() not in ['r', 'm', 'e']:
-      finishedChoice = raw_input(
-                                 '(R)epeat, go back to (M)enu '
-                                 'or (E)xit program? '
-                                )
-      if finishedChoice.lower() == 'r':
-        cast_sorts()                            # not sure if it'll work
-      elif finishedChoice.lower() == 'm':
-        pass
-      elif finishedChoice.lower() == 'e':
-        self.caster.deactivate_valves()
-        exit()                                  # call UI's exit method
+    Check if the machine is running first:
+    """
+    print('Start the machine...')
+    self.caster.detect_rotation()
 
-      else:   # deprecated
-        print('\nNo such option. Choose again.')
-        finishedChoice = ''
+    """Cast the sorts: turn on the pump first."""
+    print('Starting the pump...')
+    self.caster.send_signals_to_caster(['0075'])
+
+    """Start casting characters"""
+    print('Casting characters...')
+
+    """Cast n combinations of row & column, one by one"""
+    for i in range(n):
+      if len(combination) > 0:
+        print ' '.join(combination)
+      else:
+        print('O+15 - no signals')
+      self.caster.send_signals_to_caster(combination)
+
+    """Put the line to the galley:"""
+    print('Putting line to the galley...')
+    self.caster.send_signals_to_caster(['0005', '0075'])
+    """After casting sorts we need to stop the pump"""
+    print('Stopping the pump...')
+    self.caster.send_signals_to_caster(['0005'])
 
 
   def send_combination(self):
@@ -1851,6 +1845,93 @@ class Casting(object):
 
     """Finished. Return to menu."""
     print('Procedure finished. Compare the lengths and adjust if needed.')
+
+
+  def main_menu(self):
+    """Calls self.userInterface.menu() with options,
+    a header and a footer.
+
+    Options: {option_name : description}
+    """
+    options = {
+               1 : 'Load a ribbon file',
+               2 : 'Cast composition',
+               3 : 'Cast sorts',
+               4 : 'Test the valves and pinblocks',
+               5 : 'Lock the caster on a specified diecase position',
+               6 : 'Calibrate the 0005 and 0075 wedges',
+               0 : 'Exit program'
+              }
+
+
+    """Declare local functions for menu options:"""
+    def choose_ribbon_filename():
+      self.ribbonFile = self.userInterface.enter_filename()
+
+    def cast_composition():
+      self.cast_composition()
+      self.userInterface.hold_on_exit()
+
+    def cast_sorts():
+      self.cast_sorts()
+      self.userInterface.hold_on_exit()
+
+    def line_test():
+      self.line_test()
+
+    def send_combination():
+      self.send_combination()
+      self.userInterface.hold_on_exit()
+
+    def align_wedges():
+      self.align_wedges()
+      self.userInterface.hold_on_exit()
+
+    def exit_program():
+      self.userInterface.exit_program()
+
+    def debug_notice():
+      """Prints a notice if the program is in debug mode:"""
+      if self.debugMode:
+        return('\n\nThe program is now in debugging mode!')
+      else:
+        return ''
+
+    def main_menu_additional_info():
+      """Displays additional info as a main menu footer:"""
+      if self.ribbonFile != '':
+        return('Input file name: ' + self.ribbonFile)
+
+
+    """Commands: {option_name : function}"""
+    commands = {
+                1 : choose_ribbon_filename,
+                2 : cast_composition,
+                3 : cast_sorts,
+                4 : line_test,
+                5 : send_combination,
+                6 : align_wedges,
+                0 : exit_program
+               }
+
+    choice = self.userInterface.menu( options,
+              header = (
+                        'rpi2caster - CAT (Computer-Aided Typecasting) '
+                        'for Monotype Composition or Type and Rule casters.'
+                        '\n\n'
+                        'This program reads a ribbon (input file) '
+                        'and casts the type on a Composition Caster, \n'
+                        'or punches a paper tape with a paper tower '
+                        'taken off a Monotype keyboard.'
+                       ) + debug_notice() + '\n\nMain Menu:',
+
+              footer = main_menu_additional_info()
+              )
+
+
+    """Call the function and returnn to menu:"""
+    commands[choice]()
+    self.main_menu()
 
 
 
@@ -2021,7 +2102,6 @@ class TextUserInterface(object):
     except KeyError:
       footer = ''
 
-
     """Set up vars for conditional statements,
      and lists for appending new items.
 
@@ -2033,7 +2113,6 @@ class TextUserInterface(object):
     yourChoice = ''
     choices = []
 
-
     """Clear the screen, display header and add two empty lines:"""
     os.system('clear')
     if header:
@@ -2041,7 +2120,6 @@ class TextUserInterface(object):
       print('')
 
     """Display all the options; construct the possible choices list:"""
-
     for choice in options:
        if choice != 0:
         """Print the option choice and displayed text:
@@ -2057,7 +2135,6 @@ class TextUserInterface(object):
       choices.append('0')
     except KeyError:
       pass
-
 
     """Print footer, if defined:"""
     if footer:
@@ -2077,6 +2154,20 @@ class TextUserInterface(object):
       except ValueError:
         return yourChoice
 
+  def clear(self):
+    """Clear screen"""
+    os.system('clear')
+
+
+  def notify_user(self, message):
+    """Display info for the user:"""
+    print(message)
+
+
+  def enter_data(self, message):
+    """Let user enter the data:"""
+    return raw_input(message)
+
 
   def enter_filename(self):
     """Enter the ribbon filename; check if the file is readable"""
@@ -2090,97 +2181,8 @@ class TextUserInterface(object):
       return ''
 
 
-  def main_menu(self):
-    """Calls menu() with options, a header and a footer.
-    Does not use the recursive feature of menu(), because the
-    additional information would not be displayed.
-    Instead, recursion is implemented in this function.
-    """
-    """Options: {option_name : description}"""
-    options = {
-               1 : 'Load a ribbon file',
-               2 : 'Cast composition',
-               3 : 'Punch a paper tape',
-               4 : 'Cast sorts',
-               5 : 'Test the valves and pinblocks',
-               6 : 'Lock the caster on a specified diecase position',
-               7 : 'Calibrate the 0005 and 0075 wedges',
-               0 : 'Exit program'
-              }
-
-
-    """Sometimes we need to display notice on returning to menu:"""
-    def hold_on_exit():
-      raw_input('Press Enter to return to main menu...')
-
-    """Declare local functions for menu options:"""
-    def choose_ribbon_filename():
-      self.job.ribbonFile = self.enter_filename()
-    def cast_composition():
-      self.job.cast_composition()
-      hold_on_exit()
-    def punch_composition():
-      self.job.punch_composition()
-      hold_on_exit()
-    def cast_sorts():
-      self.job.cast_sorts()
-    def line_test():
-      self.job.line_test()
-    def send_combination():
-      self.job.send_combination()
-      hold_on_exit()
-    def align_wedges():
-      self.job.align_wedges()
-      hold_on_exit()
-    def exit_program():
-      exit()
-
-    def debug_notice():
-      """Prints a notice if the program is in debug mode:"""
-      if self.job.debugMode:
-        return('\n\nThe program is now in debugging mode!')
-      else:
-        return ''
-
-    def main_menu_additional_info():
-      """Displays additional info as a main menu footer:"""
-      if self.job.ribbonFile != '':
-        return(
-               'Input file name: ' + self.job.ribbonFile
-              )
-
-
-    """Commands: {option_name : function}"""
-    commands = {
-                1 : choose_ribbon_filename,
-                2 : cast_composition,
-                3 : punch_composition,
-                4 : cast_sorts,
-                5 : line_test,
-                6 : send_combination,
-                7 : align_wedges,
-                0 : exit_program
-               }
-
-    choice = self.menu(
-              options,
-              header = (
-                        'rpi2caster - CAT (Computer-Aided Typecasting) '
-                        'for Monotype Composition or Type and Rule casters.'
-                        '\n\n'
-                        'This program reads a ribbon (input file) '
-                        'and casts the type on a Composition Caster, \n'
-                        'or punches a paper tape with a paper tower '
-                        'taken off a Monotype keyboard.'
-                       ) + debug_notice() + '\n\nMain Menu:',
-
-              footer = main_menu_additional_info()
-              )
-
-
-    """Call the function and returnn to menu:"""
-    commands[choice]()
-    self.main_menu()
+  def hold_on_exit(self):
+      raw_input('Press [Enter] to return to main menu...')
 
 
   def simple_menu(self, message, options):
@@ -2191,9 +2193,14 @@ class TextUserInterface(object):
     options: a list or tuple of strings - options.
     """
     ans = ''
-    while ans not in options:
+    while ans.upper() not in options and ans.lower() not in options:
       ans = raw_input(message)
     return ans
+
+
+  def exit_program(self):
+    print('\nGoodbye!\n')
+    exit()
 
 
   def __exit__(self, *args):
@@ -2204,11 +2211,12 @@ class TextUserInterface(object):
 class Testing(object):
   """Testing:
 
-  A class for testing the program without an actual caster/interface.
+  A "job" class for testing the program without an actual caster/interface.
   Certain functions referring to the caster will be replaced with
   placeholder methods from the MonotypeSimulation class.
   """
   def __init__(self):
+    self.debugMode = True
     pass
 
   def __enter__(self):
@@ -2224,7 +2232,6 @@ class WebInterface(object):
   Use this class for instantiating text-based console user interface"""
 
   def __init__(self, job):
-    """instantiate config for the caster"""
     self.job = job
 
   def __enter__(self):
@@ -2248,5 +2255,5 @@ if __name__ == '__main__':
   job.caster = Monotype(job, 'mkart-cc')
   job.userInterface = TextUserInterface(job)
 
-  with job, database, caster, userInterface:
-    userInterface.consoleUI()
+  with job:
+    job.main_menu()
