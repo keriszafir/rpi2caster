@@ -567,13 +567,9 @@ class Inventory(object):
   -diecase layouts.
   """
 
-  def __init__(self, database, userInterface):
+  def __init__(self):
 
     self.debugMode = False
-    """Connect to a specified database:"""
-    self.database = database
-    self.userInterface = userInterface
-
 
   def __enter__(self):
     return self
@@ -598,21 +594,6 @@ class Inventory(object):
     When all data passes validation ("revalidate" flag remains False),
     user is asked if everything is correct and can commit values
     to the database."""
-
-
-    """
-    Reset revalidation: it's necessary to set the "revalidate" flag
-    to False at the beginning.
-    if everything is OK, the data can be written to the database.
-    In case of empty/wrong values, the validation is failed and user
-    has to enter or re-enter the value. The "revalidate" flag is set
-    to True. After all values are collected, the add_caster function
-    will recurse into itself with entered data as arguments.
-    If everything is correct, the user will be able to commit the data
-    to the database. If not, the user must re-enter
-    any parameter which does not match the expected values or type.
-    """
-    revalidate = False
 
 
     """
@@ -666,7 +647,7 @@ class Inventory(object):
     If no name is given, assume that the user means the S5 wedge, which is
     very common and most casting workshops have a few of them.
     """
-    if wedgeName == '':
+    while not wedgeName:
       wedgeName = raw_input(
                             'Enter the wedge name, e.g. S5 '
                             '(very typical, default): '
@@ -676,43 +657,53 @@ class Inventory(object):
       elif wedgeName[0].upper() != 'S' and wedgeName.isdigit():
         wedgeName = 'S' + wedgeName
       wedgeName = wedgeName.upper()
-      revalidate = True
 
     """
-    Enter a set width, float. If the width ends with "E", it's an
-    old-pica (1pica = 0.1667") wedge for European foundries, thus E.
-    Apparently, there were no cicero/Didot wedges, all was in picas.
-    E will be stripped, and the program will determine whether it's
-    an old pica wedge or not.
+    Enter a set width, float. If the width ends with "E", then
+    it's a wedge for European foundries with 1.667" (British) pica.
+    E will be stripped, and the program will set the wedge as British
+    pica.
+
+    Otherwise, user can choose if it's American (0.166") or British pica.
     """
-    try:
-      setWidth = float(setWidth)
-    except ValueError:
+    while not setWidth:
       setWidth = raw_input(
                           'Enter the wedge set width as decimal, '
                           'e.g. 9.75E: '
                           )
 
-      """Determine if it's an old pica wedge - E is present:"""
+      """Determine if it's a British pica wedge - E is present:"""
       if setWidth[-1].upper() == 'E':
         setWidth = setWidth[:-1]
-        oldPica = True
+        britPica = True
       else:
-        oldPica = False
-      revalidate = True
+        choice = ''
+        options = { 'A' : False, 'B' : True }
+        while choice not in options:
+          choice = raw_input(
+                             '[A]merican (0.1660"), '
+                             'or [B]ritish (0.1667") pica? '
+                            ).upper()
+        britPica = options[choice]
+      try:
+        setWidth = float(setWidth)
+      except ValueError:
+        setWidth = ''
 
     """Enter the wedge unit values for steps 1...15 (and optionally 16):"""
-    if not steps:
+    while not steps:
+      """First, check if we've got this wedge in our program:"""
       try:
         rawSteps = wedgeData[wedgeName]
       except (KeyError, ValueError):
+        """No wedge - enter data:"""
         rawSteps = raw_input(
                             'Enter the wedge unit values for steps 1...16, '
                             'separated by commas. If empty, entering values '
                             'for wedge S5 (very common): '
                             )
-      if rawSteps == '':
-        rawSteps = '5,6,7,8,9,9,9,10,10,11,12,13,14,15,18,18'
+        if not rawSteps:
+          rawSteps = wedgeData['S5']
       rawSteps = rawSteps.split(',')
       steps = []
       """
@@ -737,43 +728,37 @@ class Inventory(object):
       else:
         print 'The wedge has ', len(steps), 'steps. That is OK.'
 
-    if not revalidate:
 
-      # Find a more elegant way to do this:
+    """Display a summary:"""
+    summary = {
+               'Wedge' : wedgeName,
+               'Set width' : setWidth,
+               'British pica wedge?' : britPica
+              }
+    for parameter in summary:
+      print parameter, ' : ', summary[parameter]
 
-      print('Wedge: %s \n' % wedgeName)
-      print('Set width: %f \n' % setWidth)
-      print('Is it an old pica ("E") wedge?: %s \n' % str(oldPica))
+    """Loop over all unit values in wedge's steps and display them:"""
+    for i, step in zip(range(len(steps)), steps):
+      print('Step %i unit value: %i \n' % (i+1, step))
 
-      """Loop over all unit values in wedge's steps and display them:"""
-      for i, step in zip(range(len(steps)), steps):
-        print('Step %i unit value: %i \n' % (i+1, step))
+    def commit_wedge():
+      if self.database.add_wedge(wedgeName, setWidth, britPica, steps):
+        print('Wedge added successfully.')
+      else:
+        print('Failed to add wedge!')
 
-      # To be deprecated and replaced with a new small menu:
+    def reenter():
+      raw_input('Enter parameters again from scratch... ')
+      add_wedge()
 
-      ans = choice('\nCommit? [y] - yes, save wedge to database, '
-                   '[n] - no, enter values again, '
-                   'or [m] to return to main menu.',
-                   ['y', 'n', 'm']
-                  )
-      if ans.lower() == 'y':
-        """If everything is OK and user confirms,
-        add data to the database.
-        """
-        if database.add_wedge(wedgeName, setWidth, oldPica, steps):
-          print('Wedge added successfully.')
-        else:
-          print('Failed to add wedge!')
-      elif ans.lower() == 'n':
-        raw_input('Enter parameters again from scratch... ')
-        add_wedge()
-      elif ans.lower() == 'm':
-        """Back to menu..."""
-        pass
-
-    else:
-      """Recurse into add_wedge with obtained data to re-check it"""
-      self.add_wedge(wedgeName, setWidth, oldPica, steps)
+    # To be deprecated and replaced with a new small menu:
+    message = (
+               '\nCommit wedge to database? \n'
+               '[Y]es / [N]o (enter values again) / return to [M]enu: '
+              )
+    options = { 'Y' : commit_wedge, 'N' : reenter, 'M' : self.main_menu }
+    ans = self.userInterface.simple_menu(message, options).upper()
 
 
   def delete_wedge(self):
@@ -781,7 +766,7 @@ class Inventory(object):
     ID = raw_input('Enter the wedge ID to delete: ')
     if ID.isdigit():
       ID = int(ID)
-      if self.job.database.delete_wedge(ID):
+      if self.database.delete_wedge(ID):
         print('Wedge deleted successfully.')
     else:
       print('Wedge name must be a number!')
@@ -789,11 +774,13 @@ class Inventory(object):
 
   def list_wedges(self):
     """lists all wedges we have"""
-    self.job.database.list_wedges()
+    self.database.list_wedges()
 
 
   def main_menu(self):
-    self.job.userInterface.menu  (
+
+    options =
+    choice = self.userInterface.menu  (
           header = (
                     'Setup utility for rpi2caster CAT. '
                     '\nMain menu:'

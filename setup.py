@@ -1,14 +1,10 @@
 #!/usr/bin/python
 import rpi2caster
 
-#DebugMode = True
-
-database = rpi2caster.Database('database/monotype.db')
-caster = rpi2caster.MonotypeSimulation()
-actions = rpi2caster.Actions(caster)
-userInterface = rpi2caster.TextUserInterface(database, caster, actions)
-setup = rpi2caster.MonotypeConfiguration(database, userInterface)
+job = rpi2caster.Inventory()
+job.database = rpi2caster.Database(job, 'database/monotype.db')
+job.userInterface = rpi2caster.TextUserInterface(job)
 
 
-with database, caster, actions, userInterface, setup:
-  setup.main_menu()
+with job:
+  job.main_menu()
