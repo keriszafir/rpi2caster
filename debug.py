@@ -2,13 +2,11 @@
 import rpi2caster
 
 
-rpi2caster.DebugMode = True
+job = rpi2caster.Casting()
+job.debugMode = True
+job.database = rpi2caster.Database(job, 'database/monotype.db')
+job.caster = rpi2caster.Monotype(job, 'mkart-cc')
+job.UI = rpi2caster.TextUI(job)
 
-
-database = rpi2caster.Database('database/monotype.db')
-caster = rpi2caster.Monotype('mkart-cc')
-userInterface = rpi2caster.TextUserInterface(caster)
-
-
-with database, caster, userInterface:
-  userInterface.consoleUI()
+with job:
+  job.main_menu()

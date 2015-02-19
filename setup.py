@@ -3,7 +3,7 @@ import rpi2caster
 
 job = rpi2caster.Inventory()
 job.database = rpi2caster.Database(job, 'database/monotype.db')
-job.userInterface = rpi2caster.TextUserInterface(job)
+job.UI = rpi2caster.TextUI(job)
 
 
 with job:

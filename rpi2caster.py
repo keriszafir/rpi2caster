@@ -213,36 +213,36 @@ class Typesetter(object):
     return [steps0075, steps0005]
 
 
-  def calculate_line_length(self, lineLength, measurement='oldPica'):
-    """calculate_line_length(lineLength, measurement='oldPica'):
+  def calculate_line_length(self, lineLength, measurement='britPica'):
+    """calculate_line_length(lineLength, measurement='britPica'):
 
     Calculates the line length in Monotype fundamental (1-set) units.
-    The "length" parameter is in old-pica (0.1667") by default,
+    The "length" parameter is in British pica (0.1667") by default,
     but this can be changed with the "measurement" parameter.
     """
 
     """Check if the measurement is one of the following:
-    oldPica, newPica, cicero
+    britPica, amerPica, cicero
     If not, throw an error.
     """
 
     inWidth = {
                'oldPica' : 0.1667,
-               'newPica' : 0.1660,
+               'amerPica' : 0.1660,
                'cicero'  : 0.1776
               }
     if measurement not in inWidth:
-      print('Incorrect unit designation!')
+      self.UI.notify_user('Incorrect unit designation!')
       return False
 
     """Base em width is a width (in inches) of a single em -
     which, by the Monotype convention, is defined as 18 units 12 set.
 
-    Use old-pica (0.1667") value for European cicero system;
-    for pica systems, use their respective values.
+    Use British pica (0.1667") value for European cicero system;
+    for pica systems, use British or American values.
     """
     if measurement == 'cicero':
-      baseEmWidth = inWidth['oldPica']
+      baseEmWidth = inWidth['britPica']
     else:
       baseEmWidth = inWidth[measurement]
 
@@ -758,7 +758,7 @@ class Inventory(object):
                '[Y]es / [N]o (enter values again) / return to [M]enu: '
               )
     options = { 'Y' : commit_wedge, 'N' : reenter, 'M' : self.main_menu }
-    ans = self.userInterface.simple_menu(message, options).upper()
+    ans = self.UI.simple_menu(message, options).upper()
 
 
   def delete_wedge(self):
@@ -801,16 +801,16 @@ class Inventory(object):
                 7 : self.list_wedges,
                 8 : self.add_wedge,
                 9 : self.delete_wedge,
-                0 : self.userInterface.exit_program
+                0 : self.UI.exit_program
                }
 
-    choice = self.userInterface.menu (options,
+    choice = self.UI.menu (options,
           header = ('Setup utility for rpi2caster CAT.\nMain menu:'),
           footer = '')
 
     """Execute it!"""
     commands[choice]()
-    self.userInterface.hold_on_exit()
+    self.UI.hold_on_exit()
     self.main_menu()
 
 
@@ -889,12 +889,16 @@ class Monotype(object):
       [self.unitAdding, self.diecaseSystem, self.interfaceID] = settings
 
     """When debugging, display all caster info:"""
-    if self.job.debugMode:
-      print 'Using caster: ', self.casterName, '\n'
-      print 'Caster parameters:\n'
-      print 'Diecase system: ', self.diecaseSystem
-      print 'Has unit-adding? : ', self.unitAdding
-      print '\nInterface ID: ', self.interfaceID
+
+    self.job.UI.debug_info('\nCaster parameters:\n')
+    output = {
+              'Using caster name: ' : self.casterName,
+              'Diecase system: ' : self.diecaseSystem,
+              'Has unit-adding attachement? ' : self.unitAdding,
+              'Interface ID: ' : self.interfaceID
+             }
+    for parameter in output:
+      self.job.UI.debug_info(parameter + output[parameter])
 
 
     """
@@ -913,13 +917,16 @@ class Monotype(object):
       self.pinBase] = interfaceSettings
 
     """Print the parameters for debugging:"""
-    if self.job.debugMode:
-      print '\nInterface parameters:\n'
-      print 'Emergency button GPIO: ', self.emergencyGPIO
-      print 'Photocell GPIO: ', self.photocellGPIO
-      print '1st MCP23017 I2C address: ', self.mcp0Address
-      print '2nd MCP23017 I2C address: ', self.mcp1Address
-      print 'MCP23017 pin base for GPIO numbering: ', self.pinBase
+    self.job.UI.debug_info('\nInterface parameters:\n')
+    output = {
+              'Emergency button GPIO: ' : self.emergencyGPIO,
+              'Photocell GPIO: ' : self.photocellGPIO,
+              '1st MCP23017 I2C address: ' : self.mcp0Address,
+              '2nd MCP23017 I2C address: ' : self.mcp1Address,
+              'MCP23017 pin base for GPIO numbering: ' : self.pinBase
+             }
+    for parameter in output:
+      self.job.UI.debug_info(parameter + output[parameter])
 
     """On init, do the input configuration:
 
@@ -932,25 +939,25 @@ class Monotype(object):
 
     """Check if the photocell GPIO has been configured - file can be read:"""
     if not os.access(self.gpioValueFileName, os.R_OK):
-      print(
-            '%s: file does not exist or cannot be read. '
-            'You must export the GPIO no %i as input first!'
-              % (self.gpioValueFileName, self.photocellGPIO)
-           )
-      exit()
+      self.job.UI.notify_user(
+          '%s: file does not exist or cannot be read. '
+          'You must export the GPIO no %i as input first!'
+            % (self.gpioValueFileName, self.photocellGPIO)
+         )
+      self.job.UI.exit_program()
 
 
     """Ensure that the interrupts are generated for photocell GPIO
     for both rising and falling edge:"""
     with open(self.gpioEdgeFileName, 'r') as edgeFile:
       if (edgeFile.read()[:4] != 'both'):
-        print(
-              '%s: file does not exist, cannot be read, '
-              'or the interrupt on GPIO no %i is not set to "both". '
-              'Check the system config.'
-               % (self.gpioEdgeFileName, self.photocellGPIO)
-              )
-        exit()
+        self.job.UI.notify_user(
+            '%s: file does not exist, cannot be read, '
+            'or the interrupt on GPIO no %i is not set to "both". '
+            'Check the system config.'
+             % (self.gpioEdgeFileName, self.photocellGPIO)
+            )
+        self.job.UI.exit_program()
 
     """Output configuration:
 
@@ -1055,16 +1062,10 @@ class Monotype(object):
     self.wiringPiPinNumber = dict(zip(signals, pins))
 
     """Print signals order for debugging:"""
-    if self.job.debugMode:
-      print '\nSignals arrangement: ',
-      for sig in signals:
-        print sig,
-      print '\n'
-      """The program has displayed caster-related debug info,
-      now it is time for the user to read it and press Enter to proceed.
-
-      Normally, user goes directly to the main menu."""
-      raw_input('Press Enter to continue... ')
+    self.job.UI.debug_info('\nSignals arrangement: ')
+    for sig in signals:
+      self.job.UI.debug_info(sig,)
+    self.job.UI.debug_enter_data('Press Enter to continue... ')
 
 
   def get_caster_settings_from_conffile(self):
@@ -1102,9 +1103,10 @@ class Monotype(object):
     except (ConfigParser.NoSectionError, ValueError, TypeError):
       """
       In case of shit happening, return None and fall back on defaults."""
-      print('Incorrect caster parameters. Using hardcoded defaults.')
-      if self.job.debugMode:
-        raise
+      self.job.UI.notify_user(
+          'Incorrect caster parameters. Using hardcoded defaults.'
+          )
+      self.job.UI.exception_handler()
       return None
 
 
@@ -1186,7 +1188,7 @@ class Monotype(object):
                 int(pinBase)]
       else:
         """This happens if the interface is inactive in conffile:"""
-        print(
+        self.job.UI.notify_user(
               'Interface ID=', interfaceID, 'is marked as inactive. '
               'We cannot use it - reverting to defaults'
               )
@@ -1196,9 +1198,10 @@ class Monotype(object):
       """
       In case of shit happening, return None and fall back on defaults.
       """
-      print('Incorrect interface parameters. Using hardcoded defaults.')
-      if self.job.debugMode:
-        raise
+      self.job.UI.notify_user(
+           'Incorrect interface parameters. Using hardcoded defaults.'
+           )
+      self.job.UI.exception_handler()
       return None
 
 
@@ -1244,12 +1247,12 @@ class Monotype(object):
         or timeout (machine stopped):
         """
         if cycles > cycles_max:
-          print('\nOkay, the machine is running...\n')
+          self.job.UI.notify_user('\nOkay, the machine is running...\n')
           return True
         else:
           self.machine_stopped()
+          """Recurse:"""
           self.detect_rotation()
-          return False
 
 
   def send_signals_to_caster(self, signals, machineTimeout=5):
@@ -1353,20 +1356,21 @@ class Monotype(object):
     This allows us to choose whether we want to continue, return to menu
     or exit if the machine is stopped during casting.
     """
-    choice = ""
-    while choice not in ['c', 'm', 'e']:
-      choice = raw_input(
-                         "Machine not running! Check what\'s going on."
-                         "\n(C)ontinue, return to (M)enu "
-                         "or (E)xit program."
-                        )
-    else:
-      if choice.lower() == 'c':
-        return True
-      elif choice.lower() == 'm':
-        self.job.userInterface.main_menu()
-      elif choice.lower() == 'e':
-        exit()
+    def continue_casting():
+      """Helper function - continue casting."""
+      return True
+
+    options = {
+               'C' : continue_casting,
+               'M' : self.job.main_menu,
+               'E' : self.job.UI.exit_program
+              }
+    message = (
+               "Machine not running! Check what's going on.\n"
+               "[C]ontinue, return to [M]enu or [E]xit program? "
+              )
+    choice = self.job.UI.simple_menu(message, options).upper()
+    options[choice]()
 
 
   def __exit__(self, *args):
@@ -1420,29 +1424,37 @@ class MonotypeSimulation(object):
     startTime = time.time()
     answer = None
     while answer is None and time.time() < (startTime + 5):
-      answer = raw_input('Press [ENTER] (to simulate rotation) '
-                         'or wait 5sec (to simulate machine off)\n')
+      answer = self.job.UI.enter_data(
+                     'Press [ENTER] (to simulate rotation) '
+                     'or wait 5sec (to simulate machine off)\n'
+                    )
     else:
       self.machine_stopped()
+      """Recurse:"""
       self.detect_rotation()
 
 
   def machine_stopped(self):
-    """Machine stopped menu - the same as in actual casting.
+    """machine_stopped():
 
     This allows us to choose whether we want to continue, return to menu
-    or exit if the machine stops during casting. It's just a simulation here."""
-    choice = ""
-    while choice not in ['c', 'm', 'e']:
-      choice = raw_input('Machine not running! Check what\'s going on.'
-                   '\n(C)ontinue, return to (M)enu or (E)xit program.')
-    else:
-      if choice.lower() == 'c':
-        return True
-      elif choice.lower() == 'm':
-        self.job.userInterface.main_menu()
-      elif choice.lower() == 'e':
-        exit()
+    or exit if the machine is stopped during casting.
+    """
+    def continue_casting():
+      """Helper function - continue casting."""
+      return True
+
+    options = {
+               'C' : continue_casting,
+               'M' : self.job.main_menu,
+               'E' : self.job.UI.exit_program
+              }
+    message = (
+               "Machine not running! Check what's going on.\n"
+               "[C]ontinue, return to [M]enu or [E]xit program? "
+              )
+    choice = self.job.UI.simple_menu(message, options).upper()
+    options[choice]()
 
 
   def __exit__(self, *args):
@@ -1470,7 +1482,7 @@ class Parsing(object):
           contents.append(line)
         return contents
     except IOError:
-      print('Error: File cannot be read!')
+      print('Error: File cannot be read!')    # rework it to fit a new UI model
       return False
 
 
@@ -1643,7 +1655,7 @@ class Casting(object):
     in order: 0005 - S - 0075, 1 towards 14, A towards N, O+15, NI, NL,
     EF, NJ, NK, NKJ, MNH, MNK (feel free to add other combinations!)
     """
-    self.userInterface.enter_data(
+    self.UI.enter_data(
           'This will check if the valves, pin blocks and 0005, S, '
           '0075 mechanisms are working. Press return to continue... '
          )
@@ -1660,10 +1672,10 @@ class Casting(object):
 
     """Send all the combinations to the caster, one by one:"""
     for combination in combinations:
-      self.userInterface.notify_user(' '.join(combination))
+      self.UI.notify_user(' '.join(combination))
       self.caster.send_signals_to_caster(combination, 120)
 
-    self.userInterface.notify_user('\nTesting finished!')
+    self.UI.notify_user('\nTesting finished!')
 
     """End of function."""
 
@@ -1674,9 +1686,9 @@ class Casting(object):
     Sorts casting routine, based on the position in diecase.
     Ask user about the diecase row & column, as well as number of sorts.
     """
-    self.userInterface.clear()
-    self.userInterface.notify_user('Calibration and Sort Casting:\n\n')
-    signals = self.userInterface.enter_data(
+    self.UI.clear()
+    self.UI.notify_user('Calibration and Sort Casting:\n\n')
+    signals = self.UI.enter_data(
                     'Enter column and row symbols '
                     '(default: G 5, spacebar if O-15)\n '
                    )
@@ -1697,11 +1709,11 @@ class Casting(object):
     enter the combination again.
     """
     if not parsedSignals and signals != ' ':
-      self.userInterface.notify_user('\nRe-enter the sequence')
+      self.UI.notify_user('\nRe-enter the sequence')
       time.sleep(1)
       self.cast_sorts()
     """Ask for number:"""
-    n = self.userInterface.enter_data(
+    n = self.UI.enter_data(
               '\nHow many sorts do you want to cast? (default: 10) \n'
              )
 
@@ -1709,11 +1721,11 @@ class Casting(object):
     if not n.isdigit() or int(n) < 0:
       n = '10'
     n = int(n)
-    self.userInterface.notify_user("\nWe'll cast it %i times.\n" % n)
+    self.UI.notify_user("\nWe'll cast it %i times.\n" % n)
 
     """Warn if we want to cast too many sorts from a single matrix"""
     if n > 10:
-      self.userInterface.notify_user(
+      self.UI.notify_user(
             'Warning: you want to cast a single character more than '
             '10 times. This may lead to matrix overheating!\n'
            )
@@ -1722,16 +1734,16 @@ class Casting(object):
 
     def cast_it():
       self.cast_code(parsedSignals, n)
-      self.userInterface.notify_user('Finished!')
+      self.UI.notify_user('Finished!')
 
     options = {
                'C' : cast_it,
                'R' : self.cast_sorts,
                'M' : self.main_menu,
-               'E' : self.userInterface.exit_program
+               'E' : self.UI.exit_program
               }
     message = '[C]ontinue, [R]epeat, go back to [M]enu or [E]xit program? '
-    choice = self.userInterface.simple_menu(message, options).upper()
+    choice = self.UI.simple_menu(message, options).upper()
 
     """Execute choice:"""
     options[choice]()
@@ -1794,7 +1806,7 @@ class Casting(object):
     """Let the user enter a combo:"""
     signals = ''
     while signals == '':
-      signals = self.userInterface.enter_data(
+      signals = self.UI.enter_data(
                       'Enter the signals to send to the machine: '
                       )
 
@@ -1804,11 +1816,11 @@ class Casting(object):
 
     """Check if we get any signals at all, if so, turn the valves on:"""
     if combination:
-      self.userInterface.notify_user(' '.join(combination))
+      self.UI.notify_user(' '.join(combination))
       self.caster.activate_valves(combination)
 
     """Wait until user decides to stop sending those signals to valves:"""
-    self.userInterface.enter_data('Press [Enter] to stop. ')
+    self.UI.enter_data('Press [Enter] to stop. ')
     self.caster.deactivate_valves()
     """End of function"""
 
@@ -1829,7 +1841,7 @@ class Casting(object):
     """
 
     """Print some info for the user:"""
-    self.userInterface.notify_user(
+    self.UI.notify_user(
           'Transfer wedge calibration:\n\n'
           'This function will cast 10 spaces, then set the correction '
           'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
@@ -1846,21 +1858,21 @@ class Casting(object):
     space = Parsing.signals_parser(space)[0]
 
     """Cast 10 spaces without S:"""
-    self.userInterface.notify_user('Now casting with a normal wedge only.')
+    self.UI.notify_user('Now casting with a normal wedge only.')
     self.cast_code(space, 10)
 
     """Cast 10 spaces with the S-needle:"""
-    self.userInterface.notify_user('Now casting with justification wedges...')
+    self.UI.notify_user('Now casting with justification wedges...')
     self.cast_code(space + ['S'], 10)
 
     """Finished. Return to menu."""
-    self.userInterface.notify_user(
+    self.UI.notify_user(
          'Procedure finished. Compare the lengths and adjust if needed.'
          )
 
 
   def main_menu(self):
-    """Calls self.userInterface.menu() with options,
+    """Calls self.UI.menu() with options,
     a header and a footer.
 
     Options: {option_name : description}
@@ -1878,7 +1890,7 @@ class Casting(object):
 
     """Declare local functions for menu options:"""
     def choose_ribbon_filename():
-      self.ribbonFile = self.userInterface.enter_filename()
+      self.ribbonFile = self.UI.enter_filename()
       self.main_menu()
 
     def debug_notice():
@@ -1902,10 +1914,10 @@ class Casting(object):
                 4 : self.line_test,
                 5 : self.send_combination,
                 6 : self.align_wedges,
-                0 : self.userInterface.exit_program
+                0 : self.UI.exit_program
                }
 
-    choice = self.userInterface.menu( options,
+    choice = self.UI.menu( options,
               header = (
                         'rpi2caster - CAT (Computer-Aided Typecasting) '
                         'for Monotype Composition or Type and Rule casters.'
@@ -1922,7 +1934,7 @@ class Casting(object):
 
     """Call the function and returnn to menu:"""
     commands[choice]()
-    self.userInterface.hold_on_exit()
+    self.UI.hold_on_exit()
     self.main_menu()
 
 
@@ -2005,8 +2017,8 @@ class RibbonPunching(object):
 
 
 
-class TextUserInterface(object):
-  """TextUserInterface(job):
+class TextUI(object):
+  """TextUI(job):
 
   Use this class for creating a text-based console user interface.
 
@@ -2024,7 +2036,8 @@ class TextUserInterface(object):
     self.job = job
 
     """Set up an empty ribbon file name first"""
-    job.ribbonFile = ''
+    self.job.ribbonFile = ''
+
 
   def __enter__(self):
     return self
@@ -2156,6 +2169,18 @@ class TextUserInterface(object):
     print(message)
 
 
+  def debug_info(self, message):
+    """Print debug message to screen if in debug mode:"""
+    if self.job.debugMode:
+      print(message)
+
+
+  def exception_handler(self, message):
+    """Raise caught exceptions in debug mode:"""
+    if self.job.debugMode:
+      raise
+
+
   def enter_data(self, message):
     """Let user enter the data:"""
     return raw_input(message)
@@ -2245,7 +2270,7 @@ if __name__ == '__main__':
   job = Casting()
   job.database = Database(job)
   job.caster = Monotype(job, 'mkart-cc')
-  job.userInterface = TextUserInterface(job)
+  job.UI = TextUI(job)
 
   with job:
     job.main_menu()
