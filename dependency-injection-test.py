@@ -2,20 +2,15 @@
 import rpi2caster
 
 print 'Initializing job...'
-job = rpi2caster.Casting()
+job = rpi2caster.Casting
 print 'Initializing database...'
-database = rpi2caster.Database(job)
+database = rpi2caster.Database()
 print 'Initializing UI...'
-UI = rpi2caster.TextUI(job)
-
-# This is for now needed for initializing caster
-job.UI = UI
-
+UI = rpi2caster.TextUI()
 print 'Initializing caster...'
-caster = rpi2caster.Monotype(job, 'mkart-cc')
+caster = rpi2caster.Monotype('mkart-cc')
 
 print('Objects initialized.')
-
 name = {job : 'job', database : 'database', caster : 'caster', UI : 'user interface'}
 
 
