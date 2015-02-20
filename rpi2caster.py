@@ -295,32 +295,33 @@ class Database(object):
   def __init__(self, job, databasePath='', confFilePath='/etc/rpi2caster.conf'):
     """Set up the job context:"""
     self.job = job
+    self.databasePath = databasePath
+    self.confFilePath = confFilePath
 
-    """Initialize conffile:"""
-    config = ConfigParser.SafeConfigParser()
-    config.read(confFilePath)
-
-    """Look database path up in conffile:"""
-    try:
-      configDatabasePath = config.get('Database', 'path')
-    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-      configDatabasePath = ''
-
-    if databasePath:
-      """Use path from function call, if it's there:"""
-      self.databasePath = databasePath
-
-    elif configDatabasePath:
-      """Use path stored in conffile:"""
-      self.databasePath = configDatabasePath
-
-    else:
-      """Revert to hardcoded local default:"""
-      self.databasePath = 'database/monotype.db'
+    self.database_setup()
 
 
   def __enter__(self):
     return self
+
+
+  def database_setup(self):
+    """Initialize database:
+
+    Database path passed to class has priority over database path
+    set in conffile. If none of them is found, the program will use
+    hardcoded default.
+    """
+    if not self.databasePath:
+      config = ConfigParser.SafeConfigParser()
+      config.read(self.confFilePath)
+
+      """Look database path up in conffile:"""
+      try:
+        self.databasePath = config.get('Database', 'path')
+      except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+        """Revert to hardcoded local default:"""
+        self.databasePath = 'database/monotype.db'
 
 
   def add_wedge(self, wedgeName, setWidth, oldPica, steps):
@@ -374,9 +375,8 @@ class Database(object):
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        print('Database error: cannot add wedge!')
-        if self.job.debugMode:
-          raise
+        self.job.UI.notify_user('Database error: cannot add wedge!')
+        self.job.UI.exception_handler()
         return False
 
 
@@ -406,17 +406,17 @@ class Database(object):
                       )
         wedge = cursor.fetchone()
         if wedge is None:
-          print(
-                'No wedge %s - %f found in database!'
-                 % (wedgeName, setWidth)
-               )
+          self.job.UI.notify_user(
+                                  'No wedge %s - %f found in database!'
+                                   % (wedgeName, setWidth)
+                                 )
           return False
         else:
           wedge = list(wedge)
-          print(
-                'Wedge %s - %f found in database - OK'
-                 % (wedgeName, setWidth)
-               )
+          self.job.UI.notify_user(
+                                  'Wedge', wedgeName, '-', setWidth,
+                                  'set found in database - OK'
+                                 )
 
           """Change return value of oldPica to boolean:"""
           wedge[3] = bool(wedge[3])
@@ -429,9 +429,8 @@ class Database(object):
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        print('Database error: cannot get wedge!')
-        if self.job.debugMode:
-          raise
+        self.job.UI.notify_user('Database error: cannot get wedge!')
+        self.job.UI.exception_handler()
 
 
   def wedge_by_id(self, ID):
@@ -457,7 +456,7 @@ class Database(object):
                       )
         wedge = cursor.fetchone()
         if wedge is None:
-          print('Wedge not found!')
+          self.job.UI.notify_user('Wedge not found!')
           return False
         else:
           wedge = list(wedge)
@@ -473,9 +472,8 @@ class Database(object):
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        print('Database error: cannot get wedge!')
-        if self.job.debugMode:
-          raise
+        self.job.UI.notify_user('Database error: cannot get wedge!')
+        self.job.UI.exception_handler()
 
 
   def delete_wedge(self, ID):
@@ -498,12 +496,11 @@ class Database(object):
           return True
         except:
           """In debug mode we get the exact exception code & stack trace."""
-          print('Database error: cannot delete wedge!')
-          if self.job.debugMode:
-            raise
+          self.job.UI.notify_user('Database error: cannot delete wedge!')
+          self.job.UI.exception_handler()
           return False
     else:
-      print('Nothing to delete.')
+      self.job.UI.notify_user('Nothing to delete.')
       return False
 
 
@@ -528,7 +525,7 @@ class Database(object):
         cursor = db.cursor()
         cursor.execute('SELECT * FROM wedges')
         print(
-              '\nid, wedge name, set width, old pica, '
+              '\nid, wedge name, set width, British pica, '
               'unit values for all steps:\n'
              )
         while True:
@@ -540,23 +537,22 @@ class Database(object):
             wedge[4] = json.loads(wedge[4])
 
             """Print all the wedge parameters:"""
-            for item in wedge:
-              print item, '   ',
-            print ''
+            self.job.UI.notify_user(' '.join([str(item)
+                                    for item in list(wedge)]), '\n')
           else:
             break
         return True
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        print('Database error: cannot list wedges!')
-        if self.job.debugMode:
-          raise
+        self.job.UI.notify_user('Database error: cannot list wedges!')
+        self.job.UI.exception_handler()
         return False
 
 
   def __exit__(self, *args):
     pass
+
 
 
 class Inventory(object):
@@ -569,10 +565,24 @@ class Inventory(object):
 
   def __init__(self):
 
-    self.debugMode = False
+    self.debugMode = True
 
   def __enter__(self):
     return self
+
+  """Placeholders for functionality not implemented yet:"""
+  def list_diecases(self):
+    pass
+  def show_diecase_layout(self):
+    pass
+  def add_diecase(self):
+    pass
+  def edit_diecase(self):
+    pass
+  def clear_diecase(self):
+    pass
+  def delete_diecase(self):
+    pass
 
 
   def add_wedge(self, wedgeName='', setWidth='', oldPica='', steps=''):
@@ -648,10 +658,10 @@ class Inventory(object):
     very common and most casting workshops have a few of them.
     """
     while not wedgeName:
-      wedgeName = raw_input(
-                            'Enter the wedge name, e.g. S5 '
-                            '(very typical, default): '
-                           )
+      wedgeName = self.UI.enter_data(
+                                     'Enter the wedge name, e.g. S5 '
+                                     '(very typical, default): '
+                                    )
       if wedgeName == '':
         wedgeName = 'S5'
       elif wedgeName[0].upper() != 'S' and wedgeName.isdigit():
@@ -667,28 +677,26 @@ class Inventory(object):
     Otherwise, user can choose if it's American (0.166") or British pica.
     """
     while not setWidth:
-      setWidth = raw_input(
-                          'Enter the wedge set width as decimal, '
-                          'e.g. 9.75E: '
-                          )
+      setWidth = self.UI.enter_data(
+                                    'Enter the wedge set width as decimal, '
+                                    'e.g. 9.75E: '
+                                   )
 
       """Determine if it's a British pica wedge - E is present:"""
       if setWidth[-1].upper() == 'E':
         setWidth = setWidth[:-1]
         britPica = True
       else:
-        choice = ''
+        """Let user choose if it's American or British pica:"""
         options = { 'A' : False, 'B' : True }
-        while choice not in options:
-          choice = raw_input(
-                             '[A]merican (0.1660"), '
-                             'or [B]ritish (0.1667") pica? '
-                            ).upper()
+        message = '[A]merican (0.1660"), or [B]ritish (0.1667") pica? '
+        choice = self.UI.simple_menu(message, options).upper()
         britPica = options[choice]
       try:
         setWidth = float(setWidth)
       except ValueError:
         setWidth = ''
+        """Try again."""
 
     """Enter the wedge unit values for steps 1...15 (and optionally 16):"""
     while not steps:
@@ -697,11 +705,11 @@ class Inventory(object):
         rawSteps = wedgeData[wedgeName]
       except (KeyError, ValueError):
         """No wedge - enter data:"""
-        rawSteps = raw_input(
-                            'Enter the wedge unit values for steps 1...16, '
-                            'separated by commas. If empty, entering values '
-                            'for wedge S5 (very common): '
-                            )
+        rawSteps = self.UI.enter_data(
+                        'Enter the wedge unit values for steps 1...16, '
+                        'separated by commas. If empty, entering values '
+                        'for wedge S5 (very common): '
+                        )
         if not rawSteps:
           rawSteps = wedgeData['S5']
       rawSteps = rawSteps.split(',')
@@ -718,15 +726,17 @@ class Inventory(object):
       15 or 16 (15 is most common, 16 was used for HMN and KMN systems):
       """
       if len(steps) < 15:
-        print('Warning - the wedge you entered has less than 15 steps! \n'
-              'This is almost certainly a mistake.\n'
+        self.UI.notify_user(
+             'Warning - the wedge you entered has less than 15 steps! \n'
+             'This is almost certainly a mistake.\n'
              )
       elif len(steps) > 16:
-        print('Warning - the wedge you entered has more than 16 steps! \n'
+        self.UI.notify_user(
+              'Warning - the wedge you entered has more than 16 steps! \n'
               'This is almost certainly a mistake.\n'
              )
       else:
-        print 'The wedge has ', len(steps), 'steps. That is OK.'
+        self.UI.notify_user('The wedge has ', len(steps), 'steps. That is OK.')
 
 
     """Display a summary:"""
@@ -736,40 +746,42 @@ class Inventory(object):
                'British pica wedge?' : britPica
               }
     for parameter in summary:
-      print parameter, ' : ', summary[parameter]
+      self.UI.notify_user(parameter, ':', summary[parameter])
 
     """Loop over all unit values in wedge's steps and display them:"""
     for i, step in zip(range(len(steps)), steps):
-      print('Step %i unit value: %i \n' % (i+1, step))
+      self.UI.notify_user('Step', i+1, 'unit value:', step, '\n')
 
     def commit_wedge():
       if self.database.add_wedge(wedgeName, setWidth, britPica, steps):
-        print('Wedge added successfully.')
+        self.UI.notify_user('Wedge added successfully.')
       else:
-        print('Failed to add wedge!')
+        self.UI.notify_user('Failed to add wedge!')
 
     def reenter():
-      raw_input('Enter parameters again from scratch... ')
-      add_wedge()
+      self.UI.enter_data('Enter parameters again from scratch... ')
+      self.add_wedge()
 
-    # To be deprecated and replaced with a new small menu:
+
     message = (
                '\nCommit wedge to database? \n'
                '[Y]es / [N]o (enter values again) / return to [M]enu: '
               )
     options = { 'Y' : commit_wedge, 'N' : reenter, 'M' : self.main_menu }
     ans = self.UI.simple_menu(message, options).upper()
+    options[ans]()
 
 
   def delete_wedge(self):
-    """Used for deleting a wedge from database"""
-    ID = raw_input('Enter the wedge ID to delete: ')
+    """Used for deleting a wedge from database."""
+    self.list_wedges()
+    ID = self.UI.enter_data('Enter the wedge ID to delete: ')
     if ID.isdigit():
       ID = int(ID)
       if self.database.delete_wedge(ID):
-        print('Wedge deleted successfully.')
+        self.UI.notify_user('Wedge deleted successfully.')
     else:
-      print('Wedge name must be a number!')
+      self.UI.notify_user('Wedge name must be a number!')
 
 
   def list_wedges(self):
@@ -788,7 +800,8 @@ class Inventory(object):
                6 : 'Delete matrix case',
                7 : 'List wedges',
                8 : 'Add wedge',
-               9 : 'Delete wedge'
+               9 : 'Delete wedge',
+               0 : 'Exit program'
               }
 
     commands = {
@@ -898,7 +911,7 @@ class Monotype(object):
               'Interface ID: ' : self.interfaceID
              }
     for parameter in output:
-      self.job.UI.debug_info(parameter + output[parameter])
+      self.job.UI.debug_info(parameter, output[parameter])
 
 
     """
@@ -926,7 +939,7 @@ class Monotype(object):
               'MCP23017 pin base for GPIO numbering: ' : self.pinBase
              }
     for parameter in output:
-      self.job.UI.debug_info(parameter + output[parameter])
+      self.job.UI.debug_info(parameter, output[parameter])
 
     """On init, do the input configuration:
 
@@ -940,10 +953,9 @@ class Monotype(object):
     """Check if the photocell GPIO has been configured - file can be read:"""
     if not os.access(self.gpioValueFileName, os.R_OK):
       self.job.UI.notify_user(
-          '%s: file does not exist or cannot be read. '
-          'You must export the GPIO no %i as input first!'
-            % (self.gpioValueFileName, self.photocellGPIO)
-         )
+           self.gpioValueFileName, ': file does not exist or cannot be read.',
+          'You must export the GPIO no', self.photocellGPIO, 'as input first!'
+          )
       self.job.UI.exit_program()
 
 
@@ -2164,21 +2176,23 @@ class TextUI(object):
     os.system('clear')
 
 
-  def notify_user(self, message):
-    """Display info for the user:"""
-    print(message)
+  def notify_user(self, *args):
+    """Display info for the user - print all in one line:"""
+    for arg in args:
+      print arg,
+    print ''
 
 
-  def debug_info(self, message):
+  def debug_info(self, *args):
     """Print debug message to screen if in debug mode:"""
     if self.job.debugMode:
-      print(message)
+      self.notify_user(args)
 
 
-  def exception_handler(self, message):
+  def exception_handler(self):
     """Raise caught exceptions in debug mode:"""
     if self.job.debugMode:
-      raise
+      print sys.exc_info()
 
 
   def enter_data(self, message):
@@ -2269,8 +2283,9 @@ if __name__ == '__main__':
 
   job = Casting()
   job.database = Database(job)
-  job.caster = Monotype(job, 'mkart-cc')
   job.UI = TextUI(job)
+  job.caster = Monotype(job, 'mkart-cc')
+
 
   with job:
     job.main_menu()
