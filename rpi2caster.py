@@ -2189,6 +2189,11 @@ class TextUI(object):
       self.notify_user(args)
 
 
+  def debug_enter_data(self, message):
+    if self.job.debugMode:
+      return enter_data(self, message)
+
+
   def exception_handler(self):
     """Raise caught exceptions in debug mode:"""
     if self.job.debugMode:
