@@ -1,10 +1,5 @@
 #!/usr/bin/python
 import rpi2caster
 
-job = rpi2caster.Inventory()
-job.database = rpi2caster.Database(job, 'database/monotype.db')
-job.UI = rpi2caster.TextUI(job)
-
-
-with job:
-  job.main_menu()
+session = rpi2caster.Session(database=rpi2caster.Database('database/monotype.db'),
+                             job=rpi2caster.Inventory())

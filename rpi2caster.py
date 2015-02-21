@@ -371,8 +371,8 @@ class Database(object):
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        selfUI.notify_user('Database error: cannot add wedge!')
-        selfUI.exception_handler()
+        self.UI.notify_user('Database error: cannot add wedge!')
+        self.UI.exception_handler()
         return False
 
 
@@ -402,14 +402,14 @@ class Database(object):
                       )
         wedge = cursor.fetchone()
         if wedge is None:
-          selfUI.notify_user(
+          self.UI.notify_user(
                                   'No wedge %s - %f found in database!'
                                    % (wedgeName, setWidth)
                                  )
           return False
         else:
           wedge = list(wedge)
-          selfUI.notify_user(
+          self.UI.notify_user(
                                   'Wedge', wedgeName, '-', setWidth,
                                   'set found in database - OK'
                                  )
@@ -425,8 +425,8 @@ class Database(object):
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        selfUI.notify_user('Database error: cannot get wedge!')
-        selfUI.exception_handler()
+        self.UI.notify_user('Database error: cannot get wedge!')
+        self.UI.exception_handler()
 
 
   def wedge_by_id(self, ID):
@@ -452,7 +452,7 @@ class Database(object):
                       )
         wedge = cursor.fetchone()
         if wedge is None:
-          selfUI.notify_user('Wedge not found!')
+          self.UI.notify_user('Wedge not found!')
           return False
         else:
           wedge = list(wedge)
@@ -468,8 +468,8 @@ class Database(object):
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        selfUI.notify_user('Database error: cannot get wedge!')
-        selfUI.exception_handler()
+        self.UI.notify_user('Database error: cannot get wedge!')
+        self.UI.exception_handler()
 
 
   def delete_wedge(self, ID):
@@ -492,11 +492,11 @@ class Database(object):
           return True
         except:
           """In debug mode we get the exact exception code & stack trace."""
-          selfUI.notify_user('Database error: cannot delete wedge!')
-          selfUI.exception_handler()
+          self.UI.notify_user('Database error: cannot delete wedge!')
+          self.UI.exception_handler()
           return False
     else:
-      selfUI.notify_user('Nothing to delete.')
+      self.UI.notify_user('Nothing to delete.')
       return False
 
 
@@ -533,7 +533,7 @@ class Database(object):
             wedge[4] = json.loads(wedge[4])
 
             """Print all the wedge parameters:"""
-            selfUI.notify_user(' '.join([str(item)
+            self.UI.notify_user(' '.join([str(item)
                                     for item in list(wedge)]), '\n')
           else:
             break
@@ -541,8 +541,8 @@ class Database(object):
 
       except:
         """In debug mode we get the exact exception code & stack trace."""
-        selfUI.notify_user('Database error: cannot list wedges!')
-        selfUI.exception_handler()
+        self.UI.notify_user('Database error: cannot list wedges!')
+        self.UI.exception_handler()
         return False
 
 
@@ -817,7 +817,8 @@ class Inventory(object):
           footer = '')
 
     """Execute it!"""
-    commands[choice]()
+    with self.database:
+      commands[choice]()
     self.UI.hold_on_exit()
     self.main_menu()
 
@@ -844,6 +845,7 @@ class Monotype(object):
     """Creates a caster object for a given caster name.
 
     Initialize config first:"""
+    self.casterName = casterName
     self.config = ConfigParser.SafeConfigParser()
     self.config.read(confFilePath)
 
@@ -865,7 +867,6 @@ class Monotype(object):
     """
 
     """Default caster parameters:"""
-    self.casterName = casterName
     self.interfaceID = 0
     self.unitAdding = 0
     self.diecaseSystem = 'norm17'
@@ -890,7 +891,7 @@ class Monotype(object):
 
     """When debugging, display all caster info:"""
 
-    selfUI.debug_info('\nCaster parameters:\n')
+    self.UI.debug_info('\nCaster parameters:\n')
     output = {
               'Using caster name: ' : self.casterName,
               'Diecase system: ' : self.diecaseSystem,
@@ -898,7 +899,7 @@ class Monotype(object):
               'Interface ID: ' : self.interfaceID
              }
     for parameter in output:
-      selfUI.debug_info(parameter, output[parameter])
+      self.UI.debug_info(parameter, output[parameter])
 
     """
     Then, the interface ID is looked up in the database, and interface
@@ -916,7 +917,7 @@ class Monotype(object):
       self.pinBase] = interfaceSettings
 
     """Print the parameters for debugging:"""
-    selfUI.debug_info('\nInterface parameters:\n')
+    self.UI.debug_info('\nInterface parameters:\n')
     output = {
               'Emergency button GPIO: ' : self.emergencyGPIO,
               'Photocell GPIO: ' : self.photocellGPIO,
@@ -925,7 +926,7 @@ class Monotype(object):
               'MCP23017 pin base for GPIO numbering: ' : self.pinBase
              }
     for parameter in output:
-      selfUI.debug_info(parameter, output[parameter])
+      self.UI.debug_info(parameter, output[parameter])
 
     """On init, do the input configuration:
 
@@ -938,24 +939,24 @@ class Monotype(object):
 
     """Check if the photocell GPIO has been configured - file can be read:"""
     if not os.access(self.gpioValueFileName, os.R_OK):
-      selfUI.notify_user(
+      self.UI.notify_user(
            self.gpioValueFileName, ': file does not exist or cannot be read.',
           'You must export the GPIO no', self.photocellGPIO, 'as input first!'
           )
-      selfUI.exit_program()
+      self.UI.exit_program()
 
 
     """Ensure that the interrupts are generated for photocell GPIO
     for both rising and falling edge:"""
     with open(self.gpioEdgeFileName, 'r') as edgeFile:
       if (edgeFile.read()[:4] != 'both'):
-        selfUI.notify_user(
+        self.UI.notify_user(
             '%s: file does not exist, cannot be read, '
             'or the interrupt on GPIO no %i is not set to "both". '
             'Check the system config.'
              % (self.gpioEdgeFileName, self.photocellGPIO)
             )
-        selfUI.exit_program()
+        self.UI.exit_program()
 
     """Output configuration:
 
@@ -1060,10 +1061,10 @@ class Monotype(object):
     self.wiringPiPinNumber = dict(zip(signals, pins))
 
     """Print signals order for debugging:"""
-    selfUI.debug_info('\nSignals arrangement: ')
+    self.UI.debug_info('\nSignals arrangement: ')
     for sig in signals:
-      selfUI.debug_info(sig,)
-    selfUI.debug_enter_data('Press Enter to continue... ')
+      self.UI.debug_info(sig,)
+    self.UI.debug_enter_data('Press Enter to continue... ')
 
 
   def get_caster_settings_from_conffile(self):
@@ -1101,10 +1102,10 @@ class Monotype(object):
     except (ConfigParser.NoSectionError, ValueError, TypeError):
       """
       In case of shit happening, return None and fall back on defaults."""
-      selfUI.notify_user(
+      self.UI.notify_user(
           'Incorrect caster parameters. Using hardcoded defaults.'
           )
-      selfUI.exception_handler()
+      self.UI.exception_handler()
       return None
 
 
@@ -1186,7 +1187,7 @@ class Monotype(object):
                 int(pinBase)]
       else:
         """This happens if the interface is inactive in conffile:"""
-        selfUI.notify_user(
+        self.UI.notify_user(
               'Interface ID=', interfaceID, 'is marked as inactive. '
               'We cannot use it - reverting to defaults'
               )
@@ -1196,10 +1197,10 @@ class Monotype(object):
       """
       In case of shit happening, return None and fall back on defaults.
       """
-      selfUI.notify_user(
+      self.UI.notify_user(
            'Incorrect interface parameters. Using hardcoded defaults.'
            )
-      selfUI.exception_handler()
+      self.UI.exception_handler()
       return None
 
 
@@ -1245,7 +1246,7 @@ class Monotype(object):
         or timeout (machine stopped):
         """
         if cycles > cycles_max:
-          selfUI.notify_user('\nOkay, the machine is running...\n')
+          self.UI.notify_user('\nOkay, the machine is running...\n')
           return True
         else:
           self.machine_stopped()
@@ -1361,13 +1362,13 @@ class Monotype(object):
     options = {
                'C' : continue_casting,
                'M' : self.job.main_menu,
-               'E' : selfUI.exit_program
+               'E' : self.UI.exit_program
               }
     message = (
                "Machine not running! Check what's going on.\n"
                "[C]ontinue, return to [M]enu or [E]xit program? "
               )
-    choice = selfUI.simple_menu(message, options).upper()
+    choice = self.UI.simple_menu(message, options).upper()
     options[choice]()
 
 
@@ -1377,7 +1378,254 @@ class Monotype(object):
 
 
 
-class MonotypeSimulation(object):     # TODO: use new user interface abstraction
+class Keyboard(object):
+  """
+  Keyboard is technically a paper tower taken off a keyboard,
+  it does not have machine cycle sensor nor emergency stop button,
+  but it has 32 valves and an interface to control them.
+  """
+
+  def __init__(self, name='Keyboard', confFilePath='/etc/rpi2caster.conf'):
+    """Creates a caster object for a given caster name.
+
+    Initialize config first:"""
+    self.casterName = name
+    self.config = ConfigParser.SafeConfigParser()
+    self.config.read(confFilePath)
+
+
+  def __enter__(self):
+    """Run the setup when entering the context:"""
+    self.interface_setup()
+    return self
+
+
+  def interface_setup(self):
+    """Setup routine:
+
+    Sets up initial default parameters for interface:"""
+    self.interfaceID = 0
+    self.mcp0Address = 0x20
+    self.mcp1Address = 0x21
+    self.pinBase = 65
+
+    """
+    Next, this method reads data from config file and fetches
+    a list of interfaceparameters:"""
+
+    interfaceSettings = self.get_settings_from_conffile()
+    if interfaceSettings:
+      [self.interfaceID, self.mcp0Address, self.mcp1Address,
+       self.pinBase] = interfaceSettings
+
+    """Print the parameters for debugging:"""
+    self.UI.debug_info('\nInterface parameters:\n')
+    output = {
+              'Interface ID: ' : self.interfaceID,
+              '1st MCP23017 I2C address: ' : self.mcp0Address,
+              '2nd MCP23017 I2C address: ' : self.mcp1Address,
+              'MCP23017 pin base for GPIO numbering: ' : self.pinBase
+             }
+    for parameter in output:
+      self.UI.debug_info(parameter, output[parameter])
+
+
+    """Output configuration:
+
+    Setup the wiringPi MCP23017 chips for valve outputs:
+    """
+    wiringpi.mcp23017Setup(self.pinBase,      self.mcp0Address)
+    wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
+
+    pins = range(self.pinBase, self.pinBase + 32)
+
+    """Set all I/O lines on MCP23017s as outputs - mode = 1"""
+    for pin in pins:
+      wiringpi.pinMode(pin,1)
+
+    """This list defines the names and order of Monotype control signals
+    that will be assigned to 32 MCP23017 outputs and solenoid valves.
+    You may want to change it, depending on how you wired the valves
+    in hardware (e.g. you can fix interchanged lines by swapping signals).
+
+    Monotype ribbon perforations are arranged as follows:
+
+    NMLKJIHGF S ED  0075    CBA 123456789 10 11 12 13 14  0005
+                   (large)                               (large)
+
+    O15 is absent in ribbon, and is only used by the keyboard's paper tower.
+    It's recommended to assign it to the first or last output line.
+
+    You'll probably want to assign your outputs in one of these orders:
+
+    a) alphanumerically:
+
+    mcp0 bank A | mcp0 bank B                | mcp1 bank A | mcp1 bank B
+    ---------------------------------------------------------------------
+    12345678    | 9 10 11 12 13 14 0005 0075 | ABCDEFGH    | IJKLMN S O15
+    """
+    signalsA = [
+                '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
+                '11', '12', '13', '14', '0005', '0075', 'A', 'B',
+                'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+                'M', 'N', 'S', 'O15'
+               ]
+
+    """
+    b) according to Monotype codes:
+
+    mcp0 bank A | mcp0 bank B     | mcp1 bank A | mcp1 bank B
+    -----------------------------------------------------------------------
+    NMLKJIHG    | F S ED 0075 CBA | 12345678    | 9 10 11 12 13 14 0005 O15
+    """
+    signalsB = [
+                'N', 'M', 'L', 'K', 'J', 'I', 'H', 'G', 'F', 'S', 'E',
+                'D', '0075', 'C', 'B', 'A', '1', '2', '3', '4', '5',
+                '6', '7', '8', '9', '10', '11', '12', '13', '14',
+                '0005', 'O15'
+               ]
+
+    """
+    c) grouping odd and even Monotype signals in valve units,
+    where first MCP controls odd signals (upper/lower paper tower inputs
+    if you use V air connection block) and second MCP controls even signals:
+
+    mcp0 bank A   | mcp0 bank B      | mcp1 bank A | mcp1 bank B
+    --------------------------------------------------------------------
+    NLJHFE 0075 B | 13579 11 13 0005 | MKIGSDCA    | 2468 10 12 14 O15
+    """
+    signalsC = [
+                'N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', '1', '3',
+                '5', '7', '9', '11', '13', '0005', 'M', 'K', 'I', 'G',
+                'S', 'D', 'C', 'A', '2', '4', '6', '8', '10', '12',
+                '14', 'O15'
+               ]
+
+    """
+    d) grouping odd and even Monotype signals in valve units,
+    where first MCP controls left half of signals - N...A,
+    and second MCP controls right half - 1...0005:
+
+    mcp0 bank A   | mcp0 bank B | mcp1 bank A      | mcp1 bank B
+    --------------------------------------------------------------------
+    NLJGFE 0075 B | MKIHSDCA    | 13579 11 13 0005 | 2468 10 12 14 O15
+    """
+    signalsD = [
+                'N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', 'M', 'K',
+                'I', 'G', 'S', 'D', 'C', 'A','1', '3', '5', '7', '9',
+                '11', '13', '0005',  '2', '4', '6', '8', '10', '12',
+                '14', 'O15'
+               ]
+
+
+    """mcp0 is the MCP23017 with lower address (e.g. 0x20), mcp1 - the chip
+    with higher address (e.g. 0x21). If you're using DIP or SOIC chips,
+    I/O bank A uses physical pin numbers 21...18, bank B is 1...8.
+    See datasheet for further info."""
+
+
+    """Choose one of predefined orders or define a brand new one:"""
+    signals = signalsA
+
+    """Assign wiringPi pin numbers on MCP23017s to the Monotype
+    control signals defined earlier.
+    """
+    self.wiringPiPinNumber = dict(zip(signals, pins))
+
+    """Print signals order for debugging:"""
+    self.UI.debug_info('\nSignals arrangement: ')
+    for sig in signals:
+      self.UI.debug_info(sig,)
+    self.UI.debug_enter_data('Press Enter to continue... ')
+
+
+  def get_settings_from_conffile(self):
+    """get_settings_from_conffile():
+
+    Reads the settings for a keyboard with self.name
+    from the config file (where it is represented by a section, whose
+    name is self.name).
+    """
+
+    try:
+      """Get caster parameters from conffile."""
+      interfaceID = self.config.get(self.name, 'interface_id')
+
+    except (ConfigParser.NoSectionError, ValueError, TypeError):
+      """
+      In case of shit happening, return None and fall back on defaults."""
+      self.UI.notify_user(
+          'Incorrect parameters. Using hardcoded defaults.'
+          )
+      self.UI.exception_handler()
+      return None
+
+    """Time to get interface ID:"""
+    interfaceName = 'Interface' + str(self.interfaceID)
+    try:
+      """Check if the interface is active, else return None"""
+      trueAliases = ['true', '1', 'on', 'yes']
+      if self.config.get(interfaceName, 'active').lower() in trueAliases:
+        mcp0Address = self.config.get(interfaceName, 'mcp0_address')
+        mcp1Address = self.config.get(interfaceName, 'mcp1_address')
+        pinBase = self.config.get(interfaceName, 'pin_base')
+
+        """Return parameters:"""
+        return [interfaceID, int(mcp0Address, 16), int(mcp1Address, 16),
+                int(pinBase)]
+      else:
+        """This happens if the interface is inactive in conffile:"""
+        self.UI.notify_user(
+              'Interface ID=', interfaceID, 'is marked as inactive. '
+              'We cannot use it - reverting to defaults'
+              )
+        return None
+
+    except (ConfigParser.NoSectionError, ValueError, TypeError):
+      """
+      In case of shit happening, return None and fall back on defaults.
+      """
+      self.UI.notify_user(
+           'Incorrect interface parameters. Using hardcoded defaults.'
+           )
+      self.UI.exception_handler()
+      return None
+
+
+  def activate_valves(self, signals):
+    """activate_valves(signals):
+
+    Activates the solenoid valves connected with interface's outputs,
+    as specified in the "signals" argument (tuple or list).
+    The input array "signals" contains strings, either
+    lowercase (a, b, g, s...) or uppercase (A, B, G, S...).
+    Do nothing if the function receives an empty sequence, which will
+    occur if we cast with the matrix found at position O15.
+    """
+    if signals:
+      for monotypeSignal in signals:
+        pin = self.wiringPiPinNumber[monotypeSignal]
+        wiringpi.digitalWrite(pin,1)
+
+
+  def deactivate_valves(self):
+    """deactivate_valves():
+
+    Turn all valves off after casting/punching any character.
+    Call this function to avoid outputs staying turned on if something
+    goes wrong, esp. in case of abnormal program termination.
+    """
+    for pin in range(self.pinBase, self.pinBase + 32):
+      wiringpi.digitalWrite(pin,0)
+
+
+  def __exit__(self, *args):
+    """On exit, turn all the valves off"""
+    self.deactivate_valves()
+
+
+
+class MonotypeSimulation(object):
   """MonotypeSimulation:
 
   A class which allows to test rpi2caster without an actual interface
@@ -1385,34 +1633,39 @@ class MonotypeSimulation(object):     # TODO: use new user interface abstraction
   to the machine.
   """
 
-  def __init__(self, casterName='Monotype Simulator', configFileName=''):
+  def __init__(self, casterName='Monotype Simulator'):
     self.casterName = casterName
-    print 'Using hypothetical caster: ', self.casterName
-    print('Testing rpi2caster without an actual caster or interface. ')
-    raw_input('Press [ENTER] to continue...')
-    self.UIdebugMode = True
 
   def __enter__(self):
+    """Display some info"""
+    self.UI.notify_user('Using caster name:', self.casterName)
+    self.UI.notify_user('This is not an actual caster or interface. ')
+    self.UI.enter_data('Press [ENTER] to continue...')
+    self.UI.debugMode = True
     return self
 
 
   def send_signals_to_caster(self, signals, machineTimeout=5):
-    """Just send signals, as we don't have a photocell"""
-    raw_input('Press [ENTER] to simulate sensor going ON')
+    """
+    Just send signals, and wait for feedback from user,
+    as we don't have a photocell.
+    """
+    self.UI.enter_data('Press [ENTER] to simulate sensor going ON')
     self.activate_valves(signals)
-    raw_input('Press [ENTER] to simulate sensor going OFF')
+    self.UI.enter_data('Press [ENTER] to simulate sensor going OFF')
     self.deactivate_valves()
 
 
   def activate_valves(self, signals):
     """If there are any signals, print them out"""
     if len(signals) != 0:
-      print 'The valves: ',' '.join(signals),' would be activated now.'
+      self.UI.notify_user('The valves:', ' '.join(signals),
+                          'would be activated now.')
 
 
   def deactivate_valves(self):
     """No need to do anything"""
-    print('The valves would be deactivated now.')
+    self.UI.notify_user('The valves would be deactivated now.')
 
 
   def detect_rotation(self):
@@ -1421,7 +1674,7 @@ class MonotypeSimulation(object):     # TODO: use new user interface abstraction
     startTime = time.time()
     answer = None
     while answer is None and time.time() < (startTime + 5):
-      answer = selfUI.enter_data(
+      answer = self.UI.enter_data(
                      'Press [ENTER] (to simulate rotation) '
                      'or wait 5sec (to simulate machine off)\n'
                     )
@@ -1444,32 +1697,19 @@ class MonotypeSimulation(object):     # TODO: use new user interface abstraction
     options = {
                'C' : continue_casting,
                'M' : self.job.main_menu,
-               'E' : selfUI.exit_program
+               'E' : self.UI.exit_program
               }
     message = (
                "Machine not running! Check what's going on.\n"
                "[C]ontinue, return to [M]enu or [E]xit program? "
               )
-    choice = selfUI.simple_menu(message, options).upper()
+    choice = self.UI.simple_menu(message, options).upper()
     options[choice]()
 
 
   def __exit__(self, *args):
     pass
 
-
-
-class Keyboard(object):
-  """Keyboard is technically a paper tower taken off a keyboard,
-  it does not have machine cycle sensor nor emergency stop button,
-  but it has 32 valves and an interface to control them."""
-
-  def __init__(self):
-    pass
-  def __enter__(self):
-    return self
-  def __exit__(self, *args):
-    pass
 
 
 class Parsing(object):
@@ -1589,8 +1829,8 @@ class Casting(object):
   -testing the interface
   """
 
-  def __init__(self):
-    pass
+  def __init__(self, ribbonFile=''):
+    self.ribbonFile = ribbonFile
 
   def __enter__(self):
     return self
@@ -1599,6 +1839,14 @@ class Casting(object):
     pass
 
 
+  """def use_caster(self, function):
+    def func_wrapper(*args, **kwargs):
+      with self.caster:
+        function(args, kwargs)
+    return func_wrapper
+
+
+  @self.use_caster"""
   def cast_composition(self):
     """cast_composition()
 
@@ -1905,7 +2153,7 @@ class Casting(object):
 
     def debug_notice():
       """Prints a notice if the program is in debug mode:"""
-      if self.debugMode:
+      if self.UI.debugMode:
         return('\n\nThe program is now in debugging mode!')
       else:
         return ''
@@ -1942,9 +2190,14 @@ class Casting(object):
               )
 
 
-    """Call the function and returnn to menu:"""
-    commands[choice]()
-    self.UI.hold_on_exit()
+    """Call the function and return to menu.
+    Use caster context for everything that needs it:"""
+    if choice in [0, 1]:
+      commands[choice]()
+    else:
+      with self.caster:
+        commands[choice]()
+        self.UI.hold_on_exit()
     self.main_menu()
 
 
@@ -2001,7 +2254,7 @@ class RibbonPunching(object):
       signals, comment = Parsing.signals_parser(line)
 
       """Print a comment if there is one - positive length"""
-      if len(comment) > 0:
+      if comment:
         self.UI.notify_user(comment)
 
       """
@@ -2011,7 +2264,7 @@ class RibbonPunching(object):
       Don't punch a line with nothing but comments
       (prevents erroneous O+15's).
       """
-      if len(comment) == 0 or len(signals) > 0:
+      if not comment or signals:
 
         """Determine if we need to turn O+15 on"""
         if len(signals) < 2:
@@ -2042,15 +2295,9 @@ class TextUI(object):
   supports UTF-8 too.
   """
 
-  def __init__(self):
-    """
-    On instantiating, we must specify the job.
-    Then, we'll be able to reach its other sub-classes.
-    """
-    self.debugMode = False
-
-    """Set up an empty ribbon file name first"""
-    self.ribbonFile = ''
+  def __init__(self, debugMode=False):
+    """Get the debug-mode from input parameters:"""
+    self.debugMode = debugMode
 
 
   def __enter__(self):
@@ -2061,7 +2308,7 @@ class TextUI(object):
     try:
       self.job.main_menu()
     except KeyboardInterrupt:
-      print('User pressed ctrl-C. Exiting.')
+      print('\nUser pressed ctrl-C. Exiting.')
     finally:
       print('\nGoodbye!\n')
 
@@ -2078,7 +2325,7 @@ class TextUI(object):
   readline.set_completer(tab_complete)
 
 
-  def menu(self, options, **kwargs):
+  def menu(self, options, header='', footer=''):
     """menu(
             options={'foo':'bar','baz':'qux'}
             header=foo,
@@ -2089,44 +2336,33 @@ class TextUI(object):
     footer - string to be displayed below.,
 
     After choice is made, executes the command.
+
+
+    Set up vars for conditional statements,
+    and lists for appending new items.
+
+    choices - options to be entered by user,
+    commands - commands to be executed after option is chosen,
+    pauses - flags indicating whether the program will be paused
+            on return to menu (waiting for user to press return):
     """
-
-    """Parse the keyword arguments. If argument is unset, assign
-    an empty string.
-    """
-    try:
-      header = kwargs['header']
-    except KeyError:
-      header = ''
-
-    try:
-      footer = kwargs['footer']
-    except KeyError:
-      footer = ''
-
-    """Set up vars for conditional statements,
-     and lists for appending new items.
-
-     choices - options to be entered by user,
-     commands - commands to be executed after option is chosen,
-     pauses - flags indicating whether the program will be paused
-              on return to menu (waiting for user to press return):
-     """
     yourChoice = ''
     choices = []
 
     """Clear the screen, display header and add two empty lines:"""
-    os.system('clear')
+    self.clear()
     if header:
       print header
-      print('')
+      print
 
-    """Display all the options; construct the possible choices list:"""
+    """Display all the options; we'll take care of 0 later:"""
     for choice in options:
        if choice != 0:
-        """Print the option choice and displayed text:
-        """
+        """Print the option choice and displayed text:"""
         print '\t', choice, ' : ', options[choice], '\n'
+
+        """Add this option to possible choices.
+        We need to convert it to string first:"""
         choices.append(str(choice))
 
     try:
@@ -2156,6 +2392,7 @@ class TextUI(object):
       except ValueError:
         return yourChoice
 
+
   def clear(self):
     """Clear screen"""
     os.system('clear')
@@ -2165,7 +2402,8 @@ class TextUI(object):
     """Display info for the user - print all in one line:"""
     for arg in args:
       print arg,
-    print ''
+    """Newline:"""
+    print
 
 
   def debug_info(self, *args):
@@ -2220,7 +2458,10 @@ class TextUI(object):
 
 
   def exit_program(self):
-    print('\nGoodbye!\n')
+    """
+    All objects will call this method whenever they want to exit program.
+    This is because we may do something specific in a different UI.
+    """
     exit()
 
 
@@ -2271,16 +2512,16 @@ class Session(object):
   def __init__(self, job=Casting(), caster=Monotype(),
                      UI=TextUI(), database=Database()):
 
-    dependencies = {
-                    job      : {'UI' : UI, 'database' : database,
-                                'caster' : caster},
-                    caster   : {'UI' : UI, 'job' : job},
-                    UI       : {'job' : job},
-                    database : {'database' : database}
-                   }
-    for obj in dependencies:
-      for name in dependencies[obj]:
-        setattr(obj, name, dependencies[obj[name]])
+
+    """Set dependencies as object attributes:"""
+    job.UI = UI
+    job.database = database
+    job.caster = caster
+    caster.UI = UI
+    caster.job = job
+    UI.job = job
+    database.UI = UI
+
     with UI:
       pass
 
@@ -2289,8 +2530,4 @@ class Session(object):
 Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
 
-  job = Casting()
-  database = Database()
-  UI = TextUI()
-  caster = Monotype('mkart-cc')
-  session = Session(job, caster, UI, database)
+  session = Session(caster=Monotype('mkart-cc'))
