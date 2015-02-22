@@ -64,8 +64,8 @@ import select
 try:
   import wiringpi2 as wiringpi
 except ImportError:
-  print('wiringPi2 not installed! It is OK for testing, \
-  but you MUST install it if you want to cast!')
+  print('wiringPi2 not installed! It is OK for testing, '
+        'but you MUST install it if you want to cast!')
   time.sleep(1)
 
 """rpi2caster uses sqlite3 database for storing caster, interface,
@@ -92,6 +92,7 @@ class Typesetter(object):
     pass
 
   def __enter__(self):
+    self.UI.debug_info('Entering typesetting job context...')
     return self
 
 
@@ -261,6 +262,7 @@ class Typesetter(object):
 
 
   def __exit__(self, *args):
+    self.UI.debug_info('Exiting typesetting job context.')
     pass
 
 
@@ -286,6 +288,7 @@ class Config(object):
 
 
   def __enter__(self):
+    self.UI.debug_info('Entering configuration context...')
     return self
 
 
@@ -498,6 +501,7 @@ class Config(object):
 
 
   def __exit__(self, *args):
+    self.UI.debug_info('Exiting configuration context.')
     pass
 
 
@@ -533,7 +537,9 @@ class Database(object):
     self.confFilePath = confFilePath
 
   def __enter__(self):
+    self.UI.debug_info('Entering database context...')
     self.database_setup()
+    self.UI.debug_info('Using database path:', self.databasePath)
     self.db = sqlite3.connect(self.databasePath)
     return self
 
@@ -786,6 +792,7 @@ class Database(object):
 
 
   def __exit__(self, *args):
+    self.UI.debug_info('Exiting database context.')
     pass
 
 
@@ -802,6 +809,7 @@ class Inventory(object):
     pass
 
   def __enter__(self):
+    self.UI.debug_info('Entering inventory management job context...')
     return self
 
   """Placeholders for functionality not implemented yet:"""
@@ -1063,6 +1071,7 @@ class Inventory(object):
 
 
   def __exit__(self, *args):
+    self.UI.debug_info('Exiting inventory management job context.')
     pass
 
 
@@ -1086,6 +1095,7 @@ class Monotype(object):
 
   def __enter__(self):
     """Run the setup when entering the context:"""
+    self.UI.debug_info('Entering caster/interface context...')
     self.caster_setup()
     return self
 
@@ -1388,6 +1398,7 @@ class Monotype(object):
 
   def __exit__(self, *args):
     """On exit, turn all the valves off"""
+    self.UI.debug_info('Exiting caster/interface context.')
     self.deactivate_valves()
 
 
@@ -1406,6 +1417,7 @@ class Keyboard(object):
 
   def __enter__(self):
     """Run the setup when entering the context:"""
+    self.UI.debug_info('Entering keyboard/interface context...')
     self.interface_setup()
     return self
 
@@ -1494,6 +1506,7 @@ class Keyboard(object):
 
 
   def __exit__(self, *args):
+    self.UI.debug_info('Exiting keyboard/interface context.')
     """On exit, turn all the valves off"""
     self.deactivate_valves()
 
@@ -1507,12 +1520,13 @@ class MonotypeSimulation(object):
   to the machine.
   """
 
-  def __init__(self, casterName='Monotype Simulator'):
-    self.casterName = casterName
+  def __init__(self, name='Monotype Simulator'):
+    self.name = name
 
   def __enter__(self):
+    self.UI.debug_info('Entering caster/keyboard simulation context...')
     """Display some info"""
-    self.UI.notify_user('Using caster name:', self.casterName)
+    self.UI.notify_user('Using caster name:', self.name)
     self.UI.notify_user('This is not an actual caster or interface. ')
     self.UI.enter_data('Press [ENTER] to continue...')
     self.UI.debugMode = True
@@ -1582,6 +1596,7 @@ class MonotypeSimulation(object):
 
 
   def __exit__(self, *args):
+    self.UI.debug_info('Exiting caster/keyboard simulation context.')
     pass
 
 
@@ -1718,21 +1733,12 @@ class Casting(object):
   def __init__(self, ribbonFile=''):
     self.ribbonFile = ribbonFile
 
+
   def __enter__(self):
+    self.UI.debug_info('Entering casting job context...')
     return self
 
-  def __exit__(self, *args):
-    pass
 
-
-  """def use_caster(self, function):
-    def func_wrapper(*args, **kwargs):
-      with self.caster:
-        function(args, kwargs)
-    return func_wrapper
-
-
-  @self.use_caster"""
   def cast_composition(self):
     """cast_composition()
 
@@ -2098,6 +2104,11 @@ class Casting(object):
     self.main_menu()
 
 
+  def __exit__(self, *args):
+    self.UI.debug_info('Exiting casting job context.')
+    pass
+
+
 
 class RibbonPunching(object):
   """Job class for punching the paper tape (ribbon)."""
@@ -2106,10 +2117,8 @@ class RibbonPunching(object):
     pass
 
   def __enter__(self):
+    self.UI.debug_info('Entering ribbon punching job context...')
     return self
-
-  def __exit__(self, *args):
-    pass
 
 
   def punch_composition(self):
@@ -2180,6 +2189,11 @@ class RibbonPunching(object):
     """End of function."""
 
 
+  def __exit__(self, *args):
+    self.UI.debug_info('Exiting ribbon punching job context.')
+    pass
+
+
 
 class TextUI(object):
   """TextUI(job):
@@ -2198,8 +2212,10 @@ class TextUI(object):
 
 
   def __enter__(self):
-    """
-    Try to call main menu for a job.
+    """Print some debug info:"""
+    self.debug_info('Entering text UI context...')
+
+    """Try to call main menu for a job.
     Display a message when user presses ctrl-C.
     """
     try:
@@ -2366,25 +2382,9 @@ class TextUI(object):
 
 
   def __exit__(self, *args):
+    self.debug_info('Exiting text UI context.')
     pass
 
-
-
-class Testing(object):
-  """Testing:
-
-  A "job" class for testing the program without an actual caster/interface.
-  Certain functions referring to the caster will be replaced with
-  placeholder methods from the MonotypeSimulation class.
-  """
-  def __init__(self):
-    pass
-
-  def __enter__(self):
-    return self
-
-  def __exit__(self, *args):
-    pass
 
 
 class WebInterface(object):
