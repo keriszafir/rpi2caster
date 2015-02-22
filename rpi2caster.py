@@ -877,6 +877,8 @@ class Monotype(object):
     self.mcp0Address = 0x20
     self.mcp1Address = 0x21
     self.pinBase = 65
+    self.signalsArrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
+                               '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
 
     """
     Next, this method reads caster data from database and fetches
@@ -914,7 +916,7 @@ class Monotype(object):
     if interfaceSettings:
       [self.emergencyGPIO, self.photocellGPIO,
       self.mcp0Address, self.mcp1Address,
-      self.pinBase] = interfaceSettings
+      self.pinBase, self.signalsArrangement] = interfaceSettings
 
     """Print the parameters for debugging:"""
     self.UI.debug_info('\nInterface parameters:\n')
@@ -923,7 +925,8 @@ class Monotype(object):
               'Photocell GPIO: ' : self.photocellGPIO,
               '1st MCP23017 I2C address: ' : self.mcp0Address,
               '2nd MCP23017 I2C address: ' : self.mcp1Address,
-              'MCP23017 pin base for GPIO numbering: ' : self.pinBase
+              'MCP23017 pin base for GPIO numbering: ' : self.pinBase,
+              'Signals arrangement: ' : self.signalsArrangement
              }
     for parameter in output:
       self.UI.debug_info(parameter, output[parameter])
@@ -971,100 +974,16 @@ class Monotype(object):
     for pin in pins:
       wiringpi.pinMode(pin,1)
 
-    """This list defines the names and order of Monotype control signals
-    that will be assigned to 32 MCP23017 outputs and solenoid valves.
-    You may want to change it, depending on how you wired the valves
-    in hardware (e.g. you can fix interchanged lines by swapping signals).
-
-    Monotype ribbon perforations are arranged as follows:
-
-    NMLKJIHGF S ED  0075    CBA 123456789 10 11 12 13 14  0005
-                   (large)                               (large)
-
-    O15 is absent in ribbon, and is only used by the keyboard's paper tower.
-    It's recommended to assign it to the first or last output line.
-
-    You'll probably want to assign your outputs in one of these orders:
-
-    a) alphanumerically:
-
-    mcp0 bank A | mcp0 bank B                | mcp1 bank A | mcp1 bank B
-    ---------------------------------------------------------------------
-    12345678    | 9 10 11 12 13 14 0005 0075 | ABCDEFGH    | IJKLMN S O15
-    """
-    signalsA = [
-                '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
-                '11', '12', '13', '14', '0005', '0075', 'A', 'B',
-                'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
-                'M', 'N', 'S', 'O15'
-               ]
-
-    """
-    b) according to Monotype codes:
-
-    mcp0 bank A | mcp0 bank B     | mcp1 bank A | mcp1 bank B
-    -----------------------------------------------------------------------
-    NMLKJIHG    | F S ED 0075 CBA | 12345678    | 9 10 11 12 13 14 0005 O15
-    """
-    signalsB = [
-                'N', 'M', 'L', 'K', 'J', 'I', 'H', 'G', 'F', 'S', 'E',
-                'D', '0075', 'C', 'B', 'A', '1', '2', '3', '4', '5',
-                '6', '7', '8', '9', '10', '11', '12', '13', '14',
-                '0005', 'O15'
-               ]
-
-    """
-    c) grouping odd and even Monotype signals in valve units,
-    where first MCP controls odd signals (upper/lower paper tower inputs
-    if you use V air connection block) and second MCP controls even signals:
-
-    mcp0 bank A   | mcp0 bank B      | mcp1 bank A | mcp1 bank B
-    --------------------------------------------------------------------
-    NLJHFE 0075 B | 13579 11 13 0005 | MKIGSDCA    | 2468 10 12 14 O15
-    """
-    signalsC = [
-                'N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', '1', '3',
-                '5', '7', '9', '11', '13', '0005', 'M', 'K', 'I', 'G',
-                'S', 'D', 'C', 'A', '2', '4', '6', '8', '10', '12',
-                '14', 'O15'
-               ]
-
-    """
-    d) grouping odd and even Monotype signals in valve units,
-    where first MCP controls left half of signals - N...A,
-    and second MCP controls right half - 1...0005:
-
-    mcp0 bank A   | mcp0 bank B | mcp1 bank A      | mcp1 bank B
-    --------------------------------------------------------------------
-    NLJGFE 0075 B | MKIHSDCA    | 13579 11 13 0005 | 2468 10 12 14 O15
-    """
-    signalsD = [
-                'N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', 'M', 'K',
-                'I', 'G', 'S', 'D', 'C', 'A','1', '3', '5', '7', '9',
-                '11', '13', '0005',  '2', '4', '6', '8', '10', '12',
-                '14', 'O15'
-               ]
-
-
-    """mcp0 is the MCP23017 with lower address (e.g. 0x20), mcp1 - the chip
-    with higher address (e.g. 0x21). If you're using DIP or SOIC chips,
-    I/O bank A uses physical pin numbers 21...18, bank B is 1...8.
-    See datasheet for further info."""
-
-
-    """Choose one of predefined orders or define a brand new one:"""
-    signals = signalsA
+    """Make a nice list out of signal arrangement string:"""
+    self.signalsArrangement = self.signalsArrangement.split(',')
 
     """Assign wiringPi pin numbers on MCP23017s to the Monotype
-    control signals defined earlier.
+    control signals:
     """
-    self.wiringPiPinNumber = dict(zip(signals, pins))
+    self.wiringPiPinNumber = dict(zip(self.signalsArrangement, pins))
 
-    """Print signals order for debugging:"""
-    self.UI.debug_info('\nSignals arrangement: ')
-    for sig in signals:
-      self.UI.debug_info(sig,)
-    self.UI.debug_enter_data('Press Enter to continue... ')
+    """Wait for user confirmation:"""
+    self.UI.debug_enter_data('Press [Enter] to continue... ')
 
 
   def get_caster_settings_from_conffile(self):
@@ -1099,7 +1018,8 @@ class Monotype(object):
       """Time to return the data:"""
       return [bool(unitAdding), diecaseSystem, int(interfaceID)]
 
-    except (ConfigParser.NoSectionError, ValueError, TypeError):
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
       """
       In case of shit happening, return None and fall back on defaults."""
       self.UI.notify_user(
@@ -1181,10 +1101,16 @@ class Monotype(object):
         mcp1Address = self.config.get(interfaceName, 'mcp1_address')
         pinBase = self.config.get(interfaceName, 'pin_base')
 
+        """Check which signals arrangement the interface uses..."""
+        signalsArrangement = self.config.get(interfaceName, 'signals_arr')
+        """...and get the signals order for it:"""
+        signalsArrangement = self.config.get('SignalsArrangements',
+                                              signalsArrangement)
+
         """Return parameters:"""
         return [int(emergencyGPIO), int(photocellGPIO),
                 int(mcp0Address, 16), int(mcp1Address, 16),
-                int(pinBase)]
+                int(pinBase), signalsArrangement]
       else:
         """This happens if the interface is inactive in conffile:"""
         self.UI.notify_user(
@@ -1193,7 +1119,8 @@ class Monotype(object):
               )
         return None
 
-    except (ConfigParser.NoSectionError, ValueError, TypeError):
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
       """
       In case of shit happening, return None and fall back on defaults.
       """
@@ -1385,13 +1312,12 @@ class Keyboard(object):
   but it has 32 valves and an interface to control them.
   """
 
-  def __init__(self, name='Keyboard', confFilePath='/etc/rpi2caster.conf'):
+  def __init__(self, name='Keyboard', cfgFile='/etc/rpi2caster.conf'):
     """Creates a caster object for a given caster name.
 
     Initialize config first:"""
-    self.casterName = name
-    self.config = ConfigParser.SafeConfigParser()
-    self.config.read(confFilePath)
+    self.name = name
+    self.cfgFile = cfgFile
 
 
   def __enter__(self):
@@ -1408,15 +1334,13 @@ class Keyboard(object):
     self.mcp0Address = 0x20
     self.mcp1Address = 0x21
     self.pinBase = 65
+    self.signalsArrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
+                               '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
 
     """
-    Next, this method reads data from config file and fetches
-    a list of interfaceparameters:"""
-
-    interfaceSettings = self.get_settings_from_conffile()
-    if interfaceSettings:
-      [self.interfaceID, self.mcp0Address, self.mcp1Address,
-       self.pinBase] = interfaceSettings
+    Next, this method reads data from config file and overrides the
+    default interface parameters for an object:"""
+    self.get_settings_from_conffile()
 
     """Print the parameters for debugging:"""
     self.UI.debug_info('\nInterface parameters:\n')
@@ -1424,16 +1348,13 @@ class Keyboard(object):
               'Interface ID: ' : self.interfaceID,
               '1st MCP23017 I2C address: ' : self.mcp0Address,
               '2nd MCP23017 I2C address: ' : self.mcp1Address,
-              'MCP23017 pin base for GPIO numbering: ' : self.pinBase
+              'MCP23017 pin base for GPIO numbering: ' : self.pinBase,
+              'Signals arrangement: ' : self.signalsArrangement
              }
     for parameter in output:
       self.UI.debug_info(parameter, output[parameter])
 
-
-    """Output configuration:
-
-    Setup the wiringPi MCP23017 chips for valve outputs:
-    """
+    """Set up the wiringPi MCP23017 chips for valve outputs:"""
     wiringpi.mcp23017Setup(self.pinBase,      self.mcp0Address)
     wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
 
@@ -1443,100 +1364,16 @@ class Keyboard(object):
     for pin in pins:
       wiringpi.pinMode(pin,1)
 
-    """This list defines the names and order of Monotype control signals
-    that will be assigned to 32 MCP23017 outputs and solenoid valves.
-    You may want to change it, depending on how you wired the valves
-    in hardware (e.g. you can fix interchanged lines by swapping signals).
-
-    Monotype ribbon perforations are arranged as follows:
-
-    NMLKJIHGF S ED  0075    CBA 123456789 10 11 12 13 14  0005
-                   (large)                               (large)
-
-    O15 is absent in ribbon, and is only used by the keyboard's paper tower.
-    It's recommended to assign it to the first or last output line.
-
-    You'll probably want to assign your outputs in one of these orders:
-
-    a) alphanumerically:
-
-    mcp0 bank A | mcp0 bank B                | mcp1 bank A | mcp1 bank B
-    ---------------------------------------------------------------------
-    12345678    | 9 10 11 12 13 14 0005 0075 | ABCDEFGH    | IJKLMN S O15
-    """
-    signalsA = [
-                '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
-                '11', '12', '13', '14', '0005', '0075', 'A', 'B',
-                'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
-                'M', 'N', 'S', 'O15'
-               ]
-
-    """
-    b) according to Monotype codes:
-
-    mcp0 bank A | mcp0 bank B     | mcp1 bank A | mcp1 bank B
-    -----------------------------------------------------------------------
-    NMLKJIHG    | F S ED 0075 CBA | 12345678    | 9 10 11 12 13 14 0005 O15
-    """
-    signalsB = [
-                'N', 'M', 'L', 'K', 'J', 'I', 'H', 'G', 'F', 'S', 'E',
-                'D', '0075', 'C', 'B', 'A', '1', '2', '3', '4', '5',
-                '6', '7', '8', '9', '10', '11', '12', '13', '14',
-                '0005', 'O15'
-               ]
-
-    """
-    c) grouping odd and even Monotype signals in valve units,
-    where first MCP controls odd signals (upper/lower paper tower inputs
-    if you use V air connection block) and second MCP controls even signals:
-
-    mcp0 bank A   | mcp0 bank B      | mcp1 bank A | mcp1 bank B
-    --------------------------------------------------------------------
-    NLJHFE 0075 B | 13579 11 13 0005 | MKIGSDCA    | 2468 10 12 14 O15
-    """
-    signalsC = [
-                'N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', '1', '3',
-                '5', '7', '9', '11', '13', '0005', 'M', 'K', 'I', 'G',
-                'S', 'D', 'C', 'A', '2', '4', '6', '8', '10', '12',
-                '14', 'O15'
-               ]
-
-    """
-    d) grouping odd and even Monotype signals in valve units,
-    where first MCP controls left half of signals - N...A,
-    and second MCP controls right half - 1...0005:
-
-    mcp0 bank A   | mcp0 bank B | mcp1 bank A      | mcp1 bank B
-    --------------------------------------------------------------------
-    NLJGFE 0075 B | MKIHSDCA    | 13579 11 13 0005 | 2468 10 12 14 O15
-    """
-    signalsD = [
-                'N', 'L', 'J', 'H', 'F', 'E', '0075', 'B', 'M', 'K',
-                'I', 'G', 'S', 'D', 'C', 'A','1', '3', '5', '7', '9',
-                '11', '13', '0005',  '2', '4', '6', '8', '10', '12',
-                '14', 'O15'
-               ]
-
-
-    """mcp0 is the MCP23017 with lower address (e.g. 0x20), mcp1 - the chip
-    with higher address (e.g. 0x21). If you're using DIP or SOIC chips,
-    I/O bank A uses physical pin numbers 21...18, bank B is 1...8.
-    See datasheet for further info."""
-
-
-    """Choose one of predefined orders or define a brand new one:"""
-    signals = signalsA
+    """Make a nice list out of signal arrangement string:"""
+    self.signalsArrangement = self.signalsArrangement.split(',')
 
     """Assign wiringPi pin numbers on MCP23017s to the Monotype
-    control signals defined earlier.
+    control signals:
     """
-    self.wiringPiPinNumber = dict(zip(signals, pins))
+    self.wiringPiPinNumber = dict(zip(self.signalsArrangement, pins))
 
-    """Print signals order for debugging:"""
-    self.UI.debug_info('\nSignals arrangement: ')
-    for sig in signals:
-      self.UI.debug_info(sig,)
-    self.UI.debug_enter_data('Press Enter to continue... ')
+    """Wait for user confirmation:"""
+    self.UI.debug_enter_data('Press [Enter] to continue... ')
 
 
   def get_settings_from_conffile(self):
@@ -1546,50 +1383,66 @@ class Keyboard(object):
     from the config file (where it is represented by a section, whose
     name is self.name).
     """
+    config = ConfigParser.SafeConfigParser()
+    config.read(self.cfgFile)
 
     try:
       """Get caster parameters from conffile."""
-      interfaceID = self.config.get(self.name, 'interface_id')
+      interfaceID = config.get(self.name, 'interface_id')
 
-    except (ConfigParser.NoSectionError, ValueError, TypeError):
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
       """
-      In case of shit happening, return None and fall back on defaults."""
+      In case of shit happening, fall back on defaults."""
       self.UI.notify_user(
           'Incorrect parameters. Using hardcoded defaults.'
           )
+      interfaceID = 0
       self.UI.exception_handler()
-      return None
 
-    """Time to get interface ID:"""
+    finally:
+      self.interfaceID = int(interfaceID)
+
+    """Time to get interface parameters:"""
     interfaceName = 'Interface' + str(self.interfaceID)
     try:
       """Check if the interface is active, else return None"""
       trueAliases = ['true', '1', 'on', 'yes']
-      if self.config.get(interfaceName, 'active').lower() in trueAliases:
-        mcp0Address = self.config.get(interfaceName, 'mcp0_address')
-        mcp1Address = self.config.get(interfaceName, 'mcp1_address')
-        pinBase = self.config.get(interfaceName, 'pin_base')
+      if config.get(interfaceName, 'active').lower() in trueAliases:
+        mcp0Address = config.get(interfaceName, 'mcp0_address')
+        mcp1Address = config.get(interfaceName, 'mcp1_address')
+        pinBase = config.get(interfaceName, 'pin_base')
 
-        """Return parameters:"""
-        return [interfaceID, int(mcp0Address, 16), int(mcp1Address, 16),
-                int(pinBase)]
+        """Check which signals arrangement the interface uses..."""
+        signalsArrangement = config.get(interfaceName, 'signals_arr')
+        """...and get the signals order for it:"""
+        self.signalsArrangement = config.get('SignalsArrangements',
+                                              signalsArrangement)
+
+        """Set parameters for object:"""
+        self.mcp0Address = int(mcp0Address, 16)
+        self.mcp1Address = int(mcp1Address, 16)
+        self.pinBase = int(pinBase)
+        return True
+
       else:
         """This happens if the interface is inactive in conffile:"""
         self.UI.notify_user(
               'Interface ID=', interfaceID, 'is marked as inactive. '
-              'We cannot use it - reverting to defaults'
+              'We cannot use it - reverting to defaults.'
               )
-        return None
+        return False
 
-    except (ConfigParser.NoSectionError, ValueError, TypeError):
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
       """
-      In case of shit happening, return None and fall back on defaults.
+      In case of shit happening, return False and fall back on defaults.
       """
       self.UI.notify_user(
            'Incorrect interface parameters. Using hardcoded defaults.'
            )
       self.UI.exception_handler()
-      return None
+      return False
 
 
   def activate_valves(self, signals):
@@ -2409,7 +2262,10 @@ class TextUI(object):
   def debug_info(self, *args):
     """Print debug message to screen if in debug mode:"""
     if self.debugMode:
-      self.notify_user(args)
+      for arg in args:
+        print arg,
+      """Newline:"""
+      print
 
 
   def debug_enter_data(self, message):
