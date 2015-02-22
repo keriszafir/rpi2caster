@@ -266,7 +266,7 @@ class Typesetter(object):
 
 
 class Database(object):
-  """Database(databasePath):
+  """Database(databasePath, confFilePath):
 
   A class containing all methods related to storing, retrieving
   and deleting data from a SQLite3 database used for config.
@@ -292,7 +292,6 @@ class Database(object):
   """
 
   def __init__(self, databasePath='', confFilePath='/etc/rpi2caster.conf'):
-    """Set up the job context:"""
     self.databasePath = databasePath
     self.confFilePath = confFilePath
 
@@ -317,8 +316,10 @@ class Database(object):
       try:
         self.databasePath = config.get('Database', 'path')
       except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-        """Revert to hardcoded local default:"""
+        """Revert to default:"""
         self.databasePath = 'database/monotype.db'
+        self.UI.debug_notice('Database path not found in conffile. '
+                             'Using default:', self.databasePath)
 
 
   def add_wedge(self, wedgeName, setWidth, oldPica, steps):
