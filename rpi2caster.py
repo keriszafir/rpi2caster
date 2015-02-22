@@ -298,6 +298,7 @@ class Database(object):
 
   def __enter__(self):
     self.database_setup()
+    self.db = sqlite3.connect(self.databasePath)
     return self
 
 
@@ -347,9 +348,9 @@ class Database(object):
     """data - a list with wedge parameters to be written:"""
     data = [wedgeName, setWidth, str(oldPica), json.dumps(steps)]
 
-    with sqlite3.connect(self.databasePath) as db:
+    with self.db:
       try:
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         """Create the table first:"""
         cursor.execute(
                       'CREATE TABLE IF NOT EXISTS wedges '
@@ -393,9 +394,9 @@ class Database(object):
     Else, function returns False.
     """
 
-    with sqlite3.connect(self.databasePath) as db:
+    with self.db:
       try:
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         cursor.execute(
                       'SELECT * FROM wedges WHERE wedge_id = ? '
                       'AND set_width = ?', [wedgeName, setWidth]
@@ -444,9 +445,9 @@ class Database(object):
     Else, returns False.
     """
 
-    with sqlite3.connect(self.databasePath) as db:
+    with self.db:
       try:
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         cursor.execute(
                       'SELECT * FROM wedges WHERE id = ? ', [ID]
                       )
@@ -483,9 +484,9 @@ class Database(object):
     First, the function checks if the wedge is in the database at all.
     """
     if self.wedge_by_id(ID):
-      with sqlite3.connect(self.databasePath) as db:
+      with self.db:
         try:
-          cursor = db.cursor()
+          cursor = self.db.cursor()
           cursor.execute(
                          'DELETE FROM wedges WHERE id = ?', [ID]
                         )
@@ -516,14 +517,14 @@ class Database(object):
     Returns True if successful, False otherwise.
     """
 
-    with sqlite3.connect(self.databasePath) as db:
+    with self.db:
       try:
-        cursor = db.cursor()
+        cursor = self.db.cursor()
         cursor.execute('SELECT * FROM wedges')
-        print(
-              '\nid, wedge name, set width, British pica, '
-              'unit values for all steps:\n'
-             )
+        self.UI.notify_user(
+                            '\nid, wedge name, set width, British pica, '
+                            'unit values for all steps:\n'
+                           )
         while True:
           wedge = cursor.fetchone()
           if wedge is not None:
