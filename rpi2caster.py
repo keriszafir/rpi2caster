@@ -1129,10 +1129,10 @@ class Monotype(object):
 
     self.UI.debug_info('\nCaster parameters:\n')
     output = {
-              'Using caster name: ' : self.name,
-              'Diecase system: ' : self.diecaseSystem,
+              'Using caster name: '           : self.name,
+              'Diecase system: '              : self.diecaseSystem,
               'Has unit-adding attachement? ' : self.unitAdding,
-              'Interface ID: ' : self.interfaceID
+              'Interface ID: '                : self.interfaceID
              }
     for parameter in output:
       self.UI.debug_info(parameter, output[parameter])
@@ -1206,12 +1206,12 @@ class Monotype(object):
       wiringpi.pinMode(pin,1)
 
     """Make a nice list out of signal arrangement string:"""
-    self.signalsArrangement = self.signalsArrangement.split(',')
+    signalsArrangement = self.signalsArrangement.split(',')
 
     """Assign wiringPi pin numbers on MCP23017s to the Monotype
     control signals:
     """
-    self.wiringPiPinNumber = dict(zip(self.signalsArrangement, pins))
+    self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
 
     """Wait for user confirmation:"""
     self.UI.debug_enter_data('Press [Enter] to continue... ')
@@ -1454,12 +1454,12 @@ class Keyboard(object):
       wiringpi.pinMode(pin,1)
 
     """Make a nice list out of signal arrangement string:"""
-    self.signalsArrangement = self.signalsArrangement.split(',')
+    signalsArrangement = self.signalsArrangement.split(',')
 
     """Assign wiringPi pin numbers on MCP23017s to the Monotype
     control signals:
     """
-    self.wiringPiPinNumber = dict(zip(self.signalsArrangement, pins))
+    self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
 
     """Wait for user confirmation:"""
     self.UI.debug_enter_data('Press [Enter] to continue... ')
@@ -1694,13 +1694,25 @@ class Casting(object):
   """
   Casting:
 
-  A "job" class. Job-wide variables include caster (and its parameters),
-  interface (and its parameters), database, config, ribbon filename.
+  A "job" class. Objects of this class have attributes as follows:
+  -caster
+  -database
+  -UI.
 
-  All methods related to operating a composition caster:
+  These attributes need to be set up before casting anything.
+  Normally, you instantiate the Session class and it takes care of all
+  setup work.
+
+  Ribbon filename is also an object's attribute, but it's usually
+  set up via user interaction. You can also feed the filename
+  to class on init.
+
+  All methods related to operating a composition caster are here:
   -casting composition and sorts,
-  -testing and calibrating the caster,
-  -testing the interface
+  -calibrating the caster,
+  -testing the interface,
+  -sending an arbitrary combination of signals,
+  -casting spaces to heat up the mould.
   """
 
   def __init__(self, ribbonFile=''):
