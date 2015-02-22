@@ -265,6 +265,243 @@ class Typesetter(object):
 
 
 
+class Config(object):
+  """Configuration class.
+
+  A class for reading and parsing the config file with a specified path.
+
+  Want to use a different conffile? Just instantiate this class with
+  a custom "path" parameter, that's all.
+  """
+
+  def __init__(self, path='/etc/rpi2caster.conf'):
+    """Check if file is readable first:"""
+    try:
+      with open(path, 'r') as f:
+        self.confFilePath = path
+      self.cfg = ConfigParser.SafeConfigParser()
+      self.cfg.read(self.confFilePath)
+    except IOError:
+      self.UI.notify_user('Cannot open config file:', path)
+
+
+  def __enter__(self):
+    return self
+
+
+  def get_caster_settings(self, casterName):
+    """get_caster_settings(casterName):
+
+    Reads the settings for a caster with self.casterName
+    from the config file (where it is represented by a section, whose
+    name is self.casterName).
+
+    The parameters returned are:
+    [diecase_system, unit_adding, interface_id]
+
+    where:
+    diecase_system - caster's diecase layout and a method of
+                     accessing 16th row, if applicable:
+                         norm15 - old 15x15,
+                         norm17 - 15x17 NI, NL,
+                         hmn    - 16x17 HMN (rare),
+                         kmn    - 16x17 KMN (rare),
+                         shift  - 16x17 unit-shift (most modern).
+    unit_adding [0, 1] - whether the machine has a unit-adding attachment,
+    interface_id [0, 1, 2, 3] - ID of the interface connected to the caster
+
+    """
+
+    try:
+      """Get caster parameters from conffile."""
+
+      unitAdding = self.cfg.get(casterName, 'unit_adding')
+      diecaseSystem = self.cfg.get(casterName, 'diecase_system')
+      interfaceID = self.cfg.get(casterName, 'interface_id')
+      """Time to return the data:"""
+      return [bool(unitAdding), diecaseSystem, int(interfaceID)]
+
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
+      """
+      In case of shit happening, return None and fall back on defaults."""
+      self.UI.notify_user(
+          'Incorrect caster parameters. Using hardcoded defaults.'
+          )
+      self.UI.exception_handler()
+      return None
+
+
+  def get_interface_settings(self, interfaceID):
+    """get_interface_settings(interfaceID):
+
+    Reads a configuration file and gets interface parameters.
+
+    If the config file is correct, it returns a list:
+    [emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase]
+
+    emergencyGPIO - BCM number for emergency stop button GPIO
+    photocellGPIO - BCM number for photocell GPIO
+    mcp0Address   - I2C address for 1st MCP23017
+    mcp1Address   - I2C address for 2nd MCP23017
+    pinBase       - pin numbering base for GPIO outputs on MCP23017
+
+    Multiple interfaces attached to a single Raspberry Pi:
+
+    It's possible to use up to four interfaces (i.e. 2xMCP23017, 4xULN2803)
+    for a single Raspberry. It can be used for operating multiple casters,
+    or a caster and a keyboard's paper tower, simultaneously (without
+    detaching a valve block from the paper tower and moving it elsewhere).
+
+    These interfaces should be identified by numbers: 0, 1, 2, 3.
+
+    Each of the MCP23017 chips has to have unique I2C addresses. They are
+    set by pulling the A0, A1, A2 pins up (to 3.3V) or down (to GND).
+    There are 2^3 = 8 possible addresses, and an interface uses two chips,
+    so you can use up to four interfaces.
+
+    It's best to order the MCP23017 chips' addresses ascending, i.e.
+
+    interfaceID    mcp0 pin    mcp1 pin    mcp0     mcp1
+                   A2,A1,A0    A2,A1,A0    addr     addr
+
+    0              000         001         0x20     0x21
+    1              010         011         0x22     0x23
+    2              100         101         0x24     0x25
+    3              110         111         0x26     0x27
+
+    where 0 means the pin is pulled down, and 1 means pin pulled up.
+
+    As for pinBase parameter, it's the wiringPi's way of identifying GPIOs
+    on MCP23017 extenders. WiringPi is an abstraction layer which allows
+    you to control (read/write) pins on MCP23017 just like you do it on
+    typical Raspberry Pi's GPIO pins. Thus you don't have to send bytes
+    to registers.
+    The initial 64 GPIO numbers are reserved for Broadcom SoC, so the lowest
+    pin base you can use is 65. Each interface (2xMCP23017) uses 32 pins.
+
+    If you are using multiple interfaces per Raspberry, you SHOULD
+    assign the following pin bases to each interface:
+
+    interfaceID    pinBase
+
+    0              65
+    1              98          (pinBase0 + 32)
+    2              131         (pinBase1 + 32)
+    3              164         (pinBase2 + 32)
+
+
+    The interface ID is an attribute of an object.
+    """
+    interfaceName = 'Interface' + str(interfaceID)
+    try:
+      """Check if the interface is active, else return None"""
+      trueAliases = ['true', '1', 'on', 'yes']
+      if self.cfg.get(interfaceName, 'active').lower() in trueAliases:
+        emergencyGPIO = self.cfg.get(interfaceName, 'emergency_gpio')
+        photocellGPIO = self.cfg.get(interfaceName, 'photocell_gpio')
+        mcp0Address = self.cfg.get(interfaceName, 'mcp0_address')
+        mcp1Address = self.cfg.get(interfaceName, 'mcp1_address')
+        pinBase = self.cfg.get(interfaceName, 'pin_base')
+
+        """Check which signals arrangement the interface uses..."""
+        signalsArrangement = self.cfg.get(interfaceName, 'signals_arr')
+        """...and get the signals order for it:"""
+        signalsArrangement = self.cfg.get('SignalsArrangements',
+                                              signalsArrangement)
+
+        """Return parameters:"""
+        return [int(emergencyGPIO), int(photocellGPIO),
+                int(mcp0Address, 16), int(mcp1Address, 16),
+                int(pinBase), signalsArrangement]
+      else:
+        """This happens if the interface is inactive in conffile:"""
+        self.UI.notify_user(
+              'Interface ID=', interfaceID, 'is marked as inactive. '
+              'We cannot use it - reverting to defaults'
+              )
+        return None
+
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
+      """
+      In case of shit happening, return None and fall back on defaults.
+      """
+      self.UI.notify_user(
+           'Incorrect interface parameters. Using hardcoded defaults.'
+           )
+      self.UI.exception_handler()
+      return None
+
+
+  def get_keyboard_settings(self, name):
+    """get_keyboard_settings(name):
+
+    Reads the settings for a keyboard with a given name
+    from the config file (where it is represented by its section).
+    """
+
+    try:
+      """Get caster parameters from conffile."""
+      interfaceID = self.cfg.get(name, 'interface_id')
+
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
+      """
+      In case of shit happening, fall back on defaults."""
+      self.UI.notify_user(
+          'Incorrect parameters. Using hardcoded defaults.'
+          )
+      interfaceID = 0
+      self.UI.exception_handler()
+
+
+    """Time to get interface parameters:"""
+    interfaceName = 'Interface' + str(interfaceID)
+    try:
+      """Check if the interface is active, else return None"""
+      trueAliases = ['true', '1', 'on', 'yes']
+      if config.get(interfaceName, 'active').lower() in trueAliases:
+        mcp0Address = config.get(interfaceName, 'mcp0_address')
+        mcp1Address = config.get(interfaceName, 'mcp1_address')
+        pinBase = config.get(interfaceName, 'pin_base')
+
+        """Check which signals arrangement the interface uses
+        and get the signals order for it:
+        """
+        signalsArrangement = config.get('SignalsArrangements',
+                             config.get(interfaceName, 'signals_arr'))
+
+        """Return a tuple of parameters for keyboard:"""
+        return (int(interfaceID), int(mcp0Address, 16),
+                int(mcp1Address, 16), int(pinBase),
+                signalsArrangement)
+
+      else:
+        """This happens if the interface is inactive in conffile:"""
+        self.UI.notify_user(
+              'Interface ID=', interfaceID, 'is marked as inactive. '
+              'We cannot use it - reverting to defaults.'
+              )
+        return False
+
+    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+            ValueError, TypeError):
+      """
+      In case of shit happening, return False and fall back on defaults.
+      """
+      self.UI.notify_user(
+           'Incorrect interface parameters. Using hardcoded defaults.'
+           )
+      self.UI.exception_handler()
+      return False
+
+
+  def __exit__(self, *args):
+    pass
+
+
+
 class Database(object):
   """Database(databasePath, confFilePath):
 
@@ -831,7 +1068,7 @@ class Inventory(object):
 
 
 class Monotype(object):
-  """Monotype(job, casterName, confFilePath):
+  """Monotype(job, name, confFilePath):
 
   A class which stores all methods related to the interface and
   caster itself.
@@ -842,14 +1079,9 @@ class Monotype(object):
   No static methods or class methods here.
   """
 
-  def __init__(self, casterName='Monotype',
-               confFilePath='/etc/rpi2caster.conf'):
-    """Creates a caster object for a given caster name.
-
-    Initialize config first:"""
-    self.casterName = casterName
-    self.config = ConfigParser.SafeConfigParser()
-    self.config.read(confFilePath)
+  def __init__(self, name='Monotype'):
+    """Creates a caster object for a given caster name:"""
+    self.name = name
 
 
   def __enter__(self):
@@ -889,7 +1121,7 @@ class Monotype(object):
 
     In case there is no data, the function will run on default settings.
     """
-    settings = self.get_caster_settings_from_conffile()
+    settings = self.config.get_caster_settings(self.name)
     if settings:
       [self.unitAdding, self.diecaseSystem, self.interfaceID] = settings
 
@@ -897,7 +1129,7 @@ class Monotype(object):
 
     self.UI.debug_info('\nCaster parameters:\n')
     output = {
-              'Using caster name: ' : self.casterName,
+              'Using caster name: ' : self.name,
               'Diecase system: ' : self.diecaseSystem,
               'Has unit-adding attachement? ' : self.unitAdding,
               'Interface ID: ' : self.interfaceID
@@ -907,14 +1139,11 @@ class Monotype(object):
 
     """
     Then, the interface ID is looked up in the database, and interface
-    parameters are obtained:
-
-    [emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase]
-
-    Try to override defaults with the parameters from conffile.
+    parameters are obtained. The program tries to override defaults
+    with the parameters from conffile.
     The parameters will affect the whole object created with this class.
     """
-    interfaceSettings = self.get_interface_settings_from_conffile()
+    interfaceSettings = self.config.get_interface_settings(self.interfaceID)
     if interfaceSettings:
       [self.emergencyGPIO, self.photocellGPIO,
       self.mcp0Address, self.mcp1Address,
@@ -933,7 +1162,7 @@ class Monotype(object):
     for parameter in output:
       self.UI.debug_info(parameter, output[parameter])
 
-    """On init, do the input configuration:
+    """Now do the input configuration:
 
     We need to set up the sysfs interface before (powerbuttond.py -
     a daemon running on boot with root privileges takes care of it).
@@ -987,150 +1216,6 @@ class Monotype(object):
     """Wait for user confirmation:"""
     self.UI.debug_enter_data('Press [Enter] to continue... ')
 
-
-  def get_caster_settings_from_conffile(self):
-    """get_caster_settings_from_conffile():
-
-    Reads the settings for a caster with self.casterName
-    from the config file (where it is represented by a section, whose
-    name is self.casterName).
-
-    The parameters returned are:
-    [diecase_system, unit_adding, interface_id]
-
-    where:
-    diecase_system - caster's diecase layout and a method of
-                     accessing 16th row, if applicable:
-                         norm15 - old 15x15,
-                         norm17 - 15x17 NI, NL,
-                         hmn    - 16x17 HMN (rare),
-                         kmn    - 16x17 KMN (rare),
-                         shift  - 16x17 unit-shift (most modern).
-    unit_adding [0, 1] - whether the machine has a unit-adding attachment,
-    interface_id [0, 1, 2, 3] - ID of the interface connected to the caster
-
-    """
-
-    try:
-      """Get caster parameters from conffile."""
-
-      unitAdding = self.config.get(self.casterName, 'unit_adding')
-      diecaseSystem = self.config.get(self.casterName, 'diecase_system')
-      interfaceID = self.config.get(self.casterName, 'interface_id')
-      """Time to return the data:"""
-      return [bool(unitAdding), diecaseSystem, int(interfaceID)]
-
-    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
-            ValueError, TypeError):
-      """
-      In case of shit happening, return None and fall back on defaults."""
-      self.UI.notify_user(
-          'Incorrect caster parameters. Using hardcoded defaults.'
-          )
-      self.UI.exception_handler()
-      return None
-
-
-  def get_interface_settings_from_conffile(self):
-    """get_interface_settings_from_conffile():
-
-    Reads a configuration file and gets interface parameters.
-
-    If the config file is correct, it returns a list:
-    [emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase]
-
-    emergencyGPIO - BCM number for emergency stop button GPIO
-    photocellGPIO - BCM number for photocell GPIO
-    mcp0Address   - I2C address for 1st MCP23017
-    mcp1Address   - I2C address for 2nd MCP23017
-    pinBase       - pin numbering base for GPIO outputs on MCP23017
-
-    Multiple interfaces attached to a single Raspberry Pi:
-
-    It's possible to use up to four interfaces (i.e. 2xMCP23017, 4xULN2803)
-    for a single Raspberry. It can be used for operating multiple casters,
-    or a caster and a keyboard's paper tower, simultaneously (without
-    detaching a valve block from the paper tower and moving it elsewhere).
-
-    These interfaces should be identified by numbers: 0, 1, 2, 3.
-
-    Each of the MCP23017 chips has to have unique I2C addresses. They are
-    set by pulling the A0, A1, A2 pins up (to 3.3V) or down (to GND).
-    There are 2^3 = 8 possible addresses, and an interface uses two chips,
-    so you can use up to four interfaces.
-
-    It's best to order the MCP23017 chips' addresses ascending, i.e.
-
-    interfaceID    mcp0 pin    mcp1 pin    mcp0     mcp1
-                   A2,A1,A0    A2,A1,A0    addr     addr
-
-    0              000         001         0x20     0x21
-    1              010         011         0x22     0x23
-    2              100         101         0x24     0x25
-    3              110         111         0x26     0x27
-
-    where 0 means the pin is pulled down, and 1 means pin pulled up.
-
-    As for pinBase parameter, it's the wiringPi's way of identifying GPIOs
-    on MCP23017 extenders. WiringPi is an abstraction layer which allows
-    you to control (read/write) pins on MCP23017 just like you do it on
-    typical Raspberry Pi's GPIO pins. Thus you don't have to send bytes
-    to registers.
-    The initial 64 GPIO numbers are reserved for Broadcom SoC, so the lowest
-    pin base you can use is 65. Each interface (2xMCP23017) uses 32 pins.
-
-    If you are using multiple interfaces per Raspberry, you SHOULD
-    assign the following pin bases to each interface:
-
-    interfaceID    pinBase
-
-    0              65
-    1              98          (pinBase0 + 32)
-    2              131         (pinBase1 + 32)
-    3              164         (pinBase2 + 32)
-
-
-    The interface ID is an attribute of an object.
-    """
-    interfaceName = 'Interface' + str(self.interfaceID)
-    try:
-      """Check if the interface is active, else return None"""
-      trueAliases = ['true', '1', 'on', 'yes']
-      if self.config.get(interfaceName, 'active').lower() in trueAliases:
-        emergencyGPIO = self.config.get(interfaceName, 'emergency_gpio')
-        photocellGPIO = self.config.get(interfaceName, 'photocell_gpio')
-        mcp0Address = self.config.get(interfaceName, 'mcp0_address')
-        mcp1Address = self.config.get(interfaceName, 'mcp1_address')
-        pinBase = self.config.get(interfaceName, 'pin_base')
-
-        """Check which signals arrangement the interface uses..."""
-        signalsArrangement = self.config.get(interfaceName, 'signals_arr')
-        """...and get the signals order for it:"""
-        signalsArrangement = self.config.get('SignalsArrangements',
-                                              signalsArrangement)
-
-        """Return parameters:"""
-        return [int(emergencyGPIO), int(photocellGPIO),
-                int(mcp0Address, 16), int(mcp1Address, 16),
-                int(pinBase), signalsArrangement]
-      else:
-        """This happens if the interface is inactive in conffile:"""
-        self.UI.notify_user(
-              'Interface ID=', interfaceID, 'is marked as inactive. '
-              'We cannot use it - reverting to defaults'
-              )
-        return None
-
-    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
-            ValueError, TypeError):
-      """
-      In case of shit happening, return None and fall back on defaults.
-      """
-      self.UI.notify_user(
-           'Incorrect interface parameters. Using hardcoded defaults.'
-           )
-      self.UI.exception_handler()
-      return None
 
 
   def detect_rotation(self):
@@ -1314,12 +1399,9 @@ class Keyboard(object):
   but it has 32 valves and an interface to control them.
   """
 
-  def __init__(self, name='Keyboard', cfgFile='/etc/rpi2caster.conf'):
-    """Creates a caster object for a given caster name.
-
-    Initialize config first:"""
+  def __init__(self, name='Keyboard'):
+    """Creates a caster object for a given caster name."""
     self.name = name
-    self.cfgFile = cfgFile
 
 
   def __enter__(self):
@@ -1342,7 +1424,12 @@ class Keyboard(object):
     """
     Next, this method reads data from config file and overrides the
     default interface parameters for an object:"""
-    self.get_settings_from_conffile()
+    settings = self.config.get_settings_from_conffile(self.name)
+
+    """Check if we got anything - if so, set parameters for object:"""
+    if settings:
+     (self.interfaceID, self.mcp0Address, self.mcp1Address,
+      self.pinBase, self.signalsArrangement) = settings
 
     """Print the parameters for debugging:"""
     self.UI.debug_info('\nInterface parameters:\n')
@@ -1377,74 +1464,6 @@ class Keyboard(object):
     """Wait for user confirmation:"""
     self.UI.debug_enter_data('Press [Enter] to continue... ')
 
-
-  def get_settings_from_conffile(self):
-    """get_settings_from_conffile():
-
-    Reads the settings for a keyboard with self.name
-    from the config file (where it is represented by a section, whose
-    name is self.name).
-    """
-    config = ConfigParser.SafeConfigParser()
-    config.read(self.cfgFile)
-
-    try:
-      """Get caster parameters from conffile."""
-      interfaceID = config.get(self.name, 'interface_id')
-
-    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
-            ValueError, TypeError):
-      """
-      In case of shit happening, fall back on defaults."""
-      self.UI.notify_user(
-          'Incorrect parameters. Using hardcoded defaults.'
-          )
-      interfaceID = 0
-      self.UI.exception_handler()
-
-    finally:
-      self.interfaceID = int(interfaceID)
-
-    """Time to get interface parameters:"""
-    interfaceName = 'Interface' + str(self.interfaceID)
-    try:
-      """Check if the interface is active, else return None"""
-      trueAliases = ['true', '1', 'on', 'yes']
-      if config.get(interfaceName, 'active').lower() in trueAliases:
-        mcp0Address = config.get(interfaceName, 'mcp0_address')
-        mcp1Address = config.get(interfaceName, 'mcp1_address')
-        pinBase = config.get(interfaceName, 'pin_base')
-
-        """Check which signals arrangement the interface uses..."""
-        signalsArrangement = config.get(interfaceName, 'signals_arr')
-        """...and get the signals order for it:"""
-        self.signalsArrangement = config.get('SignalsArrangements',
-                                              signalsArrangement)
-
-        """Set parameters for object:"""
-        self.mcp0Address = int(mcp0Address, 16)
-        self.mcp1Address = int(mcp1Address, 16)
-        self.pinBase = int(pinBase)
-        return True
-
-      else:
-        """This happens if the interface is inactive in conffile:"""
-        self.UI.notify_user(
-              'Interface ID=', interfaceID, 'is marked as inactive. '
-              'We cannot use it - reverting to defaults.'
-              )
-        return False
-
-    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
-            ValueError, TypeError):
-      """
-      In case of shit happening, return False and fall back on defaults.
-      """
-      self.UI.notify_user(
-           'Incorrect interface parameters. Using hardcoded defaults.'
-           )
-      self.UI.exception_handler()
-      return False
 
 
   def activate_valves(self, signals):
@@ -2013,10 +2032,21 @@ class Casting(object):
       else:
         return ''
 
-    def main_menu_additional_info():
-      """Displays additional info as a main menu footer:"""
-      if self.ribbonFile != '':
-        return('Input file name: ' + self.ribbonFile)
+    def additional_info():
+      """Displays additional info as a main menu footer.
+
+      Start with empty list:"""
+      info = []
+
+      """Add ribbon filename, if any:"""
+      if self.ribbonFile:
+        info.append('Input file name: ' + self.ribbonFile)
+
+      """Add a caster name:"""
+      info.append('Using caster: ' + self.caster.name)
+
+      """Convert it all to a multiline string:"""
+      return '\n'.join(info)
 
 
     """Commands: {option_name : function}"""
@@ -2041,7 +2071,7 @@ class Casting(object):
                         'taken off a Monotype keyboard.'
                        ) + debug_notice() + '\n\nMain Menu:',
 
-              footer = main_menu_additional_info()
+              footer = additional_info()
               )
 
 
@@ -2367,19 +2397,96 @@ class WebInterface(object):
 
 class Session(object):
   """Class for injecting dependencies for objects."""
-  def __init__(self, job=Casting(), caster=Monotype(),
+  def __init__(self, job=Casting(), caster=Monotype(), config=Config(),
                      UI=TextUI(), database=Database()):
 
 
-    """Set dependencies as object attributes:"""
-    job.UI = UI
-    job.database = database
-    job.caster = caster
-    caster.UI = UI
-    caster.job = job
-    UI.job = job
-    database.UI = UI
+    """Set dependencies as object attributes.
+    Make sure we've got an UI first:"""
+    try:
+      assert (
+              isinstance(UI, TextUI)
+              or
+              isinstance(UI, WebInterface)
+             )
+    except NameError:
+      print('Error: User interface not specified!')
+      exit()
+    except AssertionError:
+      print('Error: User interface of incorrect type!')
+      exit()
 
+
+    """Make sure database and config are of the correct type:"""
+    try:
+      assert isinstance(database, Database)
+      assert isinstance(config, Config)
+    except NameError:
+      """Not set up? Move on."""
+      pass
+    except AssertionError:
+      """We can be sure that UI can handle this now..."""
+      UI.notify_user('Invalid config and/or database!')
+      UI.exit_program()
+
+
+    """We need a job: casting, punching, setup, typesetting..."""
+    try:
+      """Any job (casting, punching, setup) needs UI and database:"""
+      job.UI = UI
+      job.database = database
+      """UI needs job context:"""
+      UI.job = job
+    except NameError:
+      UI.notify_user('Job not specified!')
+
+
+    """Database needs UI to communicate messages to user:"""
+    database.UI = UI
+    """Database needs config to get the connection parameters:"""
+    database.config = config
+    """Config needs UI to communicate debug/error messages to user:"""
+    config.UI = config
+
+
+    """Assure that ribbon punching is done with keyboard
+    (or that we're using a simulator - for testing etc.):"""
+    try:
+      if isinstance(job, RibbonPunching):
+        assert (
+                isinstance(keyboard, Keyboard)
+                or
+                isinstance(keyboard, MonotypeSimulation)
+               )
+        """Set up mutual dependencies:"""
+        job.keyboard = keyboard
+        keyboard.UI = UI
+        keyboard.job = job
+        keyboard.config = config
+    except (AssertionError, NameError, AttributeError):
+      UI.notify_user('You need a proper keyboard to punch a ribbon.')
+      UI.exit_program()
+
+
+    """Assure that we're using a caster or simulator for casting:"""
+    try:
+      if isinstance(job, Casting):
+        assert (
+                isinstance(caster, Monotype)
+                or
+                isinstance(caster, MonotypeSimulation)
+               )
+        """Set up mutual dependencies:"""
+        job.caster = caster
+        caster.UI = UI
+        caster.job = job
+        caster.config = config
+    except (AssertionError, NameError, AttributeError):
+      UI.notify_user('You cannot do any casting without a proper caster!')
+      UI.exit_program()
+
+
+    """An __enter__ method of UI will call main_menu method in job:"""
     with UI:
       pass
 
@@ -2387,5 +2494,4 @@ class Session(object):
 """And now, for something completely different...
 Initialize the console interface when running the program directly."""
 if __name__ == '__main__':
-
   session = Session(caster=Monotype('mkart-cc'))
