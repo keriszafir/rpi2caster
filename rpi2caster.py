@@ -96,7 +96,7 @@ class Typesetter(object):
     return self
 
 
-  def calculate_wedges(self, setWidth, units):
+  def calculate_wedges(setWidth, units):
     """calculate_wedges(setWidth, units):
 
     Calculate the 0005 and 0075 wedge positions based on the unit width
@@ -165,7 +165,7 @@ class Typesetter(object):
     together with justification wedges 10D & 11D affect the character's
     width. The 10D is a coarse justification wedge and adds/subtracts
     0.0075" per step; the 11D is a fine justification wedge and changes
-    width by 0.0005" per step. The wedges can have one of 15 positions.
+    width by 0.0005" peru step. The wedges can have one of 15 positions.
 
     Notice that 0.0075 = 15 x 0.0005 (so, 0.0005 at 15 equals 0.0075 at 1).
     Position 0 or >15 is not possible.S
@@ -213,7 +213,7 @@ class Typesetter(object):
     return [steps0075, steps0005]
 
 
-  def calculate_line_length(self, lineLength, measurement='britPica'):
+  def calculate_line_length(lineLength, measurement='britPica'):
     """calculate_line_length(lineLength, measurement='britPica'):
 
     Calculates the line length in Monotype fundamental (1-set) units.
@@ -226,8 +226,8 @@ class Typesetter(object):
     If not, throw an error.
     """
 
-    inWidth = {
-               'oldPica' : 0.1667,
+    inchWidth = {
+               'britPica' : 0.1667,
                'amerPica' : 0.1660,
                'cicero'  : 0.1776
               }
@@ -242,23 +242,36 @@ class Typesetter(object):
     for pica systems, use British or American values.
     """
     if measurement == 'cicero':
-      baseEmWidth = inWidth['britPica']
+      baseEmWidth = inchWidth['britPica']
     else:
-      baseEmWidth = inWidth[measurement]
+      baseEmWidth = inchWidth[measurement]
 
     """To calculate the inch width of a fundamental unit (1-unit 1-set),
     we need to divide the (old or new) pica length in inches by 12*18 = 216:
     """
-    fuWidth = baseEmWidth / 216
+    fundamentalUnitWidth = baseEmWidth / 216
 
     """Convert the line length in picas/ciceros to inches:"""
-    inLineLength = lineLength * inWidth[measurement]
+    inchLineLength = lineLength * inchWidth[measurement]
 
     """Now, we need to calculate how many units of a given set
     the row will contain. Round that to an integer and return the result.
     """
-    unitCount = round(inLineLength / fuWidth)
+    unitCount = round(inchLineLength / fundamentalUnitWidth)
     return unitCount
+
+
+  def calculate_space_width(spaces, unitsLeft):
+    """
+    Divides the remaining length of line by the number of spaces in line.
+    Rounds the result down.
+    The min space width is 4 units wide; if the result is smaller,
+    the function returns 4 units.
+    """
+    spaceWidth = unitsLeft % spaces
+    if spaceWidth < 4:
+      spaceWidth = 4
+    return spaceWidth
 
 
   def __exit__(self, *args):
@@ -1596,6 +1609,7 @@ class MonotypeSimulation(object):
 
 
   def __exit__(self, *args):
+    self.deactivate_valves()
     self.UI.debug_info('Exiting caster/keyboard simulation context.')
     pass
 
