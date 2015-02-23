@@ -2472,7 +2472,7 @@ class Session(object):
     """Database needs config to get the connection parameters:"""
     database.config = config
     """Config needs UI to communicate debug/error messages to user:"""
-    config.UI = config
+    config.UI = UI
 
 
     """Assure that ribbon punching is done with keyboard
