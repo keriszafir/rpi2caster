@@ -63,6 +63,7 @@ import select
 """MCP23017 driver & hardware abstraction layer library:"""
 try:
   import wiringpi2 as wiringpi
+  #import wiringpi
 except ImportError:
   print('wiringPi2 not installed! It is OK for testing, '
         'but you MUST install it if you want to cast!')
@@ -1105,11 +1106,17 @@ class Monotype(object):
     """Creates a caster object for a given caster name:"""
     self.name = name
 
+    """Initialize the interface as non-configured..."""
+    self.configured = False
+
 
   def __enter__(self):
     """Run the setup when entering the context:"""
     self.UI.debug_info('Entering caster/interface context...')
-    self.caster_setup()
+
+    """Configure the interface if it needs it:"""
+    if not self.configured:
+      self.caster_setup()
     return self
 
 
@@ -1236,8 +1243,11 @@ class Monotype(object):
     """
     self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
 
+    """Mark the caster as configured:"""
+    self.configured = True
+
     """Wait for user confirmation:"""
-    self.UI.debug_enter_data('Press [Enter] to continue... ')
+    self.UI.debug_enter_data('Caster configured. Press [Enter] to continue... ')
 
 
 
@@ -1409,10 +1419,22 @@ class Monotype(object):
     options[choice]()
 
 
+  def cleanup(self):
+    """cleanup():
+
+    Turn all valves off, then set all lines on MCP23017 as inputs.
+    """
+    self.UI.debug_info('Cleaning up: turning all pins off...')
+    for pin in range(self.pinBase, self.pinBase + 32):
+      wiringpi.digitalWrite(pin,0)
+    """Wait for user confirmation:"""
+    self.UI.debug_enter_data('Press [Enter] to continue... ')
+
+
   def __exit__(self, *args):
-    """On exit, turn all the valves off"""
+    """On exit, do the cleanup:"""
     self.UI.debug_info('Exiting caster/interface context.')
-    self.deactivate_valves()
+    self.cleanup()
 
 
 
@@ -1427,11 +1449,17 @@ class Keyboard(object):
     """Creates a caster object for a given caster name."""
     self.name = name
 
+    """Initialize the interface as non-configured..."""
+    self.configured = False
+
 
   def __enter__(self):
     """Run the setup when entering the context:"""
     self.UI.debug_info('Entering keyboard/interface context...')
-    self.interface_setup()
+
+    """Configure the interface if it needs it:"""
+    if not self.configured:
+      self.interface_setup()
     return self
 
 
@@ -1486,8 +1514,11 @@ class Keyboard(object):
     """
     self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
 
+    """Mark the caster as configured:"""
+    self.configured = True
+
     """Wait for user confirmation:"""
-    self.UI.debug_enter_data('Press [Enter] to continue... ')
+    self.UI.debug_enter_data('Interface configured. Press [Enter] to continue... ')
 
 
 
@@ -1518,10 +1549,33 @@ class Keyboard(object):
       wiringpi.digitalWrite(pin,0)
 
 
+  def cleanup(self):
+    """cleanup():
+
+    Turn all valves off, then set all lines on MCP23017 as inputs.
+    """
+    for pin in range(self.pinBase, self.pinBase + 32):
+      wiringpi.digitalWrite(pin,0)
+      wiringpi.pinMode(pin, 0)
+    self.UI.debug_info('Cleaning up: unsetting all pins...')
+
+
+  def cleanup(self):
+    """cleanup():
+
+    Turn all valves off, then set all lines on MCP23017 as inputs.
+    """
+    self.UI.debug_info('Cleaning up: turning all pins off...')
+    for pin in range(self.pinBase, self.pinBase + 32):
+      wiringpi.digitalWrite(pin,0)
+    """Wait for user confirmation:"""
+    self.UI.debug_enter_data('Press [Enter] to continue... ')
+
+
   def __exit__(self, *args):
+    """On exit, do the cleanup:"""
     self.UI.debug_info('Exiting keyboard/interface context.')
-    """On exit, turn all the valves off"""
-    self.deactivate_valves()
+    self.cleanup()
 
 
 
@@ -2015,9 +2069,6 @@ class Casting(object):
           'Turn on the machine...'
           )
 
-    """Don't start until the machine is running:"""
-    self.caster.detect_rotation()
-
     """Parse the space combination:"""
     space = Parsing.signals_parser(space)[0]
 
@@ -2344,7 +2395,7 @@ class TextUI(object):
 
   def debug_enter_data(self, message):
     if self.debugMode:
-      return enter_data(self, message)
+      return raw_input(message)
 
 
   def exception_handler(self):
