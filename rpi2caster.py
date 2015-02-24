@@ -232,8 +232,8 @@ class Typesetter(object):
                'amerPica' : 0.1660,
                'cicero'  : 0.1776
               }
-    if measurement not in inWidth:
-      self.UI.notify_user('Incorrect unit designation!')
+    if measurement not in inchWidth:
+      """Nothing to do - return False:"""
       return False
 
     """Base em width is a width (in inches) of a single em -
@@ -293,7 +293,7 @@ class Config(object):
   def __init__(self, path='/etc/rpi2caster.conf'):
     """Check if file is readable first:"""
     try:
-      with open(path, 'r') as f:
+      with open(path, 'r'):
         self.confFilePath = path
       self.cfg = ConfigParser.SafeConfigParser()
       self.cfg.read(self.confFilePath)
@@ -478,16 +478,16 @@ class Config(object):
     try:
       """Check if the interface is active, else return None"""
       trueAliases = ['true', '1', 'on', 'yes']
-      if config.get(interfaceName, 'active').lower() in trueAliases:
-        mcp0Address = config.get(interfaceName, 'mcp0_address')
-        mcp1Address = config.get(interfaceName, 'mcp1_address')
-        pinBase = config.get(interfaceName, 'pin_base')
+      if self.cfg.get(interfaceName, 'active').lower() in trueAliases:
+        mcp0Address = self.cfg.get(interfaceName, 'mcp0_address')
+        mcp1Address = self.cfg.get(interfaceName, 'mcp1_address')
+        pinBase = self.cfg.get(interfaceName, 'pin_base')
 
         """Check which signals arrangement the interface uses
         and get the signals order for it:
         """
-        signalsArrangement = config.get('SignalsArrangements',
-                             config.get(interfaceName, 'signals_arr'))
+        signalsArrangement = self.cfg.get('SignalsArrangements',
+                             self.cfg.get(interfaceName, 'signals_arr'))
 
         """Return a tuple of parameters for keyboard:"""
         return (int(interfaceID), int(mcp0Address, 16),
@@ -625,7 +625,7 @@ class Database(object):
                       '(wedge_id,set_width,old_pica,steps) '
                       'VALUES (?, ?, ?, ?)', data
                       )
-        db.commit()
+        self.db.commit()
         return True
 
       except:
@@ -1548,16 +1548,6 @@ class Keyboard(object):
     for pin in range(self.pinBase, self.pinBase + 32):
       wiringpi.digitalWrite(pin,0)
 
-
-  def cleanup(self):
-    """cleanup():
-
-    Turn all valves off, then set all lines on MCP23017 as inputs.
-    """
-    for pin in range(self.pinBase, self.pinBase + 32):
-      wiringpi.digitalWrite(pin,0)
-      wiringpi.pinMode(pin, 0)
-    self.UI.debug_info('Cleaning up: unsetting all pins...')
 
 
   def cleanup(self):
