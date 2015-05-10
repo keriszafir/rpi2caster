@@ -41,7 +41,7 @@ The pump is immediately stopped.
 import sys
 import os
 import time
-import string
+#import string
 
 """Config parser for reading the interface settings"""
 import ConfigParser
@@ -801,6 +801,67 @@ class Database(object):
       except:
         """In debug mode we get the exact exception code & stack trace."""
         self.UI.notify_user('Database error: cannot list wedges!')
+        self.UI.exception_handler()
+        return False
+
+
+  def get_diecase(self, typeSeries, typeSize, diecaseSystem, styles):
+    """
+    Searches for diecase metadata, based on the desired type series,
+    type size, diecase system (norm15, norm17, MNH, MNK, unit-shift),
+    required styles (r - roman, b - bold, i - italic, sc - small caps,
+    sup - superior, inf - inferior)
+    """
+    with self.db:
+      try:
+        cursor = self.db.cursor()
+        cursor.execute(
+                        'SELECT * FROM diecases WHERE type_series = "%s" '
+                        'AND size = %i AND diecase_system = %s',
+                        (typeSeries, typeSize, diecaseSystem)
+                      )
+        while True:
+          diecase = cursor.fetchone()
+          if diecase is not None:
+            diecase = list(diecase)
+
+            """Print all the parameters:"""
+            self.UI.notify_user(' '.join([str(item)
+                                    for item in diecase]), '\n')
+          else:
+            break
+
+      except:
+        """In debug mode we get the exact exception code & stack trace."""
+        self.UI.notify_user('Database error: cannot find diecase data!')
+        self.UI.exception_handler()
+        return False
+
+
+  def get_matrix_position(self, character, style, diecaseID):
+    """
+    Searches for matrix coordinates (column, row) where the character
+    is stored in the diecase - based on diecase ID (which dictates layout,
+    type series/typeface, size) and character's style 
+    (r, b, i, sc, sup, inf). Returns character's unit width as well.
+    """
+    with self.db:
+      try:
+        cursor = self.db.cursor()
+        cursor.execute(
+                        'SELECT * FROM %s WHERE character = "%s" '
+                        'AND style = %s',
+                        ('layout_' + diecaseID, character, style)
+                      )
+        rawData = cursor.fetchone()
+        row = rawData[1]
+        column = rawData[2]
+        unitWidth = rawData[3]
+        return (row, column, unitWidth)
+
+      except:
+        """In debug mode we get the exact exception code & stack trace."""
+        self.UI.notify_user('Database error: cannot get coordinates!')
         self.UI.exception_handler()
         return False
 
