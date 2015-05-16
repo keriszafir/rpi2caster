@@ -2653,7 +2653,7 @@ class Casting(object):
     
     def cast_it():
       """Subroutine to cast chosen signals and/or repeat."""
-      self.cast_code(parsedSignals, n)
+      self.cast_from_matrix(parsedSignals, n)
       options = {
                  'R' : cast_it,
                  'C' : self.cast_sorts,
@@ -2681,7 +2681,7 @@ class Casting(object):
     options[choice]()
 
 
-  def cast_code(self, combination, n=5, pos0075=3, pos0005=8):
+  def cast_from_matrix(self, combination, n=5, pos0075=3, pos0005=8):
     """
     Casts n sorts from combination of signals (list),
     with correction wedges if S needle is in action.
@@ -2757,7 +2757,7 @@ class Casting(object):
     """End of function"""
 
 
-  def align_wedges(self, space='G5'):
+  def align_wedges(self, spaceCombination='G5'):
     """align_wedges(space='G5'):
 
     Allows to align the justification wedges so that when you're
@@ -2784,20 +2784,29 @@ class Casting(object):
           )
 
     """Parse the space combination:"""
-    space = Parsing.signals_parser(space)[0]
+    spaceCombination = Parsing.signals_parser(spaceCombination)[0]
 
     """Cast 10 spaces without S:"""
     self.UI.notify_user('Now casting with a normal wedge only.')
-    self.cast_code(space, 10)
+    self.cast_from_matrix(spaceCombination, 10)
 
     """Cast 10 spaces with the S-needle:"""
     self.UI.notify_user('Now casting with justification wedges...')
-    self.cast_code(space + ['S'], 10)
+    self.cast_from_matrix(spaceCombination + ['S'], 10)
 
     """Finished. Return to menu."""
-    self.UI.notify_user(
-         'Procedure finished. Compare the lengths and adjust if needed.'
-         )
+    self.UI.notify_user()
+    options = {
+                 'R' : self.align_wedges,
+                 'M' : self.main_menu,
+                 'E' : self.UI.exit_program
+                }
+    message = ('Procedure finished. Compare the lengths and adjust '
+               'if needed. \n[R]epeat, [M]enu or [E]xit? ')
+    choice = self.UI.simple_menu(message, options).upper()
+    
+    """Execute choice:"""
+    options[choice]()
 
 
   def main_menu(self):
