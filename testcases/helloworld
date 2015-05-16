@@ -10,7 +10,7 @@ G 6        // e
 J 2        // l
 J 2        // l
 B 9        // o
-E 15       // Wide 18-unit space
+G S 2      // Justifying space
 D 15       // W
 B 9        // o
 E 4        // r
@@ -21,8 +21,9 @@ O 15
 O 15
 O 15
 O 15
-O 15       // Some spaces at the beginning
-0075 0005  // Pump on, line to the galley
+O 15          // Some spaces at the beginning
+0075 6
+0075 0005 10  // Pump on, line to the galley
 //
 //
 // "Hello World!" typecasting sequence
