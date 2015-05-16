@@ -1,27 +1,27 @@
 0005       // Pump off
 0075 0005  // Line to the galley
-G 2
-G 2
-G 2
-G 2
-G 2        // Some spaces at the end
-B 3        // !
-H 10       // d
-J 2        // l
-E 4        // r
-B 10       // o
-D 15       // W
-E 15       // Wide 18-unit space
-B 10       // o
-J 2        // l
-J 2        // l
-G 6        // e
+O 15
+O 15
+O 15
+O 15
+O 15       // Some spaces at the end
 I 14       // H
-G 2
-G 2
-G 2
-G 2
-G 2        // Some spaces at the beginning
+G 6        // e
+J 2        // l
+J 2        // l
+B 9        // o
+E 15       // Wide 18-unit space
+D 15       // W
+B 9        // o
+E 4        // r
+J 2        // l
+H 10       // d
+B 3        // !
+O 15
+O 15
+O 15
+O 15
+O 15       // Some spaces at the beginning
 0075 0005  // Pump on, line to the galley
 //
 //
