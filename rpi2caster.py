@@ -2321,9 +2321,9 @@ class MonotypeSimulation(object):
   def detect_rotation(self):
     """FIXME: implement raw input breaking on timeout"""
     print('Now, the program would check if the machine is rotating.\n')
-    startTime = time.time()
+    #startTime = time.time()
     answer = None
-    while answer is None and time.time() < (startTime + 5):
+    while answer is None:# and time.time() < (startTime + 5):
       answer = self.UI.enter_data(
                      'Press [ENTER] (to simulate rotation) '
                      'or wait 5sec (to simulate machine off)\n'
