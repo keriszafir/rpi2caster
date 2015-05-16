@@ -2630,6 +2630,7 @@ class Casting(object):
       self.UI.notify_user('\nRe-enter the sequence')
       time.sleep(1)
       self.cast_sorts()
+      
     """Ask for number:"""
     n = self.UI.enter_data(
               '\nHow many sorts do you want to cast? (default: 10) \n'
@@ -2649,7 +2650,7 @@ class Casting(object):
            )
 
     """Use a simple menu to ask user if the entered parameters are correct"""
-
+    
     def cast_it():
       """Subroutine to cast chosen signals and/or repeat."""
       self.cast_code(parsedSignals, n)
@@ -2669,11 +2670,11 @@ class Casting(object):
     """Prmeters chosen. Ask what to do:"""
     options = {
                'O' : cast_it,
-               'R' : self.cast_sorts,
+               'C' : self.cast_sorts,
                'M' : self.main_menu,
                'E' : self.UI.exit_program
               }
-    message = '[O]K, [R]e-enter, [M]enu or [E]xit program? '
+    message = '[O]K, [C]hange code/quantity, [M]enu or [E]xit? '
     choice = self.UI.simple_menu(message, options).upper()
 
     """Execute choice:"""
