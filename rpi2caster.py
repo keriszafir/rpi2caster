@@ -2646,16 +2646,29 @@ class Casting(object):
     """Use a simple menu to ask user if the entered parameters are correct"""
 
     def cast_it():
+      """Subroutine to cast chosen signals and/or repeat."""
       self.cast_code(parsedSignals, n)
-      self.UI.notify_user('Finished!')
+      options = {
+                 'R' : cast_it,
+                 'C' : self.cast_sorts,
+                 'M' : self.main_menu,
+                 'E' : self.UI.exit_program
+                }
+      message = ('\nCasting finished!\n '
+                 '[R]epeat sequence, [C]hange code, [M]enu or [E]xit? ')
+      choice = self.UI.simple_menu(message, options).upper()
+  
+      """Execute choice:"""
+      options[choice]()
 
+    """Prmeters chosen. Ask what to do:"""
     options = {
-               'C' : cast_it,
+               'O' : cast_it,
                'R' : self.cast_sorts,
                'M' : self.main_menu,
                'E' : self.UI.exit_program
               }
-    message = '[C]ontinue, [R]epeat, go back to [M]enu or [E]xit program? '
+    message = '[O]K, [R]e-enter, [M]enu or [E]xit program? '
     choice = self.UI.simple_menu(message, options).upper()
 
     """Execute choice:"""
