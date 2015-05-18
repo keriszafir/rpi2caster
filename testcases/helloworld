@@ -4,7 +4,8 @@ O 15
 O 15
 O 15
 O 15
-O 15       // Some spaces at the end
+O 15       
+// Some spaces at the end
 I 14       // H
 G 6        // e
 J 2        // l
@@ -21,7 +22,8 @@ O 15
 O 15
 O 15
 O 15
-O 15          // Some spaces at the beginning
+O 15          
+// Some spaces at the beginning
 0075 6
 0075 0005 10  // Pump on, line to the galley
 //
