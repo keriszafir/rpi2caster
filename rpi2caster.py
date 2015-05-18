@@ -604,34 +604,88 @@ class Database(object):
         return False
 
 
-  def get_diecase(self, typeSeries, typeSize, diecaseSystem, styles):
-    """
-    Searches for diecase metadata, based on the desired type series,
-    type size, diecase system (norm15, norm17, MNH, MNK, unit-shift),
-    required styles (r - roman, b - bold, i - italic, sc - small caps,
-    sup - superior, inf - inferior)
+  def diecase_by_series_and_size(self, typeSeries, typeSize):
+    """diecase_by_series_and_size(typeSeries, typeSize):
+    
+    Searches for diecase metadata, based on the desired type series 
+    and size. Allows to choose one of the diecases found.
     """
     with self.db:
       try:
         cursor = self.db.cursor()
         cursor.execute(
                         'SELECT * FROM diecases WHERE type_series = "%s" '
-                        'AND size = %i AND diecase_system = %s',
-                        (typeSeries, typeSize, diecaseSystem)
+                        'AND size = %i', (typeSeries, typeSize)
                       )
+        """Initialize a list of matching diecases:"""
+        matchingDiecases = []
         while True:
           diecase = cursor.fetchone()
           if diecase is not None:
             diecase = list(diecase)
 
             """Print all the parameters:"""
-            self.UI.notify_user(' '.join([str(item)
-                                    for item in diecase]), '\n')
+            record = (' '.join([str(item) for item in diecase]) + '\n')
+            self.UI.notify_user(record)
+            matchingDiecases.append(diecase)
           else:
             break
-
+        if not matchingDiecases:
+          """List is empty. Notify the user:"""
+          self.UI.notify_user('Sorry - no results found.')
+          time.sleep(1)
+          return False
+        elif len(matchingDiecases) == 1:
+          """One diecase found - choose it:"""
+          self.UI.notify_user("One diecase found. We'll use it.")
+          time.sleep(1)
+          return matchingDiecases(0)
+        else:
+          """More than one diecase found - decide which one to use:"""
+          IDs = []
+          for diecase in matchingDiecases:
+            IDs.append(diecase(0))
+            
+          """Display a menu with diecases numbered from 1 to the last:"""
+          options = dict(zip(range(1, len(matchingDiecases) + 1), IDs))
+          header = 'Choose a diecase:'
+          choice = self.UI.menu(options, header)
+          
+          """Return a list with chosen diecase's parameters:"""
+          return options[choice]
+        
       except:
         """In debug mode we get the exact exception code & stack trace."""
+        self.UI.notify_user('Database error: cannot find diecase data!')
+        self.UI.exception_handler()
+        return False
+  
+  
+  def diecase_by_id(self, diecaseID):
+    """diecase_by_id(diecaseID):
+    
+    Searches for diecase metadata, based on the unique diecase ID.
+    """
+    with self.db:
+      try:
+        cursor = self.db.cursor()
+        cursor.execute(
+                        'SELECT * FROM diecases WHERE id = "%s"' % diecaseID
+                      )
+        """Return diecase if found:"""
+        diecase = cursor.fetchone()
+        if diecase is not None:
+          diecase = list(diecase)
+          return diecase
+        else:
+          """Notify the user, return False:"""
+          self.UI.notify_user('Sorry - no results found.')
+          time.sleep(1)
+          return False
+      
+      except:
+        """If no data - notify user and return False.
+        In debug mode we get the exact exception code & stack trace."""
         self.UI.notify_user('Database error: cannot find diecase data!')
         self.UI.exception_handler()
         return False
