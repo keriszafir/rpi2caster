@@ -23,7 +23,7 @@ S
 S
 0075 4      // Pump on
 // Line 5 of 5
-0075 0005 15 // Line to the galley
+0075 0005 14 // Line to the galley
 S
 S
 S
@@ -46,7 +46,7 @@ S
 S
 0075 4      // Pump on
 // Line 4 of 5
-0075 0005 15 // Line to the galley
+0075 0005 14 // Line to the galley
 S
 S
 S
@@ -69,7 +69,7 @@ S
 S
 0075 4      // Pump on
 // Line 3 of 5
-0075 0005 15 // Line to the galley
+0075 0005 14 // Line to the galley
 S
 S
 S
@@ -92,7 +92,7 @@ S
 S
 0075 4      // Pump on
 // Line 2 of 5
-0075 0005 15 // Line to the galley
+0075 0005 14 // Line to the galley
 S
 S
 S
@@ -116,7 +116,7 @@ S
 // Line 1 of 5    
 // Cast 20 quads at OS15 (= "S")
 0075 4
-0075 0005 15  // Pump on, line to the galley
+0075 0005 14  // Pump on, line to the galley
 //
 //
 // Casting 4 lines of 20 em-quads 12 point Didot with justification wedges
