@@ -2194,8 +2194,7 @@ class Monotype(object):
       self.emergency_stop()
       self.UI.exit_program()
       
-      
-
+    """Display a menu for the user to decide what to do:"""
     options = {
                'C' : continue_casting,
                'M' : return_to_menu,
