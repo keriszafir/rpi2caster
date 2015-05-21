@@ -639,12 +639,12 @@ class Database(object):
           """One diecase found - choose it:"""
           self.UI.notify_user("One diecase found. We'll use it.")
           time.sleep(1)
-          return matchingDiecases(0)
+          return matchingDiecases[0]
         else:
           """More than one diecase found - decide which one to use:"""
           IDs = []
           for diecase in matchingDiecases:
-            IDs.append(diecase(0))
+            IDs.append(diecase[0])
             
           """Display a menu with diecases numbered from 1 to the last:"""
           options = dict(zip(range(1, len(matchingDiecases) + 1), IDs))
@@ -693,6 +693,9 @@ class Database(object):
 
   def get_matrix_position(self, character, style, diecaseID):
     """
+    Deprecated!
+    Will now get diecase (as a list) and get coords from layout.
+    
     Searches for matrix coordinates (column, row) where the character
     is stored in the diecase - based on diecase ID (which dictates layout,
     type series/typeface, size) and character's style 
