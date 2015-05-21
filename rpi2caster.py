@@ -2156,7 +2156,23 @@ class Monotype(object):
     """
     for pin in range(self.pinBase, self.pinBase + 32):
       wiringpi.digitalWrite(pin,0)
-
+  
+  
+  def emergency_stop(self):
+    """emergency_stop():
+    
+    If the machine is stopped, we need to turn the pump off and then turn
+    all the lines off. Otherwise, the machine will keep pumping while it should
+    not (e.g. after a splash).
+    
+    The program will hold execution until the operator cleans the situation, 
+    and turns the machine at least one full revolution.
+    """
+    self.UI.notify_user('Stopping the pump...')
+    self.send_signals_to_caster(['N', 'J', '0005'])
+    self.UI.notify_user('Pump stopped. All valves off...')
+    self.deactivate_valves()
+    time.sleep(1)
 
   def machine_stopped(self):
     """machine_stopped():
@@ -2167,11 +2183,23 @@ class Monotype(object):
     def continue_casting():
       """Helper function - continue casting."""
       return True
+    
+    def return_to_menu():
+      """Make sure pump is off and no valves are activated."""
+      self.emergency_stop()
+      self.job.main_menu()
+    
+    def exit_program():
+      """Make sure pump is off and no valves are activated."""
+      self.emergency_stop()
+      self.UI.exit_program()
+      
+      
 
     options = {
                'C' : continue_casting,
-               'M' : self.job.main_menu,
-               'E' : self.UI.exit_program
+               'M' : return_to_menu,
+               'E' : exit_program
               }
     message = (
                "Machine not running! Check what's going on.\n"
