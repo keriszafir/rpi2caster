@@ -1,28 +1,27 @@
 0005       // Pump off
 0075 0005  // Line to the galley
-O 15
-O 15
-O 15
-O 15
-O 15   
-N I 5
-D E F
-N I 5
-D E F
-N I 5
-D E F
-N I 5
-D E F    
-N I 5
-D E F
-O 15
-O 15
-O 15
-O 15
-O 15          
-// Some spaces at the beginning
-0075
-0075 0005  // Pump on, line to the galley
+O 15     // em quad
+O 15     // em quad
+O 15     // em quad
+O 15     // em quad
+O 15     // em quad
+N I 5    // – (en-dash 9 units)
+L        // — (em-dash 18 units)
+N I 5    // – (en-dash 9 units)
+L        // — (em-dash 18 units)
+N I 5    // – (en-dash 9 units)
+L        // — (em-dash 18 units)
+N I 5    // – (en-dash 9 units)
+L        // — (em-dash 18 units)
+N I 5    // – (en-dash 9 units)
+L        // — (em-dash 18 units)
+O 15     // em quad
+O 15     // em quad
+O 15     // em quad
+O 15     // em quad
+O 15     // em quad
+0075     // Pump on
+0075 0005  // Starting, line to the galley
 //
 // Turn on the unit-shift!
 // D16 (em-dash) and NI5 (en-dash) typecasting sequence, 5 each
