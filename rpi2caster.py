@@ -2631,7 +2631,7 @@ class Casting(object):
       signals, comment = Parsing.signals_parser(line)
 
       """Print a comment if there is one (positive length)"""
-      if len(comment) > 0:
+      if comment:
         self.UI.notify_user(comment)
 
       """Cast an empty line, signals with comment, signals with no comment.
