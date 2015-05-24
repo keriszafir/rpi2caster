@@ -2478,17 +2478,17 @@ class Parsing(object):
 
 
   @staticmethod
-  def signals_parser(originalSignals):
-    """signals_parser(originalSignals):
+  def comments_parser(inputData):
+    """comments_parser(inputData):
 
     Parses an input string, and returns a list with two elements:
 
-    -the Monotype signals found in a line: A-N, 1-14, 0005, S, 0075.
+    -the Monotype signals (unprocessed),
     -any comments delimited by symbols from commentSymbols list.
     """
 
     """We need to work on strings. Convert any lists, integers etc."""
-    signals = str(originalSignals)
+    inputData = str(inputData)
 
     """This is a comment parser. It looks for any comment symbols
     defined here - e.g. **, *, ##, #, // etc. - and saves the comment
@@ -2499,28 +2499,49 @@ class Parsing(object):
 
     If a line in file contains a comment only, returns no combination.
 
-    If we want to cast O15, we have to feed an empty line
-    (place the comment above).
+    In case of O15 combination (no signals fed to machine), we need to have it
+    listed explicitly in the input sequence. The signals_parser will later
+    take care of it.
 
     Example:
 
     ********
     O15 //comment         <-- casts from O+15 matrix, displays comment
-                          <-- casts from O+15 matrix
-    //comment             <-- displays comment
+                          <-- nothing to do
+    //comment             <-- displays comment, no casting
     0005 5 //comment      <-- sets 0005 justification wedge to 5,
                               turns pump off, displays comment
     """
     commentSymbols = ['**', '*', '//', '##', '#']
+    
+    """Assume we don't have a comment..."""
+    rawSignals = inputData
     comment = ''
+    
+    """...then look for comment symbols and parse them:"""
     for symbol in commentSymbols:
-      symbolPosition = signals.find(symbol)
-      if symbolPosition != -1:
-        comment = signals[symbolPosition + len(symbol):].strip()
-        signals = signals[:symbolPosition].strip()
+      if inputData.find(symbol) > -1:
+        """Symbol found - split the string to signals and comments sections:"""
+        [rawSignals, comment] = inputData.split(symbol)
 
-    """Filter out all non-alphanumeric characters and whitespace"""
-    signals = filter(str.isalnum, signals).upper()
+    """Return a list with unprocessed signals and comment:"""
+    return [rawSignals.strip(), comment.strip()]
+
+  
+  @staticmethod
+  def signals_parser(rawSignals):
+    """signals_parser(rawSignals):
+    
+    Parses a string with Monotype signals on input.
+    Skips all but the "useful" signals: NI, NL, A...O, 1...15, 0005, S, 0075.
+    Outputs a list of signals to be processed by send_signals_to_caster
+    in Monotype (or MonotypeSimulation) classes.
+    """
+
+
+    """Filter out all non-alphanumeric characters and whitespace.
+    Convert to uppercase."""
+    rawSignals = filter(str.isalnum, rawSignals).upper()
 
     """Codes for columns, rows and special signals will be stored
     separately and sorted on output"""
@@ -2530,31 +2551,53 @@ class Parsing(object):
 
     """First, detect special signals: 0005, 0075, S"""
     for special in ['0005', '0075', 'S']:
-      if signals.find(special) != -1:
+      
+      """string.find returns -1 if substring not found in string,
+      or a position number, if substring is found.
+      We don't care about the position in string (the signal may as well
+      be at the beginning or at the end).
+      We can't append a present signal twice (i.e. 0005 found twice etc.)"""
+      if rawSignals.find(special) != -1 and special not in special_signals:
         special_signals.append(special)
-        signals = signals.replace(special, '')
+        """Remove the signal from string:"""
+        rawSignals = rawSignals.replace(special, '')
 
-    """Look for any numbers between 14 and 100, strip them"""
-    for n in range(100, 14, -1):
-      signals = signals.replace(str(n), '')
+    """Look for any numbers between 16 and 100, strip them"""
+    for n in range(100, 15, -1):
+      rawSignals = rawSignals.replace(str(n), '')
 
-    """From remaining numbers, determine row numbers"""
+    """From remaining numbers, determine row numbers.
+    Don't repeat yourself - if number is found twice, it'll be appended
+    to the rows only once."""
     for n in range(15, 0, -1):
-      pos = signals.find(str(n))
-      if pos > -1:
+      pos = rawSignals.find(str(n))
+      if pos > -1 and str(n) not in rows:
         rows.append(str(n))
-      signals = signals.replace(str(n), '')
+      rawSignals = rawSignals.replace(str(n), '')
 
-    """Treat signals as a list and filter it, dump all letters beyond N
+    """Treat signals as a list and filter it, dump all letters beyond O
     (S was taken care of earlier). That will be the column signals."""
-    columns = filter(lambda s: s in list('ABCDEFGHIJKLMN'), list(signals))
+    columns = filter(lambda s: s in list('ABCDEFGHIJKLMNO'), list(rawSignals))
 
     """Make sure no signal appears more than once, and sort them"""
     columns = sorted(set(columns))
 
-    """Return a list containing the signals, as well as a comment."""
-    return [columns + rows + special_signals, comment]
-
+    """Return a list containing all signals:"""
+    return columns + rows + special_signals
+  
+  
+  @staticmethod
+  def strip_O_and_15(signals):
+    """Strip O and 15 signals from input sequence, return a list without them"""
+    try:
+      signals.remove('O')
+    except ValueError:
+      pass
+    try:
+      signals.remove('15')
+    except ValueError:
+      pass
+    return signals
 
 
 class Casting(object):
@@ -2612,8 +2655,7 @@ class Casting(object):
     self.UI.notify_user(
           '\nThe combinations of Monotype signals will be displayed '
           'on screen while the machine casts the type.\n'
-          'Turn on the machine and the program will '
-          'start automatically.\n'
+          'Turn on the machine and the program will start automatically.\n'
           )
 
     """Check if the machine is running - don't do anything when
@@ -2624,27 +2666,41 @@ class Casting(object):
     the lines, display comments & code combinations, and feed the
     combinations to the caster:
     """
+    
     for line in contents:
-
       """Parse the row, return a list of signals and a comment.
       Both can have zero or positive length."""
-      signals, comment = Parsing.signals_parser(line)
+      [rawSignals, comment] = Parsing.comments_parser(line)
+      
+      """Parse the signals:"""
+      signals = Parsing.signals_parser(rawSignals)
 
-      """Print a comment if there is one (positive length)"""
+      """A string with information for user: signals, comments, etc.:"""
+      userInfo = ''
+      
+      """Add signals to be cast:"""
+      if signals:
+        userInfo += ' '.join(signals).ljust(20)
+      
+      """Add comment:"""
       if comment:
-        self.UI.notify_user(comment)
-
-      """Cast an empty line, signals with comment, signals with no comment.
-      Don't cast a line with comment alone."""
-      if len(comment) == 0 or len(signals) > 0:
-        if len(signals) > 0:
-          self.UI.notify_user(' '.join(signals))
-        else:
-          self.UI.notify_user('O+15 - no signals')
+        userInfo += comment
+      
+      """Display the info:"""
+      self.UI.notify_user(userInfo)
+      
+      """If we have signals - cast them:"""
+      if signals:
+        """Now check if we had O, 15 and strip them:"""
+        signals = Parsing.strip_O_and_15(signals)
+        
+        """Cast it!"""
         self.caster.send_signals_to_caster(signals)
+      
+      
 
     """After casting is finished, notify the user:"""
-    print('\nCasting finished!')
+    self.UI.notify_user('\nCasting finished!')
 
     """End of function."""
 
