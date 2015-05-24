@@ -749,8 +749,8 @@ class Typesetting(object):
     self.diecaseSystem = ''
     self.layout = []
     self.lineLength = ''
-    self.singleSetUnitLineLength = ''
-    self.multiSetUnitLineLength = ''
+    self.singlesetUnitLineLength = ''
+    self.unitLineLength = ''
     self.measurement = ''
     self.inputFile = ''
     self.outputFile = ''
@@ -831,14 +831,14 @@ class Typesetting(object):
         info.append('Line length: %i %s' % (self.lineLength, self.measurement))
         
       """Unit line length in 1-set units:"""
-      if self.singleSetUnitLineLength:
+      if self.singlesetUnitLineLength:
         info.append('Line length in 1-set units: %i' 
-                      % self.singleSetUnitLineLength)
+                      % self.singlesetUnitLineLength)
       
       """Unit line length in multiset units:"""
-      if self.multiSetUnitLineLength:
+      if self.unitLineLength:
         info.append('Line length in n-set units: %i' 
-                       % self.multiSetUnitLineLength)
+                       % self.unitLineLength)
         
 
       """Convert it all to a multiline string:"""
@@ -1527,9 +1527,9 @@ class Typesetting(object):
     """Now, we need to calculate how many units of a given set
     the row will contain. Round that to an integer and return the result.
     """
-    self.singleSetUnitLineLength = round(
-                                   inchLineLength / fundamentalUnitWidth
-                                   )
+    self.singlesetUnitLineLength = round(
+                                         inchLineLength / fundamentalUnitWidth
+                                        )
     
     
   def calculate_units(self):
@@ -1548,9 +1548,9 @@ class Typesetting(object):
     
     """Calculate the multi-set unit value:"""
     if self.setWidth:
-      self.multiSetUnitLineLength = round( self.singleSetUnitLineLength 
-                                                        / self.setWidth 
-                                          )
+      self.unitLineLength = round( 
+                                  self.singlesetUnitLineLength / self.setWidth 
+                                 )
 
 
   @staticmethod
