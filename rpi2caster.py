@@ -2158,8 +2158,8 @@ class Monotype(object):
       wiringpi.digitalWrite(pin,0)
   
   
-  def emergency_stop(self):
-    """emergency_stop():
+  def emergency_stop_kicked_in(self):
+    """emergency_stop_kicked_in():
     
     If the machine is stopped, we need to turn the pump off and then turn
     all the lines off. Otherwise, the machine will keep pumping while it should
@@ -2186,12 +2186,12 @@ class Monotype(object):
     
     def return_to_menu():
       """Make sure pump is off and no valves are activated."""
-      self.emergency_stop()
+      self.emergency_stop_kicked_in()
       self.job.main_menu()
     
     def exit_program():
       """Make sure pump is off and no valves are activated."""
-      self.emergency_stop()
+      self.emergency_stop_kicked_in()
       self.UI.exit_program()
       
     """Display a menu for the user to decide what to do:"""
@@ -2473,7 +2473,6 @@ class Parsing(object):
           contents.append(line)
         return contents
     except IOError:
-      print('Error: File cannot be read!')    # rework it to fit a new UI model
       return False
 
 
@@ -2526,6 +2525,44 @@ class Parsing(object):
 
     """Return a list with unprocessed signals and comment:"""
     return [rawSignals.strip(), comment.strip()]
+    
+  
+  @staticmethod
+  def count_lines_and_characters(contents):
+    """Count newlines (0005 + 0075, or NKJ) in ribbon file:"""
+    linesNumber = 0
+    charactersNumber = 0
+    for line in contents:
+      """Strip comment:"""
+      signals = Parsing.comments_parser(line)[0]
+      """Parse the signals part of the line:"""
+      signals = Parsing.signals_parser(signals)
+      if Parsing.check_newline(signals):
+        """0005 + 0075 or NKJ (when using unit-adding) doesn't count
+        as a character:"""
+        linesNumber += 1
+      elif Parsing.check_character(signals):
+        charactersNumber += 1
+    
+    """We start casting from galley trip, hence actual number of lines
+    will be lower by one:"""
+    linesNumber -= 1
+    return [linesNumber, charactersNumber]
+    
+    
+  @staticmethod
+  def count_combinations(contents):
+    """Count all combinations in ribbon file:"""
+    combinationsNumber = 0
+    for line in contents:
+      """Strip comment:"""
+      signals = Parsing.comments_parser(line)[0]
+      """Parse the signals part of the line:"""
+      signals = Parsing.signals_parser(signals)
+      if signals:
+        combinationsNumber += 1
+    """Return the number:"""
+    return combinationsNumber
 
   
   @staticmethod
@@ -2594,6 +2631,42 @@ class Parsing(object):
       if signal not in ['O', '15']:
         resultSignals.append(signal)
     return resultSignals
+    
+  
+  @staticmethod
+  def check_newline(signals):
+    """check_newline(signals):
+    
+    Checks if the newline (0005, 0075 or NKJ) is present in combination.
+    Return True if so."""
+    
+    if ('0005' in signals and '0075' in signals):
+      return True
+    elif ('N' in signals and 'K' in signals and 'J' in signals):
+      return True
+    else:
+      return False
+      
+  @staticmethod
+  def check_character(signals):
+    """Check if the combination is a character.
+    Not-characters (no type is cast) are:
+    0005 (pump off) or NJ (pump off, unit-adding),
+    0075 (pump on) or NK (pump on, unit-adding),
+    0005 0075 (galley trip) or NKJ (galley trip, unit-adding),
+    empty sequence."""
+    
+    if not signals:
+      return False
+    elif ('0005' in signals or '0075' in signals):
+      return False
+    elif ('N' in signals and 'K' in signals):
+      return False
+    elif ('N' in signals and 'J' in signals):
+      return False
+    else:
+      """Now this is a character..."""
+      return True
 
 
 class Casting(object):
@@ -2642,8 +2715,25 @@ class Casting(object):
 
     """If file read failed, end here:"""
     if not contents:
+      self.UI.notify_user('Error reading file!')
+      time.sleep(1)
       return False
 
+    """Count all characters and lines in the ribbon:"""
+    [linesNo, charactersNo] = Parsing.count_lines_and_characters(contents)
+    
+    """Characters already cast - start with zero:"""
+    charactersDone = 0
+    
+    """Lines done: this will be automatically increased on the start,
+    as the first thing to do is putting a line to the galley and setting
+    single or double justification. Hence -1."""
+    linesDone = -1
+    
+    """Show the numbers to the operator:"""
+    self.UI.notify_user('Lines found in ribbon: %i' % linesNo)
+    self.UI.notify_user('Characters: %i' % charactersNo)
+    
     """For casting, we need to read the contents in reversed order:"""
     contents = reversed(contents)
 
@@ -2670,13 +2760,24 @@ class Casting(object):
       
       """Parse the signals:"""
       signals = Parsing.signals_parser(rawSignals)
+      
+      """If character - decrease number of chars:"""
+      if Parsing.check_newline(signals):
+        linesDone += 1
+      elif Parsing.check_character(signals):
+        charactersDone += 1
 
       """A string with information for user: signals, comments, etc.:"""
       userInfo = ''
       
-      """Add signals to be cast:"""
+      """Append signals to be cast:"""
       if signals:
-        userInfo += ' '.join(signals).ljust(20)
+        userInfo += ' '.join(signals).ljust(15)
+      
+        """Display chars and lines:"""
+        userInfo += ('Char: %i of %i, line: %i of %i' 
+                     % (charactersDone, charactersNo, linesDone, linesNo)
+                     ).ljust(30)
       
       """Add comment:"""
       if comment:
@@ -3064,10 +3165,15 @@ class RibbonPunching(object):
 
     """Read the file contents:"""
     contents = Parsing.read_file(self.ribbonFile)
-
     """If file read failed, end here:"""
     if not contents:
+      self.UI.notify_user('Error reading file!')
+      time.sleep(1)
       return False
+
+    """Count a number of combinations punched in ribbon:"""
+    combinationsNo = Parsing.count_combinations(contents)
+    self.UI.notify_user('Combinations in ribbon: %i', combinationsNo)
 
     """Wait until the operator confirms.
 
