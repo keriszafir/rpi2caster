@@ -2587,17 +2587,13 @@ class Parsing(object):
   
   
   @staticmethod
-  def strip_O_and_15(signals):
+  def strip_O_and_15(inputSignals):
     """Strip O and 15 signals from input sequence, return a list without them"""
-    try:
-      signals.remove('O')
-    except ValueError:
-      pass
-    try:
-      signals.remove('15')
-    except ValueError:
-      pass
-    return signals
+    resultSignals = []
+    for signal in inputSignals:
+      if signal not in ['O', '15']:
+        resultSignals.append(signal)
+    return resultSignals
 
 
 class Casting(object):
@@ -2748,16 +2744,15 @@ class Casting(object):
     self.UI.notify_user('Calibration and Sort Casting:\n\n')
     signals = self.UI.enter_data(
                     'Enter column and row symbols '
-                    '(default: G 5, spacebar if O-15)\n '
+                    '(default: G 5)\n '
                    )
     if not signals:
-      signals = 'G5'
+      signals = 'G 5'
 
     """
-    Parse the signals and return a list containing the parsed
-    signals and the comments:
+    Parse the signals:
     """
-    [parsedSignals, comment] = Parsing.signals_parser(signals)
+    parsedSignals = Parsing.signals_parser(signals)
 
     """
     O15 yields no signals, but we may want to cast it - check if we
@@ -2766,12 +2761,15 @@ class Casting(object):
     if user entered spacebar. If it's not the case, user has to
     enter the combination again.
     """
-    if not parsedSignals and signals != ' ':
+    if not parsedSignals:
       self.UI.notify_user('\nRe-enter the sequence')
       time.sleep(1)
       self.cast_sorts()
       
-    """Ask for number:"""
+    """Strip O and 15 if they were given:"""
+    parsedSignals = Parsing.strip_O_and_15(parsedSignals)
+    
+    """Ask for number of sorts:"""
     n = self.UI.enter_data(
               '\nHow many sorts do you want to cast? (default: 10) \n'
              )
@@ -2841,10 +2839,14 @@ class Casting(object):
 
     """Cast the sorts: turn on the pump first (and line to the galley)."""
     self.UI.notify_user('Starting the pump...')
+    self.UI.notify_user('0005 wedge at ' + pos0005)
     self.caster.send_signals_to_caster(['0075', '0005', pos0005])
+    
+    self.UI.notify_user('0075 wedge at ' + pos0075)
 
     """If pos0005 != pos0075, we need double justification:"""
     if pos0005 != pos0075:
+      self.UI.notify_user('Using double justification...')
       self.caster.send_signals_to_caster(['0075', pos0075])
 
     """Start casting characters"""
@@ -2884,7 +2886,11 @@ class Casting(object):
 
     """Parse the combination, get the signals (first item returned
     by the parsing function):"""
-    combination = Parsing.signals_parser(signals)[0]
+    signals = Parsing.signals_parser(signals)
+    combination = Parsing.strip_O_and_15(signals)
+    """Add O+15 signal if it was desired:"""
+    if ('O' in signals or '15' in signals):
+      combination.append('O15')
 
     """Check if we get any signals at all, if so, turn the valves on:"""
     if combination:
@@ -2919,12 +2925,12 @@ class Casting(object):
           'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
           'S-needle. You then have to compare the length of these two '
           'sets. \nIf they are identical, all is OK. '
-          'If not, you have to adjust the 52D wedge.\n\n'
+          'If not, you have to adjust the 52D space transfer wedge.\n\n'
           'Turn on the machine...'
           )
 
     """Parse the space combination:"""
-    spaceCombination = Parsing.signals_parser(spaceCombination)[0]
+    spaceCombination = Parsing.signals_parser(spaceCombination)
 
     """Cast 10 spaces without S:"""
     self.UI.notify_user('Now casting with a normal wedge only.')
@@ -2935,7 +2941,6 @@ class Casting(object):
     self.cast_from_matrix(spaceCombination + ['S'], 10)
 
     """Finished. Return to menu."""
-    self.UI.notify_user()
     options = {
                  'R' : self.align_wedges,
                  'M' : self.main_menu,
@@ -3079,31 +3084,44 @@ class RibbonPunching(object):
            '\nInput file found. Turn on the air, fit the tape '
            'on your paper tower and press return to start punching.\n'
            )
+           
     for line in contents:
+      """Parse the row, return a list of signals and a comment.
+      Both can have zero or positive length."""
+      [rawSignals, comment] = Parsing.comments_parser(line)
+      
+      """Parse the signals:"""
+      signals = Parsing.signals_parser(rawSignals)
 
-      """
-      Parse the row, return a list of signals and a comment.
-      Both can have zero or positive length.
-      """
-      signals, comment = Parsing.signals_parser(line)
-
-      """Print a comment if there is one - positive length"""
+      """A string with information for user: signals, comments, etc.:"""
+      userInfo = ''
+      
+      """Add signals to be cast:"""
+      if signals:
+        userInfo += ' '.join(signals).ljust(20)
+      
+      """Add comment:"""
       if comment:
-        self.UI.notify_user(comment)
-
-      """
-      Punch an empty line, signals with comment, signals with
-      no comment.
-
-      Don't punch a line with nothing but comments
-      (prevents erroneous O+15's).
-      """
-      if not comment or signals:
-
-        """Determine if we need to turn O+15 on"""
+        userInfo += comment
+      
+      """Display the info:"""
+      self.UI.notify_user(userInfo)
+      
+      """If we have signals - cast them:"""
+      if signals:
+        """Now check if we had O, 15 and strip them:"""
+        signals = Parsing.strip_O_and_15(signals)
+        
+        """For punching, O+15 are needed if less than 2 lines are active.
+        That's because of how the keyboard's paper tower is constructed -
+        it has a balance mechanism that advances paper tape only if two
+        signals can outweigh constant air pressure on the other side.
+        
+        Basically: less than two signals - no ribbon advance..."""
         if len(signals) < 2:
           signals += ('O15',)
-        self.UI.notify_user(' '.join(signals))
+        
+        """Punch it!"""
         self.caster.activate_valves(signals)         # keyboard?
 
         """The pace is arbitrary, let's set it to 200ms/200ms"""
@@ -3113,6 +3131,7 @@ class RibbonPunching(object):
 
     """After punching is finished, notify the user:"""
     self.UI.notify_user('\nPunching finished!')
+    time.sleep(1)
 
     """End of function."""
 
