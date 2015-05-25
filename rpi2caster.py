@@ -2720,19 +2720,22 @@ class Casting(object):
       return False
 
     """Count all characters and lines in the ribbon:"""
-    [linesNo, charactersNo] = Parsing.count_lines_and_characters(contents)
+    [linesAll, charsAll] = Parsing.count_lines_and_characters(contents)
     
     """Characters already cast - start with zero:"""
-    charactersDone = 0
+    currentChar = 0
+    charsRemaining = charsAll
     
-    """Lines done: this will be automatically increased on the start,
-    as the first thing to do is putting a line to the galley and setting
-    single or double justification. Hence -1."""
-    linesDone = -1
+    """Line currently cast: since the caster casts backwards (from last
+    to first line), this will decrease.
+    
+    We add 1 because casting starts with galley trip sequence,
+    which also sets 0005 and 0075 to a chosen position. """
+    currentLine = linesAll + 1
     
     """Show the numbers to the operator:"""
-    self.UI.notify_user('Lines found in ribbon: %i' % linesNo)
-    self.UI.notify_user('Characters: %i' % charactersNo)
+    self.UI.notify_user('Lines found in ribbon: %i' % linesAll)
+    self.UI.notify_user('Characters: %i' % charsAll)
     
     """For casting, we need to read the contents in reversed order:"""
     contents = reversed(contents)
@@ -2763,25 +2766,42 @@ class Casting(object):
       
       """If character - decrease number of chars:"""
       if Parsing.check_newline(signals):
-        linesDone += 1
+        currentLine -= 1
+        """% of the lines done..."""
+        linePercentDone = 100 * (linesAll - currentLine) / linesAll
       elif Parsing.check_character(signals):
-        charactersDone += 1
-
+        currentChar += 1
+        charsRemaining -= 1
+        """% of the chars cast..."""
+        charPercentDone = 100 * currentChar / charsAll
+        
       """A string with information for user: signals, comments, etc.:"""
       userInfo = ''
       
+      
+      if Parsing.check_newline(signals):
+        """If starting a new line - display number of the working line,
+        number of all remaining lines, % done:"""
+        userInfo += (
+                     'Starting line: %i of %i, %i%% done... \n' 
+                         % (currentLine, linesAll, linePercentDone)
+                     )
+      elif Parsing.check_character(signals):
+        """If casting a character - display number of chars done,
+        number of all and remaining chars, % done"""
+        userInfo += (
+                     'Casting character: %i / %i, %i remaining, %i%% done... \n' 
+                         % (currentChar, charsAll, 
+                            charsRemaining, charPercentDone)
+                     )
+                     
+                     
       """Append signals to be cast:"""
       if signals:
         userInfo += ' '.join(signals).ljust(15)
       
-        """Display chars and lines:"""
-        userInfo += ('Char: %i of %i, line: %i of %i' 
-                     % (charactersDone, charactersNo, linesDone, linesNo)
-                     ).ljust(30)
-      
       """Add comment:"""
-      if comment:
-        userInfo += comment
+      userInfo += comment
       
       """Display the info:"""
       self.UI.notify_user(userInfo)
