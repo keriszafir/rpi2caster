@@ -1,6 +1,14 @@
-<justify>
+<!-- Ustawiamy parametry odlewania... -->
+<! diecase "327-12-KS01" >
+<! length "30c" >
+<! caster "mkart-cc" >
+
+<!-- Właściwy tekst -->
+<center>
 <b>Komputerowe sterowanie odlewarką do składania "Monotype"</b> 
- 
+</center>
+<justify>
+<p>
 System monotypowy składał się z dwóch maszyn: składarki (klawiatury, 
 tastra) oraz odlewarki. Pozwolił oddzielić pracę zecera od pracy odlewacza, 
 która przebiegała w uciążliwych i niebezpiecznych warunkach (wyziewy 
@@ -19,7 +27,8 @@ do tłoczków ograniczających ruch dźwigni lub pobudzających inne elementy.
 Maszyna posiadała również kilka zaworów logicznych, dzięki którym 
 kombinacja kilku sygnałów pobudzała zupełnie inne elementy odlewarki 
 niż sygnały występujące pojedynczo. 
- 
+</p>
+<p> 
 W zasobach Muzeum Książki Artystycznej jest jedna odlewarka do składów 
 obsługująca stopnie do 14pkt., dwie odlewarki do dużych składów - max 24p. 
 (jedna z nich jest niekompletna i służy jako dawca części zamiennych), 
@@ -37,7 +46,8 @@ elektrycznych na pneumatyczne, i przesłanie tych sygnałów do maszyny.
 Ponieważ to odlewarka dyktuje tempo wysyłania sygnałów, konieczny jest 
 również odczyt fazy cylku maszyny, aby w odpowiednim momencie podać 
 lub odciąć sprężone powietrze.
- 
+</p>
+<p> 
 Prezentowane urządzenie służy do sterowania odlewarką do składania przy użyciu 
 wbudowanego mikrokomputera Raspberry Pi, połączonego z maszyną za pośrednictwem 
 31 elektrozaworów oraz fotokomórki (działającej jako czujnik cyklu maszyny). 
@@ -46,7 +56,8 @@ zamontowanej na wieży odczytującej taśmę papierową, i przyłączone za pomo
 specjalnego pneumatycznego bloku sprzęgającego, wykonanego z mosiądzu. 
 W białej skrzynce znajduje się Raspberry Pi model B, interfejs sterujący 
 elektrozaworami, a także zasilacz +5 i +24V, wymontowany ze starego faksu. 
- 
+</p>
+<p>
 Urządzenie jest pierwszym prototypem i zostało wykonane w 2014/2015r. 
 Prototyp został wykonany ręcznie, z wyjątkiem jednego z elementów obudowy, 
 który wymagał frezowania na ploterze CNC należącym do firmy CorreStudio. 
@@ -58,7 +69,8 @@ we Włoszech). Seryjna produkcja wymaga mechanizacji w produkcji obudów
 (techniką frezowania CNC) oraz zaprojektowania i profesjonalnego wykonania 
 obwodu drukowanego dla interfejsu. Całość urządzenia, z wyjątkiem zasilacza, 
 będzie umieszczona w jednej obudowie, zamontowanej na wieży odlewarki. 
- 
+</p>
+<p>
 Sterownik pracuje w trybie "klient-serwer" i jest podłączony do sieci LAN 
 lub WiFi (o ile posiada kartę WLAN podłączaną do USB). Komunikacja odbywa 
 się przez protokół SSH lub HTTP, a łączyć się można z dowolnego urządzenia 
@@ -69,7 +81,8 @@ kodów monotypowych oraz odlewanie składów, a także odlewanie czcionek
 do uzupełniania kaszt, testowanie sterownika i kalibrację maszyny. 
 Oprogramowanie jest wolne i otwarte, dostępne na licencji GNU GPL. 
 Kod źródłowy znajdziecie na https://github.com/elegantandrogyne/rpi2caster 
-
+</p>
+<p>
 Ten sterownik nie jest pierwszym urządzeniem tego rodzaju. Co ciekawe, 
 pierwsze próby połączenia odlewarki monotypowej z komputerem podejmowano 
 już w latach 60-tych. Ograniczenia sprzętowe i programowe wymuszały użycie 
@@ -77,30 +90,51 @@ skomplikowanej elektroniki do sterowania maszyną, a brak wolnodostępnej
 wiedzy zmuszał do rozpracowywania (reverse-engineering) systemu monotypowego. 
 W Europie i Stanach Zjednoczonych zbudowano kilka różnych urządzeń służących 
 do skomputeryzowanego odlewania składów. Swoje sterowniki opracowywali m.in.: 
+<left>
 -John Cornelisse, Holandia
 -Jacek Zalewski, Szwajcaria
 -Henry Macintosh, Wielka Brytania
 -Bill Welliver, Stany Zjednoczone
-Wszystkie te sterowniki były w zasadzie interfejsami komputer-odlewarka, 
-wymagały podłączenia do komputera z określonym złączem (LPT, RS232, USB) 
-i systemem operacyjnym, oraz zainstalowanym oprogramowaniem do składania 
-i odlewania (a raczej: sterowania maszyną). Oprócz niewygody związanej 
-z koniecznością używania konkretnego komputera do pracy i podłączenia go 
-za pomocą przewodu (a co za tym idzie, nieprzenośnością), problemem tych 
-interfejsów jest zależność od zamkniętego oprogramowania i konieczność 
+</left>
+Wszystkie te sterowniki były w zasadzie interfejsami łączącymi określony 
+komputer z odlewarką, i wymuszały korzystanie z tego konkretnego
+komputera do składania tekstu oraz odlewania. Urządzenie musi mieć określone 
+złącze (LPT, RS232, a w przypadku Billa Wellivera - USB) 
+i system operacyjny, i musi na nim być zainstalowane oprogramowanie do składania 
+i odlewania (a raczej: sterowania maszyną), które jest obsługiwane wyłącznie
+lokalnie. Oprócz niewygody związanej z koniecznością używania konkretnego 
+komputera do pracy i podłączenia go za pomocą przewodu (a co za tym idzie, 
+nieprzenośnością), problemem tych interfejsów jest konieczność używania
+przestarzałego sprzętu (posiadającego określone złącze), a także 
+zależność od zamkniętego oprogramowania i konieczność 
 wykupu licencji na nie (co niekiedy nie jest już możliwe od wielu lat). 
 Archaiczne porty równoległe i szeregowe mają swoje ograniczenia, które 
-należało obchodzić. Protokoły obsługi tych portów w systemach operacyjnych 
-były nieprzejrzyste, a standardy - pozbawione otwartych specyfikacji. 
+należało obchodzić przez projektowanie rozbudowanych interfejsów. 
+Protokoły obsługi tych portów w systemach operacyjnych 
+były nieprzejrzyste, pozbawione otwartych specyfikacji. 
 Dlatego też zdecydowaliśmy się pójść inną drogą i oprzeć sterownik 
 o popularny wśród elektroników, hakerów, wytwórców i majsterkowiczów 
 mikrokomputer - Raspberry Pi. Jest to platforma działająca z reguły 
 pod kontrolą systemu operacyjnego GNU/Linux. Pierwsze wersje posiadały 
 procesor ARMv6 800MHz i 256, następnie 512MB RAM. Obecnie sprzedawana 
 jest Raspberry Pi 2 B, która ma czterordzeniowy procesor 1GHz i 1GB RAM. 
-Każda Malinka z serii B ma port Ethernet i dwa porty USB (w lipcu 2014r. 
-wyszedł model B+ z czterema portami USB). Od wprowadzenia na rynek 
-w 2012r. sprzedało się już ponad 5 milionów egzemplarzy Malinki, a ogromna 
-internetowa społeczność użytkowników gwarantuje znalezienie rozwiązania 
-niemal każdego możliwego problemu. Konstruktor sterownika 
+Każda Malinka z serii B ma port Ethernet i dwa lub cztery porty USB 
+(model B+, wprowadzony na rynek w lipcu 2014r., oraz późniejsze 2 B). 
+Od ukazania się pierwszej Malinki w 2012r. sprzedało się już ponad 
+5 milionów egzemplarzy, a ogromna internetowa społeczność użytkowników 
+gwarantuje znalezienie rozwiązania niemal każdego możliwego problemu. 
+Konstruktor sterownika korzystał z tej szeroko dostępnej wiedzy przy
+projektowaniu części elektronicznej oraz oprogramowania. Pierwszy 
+działający prototyp został wykonany w dwa miesiące, chociaż połączenie
+z odlewarką było możliwe znacznie później, ze względu na znaczny koszt
+elektrozaworów do sterowania maszyny. Prototyp bloku zaworowego
+zbudowano w pierwszej połowie 2015r. Próby sterowania odlewarki
+"na zimno" zakończyły się powodzeniem, a pierwsza demonstracja 
+odlewania tekstu złożonego nastąpiła 16.05.2015 podczas Nocy Muzeów.
+Zgodnie z programistycznym zwyczajem, pierwszym przykładem
+przy nauce jakiegokolwiek języka programowania jest wyświetlenie
+na ekranie napisu "Hello world!" ("Witaj, świecie!"). Taki też napis
+był pierwszym tekstem złożonym, który został odlany na sterowanej
+komputerowo maszynie. 
+</p>
 </justify>

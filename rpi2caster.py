@@ -2484,10 +2484,12 @@ class Parsing(object):
 
     -the Monotype signals (unprocessed),
     -any comments delimited by symbols from commentSymbols list.
-    """
-
-    """We need to work on strings. Convert any lists, integers etc."""
-    inputData = str(inputData)
+    
+    We need to work on strings. Convert any lists, integers etc."""
+    try:
+      ' '.join(inputData)
+    except:
+      inputData = str(inputData)
 
     """This is a comment parser. It looks for any comment symbols
     defined here - e.g. **, *, ##, #, // etc. - and saves the comment
@@ -2530,8 +2532,8 @@ class Parsing(object):
   @staticmethod
   def count_lines_and_characters(contents):
     """Count newlines (0005 + 0075, or NKJ) in ribbon file:"""
-    linesNumber = 0
-    charactersNumber = 0
+    linesAll = 0
+    charsAll = 0
     for line in contents:
       """Strip comment:"""
       signals = Parsing.comments_parser(line)[0]
@@ -2540,29 +2542,25 @@ class Parsing(object):
       if Parsing.check_newline(signals):
         """0005 + 0075 or NKJ (when using unit-adding) doesn't count
         as a character:"""
-        linesNumber += 1
+        linesAll += 1
       elif Parsing.check_character(signals):
-        charactersNumber += 1
-    
-    """We start casting from galley trip, hence actual number of lines
-    will be lower by one:"""
-    linesNumber -= 1
-    return [linesNumber, charactersNumber]
+        charsAll += 1
+
+    return [linesAll, charsAll]
     
     
   @staticmethod
   def count_combinations(contents):
     """Count all combinations in ribbon file:"""
-    combinationsNumber = 0
+    combinationsAll = 0
     for line in contents:
       """Strip comment:"""
       signals = Parsing.comments_parser(line)[0]
-      """Parse the signals part of the line:"""
-      signals = Parsing.signals_parser(signals)
-      if signals:
-        combinationsNumber += 1
+      """Parse the signals part of the line - if signals found, increment:"""
+      if Parsing.signals_parser(signals):
+        combinationsAll += 1
     """Return the number:"""
-    return combinationsNumber
+    return combinationsAll
 
   
   @staticmethod
@@ -2580,24 +2578,24 @@ class Parsing(object):
     Convert to uppercase."""
     rawSignals = filter(str.isalnum, rawSignals).upper()
 
-    """Codes for columns, rows and special signals will be stored
+    """Codes for columns, rows and justification will be stored
     separately and sorted on output"""
     columns = []
     rows = []
-    special_signals = []
+    justification = []
 
-    """First, detect special signals: 0005, 0075, S"""
-    for special in ['0005', '0075', 'S']:
+    """First, detect justification signals: 0005, 0075, S"""
+    for sig in ['0005', '0075', 'S']:
       
-      """string.find returns -1 if substring not found in string,
-      or a position number, if substring is found.
+      """string.find returns -1 if a substring is not found in the string,
+      or returns a position number, if substring is found.
       We don't care about the position in string (the signal may as well
       be at the beginning or at the end).
-      We can't append a present signal twice (i.e. 0005 found twice etc.)"""
-      if rawSignals.find(special) != -1 and special not in special_signals:
-        special_signals.append(special)
+      We can't append a present signal more than once (i.e. double 0005 etc.)"""
+      if rawSignals.find(sig) != -1 and sig not in justification:
+        justification.append(sig)
         """Remove the signal from string:"""
-        rawSignals = rawSignals.replace(special, '')
+        rawSignals = rawSignals.replace(sig, '')
 
     """Look for any numbers between 16 and 100, strip them"""
     for n in range(100, 15, -1):
@@ -2620,32 +2618,24 @@ class Parsing(object):
     columns = sorted(set(columns))
 
     """Return a list containing all signals:"""
-    return columns + rows + special_signals
+    return columns + rows + justification
   
   
   @staticmethod
-  def strip_O_and_15(inputSignals):
+  def strip_O_and_15(signals):
     """Strip O and 15 signals from input sequence, return a list without them"""
-    resultSignals = []
-    for signal in inputSignals:
-      if signal not in ['O', '15']:
-        resultSignals.append(signal)
-    return resultSignals
+    return filter(lambda s: s not in ['O', '15'], signals)
     
   
   @staticmethod
   def check_newline(signals):
     """check_newline(signals):
     
-    Checks if the newline (0005, 0075 or NKJ) is present in combination.
-    Return True if so."""
+    Checks if the newline (0005, 0075 or NKJ) is present in combination."""
     
-    if ('0005' in signals and '0075' in signals):
-      return True
-    elif ('N' in signals and 'K' in signals and 'J' in signals):
-      return True
-    else:
-      return False
+    return (('0005' in signals and '0075' in signals)
+            or ('N' in signals and 'K' in signals and 'J' in signals)
+           )
       
   @staticmethod
   def check_character(signals):
@@ -2656,17 +2646,12 @@ class Parsing(object):
     0005 0075 (galley trip) or NKJ (galley trip, unit-adding),
     empty sequence."""
     
-    if not signals:
-      return False
-    elif ('0005' in signals or '0075' in signals):
-      return False
-    elif ('N' in signals and 'K' in signals):
-      return False
-    elif ('N' in signals and 'J' in signals):
-      return False
-    else:
-      """Now this is a character..."""
-      return True
+    return (signals and not ('0005' in signals 
+                             or '0075' in signals
+                             or ('N' in signals and 'K' in signals)
+                             or ('N' in signals and 'J' in signals)
+                            )
+           )
 
 
 class Casting(object):
@@ -2724,14 +2709,17 @@ class Casting(object):
     
     """Characters already cast - start with zero:"""
     currentChar = 0
-    charsRemaining = charsAll
+    charsLeft = charsAll
     
-    """Line currently cast: since the caster casts backwards (from last
-    to first line), this will decrease.
+    """Line currently cast: since the caster casts backwards (from the last
+    to the first line), this will decrease."""
+    currentLine = linesAll
     
-    We add 1 because casting starts with galley trip sequence,
-    which also sets 0005 and 0075 to a chosen position. """
-    currentLine = linesAll + 1
+    """The program counts galley trip sequences and determines line count.
+    The first code to send to machine is galley trip (which also sets the
+    justification wedges and turns the pump on). So, subtract this one
+    to have the correct number of lines."""
+    linesAll -= 1
     
     """Show the numbers to the operator:"""
     self.UI.notify_user('Lines found in ribbon: %i' % linesAll)
@@ -2741,11 +2729,11 @@ class Casting(object):
     contents = reversed(contents)
 
     """Display a little explanation:"""
-    self.UI.notify_user(
-          '\nThe combinations of Monotype signals will be displayed '
-          'on screen while the machine casts the type.\n'
-          'Turn on the machine and the program will start automatically.\n'
-          )
+    intro = ('\nThe combinations of Monotype signals will be displayed '
+             'on screen while the machine casts the type.\n'
+             'Turn on the machine and the program will start automatically.\n'
+            )
+    self.UI.notify_user(intro)
 
     """Check if the machine is running - don't do anything when
     it's not rotating yet!"""
@@ -2755,7 +2743,6 @@ class Casting(object):
     the lines, display comments & code combinations, and feed the
     combinations to the caster:
     """
-    
     for line in contents:
       """Parse the row, return a list of signals and a comment.
       Both can have zero or positive length."""
@@ -2771,30 +2758,26 @@ class Casting(object):
         linePercentDone = 100 * (linesAll - currentLine) / linesAll
       elif Parsing.check_character(signals):
         currentChar += 1
-        charsRemaining -= 1
+        charsLeft -= 1
         """% of the chars cast..."""
         charPercentDone = 100 * currentChar / charsAll
         
       """A string with information for user: signals, comments, etc.:"""
       userInfo = ''
       
-      
       if Parsing.check_newline(signals):
         """If starting a new line - display number of the working line,
         number of all remaining lines, % done:"""
-        userInfo += (
-                     'Starting line: %i of %i, %i%% done... \n' 
-                         % (currentLine, linesAll, linePercentDone)
-                     )
+        userInfo += ('Starting line: %i of %i, %i%% done... \n' 
+                     % (currentLine, linesAll, linePercentDone)
+                    )
+                    
       elif Parsing.check_character(signals):
         """If casting a character - display number of chars done,
         number of all and remaining chars, % done"""
-        userInfo += (
-                     'Casting character: %i / %i, %i remaining, %i%% done... \n' 
-                         % (currentChar, charsAll, 
-                            charsRemaining, charPercentDone)
-                     )
-                     
+        userInfo += ('Casting character: %i / %i, %i remaining, %i%% done... \n' 
+                     % (currentChar, charsAll, charsLeft, charPercentDone)
+                    )
                      
       """Append signals to be cast:"""
       if signals:
@@ -2836,13 +2819,11 @@ class Casting(object):
          )
 
     combinations = [
-                    ['0005'], ['S'], ['0075'], ['1'], ['2'], ['3'],
+                    ['0075'], ['S'], ['0005'], ['1'], ['2'], ['3'],
                     ['4'], ['5'], ['6'], ['7'], ['8'], ['9'], ['10'],
                     ['11'], ['12'], ['13'], ['14'], ['A'], ['B'],
                     ['C'], ['D'], ['E'], ['F'], ['G'], ['H'], ['I'],
-                    ['J'], ['K'], ['L'], ['M'], ['N'], ['O15'],
-                    ['N', 'I'], ['N', 'L'], ['N', 'J'], ['N', 'K'], ['E', 'F'],
-                    ['N', 'K', 'J'], ['M', 'N', 'H'], ['M', 'N', 'K']
+                    ['J'], ['K'], ['L'], ['M'], ['N'], ['O15']
                    ]
 
     """Send all the combinations to the caster, one by one:"""
