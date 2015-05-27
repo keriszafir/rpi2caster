@@ -1906,13 +1906,11 @@ class Monotype(object):
     self.signalsArrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
                                '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
 
-    """
-    Next, this method reads caster data from database and fetches
+    """Next, this method reads caster data from database and fetches
     a list of caster parameters:
     [diecaseFormat, unitAdding, interfaceID].
 
-    In case there is no data, the function will run on default settings.
-    """
+    In case there is no data, the function will run on default settings."""
     settings = self.config.get_caster_settings(self.name)
     if settings:
       [self.unitAdding, self.diecaseSystem, self.interfaceID] = settings
@@ -1920,8 +1918,7 @@ class Monotype(object):
     """When debugging, display all caster info:"""
 
     self.UI.debug_info('\nCaster parameters:\n')
-    output = {
-              'Using caster name: '           : self.name,
+    output = {'Using caster name: '           : self.name,
               'Diecase system: '              : self.diecaseSystem,
               'Has unit-adding attachement? ' : self.unitAdding,
               'Interface ID: '                : self.interfaceID
@@ -1929,12 +1926,10 @@ class Monotype(object):
     for parameter in output:
       self.UI.debug_info(parameter, output[parameter])
 
-    """
-    Then, the interface ID is looked up in the database, and interface
+    """Then, the interface ID is looked up in the database, and interface
     parameters are obtained. The program tries to override defaults
     with the parameters from conffile.
-    The parameters will affect the whole object created with this class.
-    """
+    The parameters will affect the whole object created with this class."""
     interfaceSettings = self.config.get_interface_settings(self.interfaceID)
     if interfaceSettings:
       [self.emergencyGPIO, self.photocellGPIO,
@@ -1955,10 +1950,8 @@ class Monotype(object):
       self.UI.debug_info(parameter, output[parameter])
 
     """Now do the input configuration:
-
     We need to set up the sysfs interface before (powerbuttond.py -
-    a daemon running on boot with root privileges takes care of it).
-    """
+    a daemon running on boot with root privileges takes care of it)."""
     gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.photocellGPIO
     self.gpioValueFileName = gpioSysfsPath + 'value'
     self.gpioEdgeFileName  = gpioSysfsPath + 'edge'
@@ -1985,9 +1978,7 @@ class Monotype(object):
         self.UI.exit_program()
 
     """Output configuration:
-
-    Setup the wiringPi MCP23017 chips for valve outputs:
-    """
+    Setup the wiringPi MCP23017 chips for valve outputs:"""
     wiringpi.mcp23017Setup(self.pinBase,      self.mcp0Address)
     wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
 
@@ -2001,15 +1992,14 @@ class Monotype(object):
     signalsArrangement = self.signalsArrangement.split(',')
 
     """Assign wiringPi pin numbers on MCP23017s to the Monotype
-    control signals:
-    """
+    control signals:"""
     self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
 
     """Mark the caster as configured:"""
     self.configured = True
 
     """Wait for user confirmation:"""
-    self.UI.debug_enter_data('Caster configured. Press [Enter] to continue... ')
+    self.UI.debug_enter_data('Caster configured. [Enter] to continue... ')
 
 
 
@@ -2195,13 +2185,11 @@ class Monotype(object):
       self.UI.exit_program()
       
     """Display a menu for the user to decide what to do:"""
-    options = {
-               'C' : continue_casting,
+    options = {'C' : continue_casting,
                'M' : return_to_menu,
                'E' : exit_program
               }
-    message = (
-               "Machine not running! Check what's going on.\n"
+    message = ("Machine not running! Check what's going on.\n"
                "[C]ontinue, return to [M]enu or [E]xit program? "
               )
     choice = self.UI.simple_menu(message, options).upper()
@@ -2307,7 +2295,7 @@ class Keyboard(object):
     self.configured = True
 
     """Wait for user confirmation:"""
-    self.UI.debug_enter_data('Interface configured. Press [Enter] to continue... ')
+    self.UI.debug_enter_data('Interface configured. [Enter] to continue... ')
 
 
 
@@ -2380,10 +2368,8 @@ class MonotypeSimulation(object):
 
 
   def send_signals_to_caster(self, signals, machineTimeout=5):
-    """
-    Just send signals, and wait for feedback from user,
-    as we don't have a photocell.
-    """
+    """Just send signals, and wait for feedback from user,
+    as we don't have a photocell."""
     self.UI.enter_data('Press [ENTER] to simulate sensor going ON')
     self.activate_valves(signals)
     self.UI.enter_data('Press [ENTER] to simulate sensor going OFF')
@@ -2433,13 +2419,11 @@ class MonotypeSimulation(object):
       """Helper function - continue casting."""
       return True
 
-    options = {
-               'C' : continue_casting,
+    options = {'C' : continue_casting,
                'M' : self.job.main_menu,
                'E' : self.UI.exit_program
               }
-    message = (
-               "Machine not running! Check what's going on.\n"
+    message = ("Machine not running! Check what's going on.\n"
                "[C]ontinue, return to [M]enu or [E]xit program? "
               )
     choice = self.UI.simple_menu(message, options).upper()
@@ -2531,7 +2515,7 @@ class Parsing(object):
   
   @staticmethod
   def count_lines_and_characters(contents):
-    """Count newlines (0005 + 0075, or NKJ) in ribbon file:"""
+    """Count newlines and characters+spaces in ribbon file:"""
     linesAll = 0
     charsAll = 0
     for line in contents:
@@ -2539,12 +2523,10 @@ class Parsing(object):
       signals = Parsing.comments_parser(line)[0]
       """Parse the signals part of the line:"""
       signals = Parsing.signals_parser(signals)
-      if Parsing.check_newline(signals):
-        """0005 + 0075 or NKJ (when using unit-adding) doesn't count
-        as a character:"""
-        linesAll += 1
-      elif Parsing.check_character(signals):
+      if Parsing.check_character(signals):
         charsAll += 1
+      elif Parsing.check_newline(signals):
+        linesAll += 1
 
     return [linesAll, charsAll]
     
@@ -2625,6 +2607,25 @@ class Parsing(object):
   def strip_O_and_15(signals):
     """Strip O and 15 signals from input sequence, return a list without them"""
     return filter(lambda s: s not in ['O', '15'], signals)
+  
+  @staticmethod
+  def convert_O15(inputSignals):
+    """Converts O or 15 signals to a combined O15 that can be fed
+    to caster control routines."""
+    signals = inputSignals
+    try:
+      signals.remove('O')
+      if not 'O15' in signals:
+        signals.append('O15')
+    except ValueError:
+      pass
+    try:
+      signals.remove('15')
+      if not 'O15' in signals:
+        signals.append('O15')
+    except ValueError:
+      pass
+    return signals
     
   
   @staticmethod
@@ -2981,23 +2982,19 @@ class Casting(object):
 
     """Let the user enter a combo:"""
     signals = ''
-    while signals == '':
-      signals = self.UI.enter_data(
-                      'Enter the signals to send to the machine: '
-                      )
+    while not signals:
+      signals = self.UI.enter_data('Enter the signals to send to the caster: ')
 
-    """Parse the combination, get the signals (first item returned
-    by the parsing function):"""
-    signals = Parsing.signals_parser(signals)
-    combination = Parsing.strip_O_and_15(signals)
-    """Add O+15 signal if it was desired:"""
-    if ('O' in signals or '15' in signals):
-      combination.append('O15')
+      """Parse the combination, get the signals (first item returned
+      by the parsing function):"""
+      signals = Parsing.signals_parser(signals)
+      
+      """Add O+15 signal if it was desired:"""
+      signals = Parsing.convert_O15(signals)
 
-    """Check if we get any signals at all, if so, turn the valves on:"""
-    if combination:
-      self.UI.notify_user(' '.join(combination))
-      self.caster.activate_valves(combination)
+    """Turn the valves on:"""
+    self.UI.notify_user(' '.join(signals))
+    self.caster.activate_valves(signals)
 
     """Wait until user decides to stop sending those signals to valves:"""
     self.UI.enter_data('Press [Enter] to stop. ')
@@ -3005,8 +3002,8 @@ class Casting(object):
     """End of function"""
 
 
-  def align_wedges(self, spaceCombination='G5'):
-    """align_wedges(space='G5'):
+  def align_wedges(self, spaceAt='G5'):
+    """align_wedges(spaceAt='G5'):
 
     Allows to align the justification wedges so that when you're
     casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -3032,24 +3029,24 @@ class Casting(object):
           )
 
     """Parse the space combination:"""
-    spaceCombination = Parsing.signals_parser(spaceCombination)
+    spaceAt = Parsing.signals_parser(spaceAt)
 
     """Cast 10 spaces without S:"""
     self.UI.notify_user('Now casting with a normal wedge only.')
-    self.cast_from_matrix(spaceCombination, 10)
+    self.cast_from_matrix(spaceAt, 10)
 
     """Cast 10 spaces with the S-needle:"""
     self.UI.notify_user('Now casting with justification wedges...')
-    self.cast_from_matrix(spaceCombination + ['S'], 10)
+    self.cast_from_matrix(spaceAt + ['S'], 10)
 
     """Finished. Return to menu."""
-    options = {
-                 'R' : self.align_wedges,
-                 'M' : self.main_menu,
-                 'E' : self.UI.exit_program
-                }
-    message = ('Procedure finished. Compare the lengths and adjust '
-               'if needed. \n[R]epeat, [M]enu or [E]xit? ')
+    options = {'R' : self.align_wedges,
+               'M' : self.main_menu,
+               'E' : self.UI.exit_program
+              }
+    message = ('Procedure finished. Compare the lengths and adjust if needed.'
+               '\n[R]epeat, [M]enu or [E]xit? '
+              )
     choice = self.UI.simple_menu(message, options).upper()
     
     """Execute choice:"""
@@ -3062,8 +3059,7 @@ class Casting(object):
 
     Options: {option_name : description}
     """
-    options = {
-               1 : 'Load a ribbon file',
+    options = {1 : 'Load a ribbon file',
                2 : 'Cast composition',
                3 : 'Cast sorts',
                4 : 'Test the valves and pinblocks',
@@ -3071,7 +3067,6 @@ class Casting(object):
                6 : 'Calibrate the 0005 and 0075 wedges',
                0 : 'Exit program'
               }
-
 
     """Declare local functions for menu options:"""
     def choose_ribbon_filename():
@@ -3101,7 +3096,6 @@ class Casting(object):
       """Convert it all to a multiline string:"""
       return '\n'.join(info)
 
-
     """Commands: {option_name : function}"""
     commands = {
                 1 : choose_ribbon_filename,
@@ -3127,11 +3121,13 @@ class Casting(object):
               footer = additional_info()
               )
 
-
     """Call the function and return to menu.
     Use caster context for everything that needs it:"""
     if choice in [0, 1]:
       commands[choice]()
+    elif choice in [5]:
+      with self.caster:
+        commands[choice]()
     else:
       with self.caster:
         commands[choice]()
@@ -3173,8 +3169,8 @@ class RibbonPunching(object):
       return False
 
     """Count a number of combinations punched in ribbon:"""
-    combinationsNo = Parsing.count_combinations(contents)
-    self.UI.notify_user('Combinations in ribbon: %i', combinationsNo)
+    combinationsAll = Parsing.count_combinations(contents)
+    self.UI.notify_user('Combinations in ribbon: %i', combinationsAll)
 
     """Wait until the operator confirms.
 
@@ -3183,14 +3179,13 @@ class RibbonPunching(object):
     by itself - it must get air into tubes to operate, punches
     the perforations, and doesn't give any feedback.
     """
-    self.UI.notify_user(
-              '\nThe combinations of Monotype signals will be displayed '
-              'on screen while the paper tower punches the ribbon.\n'
-              )
-    self.UI.enter_data(
-           '\nInput file found. Turn on the air, fit the tape '
-           'on your paper tower and press return to start punching.\n'
-           )
+    intro = ('\nThe combinations of Monotype signals will be displayed '
+             'on screen while the paper tower punches the ribbon.\n'
+            )
+    self.UI.notify_user(intro)
+    self.UI.enter_data('\nInput file found. Turn on the air, fit the tape '
+                       'on your paper tower and press return to start punching.'
+                      )
            
     for line in contents:
       """Parse the row, return a list of signals and a comment.
@@ -3217,7 +3212,7 @@ class RibbonPunching(object):
       """If we have signals - cast them:"""
       if signals:
         """Now check if we had O, 15 and strip them:"""
-        signals = Parsing.strip_O_and_15(signals)
+        signals = Parsing.convert_O15(signals)
         
         """For punching, O+15 are needed if less than 2 lines are active.
         That's because of how the keyboard's paper tower is constructed -
@@ -3226,7 +3221,7 @@ class RibbonPunching(object):
         
         Basically: less than two signals - no ribbon advance..."""
         if len(signals) < 2:
-          signals += ('O15',)
+          signals.append('O15')
         
         """Punch it!"""
         self.caster.activate_valves(signals)         # keyboard?
@@ -3239,7 +3234,6 @@ class RibbonPunching(object):
     """After punching is finished, notify the user:"""
     self.UI.notify_user('\nPunching finished!')
     time.sleep(1)
-
     """End of function."""
 
 
@@ -3326,7 +3320,8 @@ class TextUI(object):
     for choice in options:
        if choice != 0:
         """Print the option choice and displayed text:"""
-        print '\t', choice, ' : ', options[choice], '\n'
+        print '\t', choice, ' : ', options[choice]
+        print
 
         """Add this option to possible choices.
         We need to convert it to string first:"""
@@ -3335,7 +3330,7 @@ class TextUI(object):
     try:
       """If an option "0." is available, print it as a last one:"""
       optionNumberZero = options[0]
-      print '\n'
+      print
       print '\t', 0, ' : ', optionNumberZero
       choices.append('0')
     except KeyError:
@@ -3343,9 +3338,9 @@ class TextUI(object):
 
     """Print footer, if defined:"""
     if footer:
-      print('')
+      print
       print footer
-    print('\n')
+    print
 
     """Ask for user input:"""
     while yourChoice not in choices:
@@ -3369,7 +3364,6 @@ class TextUI(object):
     """Display info for the user - print all in one line:"""
     for arg in args:
       print arg,
-    """Newline:"""
     print
 
 
@@ -3378,11 +3372,11 @@ class TextUI(object):
     if self.debugMode:
       for arg in args:
         print arg,
-      """Newline:"""
       print
 
 
   def debug_enter_data(self, message):
+    """For debug-specific data or confirmations"""
     if self.debugMode:
       return raw_input(message)
 
@@ -3472,14 +3466,11 @@ class Session(object):
   def __init__(self, job=Casting(), caster=Monotype(), config=Config(),
                      UI=TextUI(), database=Database()):
 
-
     """Set dependencies as object attributes.
     Make sure we've got an UI first:"""
     try:
-      assert (
-              isinstance(UI, TextUI)
-              or
-              isinstance(UI, WebInterface)
+      assert (isinstance(UI, TextUI)
+              or isinstance(UI, WebInterface)
              )
     except NameError:
       print('Error: User interface not specified!')
@@ -3487,7 +3478,6 @@ class Session(object):
     except AssertionError:
       print('Error: User interface of incorrect type!')
       exit()
-
 
     """Make sure database and config are of the correct type:"""
     try:
@@ -3501,7 +3491,6 @@ class Session(object):
       UI.notify_user('Invalid config and/or database!')
       UI.exit_program()
 
-
     """We need a job: casting, punching, setup, typesetting..."""
     try:
       """Any job (casting, punching, setup) needs UI and database:"""
@@ -3512,7 +3501,6 @@ class Session(object):
     except NameError:
       UI.notify_user('Job not specified!')
 
-
     """Database needs UI to communicate messages to user:"""
     database.UI = UI
     """Database needs config to get the connection parameters:"""
@@ -3520,15 +3508,12 @@ class Session(object):
     """Config needs UI to communicate debug/error messages to user:"""
     config.UI = UI
 
-
     """Assure that ribbon punching is done with keyboard
     (or that we're using a simulator - for testing etc.):"""
     try:
       if isinstance(job, RibbonPunching):
-        assert (
-                isinstance(keyboard, Keyboard)
-                or
-                isinstance(keyboard, MonotypeSimulation)
+        assert (isinstance(keyboard, Keyboard)
+                or isinstance(keyboard, MonotypeSimulation)
                )
         """Set up mutual dependencies:"""
         job.keyboard = keyboard
@@ -3539,14 +3524,11 @@ class Session(object):
       UI.notify_user('You need a proper keyboard to punch a ribbon.')
       UI.exit_program()
 
-
     """Assure that we're using a caster or simulator for casting:"""
     try:
       if isinstance(job, Casting):
-        assert (
-                isinstance(caster, Monotype)
-                or
-                isinstance(caster, MonotypeSimulation)
+        assert (isinstance(caster, Monotype)
+                or isinstance(caster, MonotypeSimulation)
                )
         """Set up mutual dependencies:"""
         job.caster = caster
@@ -3556,7 +3538,6 @@ class Session(object):
     except (AssertionError, NameError, AttributeError):
       UI.notify_user('You cannot do any casting without a proper caster!')
       UI.exit_program()
-
 
     """An __enter__ method of UI will call main_menu method in job:"""
     with UI:
