@@ -2826,7 +2826,8 @@ class Casting(object):
                     ['J'], ['K'], ['L'], ['M'], ['N'], ['O15']
                    ]
 
-    """Send all the combinations to the caster, one by one:"""
+    """Send all the combinations to the caster, one by one.
+    Set machine_stopped timeout at 120s."""
     for combination in combinations:
       self.UI.notify_user(' '.join(combination))
       self.caster.send_signals_to_caster(combination, 120)
@@ -2844,17 +2845,16 @@ class Casting(object):
     """
     self.UI.clear()
     self.UI.notify_user('Calibration and Sort Casting:\n\n')
-    signals = self.UI.enter_data(
-                    'Enter column and row symbols '
-                    '(default: G 5)\n '
-                   )
+    signals = self.UI.enter_data('Enter column and row symbols '
+                                 '(default: G 5)\n '
+                                )
     if not signals:
       signals = 'G 5'
 
     """
     Parse the signals:
     """
-    parsedSignals = Parsing.signals_parser(signals)
+    signals = Parsing.signals_parser(signals)
 
     """
     O15 yields no signals, but we may want to cast it - check if we
@@ -2863,18 +2863,15 @@ class Casting(object):
     if user entered spacebar. If it's not the case, user has to
     enter the combination again.
     """
-    if not parsedSignals:
+    if not signals:
       self.UI.notify_user('\nRe-enter the sequence')
       time.sleep(1)
       self.cast_sorts()
-      
-    """Strip O and 15 if they were given:"""
-    parsedSignals = Parsing.strip_O_and_15(parsedSignals)
     
     """Ask for number of sorts:"""
-    n = self.UI.enter_data(
-              '\nHow many sorts do you want to cast? (default: 10) \n'
-             )
+    n = self.UI.enter_data('\nHow many sorts do you want to cast? '
+                           '(default: 10) \n'
+                          )
 
     """Default to 10 if user enters non-positive number or letters:"""
     if not n.isdigit() or int(n) < 0:
@@ -2883,33 +2880,34 @@ class Casting(object):
     self.UI.notify_user("\nWe'll cast it %i times.\n" % n)
 
     """Warn if we want to cast too many sorts from a single matrix"""
+    warning = ('Warning: you want to cast a single character more than '
+               '10 times. This may lead to matrix overheating!\n'
+              )
     if n > 10:
-      self.UI.notify_user(
-            'Warning: you want to cast a single character more than '
-            '10 times. This may lead to matrix overheating!\n'
-           )
+      self.UI.notify_user(warning)
 
     """Use a simple menu to ask user if the entered parameters are correct"""
     
+    
     def cast_it():
       """Subroutine to cast chosen signals and/or repeat."""
-      self.cast_from_matrix(parsedSignals, n)
-      options = {
-                 'R' : cast_it,
+      self.cast_from_matrix(signals, n)
+      options = {'R' : cast_it,
                  'C' : self.cast_sorts,
                  'M' : self.main_menu,
                  'E' : self.UI.exit_program
                 }
       message = ('\nCasting finished!\n '
-                 '[R]epeat sequence, [C]hange code, [M]enu or [E]xit? ')
+                 '[R]epeat sequence, [C]hange code, [M]enu or [E]xit? '
+                )
       choice = self.UI.simple_menu(message, options).upper()
   
       """Execute choice:"""
       options[choice]()
 
-    """Prmeters chosen. Ask what to do:"""
-    options = {
-               'O' : cast_it,
+
+    """Parameters chosen. Ask what to do:"""
+    options = {'O' : cast_it,
                'C' : self.cast_sorts,
                'M' : self.main_menu,
                'E' : self.UI.exit_program
@@ -2956,10 +2954,12 @@ class Casting(object):
 
     """Cast n combinations of row & column, one by one"""
     for i in range(n):
-      if len(combination) > 0:
-        self.UI.notify_user(' '.join(combination))
-      else:
-        self.UI.notify_user('O+15 - no signals')
+      info = ('%s - casting character %i of %i, %i%% done.'
+              % (' '.join(combination).ljust(20), 
+                 i+1, n, 100 * (i+1) / n)
+             )
+      self.UI.notify_user(info)
+      Parsing.strip_O_and_15(combination)
       self.caster.send_signals_to_caster(combination)
 
     """Put the line to the galley:"""
