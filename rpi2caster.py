@@ -2211,14 +2211,9 @@ class Parsing(object):
     rows = []
     justification = []
     for sig in ['0005', '0075', 'S']:
-      """First, detect justification signals: 0005, 0075, S
-      
-      str.find returns -1 if a substring is not found in the str,
-      or returns a position number, if substring is found.
-      We don't care about the position in str (the signal may as well
-      be at the beginning or at the end).
+      """First, detect justification signals: 0005, 0075, S.
       We can't append a signal more than once (i.e. double 0005 etc.)"""
-      if rawSignals.find(sig) > -1 and sig not in justification:
+      if sig in rawSignals and sig not in justification:
         justification.append(sig)
         """Remove the signal from string:"""
         rawSignals = rawSignals.replace(sig, '')
@@ -2229,8 +2224,7 @@ class Parsing(object):
     Don't repeat yourself - if number is found twice, it'll be appended
     to the rows only once."""
     for n in range(15, 0, -1):
-      pos = rawSignals.find(str(n))
-      if pos > -1 and str(n) not in rows:
+      if str(n) in rawSignals and str(n) not in rows:
         rows.append(str(n))
       rawSignals = rawSignals.replace(str(n), '')
     """Treat signals as a list and filter it, dump all letters beyond O
@@ -2251,18 +2245,10 @@ class Parsing(object):
     """Converts O or 15 signals to a combined O15 that can be fed
     to caster control routines."""
     signals = inputSignals
-    try:
-      signals.remove('O')
-      if not 'O15' in signals:
-        signals.append('O15')
-    except ValueError:
-      pass
-    try:
-      signals.remove('15')
-      if not 'O15' in signals:
-        signals.append('O15')
-    except ValueError:
-      pass
+    """If any of O, 15 found in signals - remove the signals and add O+15"""
+    if 'O' in signals or '15' in signals:
+      signals.append('O15')
+    Parsing.strip_O_and_15(signals)
     return signals
   
   @staticmethod
@@ -2270,8 +2256,8 @@ class Parsing(object):
     """check_newline(signals):
     
     Checks if the newline (0005, 0075 or NKJ) is present in combination."""
-    return (('0005' in signals and '0075' in signals)
-            or ('N' in signals and 'K' in signals and 'J' in signals))
+    return (set(['0005', '0075']).issubset(signals)
+            or set(['N', 'K', 'J']).issubset(signals))
       
   @staticmethod
   def check_character(signals):
@@ -2284,8 +2270,8 @@ class Parsing(object):
     return (signals 
             and not '0005' in signals 
             and not '0075' in signals
-            and not ('N' in signals and 'K' in signals)
-            and not ('N' in signals and 'J' in signals))
+            and not set(['N', 'K']).issubset(signals)
+            and not set(['N', 'J']).issubset(signals))
 
 
 class Casting(object):
