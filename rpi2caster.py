@@ -2055,7 +2055,7 @@ class MonotypeSimulation(object):
   def activate_valves(self, signals):
     """If there are any signals, print them out"""
     if len(signals) != 0:
-      message = 'The valves:' + ' '.join(signals) + 'would be activated now.'
+      message = 'The valves: ' + ' '.join(signals) + ' would be activated now.'
       self.UI.notify_user(message)
 
   def deactivate_valves(self):
@@ -2218,7 +2218,7 @@ class Parsing(object):
       We don't care about the position in str (the signal may as well
       be at the beginning or at the end).
       We can't append a signal more than once (i.e. double 0005 etc.)"""
-      if rawSignals.find(sig) != -1 and sig not in justification:
+      if rawSignals.find(sig) > -1 and sig not in justification:
         justification.append(sig)
         """Remove the signal from string:"""
         rawSignals = rawSignals.replace(sig, '')
@@ -2373,19 +2373,19 @@ class Casting(object):
       elif Parsing.check_character(signals):
         currentChar += 1
         charsLeft -= 1
-        """% of the chars cast..."""
+        """% of the chars to cast..."""
         charPercentDone = 100 * currentChar / charsAll
       """A string with information for user: signals, comments, etc.:"""
       userInfo = ''
       if Parsing.check_newline(signals):
         """If starting a new line - display number of the working line,
         number of all remaining lines, % done:"""
-        userInfo += ('Starting line: %i of %i, %i%% done... \n' 
+        userInfo += ('Starting line: %i of %i, %i%% done...\n' 
                      % (currentLine, linesAll, linePercentDone))
       elif Parsing.check_character(signals):
         """If casting a character - display number of chars done,
         number of all and remaining chars, % done"""
-        userInfo += ('Casting character: %i / %i, %i remaining, %i%% done... \n' 
+        userInfo += ('Casting character: %i / %i, %i remaining, %i%% done...\n' 
                      % (currentChar, charsAll, charsLeft, charPercentDone))
       """Append signals to be cast:"""
       if signals:
@@ -2483,8 +2483,13 @@ class Casting(object):
     By default, it sets 0075 wedge to 3 and 0005 wedge to 8 (neutral).
     Determines if single justification (0075 only) or double
     justification (0005 + 0075) is used.
-
-    Turns the pump on and off and casts the characters."""
+    
+    N, K and J signals are for alternate justification scheme,
+    used with unit-adding attachment and turned on/off with a large
+    IN/OUT valve at the backside of the caster:
+    NJ = 0005
+    NK = 0075
+    NKJ = 0005 + 0075"""
     pos0005 = str(pos0005)
     pos0075 = str(pos0075)
     """Check if the machine is running first:"""
@@ -2493,12 +2498,13 @@ class Casting(object):
     """Cast the sorts: turn on the pump first (and line to the galley)."""
     self.UI.notify_user('Starting the pump...')
     self.UI.notify_user('0005 wedge at ' + pos0005)
-    self.caster.send_signals_to_caster(['0075', '0005', pos0005])
+    self.caster.send_signals_to_caster(['N', 'K', 'J',
+                                        '0075', '0005', pos0005])
     self.UI.notify_user('0075 wedge at ' + pos0075)
     """If pos0005 is different than pos0075, we need double justification:"""
-    if pos0005 != pos0075:
+    if pos0005 is not pos0075:
       self.UI.notify_user('Using double justification...')
-      self.caster.send_signals_to_caster(['0075', pos0075])
+      self.caster.send_signals_to_caster(['N', 'K', '0075', pos0075])
     """Start casting characters"""
     self.UI.notify_user('Casting characters...')
     """Cast n combinations of row & column, one by one"""
@@ -2510,10 +2516,10 @@ class Casting(object):
       self.caster.send_signals_to_caster(combination)
     """Put the line to the galley:"""
     self.UI.notify_user('Putting line to the galley...')
-    self.caster.send_signals_to_caster(['0005', '0075'])
+    self.caster.send_signals_to_caster(['N', 'K', 'J', '0005', '0075'])
     """After casting sorts we need to stop the pump"""
     self.UI.notify_user('Stopping the pump...')
-    self.caster.send_signals_to_caster(['0005'])
+    self.caster.send_signals_to_caster(['N', 'J', '0005'])
 
   def send_combination(self):
     """send_combination():
