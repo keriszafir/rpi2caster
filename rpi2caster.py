@@ -1720,7 +1720,7 @@ class Monotype(object):
     """Ensure that the interrupts are generated for photocell GPIO
     for both rising and falling edge:"""
     with open(self.gpioEdgeFileName, 'r') as edgeFile:
-      if (edgeFile.read()[:4] is not 'both'):
+      if 'both' not in edgeFile.read():
         message = ('%s: file does not exist, cannot be read, '
                    'or the interrupt on GPIO no %i is not set to "both". '
                    'Check the system config.'
