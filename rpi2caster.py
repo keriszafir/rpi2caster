@@ -65,7 +65,7 @@ except ImportError:
 import readline
 import glob
 
-"""Essential for polling the photocell for state change:"""
+"""Essential for polling the sensor for state change:"""
 import select
 
 """MCP23017 driver & hardware abstraction layer library:"""
@@ -156,10 +156,10 @@ class Config(object):
     Reads a configuration file and gets interface parameters.
 
     If the config file is correct, it returns a list:
-    [emergencyGPIO, photocellGPIO, mcp0Address, mcp1Address, pinBase]
+    [emergencyGPIO, sensorGPIO, mcp0Address, mcp1Address, pinBase]
 
     emergencyGPIO - BCM number for emergency stop button GPIO
-    photocellGPIO - BCM number for photocell GPIO
+    sensorGPIO    - BCM number for sensor GPIO
     mcp0Address   - I2C address for 1st MCP23017
     mcp1Address   - I2C address for 2nd MCP23017
     pinBase       - pin numbering base for GPIO outputs on MCP23017
@@ -214,7 +214,7 @@ class Config(object):
       trueAliases = ['true', '1', 'on', 'yes']
       if self.cfg.get(interfaceName, 'active').lower() in trueAliases:
         emergencyGPIO = self.cfg.get(interfaceName, 'emergency_gpio')
-        photocellGPIO = self.cfg.get(interfaceName, 'photocell_gpio')
+        sensorGPIO = self.cfg.get(interfaceName, 'sensor_gpio')
         mcp0Address = self.cfg.get(interfaceName, 'mcp0_address')
         mcp1Address = self.cfg.get(interfaceName, 'mcp1_address')
         pinBase = self.cfg.get(interfaceName, 'pin_base')
@@ -225,7 +225,7 @@ class Config(object):
         signalsArrangement = self.cfg.get('SignalsArrangements',
                                           signalsArrangement)
         """Return parameters:"""
-        return [int(emergencyGPIO), int(photocellGPIO),
+        return [int(emergencyGPIO), int(sensorGPIO),
                 int(mcp0Address, 16), int(mcp1Address, 16),
                 int(pinBase), signalsArrangement]
       else:
@@ -1659,7 +1659,7 @@ class Monotype(object):
     self.diecaseSystem = 'norm17'
     """Default interface parameters:"""
     self.emergencyGPIO = 18
-    self.photocellGPIO = 24
+    self.sensorGPIO = 24
     self.mcp0Address = 0x20
     self.mcp1Address = 0x21
     self.pinBase = 65
@@ -1689,15 +1689,15 @@ class Monotype(object):
     The parameters will affect the whole object created with this class."""
     interfaceSettings = self.config.get_interface_settings(self.interfaceID)
     try:
-      [self.emergencyGPIO, self.photocellGPIO,
+      [self.emergencyGPIO, self.sensorGPIO,
       self.mcp0Address, self.mcp1Address,
       self.pinBase, self.signalsArrangement] = interfaceSettings
     except:
       pass
     """Print the parameters for debugging:"""
     self.UI.debug_info('\nInterface parameters:\n')
-    output = {'Emergency button GPIO: ' : self.emergencyGPIO,
-              'Photocell GPIO: ' : self.photocellGPIO,
+    output = {'Emergency button GPIO: '    : self.emergencyGPIO,
+              'sensor GPIO: '              : self.sensorGPIO,
               '1st MCP23017 I2C address: ' : self.mcp0Address,
               '2nd MCP23017 I2C address: ' : self.mcp1Address,
               'MCP23017 pin base for GPIO numbering: ' : self.pinBase,
@@ -1707,24 +1707,27 @@ class Monotype(object):
     """Now do the input configuration:
     We need to set up the sysfs interface before (powerbuttond.py -
     a daemon running on boot with root privileges takes care of it)."""
-    gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.photocellGPIO
-    self.gpioValueFileName = gpioSysfsPath + 'value'
-    self.gpioEdgeFileName  = gpioSysfsPath + 'edge'
-    """Check if the photocell GPIO has been configured - file can be read:"""
-    if not os.access(self.gpioValueFileName, os.R_OK):
+    gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.sensorGPIO
+    self.sensorGPIOValueFile = gpioSysfsPath + 'value'
+    self.sensorGPIOEdgeFile  = gpioSysfsPath + 'edge'
+    """Check if the sensor GPIO has been configured - file can be read:"""
+    try:
+      with open(self.sensorGPIOValueFile, 'r'):
+        pass
+    except IOError:
       message = ('%s : file does not exist or cannot be read. '
                  'You must export the GPIO no %s as input first!'
-                 % (self.gpioValueFileName, self.photocellGPIO))
+                 % (self.sensorGPIOValueFile, self.sensorGPIO))
       self.UI.notify_user(message)
       self.UI.exit_program()
-    """Ensure that the interrupts are generated for photocell GPIO
+    """Ensure that the interrupts are generated for sensor GPIO
     for both rising and falling edge:"""
-    with open(self.gpioEdgeFileName, 'r') as edgeFile:
+    with open(self.sensorGPIOEdgeFile, 'r') as edgeFile:
       if 'both' not in edgeFile.read():
         message = ('%s: file does not exist, cannot be read, '
                    'or the interrupt on GPIO no %i is not set to "both". '
                    'Check the system config.'
-                    % (self.gpioEdgeFileName, self.photocellGPIO))
+                    % (self.sensorGPIOEdgeFile, self.sensorGPIO))
         self.UI.notify_user(message)
         self.UI.exit_program()
     """Output configuration:
@@ -1748,7 +1751,7 @@ class Monotype(object):
   def detect_rotation(self):
     """detect_rotation():
 
-    Checks if the machine is running by counting pulses on a photocell
+    Checks if the machine is running by counting pulses on a sensor
     input. One pass of a while loop is a single cycle. If cycles_max
     value is exceeded in a time <= time_max, the program assumes that
     the caster is rotating and it can start controlling the machine."""
@@ -1757,23 +1760,23 @@ class Monotype(object):
     """Let's give it 30 seconds timeout."""
     time_start = time.time()
     time_max = 30
-    """Check for photocell signals, keep checking until max time is exceeded
+    """Check for sensor signals, keep checking until max time is exceeded
     or target number of cycles is reached:"""
-    with open(self.gpioValueFileName, 'r') as gpiostate:
+    with open(self.sensorGPIOValueFile, 'r') as gpiostate:
       while time.time() <= time_start + time_max and cycles <= cycles_max:
-        photocellSignals = select.epoll()
-        photocellSignals.register(gpiostate, select.POLLPRI)
-        events = photocellSignals.poll(0.5)
-        """Check if the photocell changes state at all:"""
+        sensorSignals = select.epoll()
+        sensorSignals.register(gpiostate, select.POLLPRI)
+        events = sensorSignals.poll(0.5)
+        """Check if the sensor changes state at all:"""
         if events:
           gpiostate.seek(0)
-          photocellState = int(gpiostate.read())
+          sensorState = int(gpiostate.read())
           previousState = 0
           """Cycle between 0 and 1, increment the number of passed cycles:"""
-          if photocellState == 1 and previousState == 0:
+          if sensorState == 1 and previousState == 0:
             previousState = 1
             cycles += 1
-          elif photocellState == 0 and previousState == 1:
+          elif sensorState == 0 and previousState == 1:
             previousState = 0
       else:
         """In case of cycles exceeded (machine running),
@@ -1792,7 +1795,7 @@ class Monotype(object):
     Checks for the machine's rotation, sends the signals (activates
     solenoid valves) after the caster is in the "air bar down" position.
 
-    If no machine rotation is detected (photocell input doesn't change
+    If no machine rotation is detected (sensor input doesn't change
     its state) during machineTimeout, calls a function to ask user
     what to do (can be useful for resuming casting after manually
     stopping the machine for a short time - not recommended as the
@@ -1802,7 +1805,7 @@ class Monotype(object):
     we can't arbitrarily set the intervals between valve ON and OFF
     signals. We need to get feedback from the machine, and we can use
     contact switch (unreliable in the long run), magnet & reed switch
-    (not precise enough) or a photocell + LED (very precise).
+    (not precise enough) or a sensor + LED (very precise).
     We can use a paper tower's operating lever for obscuring the sensor
     (like John Cornelisse did), or we can use a partially obscured disc
     attached to the caster's shaft (like Bill Welliver did).
@@ -1810,11 +1813,11 @@ class Monotype(object):
     valve block assembly, and the latter allows for very precise tweaking
     of duty cycle (bright/dark area ratio) and phase shift (disc's position
     relative to 0 degrees caster position)."""
-    with open(self.gpioValueFileName, 'r') as gpiostate:
+    with open(self.sensorGPIOValueFile, 'r') as gpiostate:
       po = select.epoll()
       po.register(gpiostate, select.POLLPRI)
       previousState = 0
-      """Detect events on a photocell input, and if a rising or falling edge
+      """Detect events on a sensor input, and if a rising or falling edge
       is detected, determine the input's logical state (high or low).
       If high - check if it was previously low to be sure. Then send
       all signals passed as an argument (tuple or list).
@@ -1826,13 +1829,13 @@ class Monotype(object):
         if events:
           """be sure that the machine is working"""
           gpiostate.seek(0)
-          photocellState = int(gpiostate.read())
-          if photocellState == 1 and previousState == 0:
+          sensorState = int(gpiostate.read())
+          if sensorState == 1 and previousState == 0:
             """Now, the air bar on paper tower would go down -
-            we got signal from photocell to let the air in: """
+            we got signal from sensor to let the air in: """
             self.activate_valves(signals)
             previousState = 1
-          elif photocellState == 0 and previousState == 1:
+          elif sensorState == 0 and previousState == 1:
             """Air bar on paper tower goes back up -
             end of "air in" phase, turn off the valves:"""
             self.deactivate_valves()
@@ -2046,7 +2049,7 @@ class MonotypeSimulation(object):
 
   def send_signals_to_caster(self, signals, machineTimeout=5):
     """Just send signals, and wait for feedback from user,
-    as we don't have a photocell."""
+    as we don't have a machine cycle sensor."""
     self.UI.enter_data('Press [ENTER] to simulate sensor going ON')
     self.activate_valves(signals)
     self.UI.enter_data('Press [ENTER] to simulate sensor going OFF')
