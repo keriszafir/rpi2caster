@@ -2486,6 +2486,7 @@ class Casting(object):
     NK = 0075
     NKJ = 0005 + 0075"""
     combination = Parsing.signals_parser(signals)
+    combination = Parsing.strip_O_and_15(combination)
     pos0005 = str(pos0005)
     pos0075 = str(pos0075)
     """Check if the machine is running first:"""
