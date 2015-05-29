@@ -2616,7 +2616,7 @@ class Casting(object):
       return '\n'.join(info)
     def heatup():
       self.UI.clear()
-      self.cast_from_matrix('O15', n=20, lines=1)
+      self.cast_from_matrix('O15', n=20, lines=2)
     """End of subroutines.
     Commands: {option_name : function}"""
     commands = {1 : choose_ribbon_filename,
