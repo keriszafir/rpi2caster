@@ -2424,8 +2424,6 @@ class Casting(object):
     signals = self.UI.enter_data(prompt)
     if not signals:
       signals = 'G 5'
-    """Parse the signals:"""
-    signals = Parsing.signals_parser(signals)
     """Ask for number of sorts and lines:"""
     prompt = '\nHow many sorts? (default: 10): '
     n = self.UI.enter_data(prompt)
@@ -2466,12 +2464,12 @@ class Casting(object):
                'E' : self.UI.exit_program}
     message = ('Casting %s, %i lines of %i sorts.\n'
                '[O]K, [C]hange code/quantity, [M]enu or [E]xit? '
-               % (''.join(signals), lines, n))
+               % (signals, lines, n))
     choice = self.UI.simple_menu(message, options).upper()
     """Execute choice:"""
     options[choice]()
 
-  def cast_from_matrix(self, combination, n=5, lines=1, pos0075=3, pos0005=8):
+  def cast_from_matrix(self, signals, n=5, lines=1, pos0075=3, pos0005=8):
     """cast_from_matrix(combination, n, pos0075, pos0005):
     
     Casts n sorts from combination of signals (list),
@@ -2487,6 +2485,7 @@ class Casting(object):
     NJ = 0005
     NK = 0075
     NKJ = 0005 + 0075"""
+    combination = Parsing.signals_parser(signals)
     pos0005 = str(pos0005)
     pos0075 = str(pos0075)
     """Check if the machine is running first:"""
