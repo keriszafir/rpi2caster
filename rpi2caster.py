@@ -2426,15 +2426,21 @@ class Casting(object):
       signals = 'G 5'
     """Parse the signals:"""
     signals = Parsing.signals_parser(signals)
-    """Ask for number of sorts:"""
-    prompt = '\nHow many sorts do you want to cast? (default: 10): '
+    """Ask for number of sorts and lines:"""
+    prompt = '\nHow many sorts? (default: 10): '
     n = self.UI.enter_data(prompt)
     """Default to 10 if user enters non-positive number or letters:"""
     if not n.isdigit() or int(n) < 0:
       n = 10
     else:
       n = int(n)
-    self.UI.notify_user("\nWe'll cast it %i times.\n" % n)
+    prompt = '\nHow many lines? (default: 1): '
+    lines = self.UI.enter_data(prompt)
+    """Default to 10 if user enters non-positive number or letters:"""
+    if not lines.isdigit() or int(lines) < 0:
+      lines = 1
+    else:
+      lines = int(lines)
     """Warn if we want to cast too many sorts from a single matrix"""
     warning = ('Warning: you want to cast a single character more than '
                '10 times. This may lead to matrix overheating!\n')
@@ -2443,7 +2449,7 @@ class Casting(object):
     """Use a simple menu to ask user if the entered parameters are correct"""
     def cast_it():
       """Subroutine to cast chosen signals and/or repeat."""
-      self.cast_from_matrix(signals, n)
+      self.cast_from_matrix(signals, n, lines)
       options = {'R' : cast_it,
                  'C' : self.cast_sorts,
                  'M' : self.main_menu,
@@ -2458,12 +2464,14 @@ class Casting(object):
                'C' : self.cast_sorts,
                'M' : self.main_menu,
                'E' : self.UI.exit_program}
-    message = '[O]K, [C]hange code/quantity, [M]enu or [E]xit? '
+    message = ('Casting %s, %i lines of %i sorts.\n'
+               '[O]K, [C]hange code/quantity, [M]enu or [E]xit? '
+               % (''.join(signals), lines, n))
     choice = self.UI.simple_menu(message, options).upper()
     """Execute choice:"""
     options[choice]()
 
-  def cast_from_matrix(self, combination, n=5, pos0075=3, pos0005=8):
+  def cast_from_matrix(self, combination, n=5, lines=1, pos0075=3, pos0005=8):
     """cast_from_matrix(combination, n, pos0075, pos0005):
     
     Casts n sorts from combination of signals (list),
@@ -2484,28 +2492,26 @@ class Casting(object):
     """Check if the machine is running first:"""
     self.UI.notify_user('Start the machine...')
     self.caster.detect_rotation()
-    """Cast the sorts: turn on the pump first (and line to the galley)."""
-    self.UI.notify_user('Starting the pump...')
-    self.UI.notify_user('0005 wedge at ' + pos0005)
-    self.caster.send_signals_to_caster(['N', 'K', 'J',
-                                        '0075', '0005', pos0005])
-    self.UI.notify_user('0075 wedge at ' + pos0075)
-    """If pos0005 is different than pos0075, we need double justification:"""
-    if pos0005 is not pos0075:
-      self.UI.notify_user('Using double justification...')
+    """Cast the sorts: set wedges, turn pump on, cast, line to the galley."""
+    for currentLine in range(lines):
+      self.UI.notify_user('Castling line %i of %i' % (currentLine + 1, lines))
+      self.UI.notify_user('0005 wedge at ' + pos0005)
+      self.caster.send_signals_to_caster(['N', 'J', '0005', pos0005])
+      self.UI.notify_user('0075 wedge at ' + pos0075)
+      self.UI.notify_user('Starting the pump...')
       self.caster.send_signals_to_caster(['N', 'K', '0075', pos0075])
-    """Start casting characters"""
-    self.UI.notify_user('Casting characters...')
-    """Cast n combinations of row & column, one by one"""
-    for i in range(0, n+1):
-      info = ('%s - casting character %i of %i, %i%% done.'
-              % (' '.join(combination).ljust(20), i, n, 100 * i / n))
-      self.UI.notify_user(info)
-      Parsing.strip_O_and_15(combination)
-      self.caster.send_signals_to_caster(combination)
-    """Put the line to the galley:"""
-    self.UI.notify_user('Putting line to the galley...')
-    self.caster.send_signals_to_caster(['N', 'K', 'J', '0005', '0075'])
+      """Start casting characters"""
+      self.UI.notify_user('Casting characters...')
+      """Cast n combinations of row & column, one by one"""
+      for i in range(1, n+1):
+        info = ('%s - casting character %i of %i, %i%% done.'
+                % (' '.join(combination).ljust(20), i, n, 100 * i / n))
+        self.UI.notify_user(info)
+        Parsing.strip_O_and_15(combination)
+        self.caster.send_signals_to_caster(combination)
+      """Put the line to the galley:"""
+      self.UI.notify_user('Putting line to the galley...')
+      self.caster.send_signals_to_caster(['N', 'K', 'J', '0005', '0075'])
     """After casting sorts we need to stop the pump"""
     self.UI.notify_user('Stopping the pump...')
     self.caster.send_signals_to_caster(['N', 'J', '0005'])
@@ -2584,6 +2590,7 @@ class Casting(object):
                4 : 'Test the valves and pinblocks',
                5 : 'Lock the caster on a specified diecase position',
                6 : 'Calibrate the 0005 and 0075 wedges',
+               7 : 'Cast two lines of 20 quads to heat up the mould',
                0 : 'Exit program'}
     """Declare subroutines for menu options:"""
     def choose_ribbon_filename():
@@ -2607,6 +2614,9 @@ class Casting(object):
       info.append('Using caster: ' + self.caster.name)
       """Convert it all to a multiline string:"""
       return '\n'.join(info)
+    def heatup():
+      self.UI.clear()
+      self.cast_from_matrix('O15', n=20, lines=1)
     """End of subroutines.
     Commands: {option_name : function}"""
     commands = {1 : choose_ribbon_filename,
@@ -2615,6 +2625,7 @@ class Casting(object):
                 4 : self.line_test,
                 5 : self.send_combination,
                 6 : self.align_wedges,
+                7 : heatup,
                 0 : self.UI.exit_program}
     choice = self.UI.menu( options,
               header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
