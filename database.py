@@ -56,10 +56,10 @@ class Database(object):
     Usually you run setup with sudo.
     """
 
-    def __init__(self, databasePath='', confFilePath='/etc/rpi2caster.conf'):
+    def __init__(self, databasePath='', configPath='rpi2caster.conf'):
         self.UI = TextUI()
         self.databasePath = databasePath
-        self.confFilePath = confFilePath
+        self.configPath = configPath
         # Connect to the database when entering the object's context
         self.db = None
 
@@ -79,7 +79,7 @@ class Database(object):
         """
         if not self.databasePath:
             config = ConfigParser.SafeConfigParser()
-            config.read(self.confFilePath)
+            config.read(self.configPath)
         # Look database path up in conffile:
             try:
                 self.databasePath = config.get('Database', 'path')

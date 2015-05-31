@@ -40,88 +40,155 @@ stops sending codes to the caster and sends a 0005 combination instead.
 The pump is immediately stopped.
 """
 
-# IMPORTS, and warnings if package is not found in system:
-unmetDependencies = []
-
-# Typical libs, used by most routines:
-import sys
-import os
+# IMPORTS:
 import time
 
 # Config parser for reading the interface settings
 import ConfigParser
-
-# Used for serializing lists stored in database, and for communicating
-# with the web application (in the future):
-try:
-    import json
-except ImportError:
-    import simplejson as json
-
-# These libs are used by file name autocompletion:
-import readline
-import glob
 
 # Essential for polling the sensor for state change:
 import select
 
 # Signals parsing methods for rpi2caster:
 import parsing
+# Database module for rpi2caster:
+import database
+# User interfaces module for rpi2caster:
+import userinterfaces
+UI = userinterfaces.TextUI()
 
 # MCP23017 driver & hardware abstraction layer library:
 try:
     import wiringpi2 as wiringpi
     #import wiringpi
 except ImportError:
-    unmetDependencies.append('wiringPi2 Python bindings: wiringpi2-python')
-
-# rpi2caster uses sqlite3 database for storing caster, interface,
-# wedge, diecase & matrix parameters:
-try:
-    import sqlite3
-except ImportError:
-    unmetDependencies.append('SQLite3: sqlite3')
-
-# Warn about unmet dependencies:
-if unmetDependencies:
-    warning = 'Unmet dependencies - some functionality will not work:\n'
-    for dep in unmetDependencies:
-        warning += (dep + '\n')
-    print warning
-    time.sleep(2)
+    print 'Missing dependency: wiringPi2 Python bindings: wiringpi2-python'
+    print 'Caster control will not work!'
 
 
-class Config(object):
-    """Configuration class.
+class Monotype(object):
+    """Monotype(job, name, confFilePath):
 
-    A class for reading and parsing the config file with a specified path.
-
-    Want to use a different conffile? Just instantiate this class with
-    a custom "path" parameter, that's all.
+    A class which stores all hardware-layer methods, related to caster control.
+    This class requires a caster name, and a database object.
     """
 
-    def __init__(self, path='/etc/rpi2caster.conf'):
-        """Check if config file is readable first"""
-        self.UI = TextUI()
-        self.is_caster = True
+    def __init__(self, name='Monotype', configPath='/etc/rpi2caster.conf'):
+        """Creates a caster object for a given caster name
+        """
+        self.UI = UI
+        self.name = name
+        # Check if config file is readable first
         try:
-            with open(path, 'r'):
-                self.confFilePath = path
+            with open(configPath, 'r'):
+                self.configPath = configPath
             self.cfg = ConfigParser.SafeConfigParser()
-            self.cfg.read(self.confFilePath)
+            self.cfg.read(self.configPath)
         except IOError:
-            self.UI.display('Cannot open config file:', path)
+            self.UI.display('Cannot open config file:', configPath)
+        # It's not configured yet - we'll do it when needed, and only once:
+        self.configured = False
 
     def __enter__(self):
-        self.UI.debug_info('Entering configuration context...')
+        """Run the setup when entering the context:
+        """
+        self.UI.debug_info('Entering caster/interface context...')
+        # Configure the interface if it needs it:
+        if not self.configured:
+            self.caster_setup()
         return self
 
-    def get_caster_settings(self, casterName):
-        """get_caster_settings(casterName):
+    def caster_setup(self):
+        """Setup routine:
 
-        Reads the settings for a caster with self.casterName
+        Sets up initial default parameters for caster & interface:
+        caster - "Monotype" (if no name is given),
+        interface ID 0,
+        unit-adding disabled,
+        diecase format 15x17.
+        """
+        # Default caster parameters:
+        self.isPerforator = False
+        self.interfaceID = 0
+        self.unitAdding = 0
+        self.diecaseSystem = 'norm17'
+        # Default interface parameters:
+        self.emergencyGPIO = None
+        self.sensorGPIO = None
+        self.mcp0Address = 0x20
+        self.mcp1Address = 0x21
+        self.pinBase = 65
+        self.signalsArrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
+                                   '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
+        # Next, this method reads caster data from database and fetches
+        # a list of caster parameters: diecaseFormat, unitAdding, interfaceID.
+        # In case there is no data, the function will run on default settings.
+        self.get_caster_settings()
+        self.get_interface_settings()
+        # When debugging, display all caster info:
+        output = {'\nCaster parameters:\n' : '',
+                  'Using caster name: ' : self.name,
+                  'Is a perforator? ' : self.isPerforator,
+                  '\nInterface parameters:\n' : '',
+                  'Interface ID: ' : self.interfaceID,
+                  '1st MCP23017 I2C address: ' : self.mcp0Address,
+                  '2nd MCP23017 I2C address: ' : self.mcp1Address,
+                  'MCP23017 pin base for GPIO numbering: ' : self.pinBase,
+                  'Signals arrangement: ' : self.signalsArrangement,
+                  'Emergency button GPIO: ' : self.emergencyGPIO,
+                  'Sensor GPIO: ' : self.sensorGPIO}
+        for parameter in output:
+            self.UI.debug_info(parameter, output[parameter])
+
+        # This is done only for a caster interface:
+        if not self.isPerforator:
+        # Set up an input for machine cycle sensor:
+            gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.sensorGPIO
+            self.sensorGPIOValueFile = gpioSysfsPath + 'value'
+            self.sensorGPIOEdgeFile = gpioSysfsPath + 'edge'
+        # Check if the sensor GPIO has been configured - file is readable:
+            try:
+                with open(self.sensorGPIOValueFile, 'r'):
+                    pass
+            except IOError:
+                message = ('%s : file does not exist or cannot be read. '
+                           'You must export the GPIO no %s as input first!'
+                           % (self.sensorGPIOValueFile, self.sensorGPIO))
+                self.UI.display(message)
+                self.UI.exit_program()
+            # Ensure that the interrupts are generated for sensor GPIO
+            # for both rising and falling edge:
+            with open(self.sensorGPIOEdgeFile, 'r') as edgeFile:
+                if 'both' not in edgeFile.read():
+                    message = ('%s: file does not exist, cannot be read, '
+                               'or the interrupt on GPIO %i is not set to "both". '
+                               'Check the system config.'
+                               % (self.sensorGPIOEdgeFile, self.sensorGPIO))
+                    self.UI.display(message)
+                    self.UI.exit_program()
+        # Setup the wiringPi MCP23017 chips for valve outputs
+        wiringpi.mcp23017Setup(self.pinBase, self.mcp0Address)
+        wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
+        pins = range(self.pinBase, self.pinBase + 32)
+        # Set all I/O lines on MCP23017s as outputs - mode=1
+        for pin in pins:
+            wiringpi.pinMode(pin, 1)
+        # Make a nice list out of the signal arrangement string:
+        signalsArrangement = self.signalsArrangement.split(',')
+        # Assign wiringPi pin numbers on MCP23017s to the Monotype
+        # control signals
+        self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
+        # Mark the caster as configured
+        self.configured = True
+        # Wait for user confirmation if in debug mode
+        self.UI.debug_enter_data('Caster configured. [Enter] to continue... ')
+
+    def get_caster_settings(self):
+        """get_caster_settings():
+
+        Reads the settings for a caster with self.name
         from the config file (where it is represented by a section, whose
-        name is self.casterName).
+        name is the same as the caster's).
 
         The parameters returned are:
         [diecase_system, unit_adding, interface_id]
@@ -138,33 +205,28 @@ class Config(object):
         interface_id [0,1,2,3] - ID of the interface connected to the caster.
         """
         try:
-            isPerforator = self.cfg.get(casterName, 'is_perforator')
-        except (ConfigParser.NoSectionError,
-                ConfigParser.NoOptionError,
+        # Determine if it's a perforator interface
+            self.isPerforator = self.cfg.get(self.name, 'is_perforator')
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
                 ValueError, TypeError):
-                    isPerforator = False
+            self.isPerforator = False
         # We now know if it's a perforator
         try:
-            interfaceID = self.cfg.get(casterName, 'interface_id')
-            if isPerforator:
-                return int(interfaceID)
-            else:
+            self.interfaceID = self.cfg.get(self.name, 'interface_id')
+            if not self.isPerforator:
             # Get caster parameters from conffile
-                unitAdding = self.cfg.get(casterName, 'unit_adding')
-                diecaseSystem = self.cfg.get(casterName, 'diecase_system')
-            # Time to return the data:
-                return [bool(unitAdding), diecaseSystem, int(interfaceID)]
-        except (ConfigParser.NoSectionError,
-                ConfigParser.NoOptionError,
-                ValueError, TypeError):
+                self.unitAdding = bool(self.cfg.get(self.name, 'unit_adding'))
+                self.diecaseSystem = self.cfg.get(self.name, 'diecase_system')
         # Do nothing if config is wrong:
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
+                ValueError, TypeError):
             self.UI.display('Incorrect caster parameters. '
                             'Using hardcoded defaults.')
             self.UI.exception_handler()
             return None
 
-    def get_interface_settings(self, interfaceID):
-        """get_interface_settings(interfaceID):
+    def get_interface_settings(self):
+        """get_interface_settings():
 
         Reads a configuration file and gets interface parameters.
 
@@ -220,776 +282,36 @@ class Config(object):
         2                  131                 (pinBase1 + 32)
         3                  164                 (pinBase2 + 32)
         """
-        interfaceName = 'Interface' + str(interfaceID)
+        ifaceName = 'Interface' + str(self.interfaceID)
         try:
-        # Check if the interface is active, else return None
+        # Check if the interface is active, else do nothing
             trueAliases = ['true', '1', 'on', 'yes']
-            if self.cfg.get(interfaceName, 'active').lower() in trueAliases:
-                if self.is_caster:
+            if self.cfg.get(ifaceName, 'active').lower() in trueAliases:
+                if not self.isPerforator:
                 # Emergency stop and sensor are valid only for casters,
                 # perforators do not have them
-                    emergencyGPIO = self.cfg.get(interfaceName, 'stop_gpio')
-                    sensorGPIO = self.cfg.get(interfaceName, 'sensor_gpio')
-                mcp0Address = self.cfg.get(interfaceName, 'mcp0_address')
-                mcp1Address = self.cfg.get(interfaceName, 'mcp1_address')
-                pinBase = self.cfg.get(interfaceName, 'pin_base')
+                    self.emergencyGPIO = self.cfg.get(ifaceName, 'stop_gpio')
+                    self.sensorGPIO = self.cfg.get(ifaceName, 'sensor_gpio')
+                self.mcp0Address = self.cfg.get(ifaceName, 'mcp0_address')
+                self.mcp1Address = self.cfg.get(ifaceName, 'mcp1_address')
+                self.pinBase = self.cfg.get(ifaceName, 'pin_base')
 
             # Check which signals arrangement the interface uses...
-                signalsArrangement = self.cfg.get(interfaceName, 'signals_arr')
-                """...and get the signals order for it:"""
-                signalsArrangement = self.cfg.get('SignalsArrangements',
+                signalsArrangement = self.cfg.get(ifaceName, 'signals_arr')
+            # ...and get the signals order for it:
+                self.signalsArrangement = self.cfg.get('SignalsArrangements',
                                                   signalsArrangement)
-                if self.is_caster:
-                # Return parameters for a caster
-                    return [int(emergencyGPIO), int(sensorGPIO),
-                            int(mcp0Address, 16), int(mcp1Address, 16),
-                            int(pinBase), signalsArrangement]
-                else:
-                # Return parameters for a perforator - no sensor or emerg. stop
-                    return [int(mcp0Address, 16), int(mcp1Address, 16),
-                            int(pinBase), signalsArrangement]
             else:
             # This happens if the interface is inactive in conffile:
                 self.UI.display('Interface %i is marked as inactive!'
-                                % interfaceID)
-                return None
-        except (ConfigParser.NoSectionError,
-                ConfigParser.NoOptionError,
+                                % self.interfaceID)
+        # In case of wrong configuration, do nothing
+        except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
                 ValueError, TypeError):
             self.UI.display('Incorrect interface parameters. '
                             'Using hardcoded defaults.')
             self.UI.exception_handler()
             return None
-
-    def __exit__(self, *args):
-        self.UI.debug_info('Exiting configuration context.')
-        pass
-
-
-class Database(object):
-    """Database(databasePath, confFilePath):
-
-    A class containing all methods related to storing, retrieving
-    and deleting data from a SQLite3 database used for config.
-
-    We're using database because it's easy to access and modify with
-    third-party programs (like sqlite, sqlitebrowser or a Firefox plugin),
-    and there will be lots of data to store: diecase (matrix case)
-    properties, diecase layouts, wedge unit values, caster and interface
-    settings (although we may move them to config files - they're "system"
-    settings best left default, instead of "foundry" settings the user has
-    to set up before being able to cast, based on their type foundry's
-    inventory, which varies from one place to another).
-
-    Methods here are for reading/writing data for diecases, matrices,
-    wedges (and casters & interfaces) from/to designated sqlite3 database.
-
-    Default database path is ./database/monotype.db - but you can
-    override it by instantiating this class with a different name
-    passed as an argument. It is necessary that the user who's running
-    this program for setup has write access to the database file;
-    read access is enough for normal operation.
-    Usually you run setup with sudo.
-    """
-
-    def __init__(self, databasePath='', confFilePath='/etc/rpi2caster.conf'):
-        self.UI = TextUI()
-        self.databasePath = databasePath
-        self.confFilePath = confFilePath
-
-    def __enter__(self):
-        self.UI.debug_info('Entering database context...')
-        self.database_setup()
-        self.UI.debug_info('Using database path:', self.databasePath)
-        self.db = sqlite3.connect(self.databasePath)
-        return self
-
-    def database_setup(self):
-        """Initialize database:
-
-        Database path passed to class has priority over database path
-        set in conffile. If none of them is found, the program will use
-        hardcoded default.
-        """
-        if not self.databasePath:
-            config = ConfigParser.SafeConfigParser()
-            config.read(self.confFilePath)
-        # Look database path up in conffile:
-            try:
-                self.databasePath = config.get('Database', 'path')
-            except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-            # Revert to defaults if database not configured properly:
-                self.databasePath = 'database/monotype.db'
-                self.UI.debug_info('Database path not found in conffile. '
-                                   'Using default:', self.databasePath)
-
-    def add_wedge(self, wedgeName, setWidth, britPica, steps):
-        """add_wedge(wedgeName, setWidth, britPica, steps):
-
-        Registers a wedge in our database.
-        Returns True if successful, False otherwise.
-
-        Arguments:
-        wedgeName - wedge's number, e.g. S5 or 1160. String, cannot be null.
-        setWidth - set width of a wedge, e.g. 9.75. Float, cannot be null.
-        britPica - 1 or True if it's a British pica system (1pica = 0.1667")
-        0 or False if it's an American pica system (1pica = 0.1660")
-
-        If the wedge has "E" at the end of its number (e.g. 5-12E),
-        then it was made for European countries which used Didot points
-        and ciceros (1cicero = 0.1776"), but the unit calculations were all
-        based on the British pica.
-
-        steps - a wedge's unit arrangement - list of unit values for each
-        of the wedge's steps (i.e. diecase rows). Cannot be null.
-
-        An additional column, id, will be created and auto-incremented.
-        This will be an unique identifier of a wedge.
-        """
-
-        # data - a list with wedge parameters to be written,
-        # a unit arrangement (list of wedge's steps) is JSON-encoded
-        data = [wedgeName, setWidth, str(britPica), json.dumps(steps)]
-        with self.db:
-            try:
-                cursor = self.db.cursor()
-            # Create the table first:
-                cursor.execute('CREATE TABLE IF NOT EXISTS wedges ('
-                               'id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
-                               'wedge_id TEXT NOT NULL, '
-                               'set_width REAL NOT NULL, '
-                               'brit_pica TEXT NOT NULL, '
-                               'steps TEXT NOT NULL)')
-            # Then add an entry:
-                cursor.execute('''INSERT INTO wedges (
-                                  wedge_id,set_width,old_pica,steps
-                                  ) VALUES (?, ?, ?, ?)''', data)
-                self.db.commit()
-                return True
-            except:
-            # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot add wedge!')
-                self.UI.exception_handler()
-                return False
-
-    def wedge_by_name_and_width(self, wedgeName, setWidth):
-        """wedge_by_name_and_width(wedgeName, setWidth):
-
-        Looks up a wedge with given ID and set width in database.
-        Useful when coding a ribbon - wedge is obtained from diecase data.
-
-        If wedge is registered, function returns:
-        ID - unique, int (e.g. 0),
-        wedgeName - string (e.g. S5) - wedge name
-        setWidth - float (e.g. 9.75) - set width,
-        britPica - bool - whether this is an old-pica ("E") wedge or not,
-        steps - list of unit values for all wedge's steps.
-
-        Else, function returns False.
-        """
-        with self.db:
-            try:
-                cursor = self.db.cursor()
-                cursor.execute('SELECT * FROM wedges '
-                               'WHERE wedge_id = ? AND set_width = ?',
-                               [wedgeName, setWidth])
-                wedge = cursor.fetchone()
-                if wedge is None:
-                    self.UI.display('No wedge %s - %f found in database!'
-                                    % (wedgeName, setWidth))
-                    return False
-                else:
-                    wedge = list(wedge)
-                    self.UI.display('Wedge %s-%fset found in database - OK'
-                                    % (wedgeName, setWidth))
-                # Change return value of britPica to boolean:
-                    wedge[3] = bool(wedge[3])
-                # Change return value of steps to list:
-                    wedge[4] = json.loads(wedge[4])
-                # Return [ID, wedgeName, setWidth, britPica, steps]:
-                    return wedge
-            except:
-            # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot get wedge!')
-                self.UI.exception_handler()
-
-    def wedge_by_id(self, ID):
-        """wedge_by_id(ID):
-
-        Gets parameters for a wedge with given ID.
-
-        If so, returns:
-        ID - unique, int (e.g. 0),
-        wedgeName - string (e.g. S5) - wedge name
-        setWidth - float (e.g. 9.75) - set width,
-        britPica - bool - whether this is a British pica wedge or not,
-        steps - list of unit values for all wedge's steps.
-
-        Else, returns False.
-        """
-        with self.db:
-            try:
-                cursor = self.db.cursor()
-                cursor.execute('SELECT * FROM wedges WHERE id = ? ', [ID])
-                wedge = cursor.fetchone()
-                if wedge is None:
-                    self.UI.display('Wedge not found!')
-                    return False
-                else:
-                    wedge = list(wedge)
-                # Change return value of britPica to boolean:
-                    wedge[3] = bool(wedge[3])
-                # Change return value of steps to list:
-                    wedge[4] = json.loads(wedge[4])
-                    """Return [ID, wedgeName, setWidth, britPica, steps]:"""
-                    return wedge
-            except:
-            # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot get wedge!')
-                self.UI.exception_handler()
-
-    def delete_wedge(self, ID):
-        """delete_wedge(self, ID):
-
-        Deletes a wedge with given unique ID from the database
-        (useful in case we no longer have the wedge).
-
-        Returns True if successful, False otherwise.
-
-        First, the function checks if the wedge is in the database at all.
-        """
-        if self.wedge_by_id(ID):
-            with self.db:
-                try:
-                    cursor = self.db.cursor()
-                    cursor.execute('DELETE FROM wedges WHERE id = ?', [ID])
-                    return True
-                except:
-                # In debug mode, display exception code & stack trace.
-                    self.UI.display('Database error: cannot delete wedge!')
-                    self.UI.exception_handler()
-                    return False
-        else:
-            self.UI.display('Nothing to delete.')
-            return False
-
-    def list_wedges(self):
-        """list_wedges(self):
-
-        Lists all wedges stored in database, with their step unit values.
-
-        Prints the following to stdout:
-
-        ID - unique, int (e.g. 0),
-        wedgeName - string (e.g. S5) - wedge name
-        setWidth - float (e.g. 9.75) - set width,
-        britPica - bool - whether this is an old-pica ("E") wedge or not,
-        steps - list of unit values for all wedge's steps.
-
-        Returns True if successful, False otherwise.
-        """
-        with self.db:
-            try:
-                cursor = self.db.cursor()
-                cursor.execute('SELECT * FROM wedges')
-                header = ('\n' + 'ID'.center(10)
-                          + 'wedge No'.center(10)
-                          + 'Brit. pica'.center(10)
-                          + 'unit arrangement'
-                          + '\n')
-                self.UI.display(header)
-                while True:
-                    wedge = cursor.fetchone()
-                    if wedge is not None:
-                        record = ''
-                        for field in wedge:
-                            record += str(field).ljust(10)
-                        self.UI.display(record)
-                    else:
-                        break
-                return True
-            except:
-            # In debug mode, display exception code & stack trace."""
-                self.UI.display('Database error: cannot list wedges!')
-                self.UI.exception_handler()
-                return False
-
-    def diecase_by_series_and_size(self, typeSeries, typeSize):
-        """diecase_by_series_and_size(typeSeries, typeSize):
-
-        Searches for diecase metadata, based on the desired type series
-        and size. Allows to choose one of the diecases found.
-        """
-        with self.db:
-            try:
-                cursor = self.db.cursor()
-                cursor.execute('SELECT * FROM diecases '
-                               'WHERE type_series = "%s" AND size = %i',
-                               (typeSeries, typeSize))
-            # Initialize a list of matching diecases:
-                matches = []
-                while True:
-                    diecase = cursor.fetchone()
-                    if diecase is not None:
-                        diecase = list(diecase)
-                        matches.append(diecase)
-                    else:
-                        break
-                if not matches:
-                # List is empty. Notify the user:
-                    self.UI.display('Sorry - no results found.')
-                    time.sleep(1)
-                    return False
-                elif len(matches) == 1:
-                    return matches[0]
-                else:
-                # More than one match - decide which one to use:
-                    IDs = []
-                    for diecase in matches:
-                        IDs.append(diecase[0])
-                # Display a menu with diecases from 1 to the last:
-                    options = dict(zip(range(1, len(matches) + 1), IDs))
-                    header = 'Choose a diecase:'
-                    choice = self.UI.menu(options, header)
-                # Return a list with chosen diecase's parameters:
-                    return options[choice]
-            except:
-            # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot find diecase data!')
-                self.UI.exception_handler()
-                return False
-
-    def diecase_by_id(self, diecaseID):
-        """diecase_by_id(diecaseID):
-
-        Searches for diecase metadata, based on the unique diecase ID.
-        """
-        with self.db:
-            try:
-                cursor = self.db.cursor()
-                cursor.execute('SELECT * FROM diecases WHERE id = "%s"'
-                               % diecaseID)
-            # Return diecase if found:
-                diecase = cursor.fetchone()
-                if diecase is not None:
-                    diecase = list(diecase)
-                    return diecase
-                else:
-                # Otherwise, notify the user, return False:
-                    self.UI.display('Sorry - no results found.')
-                    time.sleep(1)
-                    return False
-            except:
-            # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot find diecase data!')
-                self.UI.exception_handler()
-                return False
-
-    def __exit__(self, *args):
-        self.UI.debug_info('Exiting database context.')
-        pass
-
-
-class Inventory(object):
-    """Inventory management class:
-
-    Used for configuring the Monotype workshop inventory:
-    -wedges
-    -diecases
-    -diecase layouts.
-    """
-
-    def __init__(self):
-        self.UI = TextUI()
-
-    def __enter__(self):
-        self.UI.debug_info('Entering inventory management job context...')
-        return self
-
-    # Placeholders for functionality not implemented yet:
-    def list_diecases(self):
-        pass
-    def show_diecase_layout(self):
-        pass
-    def add_diecase(self):
-        pass
-    def edit_diecase(self):
-        pass
-    def clear_diecase(self):
-        pass
-    def delete_diecase(self):
-        pass
-
-    def add_wedge(self, wedgeName='', setWidth='', britPica=None, steps=''):
-        """add_wedge(wedgeName, setWidth, britPica, steps)
-
-        Used for adding wedges.
-
-        Can be called with or without arguments.
-
-        wedgeName - string - series name for a wedge (e.g. S5, S111)
-        setWidth  - float - set width of a particular wedge (e.g. 9.75)
-        britPica - boolean - whether the wedge is based on British pica
-        (0.1667") or not (American pica - 0.1660")
-        True if the wedge is for European market ("E" after set width number)
-        steps - string with unit values for steps - e.g. '5,6,7,8,9,9,9...,16'
-
-        Start with defining the unit arrangements for some known wedges.
-        This data will be useful when adding a wedge. The setup program
-        will look up a wedge by its name, then get unit values.
-
-        The MONOSPACE wedge is a special wedge, where all steps have
-        the same unit value of 9. It is used for casting constant-width
-        (monospace) type, like the typewriters have. You could even cast
-        from regular matrices, provided that you use 0005 and 0075 wedges
-        to add so many units that you can cast wide characters
-        like "M", "W" etc. without overhang. You'll get lots of spacing
-        between narrower characters, because they'll be cast on a body
-        wider than necessary.
-
-        In this program, all wedges have the "S" (for stopbar) letter
-        at the beginning of their designation. However, the user can enter
-        a designation with or without "S", so check if it's there, and
-        append if needed (only for numeric designations - not the "monospace"
-        or other text values!)
-
-        If no name is given, assume that the user means the S5 wedge, which is
-        very common and most casting workshops have a few of them.
-        """
-        wedgeData = {'S5'     : '5,6,7,8,9,9,9,10,10,11,12,13,14,15,18,18',
-                     'S96'    : '5,6,7,8,9,9,10,10,11,12,13,14,15,16,18,18',
-                     'S111' : '5,6,7,8,8,8,9,9,9,9,10,12,12,13,15,15',
-                     'S334' : '5,6,7,8,9,9,10,10,11,11,13,14,15,16,18,18',
-                     'S344' : '5,6,7,9,9,9,10,11,11,12,12,13,14,15,16,16',
-                     'S377' : '5,6,7,8,8,9,9,10,10,11,12,13,14,15,18,18',
-                     'S409' : '5,6,7,8,8,9,9,10,10,11,12,13,14,15,16,16',
-                     'S467' : '5,6,7,8,8,9,9,9,10,11,12,13,14,15,18,18',
-                     'S486' : '5,7,6,8,9,11,10,10,13,12,14,15,15,18,16,16',
-                     'S526' : '5,6,7,8,9,9,10,10,11,12,13,14,15,17,18,18',
-                     'S536' : '5,6,7,8,9,9,10,10,11,12,13,14,15,17,18,18',
-                     'S562' : '5,6,7,8,9,9,9,10,11,12,13,14,15,17,18,18',
-                     'S607' : '5,6,7,8,9,9,9,9,10,11,12,13,14,15,18,18',
-                     'S611' : '6,6,7,9,9,10,11,11,12,12,13,14,15,16,18,18',
-                     'S674' : '5,6,7,8,8,9,9,9,10,10,11,12,13,14,15,18',
-                     'S724' : '5,6,7,8,8,9,9,10,10,11,13,14,15,16,18,18',
-                     'S990' : '5,5,6,7,8,9,9,9,9,10,10,11,13,14,18,18',
-                     'S1063': '5,6,8,9,9,9,9,10,12,12,13,14,15,15,18,18',
-                     'S1329': '4,5,7,8,9,9,9,9,10,10,11,12,12,13,15,15',
-                     'S1331': '4,5,7,8,8,9,9,9,9,10,11,12,12,13,15,15',
-                     'S1406': '4,5,6,7,8,8,9,9,9,9,10,10,11,12,13,15',
-                     'MONOSPACE' : '9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9'}
-        # Enter the wedge name:
-        while not wedgeName:
-            wedgeName = self.UI.enter_data('Enter the wedge name, e.g. S5 '
-                                           '(very typical, default): ')
-            if not wedgeName:
-                wedgeName = 'S5'
-            elif wedgeName[0].upper() is not 'S' and wedgeName.isdigit():
-                wedgeName = 'S' + wedgeName
-            wedgeName = wedgeName.upper()
-        # Enter the set width:
-        while not setWidth:
-            prompt = 'Enter the wedge set width as decimal, e.g. 9.75E: '
-            setWidth = self.UI.enter_data(prompt)
-        # Determine if it's a British pica wedge automatically - E is present:
-        if setWidth[-1].upper() == 'E':
-            setWidth = setWidth[:-1]
-            britPica = True
-        elif britPica is None:
-        # Otherwise, let user choose if it's American or British pica:
-            options = {'A' : False, 'B' : True}
-            message = '[A]merican (0.1660"), or [B]ritish (0.1667") pica? '
-            choice = self.UI.simple_menu(message, options).upper()
-            britPica = options[choice]
-        try:
-            setWidth = float(setWidth)
-        except ValueError:
-            setWidth = 12
-        # Enter the wedge unit arrangement for steps 1...15 (optionally 16):
-        while not steps:
-        # Check if we have the values hardcoded already:
-            try:
-                rawSteps = wedgeData[wedgeName]
-            except (KeyError, ValueError):
-            # No wedge - enter data manually:
-                prompt = ('Enter the wedge unit values for steps 1...16, '
-                          'separated by commas. If empty, entering values '
-                          'for wedge S5 (very common): ')
-                rawSteps = self.UI.enter_data(prompt)
-                if not rawSteps:
-                    rawSteps = wedgeData['S5']
-            rawSteps = rawSteps.split(',')
-            steps = []
-        # Now we need to be sure that all whitespace is stripped,
-        # and the value written to database is a list of integers
-            for step in rawSteps:
-                step = int(step.strip())
-                steps.append(step)
-        # Display warning if the number of steps is anything other than
-        # 15 or 16 (15 is most common, 16 was used for HMN and KMN systems).
-        # If length is correct, tell user it's OK.
-            warnMin = ('Warning: the wedge you entered has less than 15 steps!'
-                       '\nThis is almost certainly a mistake.\n')
-            warnMax = ('Warning: the wedge you entered has more than 16 steps!'
-                       '\nThis is almost certainly a mistake.\n')
-            stepsOK = ('The wedge has ', len(steps), 'steps. That is OK.')
-            if len(steps) < 15:
-                self.UI.display(warnMin)
-            elif len(steps) > 16:
-                self.UI.display(warnMax)
-            else:
-                self.UI.display(stepsOK)
-        # Display a summary:
-        summary = {'Wedge' : wedgeName,
-                   'Set width' : setWidth,
-                   'British pica wedge?' : britPica}
-        for parameter in summary:
-            self.UI.display(parameter, ':', summary[parameter])
-        # Loop over all unit values in wedge's steps and display them:
-        for i, step in zip(range(len(steps)), steps):
-            self.UI.display('Step', i+1, 'unit value:', step, '\n')
-        # Subroutines:
-        def commit_wedge():
-            if self.database.add_wedge(wedgeName, setWidth, britPica, steps):
-                self.UI.display('Wedge added successfully.')
-            else:
-                self.UI.display('Failed to add wedge!')
-        def reenter():
-            self.UI.enter_data('Enter parameters again from scratch... ')
-            self.add_wedge()
-        # Confirmation menu:
-        message = ('\nCommit wedge to database? \n'
-                   '[Y]es / [N]o (enter values again) / return to [M]enu: ')
-        options = {'Y' : commit_wedge, 'N' : reenter, 'M' : self.main_menu}
-        ans = self.UI.simple_menu(message, options).upper()
-        options[ans]()
-
-    def delete_wedge(self):
-        """Used for deleting a wedge from database.
-        """
-        self.list_wedges()
-        ID = self.UI.enter_data('Enter the wedge ID to delete: ')
-        if ID.isdigit():
-            ID = int(ID)
-            if self.database.delete_wedge(ID):
-                self.UI.display('Wedge deleted successfully.')
-        else:
-            self.UI.display('Wedge ID must be a number!')
-
-    def list_wedges(self):
-        """lists all wedges we have
-        """
-        self.database.list_wedges()
-
-    def main_menu(self):
-        options = {1 : 'List matrix cases',
-                   2 : 'Show matrix case layout',
-                   3 : 'Add a new, empty matrix case',
-                   4 : 'Edit matrix case layout',
-                   5 : 'Clear matrix case layout',
-                   6 : 'Delete matrix case',
-                   7 : 'List wedges',
-                   8 : 'Add wedge',
-                   9 : 'Delete wedge',
-                   0 : 'Exit program'}
-        commands = {1 : self.list_diecases,
-                    2 : self.show_diecase_layout,
-                    3 : self.add_diecase,
-                    4 : self.edit_diecase,
-                    5 : self.clear_diecase,
-                    6 : self.delete_diecase,
-                    7 : self.list_wedges,
-                    8 : self.add_wedge,
-                    9 : self.delete_wedge,
-                    0 : self.UI.exit_program}
-        h = 'Setup utility for rpi2caster CAT.\nMain menu:'
-        choice = self.UI.menu(options, header=h, footer='')
-        # Execute it!
-        with self.database:
-            commands[choice]()
-        self.UI.hold_on_exit()
-        self.main_menu()
-
-    def __exit__(self, *args):
-        self.UI.debug_info('Exiting inventory management job context.')
-        pass
-
-
-class Monotype(object):
-    """Monotype(job, name, confFilePath):
-
-    A class which stores all hardware-layer methods, related to caster control.
-    This class requires a caster name, and a database object.
-    """
-
-    def __init__(self, name='Monotype'):
-        """Creates a caster object for a given caster name
-        """
-        self.UI = TextUI()
-        self.name = name
-        # It's not configured yet - we'll do it when needed, and only once:
-        self.configured = False
-
-    def __enter__(self):
-        """Run the setup when entering the context:
-        """
-        self.UI.debug_info('Entering caster/interface context...')
-        # Configure the interface if it needs it:
-        if not self.configured:
-            self.caster_setup()
-        return self
-
-    def caster_setup(self):
-        """Setup routine:
-
-        Sets up initial default parameters for caster & interface:
-        caster - "Monotype" (if no name is given),
-        interface ID 0,
-        unit-adding disabled,
-        diecase format 15x17.
-        """
-        # Default caster parameters:
-        self.interfaceID = 0
-        self.unitAdding = 0
-        self.diecaseSystem = 'norm17'
-        # Default interface parameters:
-        self.emergencyGPIO = 18
-        self.sensorGPIO = 24
-        self.mcp0Address = 0x20
-        self.mcp1Address = 0x21
-        self.pinBase = 65
-        self.signalsArrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
-                                   '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
-        # Next, this method reads caster data from database and fetches
-        # a list of caster parameters: diecaseFormat, unitAdding, interfaceID.
-        # In case there is no data, the function will run on default settings.
-        settings = self.config.get_caster_settings(self.name)
-        try:
-            [self.unitAdding, self.diecaseSystem, self.interfaceID] = settings
-        except:
-            pass
-        # When debugging, display all caster info:
-        self.UI.debug_info('\nCaster parameters:\n')
-        output = {'Using caster name: ' : self.name,
-                  'Diecase system: ' : self.diecaseSystem,
-                  'Has unit-adding attachement? ' : self.unitAdding,
-                  'Interface ID: ' : self.interfaceID}
-        for parameter in output:
-            self.UI.debug_info(parameter, output[parameter])
-        # Call a config method to get interface settings,
-        # otherwise revert to defaults.
-        interfaceSettings = self.config.get_interface_settings(self.interfaceID)
-        try:
-            [self.emergencyGPIO, self.sensorGPIO,
-             self.mcp0Address, self.mcp1Address,
-             self.pinBase, self.signalsArrangement] = interfaceSettings
-        except:
-            pass
-        # Print the parameters for debugging:
-        self.UI.debug_info('\nInterface parameters:\n')
-        output = {'Emergency button GPIO: ' : self.emergencyGPIO,
-                  'Sensor GPIO: ' : self.sensorGPIO,
-                  '1st MCP23017 I2C address: ' : self.mcp0Address,
-                  '2nd MCP23017 I2C address: ' : self.mcp1Address,
-                  'MCP23017 pin base for GPIO numbering: ' : self.pinBase,
-                  'Signals arrangement: ' : self.signalsArrangement}
-        for parameter in output:
-            self.UI.debug_info(parameter, output[parameter])
-        # Set up an input for machine cycle sensor:
-        gpioSysfsPath = '/sys/class/gpio/gpio%s/' % self.sensorGPIO
-        self.sensorGPIOValueFile = gpioSysfsPath + 'value'
-        self.sensorGPIOEdgeFile = gpioSysfsPath + 'edge'
-        # Check if the sensor GPIO has been configured - file is readable:
-        try:
-            with open(self.sensorGPIOValueFile, 'r'):
-                pass
-        except IOError:
-            message = ('%s : file does not exist or cannot be read. '
-                       'You must export the GPIO no %s as input first!'
-                       % (self.sensorGPIOValueFile, self.sensorGPIO))
-            self.UI.display(message)
-            self.UI.exit_program()
-        # Ensure that the interrupts are generated for sensor GPIO
-        # for both rising and falling edge:
-        with open(self.sensorGPIOEdgeFile, 'r') as edgeFile:
-            if 'both' not in edgeFile.read():
-                message = ('%s: file does not exist, cannot be read, '
-                           'or the interrupt on GPIO %i is not set to "both". '
-                           'Check the system config.'
-                           % (self.sensorGPIOEdgeFile, self.sensorGPIO))
-                self.UI.display(message)
-                self.UI.exit_program()
-        # Setup the wiringPi MCP23017 chips for valve outputs
-        wiringpi.mcp23017Setup(self.pinBase, self.mcp0Address)
-        wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
-        pins = range(self.pinBase, self.pinBase + 32)
-        # Set all I/O lines on MCP23017s as outputs - mode=1
-        for pin in pins:
-            wiringpi.pinMode(pin, 1)
-        # Make a nice list out of the signal arrangement string:
-        signalsArrangement = self.signalsArrangement.split(',')
-        # Assign wiringPi pin numbers on MCP23017s to the Monotype
-        # control signals
-        self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
-        # Mark the caster as configured
-        self.configured = True
-        # Wait for user confirmation if in debug mode
-        self.UI.debug_enter_data('Caster configured. [Enter] to continue... ')
-
-    def perforator_setup(self):
-        """Perforator setup routine:
-
-        A simplified interface with no machine cycle sensor is used
-        for controlling a perforator, i.e. a paper tower taken off a Monotype
-        keyboard and used for punching the paper tape. This is useful if you
-        want to make some tape with composed text for someone who has a caster
-        but cannot make a ribbon because they have no keyboard
-        or necessary parts (keybar, stopbar, justifying scale).
-
-        The perforator interface has outputs only, and does not rely on
-        any GPIOs, apart from the I2C interface and MCP23017 chips.
-        """
-        self.interfaceID = 0
-        self.mcp0Address = 0x20
-        self.mcp1Address = 0x21
-        self.pinBase = 65
-        self.signalsArrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
-                                   '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
-        # Next, this method reads data from config file and overrides the
-        # default interface parameters for an object
-        settings = self.config.get_settings_from_conffile(self.name)
-        # Check if we got anything - if so, set parameters for object
-        try:
-            (self.interfaceID, self.mcp0Address, self.mcp1Address,
-             self.pinBase, self.signalsArrangement) = settings
-        except (NameError, ValueError):
-            return False
-        # Print the parameters for debugging
-        self.UI.debug_info('\nInterface parameters:\n')
-        output = {'Interface ID: ' : self.interfaceID,
-                  '1st MCP23017 I2C address: ' : self.mcp0Address,
-                  '2nd MCP23017 I2C address: ' : self.mcp1Address,
-                  'MCP23017 pin base for GPIO numbering: ' : self.pinBase,
-                  'Signals arrangement: ' : self.signalsArrangement}
-        for parameter in output:
-            self.UI.debug_info(parameter, output[parameter])
-        # Set up the wiringPi MCP23017 chips for valve outputs
-        wiringpi.mcp23017Setup(self.pinBase, self.mcp0Address)
-        wiringpi.mcp23017Setup(self.pinBase + 16, self.mcp1Address)
-        pins = range(self.pinBase, self.pinBase + 32)
-        # Set all I/O lines on MCP23017s as outputs - mode=1
-        for pin in pins:
-            wiringpi.pinMode(pin, 1)
-        # Make a nice list out of signal arrangement string
-        signalsArrangement = self.signalsArrangement.split(',')
-        # Assign wiringPi pin numbers on MCP23017s to the Monotype signals
-        self.wiringPiPinNumber = dict(zip(signalsArrangement, pins))
-        # Mark the perforator interface as configured
-        self.configured = True
-        # Wait for user confirmation
-        prompt = 'Interface configured. [Enter] to continue... '
-        self.UI.debug_enter_data(prompt)
-        return True
 
     def detect_rotation(self):
         """detect_rotation():
@@ -1187,7 +509,7 @@ class MonotypeSimulation(object):
     """
 
     def __init__(self, name='Monotype Simulator'):
-        self.UI = TextUI()
+        self.UI = UI
         self.name = name
 
     def __enter__(self):
@@ -1289,12 +611,13 @@ class Casting(object):
     -casting spaces to heat up the mould."""
 
     def __init__(self, ribbonFile=''):
-        self.UI = TextUI()
+        self.UI = UI
         self.ribbonFile = ribbonFile
 
     def __enter__(self):
         self.UI.debug_info('Entering casting job context...')
-        return self
+        with self.UI:
+            self.main_menu()
 
     def cast_composition(self):
         """cast_composition()
@@ -1623,14 +946,12 @@ class Casting(object):
                  'If not, you have to adjust the 52D space transfer wedge.\n\n'
                  'Turn on the machine...')
         self.UI.display(intro)
-        # Parse the space combination:"""
-        spaceAt = parsing.signals_parser(spaceAt)
         # Cast 10 spaces without correction
         self.UI.display('Now casting with a normal wedge only.')
         self.cast_from_matrix(spaceAt, 10)
         # Cast 10 spaces with the S-needle
         self.UI.display('Now casting with justification wedges...')
-        self.cast_from_matrix(spaceAt + ['S'], 10)
+        self.cast_from_matrix(spaceAt + 'S', 10)
         # Finished. Return to menu.
         options = {'R' : self.align_wedges,
                    'M' : self.main_menu,
@@ -1714,210 +1035,18 @@ class Casting(object):
         pass
 
 
-class TextUI(object):
-    """TextUI(job):
-
-    Use this class for creating a text-based console user interface.
-    A caster object must be created before instantiating this class.
-    Suitable for controlling a caster from the local terminal or via SSH,
-    supports UTF-8 too.
-    """
-
-    def __init__(self, debugMode=False):
-    # Get the debug-mode from input parameters
-        self.debugMode = debugMode
-
-    def __enter__(self):
-        """Try to call main menu for a job.
-
-        Display a message when user presses ctrl-C.
-        """
-    # Print some debug info
-        self.debug_info('Entering text UI context...')
-        try:
-            self.job.main_menu()
-        except KeyboardInterrupt:
-            print '\nUser pressed ctrl-C. Exiting.'
-        finally:
-            print '\nGoodbye!\n'
-
-    def tab_complete(text, state):
-        """tab_complete(text, state):
-
-        This function enables tab key auto-completion when you
-        enter the filename.
-        """
-        return (glob.glob(text+'*')+[None])[state]
-    readline.set_completer_delims(' \t\n;')
-    readline.parse_and_bind('tab: complete')
-    readline.set_completer(tab_complete)
-
-    def menu(self, options, header='', footer=''):
-        """menu(options={'foo':'bar','baz':'qux'}
-                        header=foo,
-                        footer=bar):
-
-        A menu which takes three arguments:
-        header - string to be displayed above,
-        footer - string to be displayed below,
-
-        After choice is made, return the command.
-
-        Set up vars for conditional statements,
-        and lists for appending new items.
-
-        choices - options to be entered by user
-        """
-        yourChoice = ''
-        choices = []
-        # Clear the screen, display header and add two empty lines
-        self.clear()
-        if header:
-            print header
-            print
-        # Display all the options; we'll take care of 0 later
-        for choice in options:
-            if choice != 0:
-            # Print the option choice and displayed text
-                print '\t', choice, ' : ', options[choice], '\n'
-            # Add this option to possible choices.
-            # We need to convert it to string first.
-                choices.append(str(choice))
-        try:
-        # If an option "0." is available, print it at the end
-            optionNumberZero = options[0]
-            print '\n\t', 0, ' : ', optionNumberZero
-            choices.append('0')
-        except KeyError:
-            pass
-        # Print footer, if defined
-        if footer:
-            print '\n' + footer
-        # Add an empty line to separate prompt
-        print '\n'
-        # Ask for user input
-        while yourChoice not in choices:
-            yourChoice = raw_input('Your choice: ')
-        else:
-        # Valid option is chosen, return integer if options were numbers,
-        # else return string
-            try:
-                return int(yourChoice)
-            except ValueError:
-                return yourChoice
-
-    def clear(self):
-        # Clear screen
-        os.system('clear')
-
-    def display(self, *args):
-        # Display info for the user - print all in one line
-        for arg in args:
-            print arg,
-        print '\n'
-
-    def debug_info(self, *args):
-        # Print debug message to screen if in debug mode
-        if self.debugMode:
-            for arg in args:
-                print arg,
-            print '\n'
-
-    def debug_enter_data(self, message):
-        # For debug-specific data or confirmations
-        if self.debugMode:
-            return raw_input(message)
-
-
-    def exception_handler(self):
-        # Raise caught exceptions in debug mode
-        if self.debugMode:
-            print sys.exc_info()
-
-    def enter_data(self, message):
-        # Let user enter the data
-        return raw_input(message)
-
-    def enter_input_filename(self):
-        # Enter the input filename; check if the file is readable
-        fn = raw_input('\n Enter the input file name: ')
-        fn = os.path.realpath(fn)
-        try:
-            with open(fn, 'r'):
-                return fn
-        except IOError:
-            raw_input('Wrong filename or file not readable!')
-            return ''
-
-    def enter_output_filename(self):
-        # Enter the output filename; no check here
-        fn = raw_input('\n Enter the output file name: ')
-        fn = os.path.realpath(fn)
-        return fn
-
-    def hold_on_exit(self):
-        raw_input('Press [Enter] to return to main menu...')
-
-    def simple_menu(self, message, options):
-        """Simple menu:
-
-        A simple menu where user is asked what to do.
-        Wrong choice points back to the menu.
-
-        Message: string displayed on screen;
-        options: a list or tuple of strings - options.
-        """
-        ans = ''
-        while ans.upper() not in options and ans.lower() not in options:
-            ans = raw_input(message)
-        return ans
-
-    def exit_program(self):
-        """Exit program:
-
-        All objects call this method whenever they want to exit program.
-        This is because we may do something specific in different UIs,
-        so an abstraction layer may come in handy.
-        """
-        exit()
-
-    def __exit__(self, *args):
-        self.debug_info('Exiting text UI context.')
-        pass
-
-class WebInterface(object):
-    """WebInterface:
-
-    TODO: not implemented yet!
-    Use this class for instantiating text-based console user interface
-    """
-
-    def __init__(self):
-        pass
-
-    def __enter__(self):
-        return self
-
-    def webUI(self):
-        """This is a placeholder for web interface method. Nothing yet..."""
-        pass
-
-    def __exit__(self, *args):
-        pass
-
-
 class Session(object):
     """Session:
 
     Class for injecting dependencies for objects.
     """
-    def __init__(self, job=Casting(), caster=Monotype(), config=Config(),
-                 UI=TextUI(), database=Database()):
+    def __init__(self, job=Casting(), caster=Monotype(),
+                 UI=UI, db=database.Database()):
         # Set dependencies as object attributes.
         # Make sure we've got an UI first.
         try:
-            assert (isinstance(UI, TextUI)
-                    or isinstance(UI, WebInterface))
+            assert (isinstance(UI, userinterfaces.TextUI)
+                    or isinstance(UI, userinterfaces.WebInterface))
         except NameError:
             print 'Error: User interface not specified!'
             exit()
@@ -1926,45 +1055,39 @@ class Session(object):
             exit()
         # Make sure database and config are of the correct type
         try:
-            assert isinstance(database, Database)
-            assert isinstance(config, Config)
+            assert isinstance(db, database.Database)
         except NameError:
         # Not set up? Move on
             pass
         except AssertionError:
         # We can be sure that UI can handle this now
-            UI.display('Invalid config and/or database!')
+            UI.display('Invalid database!')
             UI.exit_program()
         # We need a job: casting, setup, typesetting...
         try:
         # Any job needs UI and database
             job.UI = UI
-            job.database = database
+            job.db = db
         # UI needs job context
             UI.job = job
         except NameError:
             UI.display('Job not specified!')
         # Database needs UI to communicate messages to user
-        database.UI = UI
-        # Database needs config to get the connection parameters
-        database.config = config
-        # Config needs UI to communicate debug/error messages to user
-        config.UI = UI
+        db.UI = UI
         # Assure that we're using a caster or simulator for casting
         try:
             if isinstance(job, Casting):
                 assert (isinstance(caster, Monotype)
-                        or isinstance(caster, MonotypeSimulation))
+                or isinstance(caster, MonotypeSimulation))
         # Set up mutual dependencies
                 job.caster = caster
                 caster.UI = UI
                 caster.job = job
-                caster.config = config
         except (AssertionError, NameError, AttributeError):
             UI.display('You cannot do any casting without a proper caster!')
             UI.exit_program()
         # An __enter__ method of UI will call main_menu method in job
-        with UI:
+        with job:
             pass
 
 

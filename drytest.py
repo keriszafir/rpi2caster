@@ -1,8 +1,10 @@
 #!/usr/bin/python
 import rpi2caster
+import userinterfaces
+import database
 
 session = rpi2caster.Session(
-                             database=rpi2caster.Database('database/monotype.db'),
-                             UI=rpi2caster.TextUI(debugMode=True),
+                             db=database.Database('database/monotype.db'),
+                             UI=userinterfaces.TextUI(debugMode=True),
                              caster=rpi2caster.MonotypeSimulation()
                             )
