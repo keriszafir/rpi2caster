@@ -5,7 +5,7 @@ This module contains file- and line-parsing methods."""
 
 def read_file(filename):
     """Tries to read a file.
-    
+
     Returns its contents (if file is readable), or False otherwise.
     """
 # Open a file with signals, test if it's readable and return its contents
@@ -111,14 +111,13 @@ def signals_parser(rawSignals):
     # separately and sorted on output
     columns = []
     rows = []
-    justification = []
-    for sig in ['0005', '0075', 'S']:
-    # First, detect justification signals: 0005, 0075, S.
-    # We can't append a signal more than once (i.e. double 0005 etc.)
-        if sig in rawSignals and sig not in justification:
-            justification.append(sig)
+    li = ['0005', '0075', 'S']
+    # Build a list of justification signals
+    justification = [sig for sig in li if sig in rawSignals]
+    # Remove these signals from the input string
+    for sig in justification:
         # We operate on a string, so cannot remove the item...
-            rawSignals = rawSignals.replace(sig, '')
+        rawSignals = rawSignals.replace(sig, '')
     # Look for any numbers between 16 and 100, remove them
     for n in range(100, 15, -1):
         rawSignals = rawSignals.replace(str(n), '')
@@ -133,15 +132,13 @@ def signals_parser(rawSignals):
     rawSignals = list(rawSignals)
     # Filter the list, dump all letters beyond O
     # (S was taken care of earlier). That will be the column signals.
-    columns = filter(lambda s: s in list('ABCDEFGHIJKLMNO'), rawSignals)
-    # Make sure no signal appears more than once, and sort them
-    columns = sorted(set(columns))
+    columns = [s for s in 'ABCDEFGHIJKLMNO' if s in rawSignals]
     # Return a list containing all signals
     return columns + rows + justification
 
 def strip_O_and_15(signals):
     # Strip O and 15 signals from input sequence, we don't cast them
-    return filter(lambda s: s not in ['O', '15'], signals)
+    return [s for s in signals if s not in ['O', '15']]
 
 def convert_O15(inputSignals):
     """Convert O or 15 to O15.
@@ -152,9 +149,8 @@ def convert_O15(inputSignals):
     signals = inputSignals
     if 'O' in signals or '15' in signals:
         signals.append('O15')
-    # Now remove the individual O and 15 signals
-    strip_O_and_15(signals)
-    return signals
+    # Now remove the individual O and 15 signals and return the result
+    return strip_O_and_15(signals)
 
 def check_newline(signals):
     """check_newline(signals):
