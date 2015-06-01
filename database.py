@@ -56,7 +56,8 @@ class Database(object):
     Usually you run setup with sudo.
     """
 
-    def __init__(self, databasePath='', configPath='rpi2caster.conf'):
+    def __init__(self, databasePath='database/monotype.db',
+                 configPath='/etc/rpi2caster.conf'):
         self.UI = TextUI()
         self.databasePath = databasePath
         self.configPath = configPath

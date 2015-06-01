@@ -142,6 +142,8 @@ class Monotype(object):
                   'Sensor GPIO: ' : self.sensorGPIO}
         for parameter in output:
             self.UI.debug_info(parameter, output[parameter])
+        prompt = '[Enter] to continue...'
+        self.UI.debug_enter_data(prompt)
 
         # This is done only for a caster interface:
         if not self.isPerforator:
@@ -1043,8 +1045,7 @@ class Session(object):
 
     Class for injecting dependencies for objects.
     """
-    def __init__(self, job=Casting(), caster=Monotype(),
-                 UI=UI, db=database.Database()):
+    def __init__(self, job, caster, UI, db):
         # Set dependencies as object attributes.
         # Make sure we've got an UI first.
         try:
@@ -1099,4 +1100,7 @@ class Session(object):
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
     monotype = Monotype(name='mkart-cc')
-    #session = Session(caster=monotype)
+    UI = userinterfaces.TextUI()
+    db=database.Database()
+    job=Casting()
+    session = Session(job, monotype, UI, db)
