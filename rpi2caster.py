@@ -513,9 +513,10 @@ class MonotypeSimulation(object):
     to the machine.
     """
 
-    def __init__(self, name='Monotype Simulator'):
+    def __init__(self, name='Monotype Simulator', isPerforator=False):
         self.UI = UI
         self.name = name
+        self.isPerforator = isPerforator
 
     def __enter__(self):
         self.UI.debug_info('Entering caster/keyboard simulation context...')
@@ -973,8 +974,13 @@ class Casting(object):
 
         Options: {option_name : description}
         """
+        def castorpunch():
+            if self.caster.isPerforator:
+                return ('Punch composition', self.punch_composition)
+            else:
+                return ('Cast composition', self.cast_composition)
         options = {1 : 'Load a ribbon file',
-                   2 : 'Cast composition',
+                   2 : castorpunch()[0],
                    3 : 'Cast sorts',
                    4 : 'Test the valves and pinblocks',
                    5 : 'Lock the caster on a specified diecase position',
@@ -1007,7 +1013,7 @@ class Casting(object):
         # End of subroutines.
         # Commands: {option_name : function}
         commands = {1 : choose_ribbon_filename,
-                    2 : self.cast_composition,
+                    2 : castorpunch()[1],
                     3 : self.cast_sorts,
                     4 : self.line_test,
                     5 : self.send_combination,
@@ -1043,7 +1049,8 @@ class Casting(object):
 class Session(object):
     """Session:
 
-    Class for injecting dependencies for objects.
+    This is a top-level abstraction layer.
+    Used for injecting dependencies for objects.
     """
     def __init__(self, job, caster, UI, db):
         # Set dependencies as object attributes.
