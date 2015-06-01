@@ -311,6 +311,7 @@ class Monotype(object):
         # In case of wrong configuration, do nothing
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
                 ValueError, TypeError):
+            raise
             self.UI.display('Incorrect interface parameters. '
                             'Using hardcoded defaults.')
             self.UI.exception_handler()
@@ -1099,5 +1100,5 @@ class Session(object):
 # And now, for something completely different...
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
-    caster = Monotype(name='mkart-cc')
-    session = Session(caster)
+    monotype = Monotype(name='mkart-cc')
+    session = Session(caster=monotype)
