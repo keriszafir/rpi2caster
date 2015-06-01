@@ -285,22 +285,21 @@ class Monotype(object):
         2                  131                 (pinBase1 + 32)
         3                  164                 (pinBase2 + 32)
         """
-        ifaceName = 'Interface' + str(self.interfaceID)
+        ifName = 'Interface' + str(self.interfaceID)
         try:
         # Check if the interface is active, else do nothing
             trueAliases = ['true', '1', 'on', 'yes']
-            if self.cfg.get(ifaceName, 'active').lower() in trueAliases:
+            if self.cfg.get(ifName, 'active').lower() in trueAliases:
                 if not self.isPerforator:
                 # Emergency stop and sensor are valid only for casters,
                 # perforators do not have them
-                    self.emergencyGPIO = self.cfg.get(ifaceName, 'stop_gpio')
-                    self.sensorGPIO = self.cfg.get(ifaceName, 'sensor_gpio')
-                self.mcp0Address = self.cfg.get(ifaceName, 'mcp0_address')
-                self.mcp1Address = self.cfg.get(ifaceName, 'mcp1_address')
-                self.pinBase = self.cfg.get(ifaceName, 'pin_base')
-
+                    self.emergencyGPIO = int(self.cfg.get(ifName, 'stop_gpio'))
+                    self.sensorGPIO = int(self.cfg.get(ifName, 'sensor_gpio'))
+                self.mcp0Address = int(self.cfg.get(ifName, 'mcp0_address'))
+                self.mcp1Address = int(self.cfg.get(ifName, 'mcp1_address'))
+                self.pinBase = int(self.cfg.get(ifName, 'pin_base'))
             # Check which signals arrangement the interface uses...
-                signalsArrangement = self.cfg.get(ifaceName, 'signals_arr')
+                signalsArrangement = self.cfg.get(ifName, 'signals_arr')
             # ...and get the signals order for it:
                 self.signalsArrangement = self.cfg.get('SignalsArrangements',
                                                   signalsArrangement)
@@ -311,7 +310,6 @@ class Monotype(object):
         # In case of wrong configuration, do nothing
         except (ConfigParser.NoSectionError, ConfigParser.NoOptionError,
                 ValueError, TypeError):
-            raise
             self.UI.display('Incorrect interface parameters. '
                             'Using hardcoded defaults.')
             self.UI.exception_handler()
