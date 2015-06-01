@@ -1099,4 +1099,4 @@ class Session(object):
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
     monotype = Monotype(name='mkart-cc')
-    session = Session(caster=monotype)
+    #session = Session(caster=monotype)
