@@ -619,6 +619,8 @@ class Casting(object):
     def __init__(self, ribbonFile=''):
         self.UI = UI
         self.ribbonFile = ribbonFile
+        self.ribbon = []
+        self.metadata = {}
 
     def __enter__(self):
         self.UI.debug_info('Entering casting job context...')
@@ -631,15 +633,8 @@ class Casting(object):
         Composition casting routine. The input file is read backwards -
         last characters are cast first, after setting the justification.
         """
-        # First, read the file contents
-        contents = parsing.read_file(self.ribbonFile)
-        # If file read failed, end here
-        if not contents:
-            self.UI.display('Error reading file!')
-            time.sleep(1)
-            return False
         # Count all characters and lines in the ribbon
-        [linesAll, charsAll] = parsing.count_lines_and_characters(contents)
+        [linesAll, charsAll] = parsing.count_lines_and_characters(self.ribbon)
         # Characters already cast - start with zero
         currentChar = 0
         charsLeft = charsAll
@@ -655,7 +650,7 @@ class Casting(object):
         self.UI.display('Lines found in ribbon: %i' % linesAll)
         self.UI.display('Characters: %i' % charsAll)
         # For casting, we need to read the contents in reversed order
-        contents = reversed(contents)
+        content = reversed(self.ribbon)
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
@@ -666,7 +661,7 @@ class Casting(object):
         # Read the reversed file contents, line by line, then parse
         # the lines, display comments & code combinations, and feed the
         # combinations to the caster
-        for line in contents:
+        for line in content:
         # Parse the row, return a list of signals and a comment.
         # Both can have zero or positive length.
             [rawSignals, comment] = parsing.comments_parser(line)
@@ -729,15 +724,8 @@ class Casting(object):
         signals can outweigh constant air pressure on the other side.
         Basically: less than two signals - no ribbon advance...
         """
-        # First, read the file contents
-        contents = parsing.read_file(self.ribbonFile)
-        # If file read failed, end here
-        if not contents:
-            self.UI.display('Error reading file!')
-            time.sleep(1)
-            return False
         # Count a number of combinations punched in ribbon
-        combinationsAll = parsing.count_combinations(contents)
+        combinationsAll = parsing.count_combinations(self.ribbon)
         self.UI.display('Combinations in ribbon: %i', combinationsAll)
         # Wait until the operator confirms.
         intro = ('\nThe combinations of Monotype signals will be displayed '
@@ -746,7 +734,7 @@ class Casting(object):
         prompt = ('\nInput file found. Turn on the air, fit the tape '
                   'on your paper tower and press return to start punching.')
         self.UI.enter_data(prompt)
-        for line in contents:
+        for line in self.ribbon:
         # Parse the row, return a list of signals and a comment.
         # Both can have zero or positive length.
             [rawSignals, comment] = parsing.comments_parser(line)
@@ -974,13 +962,13 @@ class Casting(object):
 
         Options: {option_name : description}
         """
-        def castorpunch():
+        def cast_or_punch():
             if self.caster.isPerforator:
                 return ('Punch composition', self.punch_composition)
             else:
                 return ('Cast composition', self.cast_composition)
         options = {1 : 'Load a ribbon file',
-                   2 : castorpunch()[0],
+                   2 : cast_or_punch()[0],
                    3 : 'Cast sorts',
                    4 : 'Test the valves and pinblocks',
                    5 : 'Lock the caster on a specified diecase position',
@@ -990,7 +978,14 @@ class Casting(object):
         # Declare subroutines for menu options
         def choose_ribbon_filename():
             self.ribbonFile = self.UI.enter_input_filename()
-            self.main_menu()
+            self.ribbon = parsing.read_file(self.ribbonFile)
+            # If file read failed, end here
+            if not self.ribbon:
+                self.UI.display('Error reading file!')
+                time.sleep(1)
+                return False
+            self.metadata = parsing.get_metadata(self.ribbon)
+            
         def debug_notice():
         # Prints a notice if the program is in debug mode
             if self.UI.debugMode:
@@ -1005,6 +1000,10 @@ class Casting(object):
                 info.append('Input file name: ' + self.ribbonFile)
         # Add a caster name
             info.append('Using caster: ' + self.caster.name)
+        # Add metadata for ribbon
+            for parameter in self.metadata:
+                value = str(self.metadata[parameter])
+                info.append(str(parameter).capitalize() + ': ' + value)
         # Convert it all to a multiline string
             return '\n'.join(info)
         def heatup():
@@ -1013,7 +1012,7 @@ class Casting(object):
         # End of subroutines.
         # Commands: {option_name : function}
         commands = {1 : choose_ribbon_filename,
-                    2 : castorpunch()[1],
+                    2 : cast_or_punch()[1],
                     3 : self.cast_sorts,
                     4 : self.line_test,
                     5 : self.send_combination,
