@@ -166,8 +166,8 @@ class Monotype(object):
             with open(self.sensorGPIOEdgeFile, 'r') as edgeFile:
                 if 'both' not in edgeFile.read():
                     message = ('%s: file does not exist, cannot be read, '
-                               'or the interrupt on GPIO %i is not set to "both". '
-                               'Check the system config.'
+                               'or the interrupt on GPIO %i is not set '
+                               'to "both". Check the system configuration.'
                                % (self.sensorGPIOEdgeFile, self.sensorGPIO))
                     self.UI.display(message)
                     self.UI.exit_program()
@@ -987,7 +987,6 @@ class Casting(object):
                 time.sleep(1)
                 return False
             self.metadata = parsing.get_metadata(self.ribbon)
-            
         def debug_notice():
         # Prints a notice if the program is in debug mode
             if self.UI.debugMode:
