@@ -14,7 +14,8 @@ def read_file(filename):
         with open(filename, 'r') as inputfile:
             contentGenerator = inputfile.readlines()
             for line in contentGenerator:
-                content.append(line)
+            # Strip newline characters from lines
+                content.append(line.strip('\n'))
             return content
     except IOError:
         return False
@@ -35,6 +36,7 @@ def get_metadata(content):
     parameters = ['diecase', 'title', 'author', 'unit-shift', 'justification']
     symbols = ['=', ':', ' ']
     result = []
+    # Work on an unmodified copy and delete lines from the sequence 
     for line in content[:]:
         for parameter in parameters:
             if line.startswith(parameter):

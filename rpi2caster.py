@@ -969,13 +969,22 @@ class Casting(object):
                 return ('Punch composition', self.punch_composition)
             else:
                 return ('Cast composition', self.cast_composition)
+        def preview_ribbon():
+            if self.ribbon:
+                self.UI.clear()
+                self.UI.display('Ribbon preview:\n')
+                self.UI.display('\n'.join([line for line in self.ribbon]))
+            else:
+                self.UI.display('No ribbon to preview!')
+            self.UI.enter_data('[Enter] to return to menu...')
         options = {1 : 'Load a ribbon file',
-                   2 : cast_or_punch()[0],
-                   3 : 'Cast sorts',
-                   4 : 'Test the valves and pinblocks',
-                   5 : 'Lock the caster on a specified diecase position',
-                   6 : 'Calibrate the 0005 and 0075 wedges',
-                   7 : 'Cast two lines of 20 quads to heat up the mould',
+                   2 : 'Preview ribbon',
+                   3 : cast_or_punch()[0],
+                   4 : 'Cast sorts',
+                   5 : 'Test the valves and pinblocks',
+                   6 : 'Lock the caster on a specified diecase position',
+                   7 : 'Calibrate the 0005 and 0075 wedges',
+                   8 : 'Cast two lines of 20 quads to heat up the mould',
                    0 : 'Exit program'}
         # Declare subroutines for menu options
         def choose_ribbon_filename():
@@ -1013,12 +1022,13 @@ class Casting(object):
         # End of subroutines.
         # Commands: {option_name : function}
         commands = {1 : choose_ribbon_filename,
-                    2 : cast_or_punch()[1],
-                    3 : self.cast_sorts,
-                    4 : self.line_test,
-                    5 : self.send_combination,
-                    6 : self.align_wedges,
-                    7 : heatup,
+                    2 : preview_ribbon,
+                    3 : cast_or_punch()[1],
+                    4 : self.cast_sorts,
+                    5 : self.line_test,
+                    6 : self.send_combination,
+                    7 : self.align_wedges,
+                    8 : heatup,
                     0 : self.UI.exit_program}
         h = ('rpi2caster - CAT (Computer-Aided Typecasting) '
              'for Monotype Composition or Type and Rule casters.'
@@ -1029,10 +1039,10 @@ class Casting(object):
         choice = self.UI.menu(options, header=h, footer=additional_info())
         # Call the function and return to menu.
         # Use the caster context for everything that needs it.
-        if choice in [0, 1]:
+        if choice in [0, 1, 2]:
             commands[choice]()
         # FIXME: get rid of this ugly ifology
-        elif choice in [5]:
+        elif choice in [6]:
             with self.caster:
                 commands[choice]()
         else:
@@ -1108,6 +1118,6 @@ class Session(object):
 if __name__ == '__main__':
     monotype = Monotype(name='mkart-cc')
     UI = userinterfaces.TextUI()
-    db=database.Database()
-    job=Casting()
+    db = database.Database()
+    job = Casting()
     session = Session(job, monotype, UI, db)
