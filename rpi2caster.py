@@ -354,8 +354,7 @@ class Monotype(object):
                 if cycles > cycles_max:
                     self.UI.display('\nOkay, the machine is running...\n')
                     return True
-                else:
-                    self.machine_stopped()
+                elif self.machine_stopped():
                 # Check again:
                     self.detect_rotation()
 
@@ -413,10 +412,10 @@ class Monotype(object):
                         self.deactivate_valves()
                         previousState = 0
                         break
-                else:
+                elif self.machine_stopped():
                 # No events? That would mean that the machine has stopped,
                 # usually because of emergency. Ask user what to do.
-                    self.machine_stopped()
+                    pass
 
     def activate_valves(self, signals):
         """activate_valves(signals):
@@ -467,11 +466,11 @@ class Monotype(object):
         """
         def continue_casting():
         # Helper function - continue casting.
-            pass
+            return True
         def return_to_menu():
         # Make sure pump is off and no valves are activated.
             self.emergency_stop_kicked_in()
-            self.job.main_menu()
+            return False
         def exit_program():
         # Make sure pump is off and no valves are activated.
             self.emergency_stop_kicked_in()
@@ -578,8 +577,10 @@ class MonotypeSimulation(object):
         def continue_casting():
         # Helper function - continue casting.
             return True
+        def return_to_menu():
+            return False
         options = {'C' : continue_casting,
-                   'M' : self.job.main_menu,
+                   'M' : return_to_menu,
                    'E' : self.UI.exit_program}
         message = ('Machine not running! Check what happened.\n'
                    '[C]ontinue, return to [M]enu or [E]xit program? ')
@@ -618,6 +619,7 @@ class Casting(object):
 
     def __init__(self, ribbonFile=''):
         self.UI = UI
+        self.caster = MonotypeSimulation()
         self.ribbonFile = ribbonFile
         self.ribbon = []
         self.metadata = {}
