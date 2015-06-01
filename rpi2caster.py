@@ -84,6 +84,8 @@ class Monotype(object):
                 self.configPath = configPath
             self.cfg = ConfigParser.SafeConfigParser()
             self.cfg.read(self.configPath)
+            self.caster_setup()
+            self.lock = False
         except IOError:
             self.UI.display('Cannot open config file:', configPath)
         # It's not configured yet - we'll do it when needed, and only once:
@@ -93,10 +95,11 @@ class Monotype(object):
         """Run the setup when entering the context:
         """
         self.UI.debug_info('Entering caster/interface context...')
-        # Configure the interface if it needs it:
-        if not self.configured:
-            self.caster_setup()
-        return self
+        if self.lock:
+            self.UI.display('Caster %s is already busy!' % self.name)
+        else:
+            self.lock = True
+            return self
 
     def caster_setup(self):
         """Setup routine:
@@ -113,8 +116,8 @@ class Monotype(object):
         self.unitAdding = 0
         self.diecaseSystem = 'norm17'
         # Default interface parameters:
-        self.emergencyGPIO = None
-        self.sensorGPIO = None
+        self.emergencyGPIO = 24
+        self.sensorGPIO = 17
         self.mcp0Address = 0x20
         self.mcp1Address = 0x21
         self.pinBase = 65
@@ -497,6 +500,7 @@ class Monotype(object):
         """On exit, do the cleanup:
         """
         self.UI.debug_info('Exiting caster/interface context.')
+        self.lock = False
         self.cleanup()
 
 
@@ -1095,4 +1099,5 @@ class Session(object):
 # And now, for something completely different...
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
-    session = Session(caster=Monotype('mkart-cc'))
+    caster = Monotype(name='mkart-cc')
+    session = Session(caster)
