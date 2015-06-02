@@ -355,8 +355,11 @@ class Monotype(object):
                     self.UI.display('\nOkay, the machine is running...\n')
                     return True
                 elif self.machine_stopped():
-                # Check again:
+                # Check again recursively:
                     self.detect_rotation()
+                else:
+                # This will lead to return to menu
+                    return False
 
     def send_signals_to_caster(self, signals, machineTimeout=5):
         """send_signals_to_caster(signals, machineTimeout):
@@ -412,10 +415,19 @@ class Monotype(object):
                         self.deactivate_valves()
                         previousState = 0
                         break
+                    return True
                 elif self.machine_stopped():
                 # No events? That would mean that the machine has stopped,
                 # usually because of emergency. Ask user what to do.
-                    pass
+                # If machine_stopped returns True (continue casting), then
+                # return True to tell the casting routine that
+                # this step went OK.
+                    return True
+                else:
+                # If machine_stopped returned False, it means that
+                # the operator decided to abort casting. We need to tell it
+                # to the casting routine.
+                    return False
 
     def activate_valves(self, signals):
         """activate_valves(signals):
@@ -442,8 +454,8 @@ class Monotype(object):
         for pin in range(self.pinBase, self.pinBase + 32):
             wiringpi.digitalWrite(pin, 0)
 
-    def emergency_stop_kicked_in(self):
-        """emergency_stop_kicked_in():
+    def emergency_cleanup(self):
+        """emergency_cleanup():
 
         If the machine is stopped, we need to turn the pump off and then turn
         all the lines off. Otherwise, the machine will keep pumping
@@ -469,11 +481,11 @@ class Monotype(object):
             return True
         def return_to_menu():
         # Make sure pump is off and no valves are activated.
-            self.emergency_stop_kicked_in()
+            self.emergency_cleanup()
             return False
         def exit_program():
         # Make sure pump is off and no valves are activated.
-            self.emergency_stop_kicked_in()
+            self.emergency_cleanup()
             self.UI.exit_program()
         # Display a menu for the user to decide what to do
         options = {'C' : continue_casting,
@@ -695,15 +707,23 @@ class Casting(object):
         # Append signals to be cast
             if signals:
                 userInfo += ' '.join(signals).ljust(15)
-        # Add comment
+            # Add comment
             userInfo += comment
-        # Display the info
+            # Display the info
             self.UI.display(userInfo)
         # If we have signals - cast them
             if signals:
-        # Now check if we had O, 15 and strip them, then cast the combination
+            # Now check if we had O, 15 and strip them
                 signals = parsing.strip_O_and_15(signals)
-                self.caster.send_signals_to_caster(signals)
+            # Cast the combination and determine the exit status.
+            # True if casting went OK or False if shit happened and
+            # the operator decided to abort casting.
+                if self.caster.send_signals_to_caster(signals):
+                    continue
+                else:
+                # Remember the line we aborted casting on
+                    self.lineAborted = currentLine
+                    break
         # After casting is finished, notify the user
         self.UI.display('\nCasting finished!')
         return True

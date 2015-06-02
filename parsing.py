@@ -142,14 +142,12 @@ def signals_parser(rawSignals):
     rawSignals = filter(str.isalnum, rawSignals).upper()
     # Codes for columns, rows and justification will be stored
     # separately and sorted on output
-    columns = []
     rows = []
-    li = ['0005', '0075', 'S']
     # Build a list of justification signals
-    justification = [sig for sig in li if sig in rawSignals]
+    justification = [sig for sig in ['0005', '0075'] if sig in rawSignals]
     # Remove these signals from the input string
     for sig in justification:
-        # We operate on a string, so cannot remove the item...
+    # We operate on a string, so cannot remove the item...
         rawSignals = rawSignals.replace(sig, '')
     # Look for any numbers between 16 and 100, remove them
     for n in range(100, 15, -1):
@@ -161,11 +159,8 @@ def signals_parser(rawSignals):
         if str(n) in rawSignals and str(n) not in rows:
             rows.append(str(n))
         rawSignals = rawSignals.replace(str(n), '')
-    # Treat signals as a list from now on
-    rawSignals = list(rawSignals)
-    # Filter the list, dump all letters beyond O
-    # (S was taken care of earlier). That will be the column signals.
-    columns = [s for s in 'ABCDEFGHIJKLMNO' if s in rawSignals]
+    # Columns + S justification signal
+    columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in rawSignals]
     # Return a list containing all signals
     return columns + rows + justification
 
