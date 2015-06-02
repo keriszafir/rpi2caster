@@ -414,8 +414,8 @@ class Monotype(object):
                     # end of "air in" phase, turn off the valves
                         self.deactivate_valves()
                         previousState = 0
-                        break
-                    return True
+                        #break
+                        return True
                 elif self.machine_stopped():
                 # No events? That would mean that the machine has stopped,
                 # usually because of emergency. Ask user what to do.
