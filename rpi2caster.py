@@ -917,12 +917,23 @@ class Casting(object):
             return False
         # Cast the sorts: set wedges, turn pump on, cast, line out
         for currentLine in range(lines):
-            self.UI.display('Castling line %i of %i' % (currentLine + 1, lines))
+        # End the whole casting job if it was aborted
+            if lineAborted:
+                break
+        # No aborted lines? Proceed with casting
+        # Set up the justification, turn the pump on
+            self.UI.display('Casting line %i of %i' % (currentLine + 1, lines))
             self.UI.display('0005 wedge at ' + pos0005)
-            self.caster.send_signals_to_caster(set0005)
+        # Abort casting if something goes wrong:
+            if not self.caster.send_signals_to_caster(set0005):
+                lineAborted = currentLine
+                break
             self.UI.display('0075 wedge at ' + pos0075)
             self.UI.display('Starting the pump...')
-            self.caster.send_signals_to_caster(set0075)
+        # Abort casting if something goes wrong:
+            if not self.caster.send_signals_to_caster(set0075):
+                lineAborted = currentLine
+                break
         # Start casting characters
             self.UI.display('Casting characters...')
         # Cast n combinations of row & column, one by one
@@ -936,17 +947,14 @@ class Casting(object):
                 if not self.caster.send_signals_to_caster(combination):
                     lineAborted = currentLine
                     break
-        # End the whole casting job if it was aborted
-            if lineAborted:
-                self.UI.display('Casting aborted at line %i' % lineAborted)
-                break
-        # Put the line out to the galley
+        # If everything went normally, put the line out to the galley
             self.UI.display('Putting line to the galley...')
             self.caster.send_signals_to_caster(galleyTrip)
         # After casting sorts we need to stop the pump
             self.UI.display('Stopping the pump...')
             self.caster.send_signals_to_caster(set0005)
         if lineAborted:
+            self.UI.display('Casting aborted at line %i' % lineAborted)
             return False
         else:
             return True
