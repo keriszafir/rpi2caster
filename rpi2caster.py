@@ -986,17 +986,91 @@ class Casting(object):
         options[choice]()
 
     def main_menu(self):
-        """Calls self.UI.menu() with options,
-        a header and a footer.
+        """main_menu:
 
+        Calls self.UI.menu() with options, a header and a footer.
         Options: {option_name : description}
+        Header: string displayed over menu
+        Footer: string displayed under menu (all info will be added here).
         """
+        # Declare subroutines for menu options
+        def choose_ribbon_filename():
+            """choose_ribbon_filename
+
+            Asks the user for the ribbon filename.
+            Checks if the file is readable, and pre-processes it.
+            """
+            self.ribbonFile = self.UI.enter_input_filename()
+            self.ribbon = parsing.read_file(self.ribbonFile)
+            # If file read failed, end here
+            if not self.ribbon:
+                self.UI.display('Error reading file!')
+                time.sleep(1)
+                return False
+            # Read the metadata at the beginning of the ribbon file
+            self.metadata = parsing.get_metadata(self.ribbon)
+            # Reset the "line aborted" on a new casting job
+            self.lineAborted = None
+            return True
+        def debug_notice():
+            """debug_notice
+
+            Prints a notice if the program is in debug mode.
+            """
+            if self.UI.debugMode:
+                return '\n\nThe program is now in debugging mode!'
+            else:
+                return ''
+        def additional_info():
+            """additional_info:
+
+            Displays additional info as a menu footer.
+            Starts with an empty list, and checks whether the casting job
+            objects has attributes that are parameters to be displayed.
+            """
+            info = []
+            # Add ribbon filename, if any
+            if self.ribbonFile:
+                info.append('Input file name: ' + self.ribbonFile)
+            # Add a caster name
+            info.append('Using caster: ' + self.caster.name)
+            # Add metadata for ribbon
+            for parameter in self.metadata:
+                value = str(self.metadata[parameter])
+                info.append(str(parameter).capitalize() + ': ' + value)
+            # Display the line last casting was aborted on, if applicable:
+            if self.lineAborted:
+                info.append('Last casting was aborted on line '
+                            + str(self.lineAborted))
+            # Convert it all to a multiline string
+            return '\n'.join(info)
+        def heatup():
+            """heatup
+
+            Allows to heat up the mould before casting, in order to
+            stabilize the mould temperature (affects the type quality).
+            Casts two lines of em-quads, which can be thrown back to the pot.
+            """
+            self.UI.clear()
+            self.cast_from_matrix('O15', n=20, lines=2)
         def cast_or_punch():
+            """cast_or_punch:
+
+            Determines if the caster specified for the job is actually
+            a perforator - if so, a "punch ribbon" feature will be
+            available instead of "cast composition".
+            """
             if self.caster.isPerforator:
                 return ('Punch composition', self.punch_composition)
             else:
                 return ('Cast composition', self.cast_composition)
         def preview_ribbon():
+            """preview_ribbon:
+
+            Determines if we have a ribbon file that can be previewed,
+            and displays its contents line by line, or displays
+            an error message.
+            """
             if self.ribbon:
                 self.UI.clear()
                 self.UI.display('Ribbon preview:\n')
@@ -1004,6 +1078,8 @@ class Casting(object):
             else:
                 self.UI.display('No ribbon to preview!')
             self.UI.enter_data('[Enter] to return to menu...')
+        # End of menu subroutines
+        # Now construct the menu, starting with available options
         options = {1 : 'Load a ribbon file',
                    2 : 'Preview ribbon',
                    3 : cast_or_punch()[0],
@@ -1013,44 +1089,6 @@ class Casting(object):
                    7 : 'Calibrate the 0005 and 0075 wedges',
                    8 : 'Cast two lines of 20 quads to heat up the mould',
                    0 : 'Exit program'}
-        # Declare subroutines for menu options
-        def choose_ribbon_filename():
-            self.ribbonFile = self.UI.enter_input_filename()
-            self.ribbon = parsing.read_file(self.ribbonFile)
-            # If file read failed, end here
-            if not self.ribbon:
-                self.UI.display('Error reading file!')
-                time.sleep(1)
-                return False
-            self.metadata = parsing.get_metadata(self.ribbon)
-        def debug_notice():
-        # Prints a notice if the program is in debug mode
-            if self.UI.debugMode:
-                return '\n\nThe program is now in debugging mode!'
-            else:
-                return ''
-        def additional_info():
-        # Displays additional info as a menu footer. Start with empty list
-            info = []
-        # Add ribbon filename, if any
-            if self.ribbonFile:
-                info.append('Input file name: ' + self.ribbonFile)
-        # Add a caster name
-            info.append('Using caster: ' + self.caster.name)
-        # Add metadata for ribbon
-            for parameter in self.metadata:
-                value = str(self.metadata[parameter])
-                info.append(str(parameter).capitalize() + ': ' + value)
-        # Display the line last casting was aborted on, if applicable:
-            if self.lineAborted:
-                info.append('Last casting was aborted on line '
-                            + str(self.lineAborted))
-        # Convert it all to a multiline string
-            return '\n'.join(info)
-        def heatup():
-            self.UI.clear()
-            self.cast_from_matrix('O15', n=20, lines=2)
-        # End of subroutines.
         # Commands: {option_name : function}
         commands = {1 : choose_ribbon_filename,
                     2 : preview_ribbon,
