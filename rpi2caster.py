@@ -354,9 +354,9 @@ class Monotype(object):
                 if cycles > cycles_max:
                     self.UI.display('\nOkay, the machine is running...\n')
                     return True
-                elif self.machine_stopped():
+                elif self.machine_stopped() and self.detect_rotation():
                 # Check again recursively:
-                    self.detect_rotation()
+                    return True
                 else:
                 # This will lead to return to menu
                     return False
@@ -670,8 +670,10 @@ class Casting(object):
                  'on screen while the machine casts the type.\n'
                  'Turn on the machine and the program will start.\n')
         self.UI.display(intro)
-        # Start only after the machine is running
-        self.caster.detect_rotation()
+        # Start only after the machine is running,
+        # go back to menu if aborted
+        if not self.caster.detect_rotation():
+            return False
         # Read the reversed file contents, line by line, then parse
         # the lines, display comments & code combinations, and feed the
         # combinations to the caster
