@@ -947,6 +947,9 @@ class Casting(object):
                 if not self.caster.send_signals_to_caster(combination):
                     lineAborted = currentLine
                     break
+        # Skip the rest of the "for" loop for the aborted job
+            if lineAborted:
+                break
         # If everything went normally, put the line out to the galley
             self.UI.display('Putting line to the galley...')
             self.caster.send_signals_to_caster(galleyTrip)
