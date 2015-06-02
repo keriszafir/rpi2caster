@@ -730,10 +730,10 @@ class Casting(object):
         # After casting is finished, notify the user
         if self.lineAborted:
             self.UI.display('\nCasting aborted on line %i.' % self.lineAborted)
-            return False
         else:
             self.UI.display('\nCasting finished!')
-            return True
+        self.UI.hold_on_exit()
+        return True
 
     def punch_composition(self):
         """punch_composition():
@@ -793,6 +793,7 @@ class Casting(object):
                 time.sleep(0.2)
         # After punching is finished, notify the user:"""
         self.UI.display('\nPunching finished!')
+        self.UI.hold_on_exit()
         return True
 
     def line_test(self):
@@ -816,6 +817,8 @@ class Casting(object):
             self.UI.display(' '.join(combination))
             self.caster.send_signals_to_caster(combination, 120)
         self.UI.display('\nTesting finished!')
+        self.UI.hold_on_exit()
+        return True
 
     def cast_sorts(self):
         """cast_sorts():
@@ -892,21 +895,30 @@ class Casting(object):
         NK = 0075
         NKJ = 0005 + 0075
         """
-        combination = parsing.signals_parser(signals)
-        combination = parsing.strip_O_and_15(combination)
+        lineAborted = None
+        # Convert the positions to strings
         pos0005 = str(pos0005)
         pos0075 = str(pos0075)
-        # Check if the machine is running first
+        # Signals for setting 0005 and 0075 justification wedges
+        set0005 = ['N', 'J', '0005', pos0005]
+        set0075 = ['N', 'K', '0075', pos0075]
+        # Galley trip signal
+        galleyTrip = ['N', 'K', 'J', '0005', '0075']
+        # Parse the combination
+        combination = parsing.signals_parser(signals)
+        combination = parsing.strip_O_and_15(combination)
+        # Check if the machine is running first, end here if not
         self.UI.display('Start the machine...')
-        self.caster.detect_rotation()
+        if not self.caster.detect_rotation():
+            return False
         # Cast the sorts: set wedges, turn pump on, cast, line out
         for currentLine in range(lines):
             self.UI.display('Castling line %i of %i' % (currentLine + 1, lines))
             self.UI.display('0005 wedge at ' + pos0005)
-            self.caster.send_signals_to_caster(['N', 'J', '0005', pos0005])
+            self.caster.send_signals_to_caster(set0005)
             self.UI.display('0075 wedge at ' + pos0075)
             self.UI.display('Starting the pump...')
-            self.caster.send_signals_to_caster(['N', 'K', '0075', pos0075])
+            self.caster.send_signals_to_caster(set0075)
         # Start casting characters
             self.UI.display('Casting characters...')
         # Cast n combinations of row & column, one by one
@@ -915,13 +927,23 @@ class Casting(object):
                         % (' '.join(combination).ljust(20), i, n, 100 * i / n))
                 self.UI.display(info)
                 parsing.strip_O_and_15(combination)
-                self.caster.send_signals_to_caster(combination)
-        # Put the line out to the galley
-            self.UI.display('Putting line to the galley...')
-            self.caster.send_signals_to_caster(['N', 'K', 'J', '0005', '0075'])
-        # After casting sorts we need to stop the pump
-        self.UI.display('Stopping the pump...')
-        self.caster.send_signals_to_caster(['N', 'J', '0005'])
+            # Break the "for" loop if casting abnormally stopped
+            # (i.e. send_signals_to_caster returned False)
+                if not self.caster.send_signals_to_caster(combination):
+                    lineAborted = currentLine
+                    break
+            if not lineAborted:
+            # Put the line out to the galley
+                self.UI.display('Putting line to the galley...')
+                self.caster.send_signals_to_caster(galleyTrip)
+            # After casting sorts we need to stop the pump
+                self.UI.display('Stopping the pump...')
+                self.caster.send_signals_to_caster(set0005)
+                self.UI.display('Casting finished!')
+            else:
+                self.UI.display('Casting aborted at line %i' % lineAborted)
+                return False
+        return True
 
     def send_combination(self):
         """send_combination():
@@ -969,12 +991,16 @@ class Casting(object):
                  'If not, you have to adjust the 52D space transfer wedge.\n\n'
                  'Turn on the machine...')
         self.UI.display(intro)
-        # Cast 10 spaces without correction
+        # Cast 10 spaces without correction.
+        # End here if casting unsuccessful.
         self.UI.display('Now casting with a normal wedge only.')
-        self.cast_from_matrix(spaceAt, 10)
-        # Cast 10 spaces with the S-needle
+        if not self.cast_from_matrix(spaceAt, 10):
+            return False
+        # Cast 10 spaces with the S-needle.
+        # End here if casting unsuccessful.
         self.UI.display('Now casting with justification wedges...')
-        self.cast_from_matrix(spaceAt + 'S', 10)
+        if not self.cast_from_matrix(spaceAt + 'S', 10):
+            return False
         # Finished. Return to menu.
         options = {'R' : self.align_wedges,
                    'M' : self.main_menu,
