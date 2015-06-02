@@ -401,7 +401,8 @@ class Monotype(object):
             # Polling the interrupt file
                 events = po.poll(machineTimeout)
                 if events:
-                # Be sure that the machine is working!
+                # Normal control flow when the machine is working
+                # (cycle sensor generates events)
                     gpiostate.seek(0)
                     sensorState = int(gpiostate.read())
                     if sensorState == 1 and previousState == 0:
@@ -420,8 +421,7 @@ class Monotype(object):
                 # No events? That would mean that the machine has stopped,
                 # usually because of emergency. Ask user what to do.
                 # If machine_stopped returns True (continue casting), then
-                # repeat and return True to tell the casting routine that
-                # this step went OK.
+                # repeat this step.
                     return self.send_signals_to_caster(signals, machineTimeout)
                 else:
                 # If machine_stopped returned False, it means that
@@ -466,8 +466,9 @@ class Monotype(object):
         
         The program MUST turn the pump off to go on.
         """
+        self.UI.display('Stopping the pump...')
         while not self.send_signals_to_caster(['N', 'J', '0005']):
-            self.UI.display('Stopping the pump...')
+            self.emergency_cleanup()
         else:
             self.UI.display('Pump stopped. All valves off...')
             self.deactivate_valves()
