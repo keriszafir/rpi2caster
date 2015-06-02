@@ -487,6 +487,7 @@ class Monotype(object):
         # Make sure pump is off and no valves are activated.
             self.emergency_cleanup()
             self.UI.exit_program()
+            return None
         # Display a menu for the user to decide what to do
         options = {'C' : continue_casting,
                    'M' : return_to_menu,
@@ -494,7 +495,7 @@ class Monotype(object):
         message = ("Machine not running! Check what's going on.\n"
                    "[C]ontinue, return to [M]enu or [E]xit program? ")
         choice = self.UI.simple_menu(message, options).upper()
-        options[choice]()
+        return options[choice]()
 
     def cleanup(self):
         """cleanup():
