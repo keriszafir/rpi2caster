@@ -463,12 +463,15 @@ class Monotype(object):
 
         The program will hold execution until the operator clears the situation,
         it needs turning the machine at least one full revolution.
+        
+        The program MUST turn the pump off to go on.
         """
-        self.UI.display('Stopping the pump...')
-        self.send_signals_to_caster(['N', 'J', '0005'])
-        self.UI.display('Pump stopped. All valves off...')
-        self.deactivate_valves()
-        time.sleep(1)
+        while not self.send_signals_to_caster(['N', 'J', '0005']):
+            self.UI.display('Stopping the pump...')
+        else:
+            self.UI.display('Pump stopped. All valves off...')
+            self.deactivate_valves()
+            time.sleep(1)
 
     def machine_stopped(self):
         """machine_stopped():
