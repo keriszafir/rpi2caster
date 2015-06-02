@@ -420,7 +420,7 @@ class Monotype(object):
                 # No events? That would mean that the machine has stopped,
                 # usually because of emergency. Ask user what to do.
                 # If machine_stopped returns True (continue casting), then
-                # recurse and return True to tell the casting routine that
+                # repeat and return True to tell the casting routine that
                 # this step went OK.
                     return self.send_signals_to_caster(signals, machineTimeout)
                 else:
@@ -635,6 +635,7 @@ class Casting(object):
         self.caster = MonotypeSimulation()
         self.ribbonFile = ribbonFile
         self.ribbon = []
+        self.lineAborted = None
         self.metadata = {}
 
     def __enter__(self):
@@ -720,16 +721,19 @@ class Casting(object):
                 signals = parsing.strip_O_and_15(signals)
             # Cast the combination and determine the exit status.
             # True if casting went OK or False if shit happened and
-            # the operator decided to abort casting.
-                if self.caster.send_signals_to_caster(signals):
-                    continue
-                else:
-                # Remember the line we aborted casting on
+            # the operator decided to abort casting. In this case,
+            # remember the last line cast and finish.
+                if not self.caster.send_signals_to_caster(signals):
                     self.lineAborted = currentLine
+                # Stop doing the "for line in content" loop:
                     break
         # After casting is finished, notify the user
-        self.UI.display('\nCasting finished!')
-        return True
+        if self.lineAborted:
+            self.UI.display('\nCasting aborted on line %i.' % self.lineAborted)
+            return False
+        else:
+            self.UI.display('\nCasting finished!')
+            return True
 
     def punch_composition(self):
         """punch_composition():
@@ -1037,6 +1041,10 @@ class Casting(object):
             for parameter in self.metadata:
                 value = str(self.metadata[parameter])
                 info.append(str(parameter).capitalize() + ': ' + value)
+        # Display the line last casting was aborted on, if applicable:
+            if self.lineAborted:
+                info.append('Last casting was aborted on line '
+                            + str(self.lineAborted))
         # Convert it all to a multiline string
             return '\n'.join(info)
         def heatup():
