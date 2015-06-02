@@ -898,6 +898,7 @@ class Casting(object):
         NK = 0075
         NKJ = 0005 + 0075
         """
+        # Use this for storing a number of line we aborted casting on:
         lineAborted = None
         # Convert the positions to strings
         pos0005 = str(pos0005)
@@ -930,23 +931,25 @@ class Casting(object):
                         % (' '.join(combination).ljust(20), i, n, 100 * i / n))
                 self.UI.display(info)
                 parsing.strip_O_and_15(combination)
-            # Break the "for" loop if casting abnormally stopped
+            # Break the "characters" loop if casting abnormally stopped
             # (i.e. send_signals_to_caster returned False)
                 if not self.caster.send_signals_to_caster(combination):
                     lineAborted = currentLine
                     break
-            if not lineAborted:
-            # Put the line out to the galley
-                self.UI.display('Putting line to the galley...')
-                self.caster.send_signals_to_caster(galleyTrip)
-            # After casting sorts we need to stop the pump
-                self.UI.display('Stopping the pump...')
-                self.caster.send_signals_to_caster(set0005)
-                self.UI.display('Casting finished!')
-            else:
+        # End the whole casting job if it was aborted
+            if lineAborted:
                 self.UI.display('Casting aborted at line %i' % lineAborted)
-                return False
-        return True
+                break
+        # Put the line out to the galley
+            self.UI.display('Putting line to the galley...')
+            self.caster.send_signals_to_caster(galleyTrip)
+        # After casting sorts we need to stop the pump
+            self.UI.display('Stopping the pump...')
+            self.caster.send_signals_to_caster(set0005)
+        if lineAborted:
+            return False
+        else:
+            return True
 
     def send_combination(self):
         """send_combination():
