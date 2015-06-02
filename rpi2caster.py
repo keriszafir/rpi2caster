@@ -420,9 +420,9 @@ class Monotype(object):
                 # No events? That would mean that the machine has stopped,
                 # usually because of emergency. Ask user what to do.
                 # If machine_stopped returns True (continue casting), then
-                # return True to tell the casting routine that
+                # recurse and return True to tell the casting routine that
                 # this step went OK.
-                    return True
+                    return self.send_signals_to_caster(signals, machineTimeout)
                 else:
                 # If machine_stopped returned False, it means that
                 # the operator decided to abort casting. We need to tell it
