@@ -354,12 +354,11 @@ class Monotype(object):
                 if cycles > cycles_max:
                     self.UI.display('\nOkay, the machine is running...\n')
                     return True
-                elif self.machine_stopped() and self.detect_rotation():
+                elif self.machine_stopped():
                 # Check again recursively:
-                    return True
+                    return self.detect_rotation()
                 else:
                 # This will lead to return to menu
-                    raw_input('Rotation not detected')
                     return False
 
     def send_signals_to_caster(self, signals, machineTimeout=5):
