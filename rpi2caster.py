@@ -359,6 +359,7 @@ class Monotype(object):
                     return True
                 else:
                 # This will lead to return to menu
+                    raw_input('Rotation not detected')
                     return False
 
     def send_signals_to_caster(self, signals, machineTimeout=5):
