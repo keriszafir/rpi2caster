@@ -415,18 +415,10 @@ class Monotype(object):
                     # end of "air in" phase, turn off the valves
                         self.deactivate_valves()
                         previousState = 0
-                        #break
+                        # Successful ending
                         return True
-                elif self.machine_stopped():
-                # No events? That would mean that the machine has stopped,
-                # usually because of emergency. Ask user what to do.
-                # If machine_stopped returns True (continue casting), then
-                # repeat this step.
-                    return self.send_signals_to_caster(signals, machineTimeout)
                 else:
-                # If machine_stopped returned False, it means that
-                # the operator decided to abort casting. We need to tell it
-                # to the casting routine.
+                # Timeout with no signals - failed ending
                     return False
 
     def activate_valves(self, signals):
