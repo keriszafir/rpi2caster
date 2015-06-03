@@ -459,11 +459,11 @@ class Monotype(object):
         The program MUST turn the pump off to go on.
         """
         pumpOff = False
+        self.UI.display('Stopping the pump...')
         while not pumpOff:
         # Try stopping the pump until we succeed!
         # Keep calling send_signals_to_caster until it returns True
         # (the machine receives and processes the pump stop signal)
-            self.UI.display('Stopping the pump...')
             pumpOff = self.send_signals_to_caster(['N', 'J', '0005'])
         else:
             self.UI.display('Pump stopped. All valves off...')
