@@ -683,6 +683,7 @@ class Casting(object):
         # Start only after the machine is running,
         # go back to menu if aborted
         if not self.caster.detect_rotation():
+            self.UI.hold_on_exit()
             return False
         # Read the reversed file contents, line by line, then parse
         # the lines, display comments & code combinations, and feed the
