@@ -460,7 +460,7 @@ class Monotype(object):
                 time.sleep(1)
                 return True
         # End of subroutine definitions
-        while not send_signals_to_caster(signals, machineTimeout):
+        while not send_signals_to_caster(signals, 30):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
             if not self.machine_stopped():
@@ -606,7 +606,7 @@ class MonotypeSimulation(object):
                 time.sleep(1)
                 return True
         # End of subroutine definitions
-        while not send_signals_to_caster(signals, machineTimeout):
+        while not send_signals_to_caster(signals, 30):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
             if not self.machine_stopped():
