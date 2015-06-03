@@ -466,13 +466,18 @@ class Monotype(object):
         
         The program MUST turn the pump off to go on.
         """
-        self.UI.display('Stopping the pump...')
-        while not self.send_signals_to_caster(['N', 'J', '0005']):
-            self.emergency_cleanup()
+        pumpOff = False
+        while not pumpOff:
+        # Try stopping the pump until we succeed!
+        # Keep calling send_signals_to_caster until it returns True
+        # (the machine receives and processes the pump stop signal)
+            self.UI.display('Stopping the pump...')
+            pumpOff = self.send_signals_to_caster(['N', 'J', '0005'])
         else:
             self.UI.display('Pump stopped. All valves off...')
             self.deactivate_valves()
             time.sleep(1)
+            return True
 
     def machine_stopped(self):
         """machine_stopped():
@@ -491,7 +496,6 @@ class Monotype(object):
         # Make sure pump is off and no valves are activated.
             self.emergency_cleanup()
             self.UI.exit_program()
-            return None
         # Display a menu for the user to decide what to do
         options = {'C' : continue_casting,
                    'M' : return_to_menu,
@@ -715,7 +719,7 @@ class Casting(object):
         # Append signals to be cast
             if signals:
                 userInfo += ' '.join(signals).ljust(15)
-            # Add comment
+        # Add comment
             userInfo += comment
             # Display the info
             self.UI.display(userInfo)
@@ -724,10 +728,11 @@ class Casting(object):
             # Now check if we had O, 15 and strip them
                 signals = parsing.strip_O_and_15(signals)
             # Cast the combination and determine the exit status.
-            # True if casting went OK or False if shit happened and
+            # True if casting went OK, or False if shit happened and
             # the operator decided to abort casting. In this case,
-            # remember the last line cast and finish.
-                if not self.caster.send_signals_to_caster(signals):
+            # remember the last line being cast and finish.
+                castingSuccessful = self.caster.send_signals_to_caster(signals)
+                if not castingSuccessful:
                     self.lineAborted = currentLine
                 # Stop doing the "for line in content" loop:
                     break
@@ -1155,7 +1160,7 @@ class Casting(object):
         if choice in [0, 1, 2]:
             commands[choice]()
         # FIXME: get rid of this ugly ifology
-        elif choice in [6]:
+        elif choice in [3, 6]:
             with self.caster:
                 commands[choice]()
         else:
