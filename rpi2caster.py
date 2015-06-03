@@ -481,7 +481,7 @@ class Monotype(object):
 
         The program will hold execution until the operator clears the situation,
         it needs turning the machine at least one full revolution.
-        
+
         The program MUST turn the pump off to go on.
         """
         pumpOff = False
@@ -630,8 +630,10 @@ class MonotypeSimulation(object):
         """
         def continue_casting():
         # Helper function - continue casting.
+            self.UI.debug_info('Continuing...')
             return True
         def return_to_menu():
+            self.UI.debug_info('Back to menu...')
             return False
         options = {'C' : continue_casting,
                    'M' : return_to_menu,
@@ -639,7 +641,7 @@ class MonotypeSimulation(object):
         message = ('Machine not running! Check what happened.\n'
                    '[C]ontinue, return to [M]enu or [E]xit program? ')
         choice = self.UI.simple_menu(message, options).upper()
-        options[choice]()
+        return options[choice]()
 
     def emergency_cleanup(self):
         """emergency_cleanup():

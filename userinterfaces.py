@@ -179,10 +179,10 @@ class TextUI(object):
         so an abstraction layer may come in handy.
         """
         exit()
+        return False
 
     def __exit__(self, *args):
         self.debug_info('Exiting text UI context.')
-        pass
 
 class WebInterface(object):
     """WebInterface:
