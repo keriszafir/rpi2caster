@@ -433,6 +433,32 @@ class Monotype(object):
                     else:
                     # Timeout with no signals - failed ending
                         return False
+        def emergency_cleanup(self):
+            """emergency_cleanup():
+    
+            If the machine is stopped, we need to turn the pump off and then
+            turn all the lines off. Otherwise, the machine will keep pumping
+            while it shouldnot (e.g. after a splash).
+    
+            The program will hold execution until the operator clears
+            the situation, it needs turning the machine at least one
+            full revolution.
+    
+            The program MUST turn the pump off to move on.
+            """
+            pumpOff = False
+            stopSignal = ['N', 'J', '0005']
+            self.UI.display('Stopping the pump...')
+            while not pumpOff:
+            # Try stopping the pump until we succeed!
+            # Keep calling process_signals until it returns True
+            # (the machine receives and processes the pump stop signal)
+                pumpOff = send_signals_to_caster(stopSignal, machineTimeout)
+            else:
+                self.UI.display('Pump stopped. All valves off...')
+                self.deactivate_valves()
+                time.sleep(1)
+                return True
         # End of subroutine definitions
         while not send_signals_to_caster(signals, machineTimeout):
             # Keep trying to cast the combination, or do the emergency
@@ -471,31 +497,6 @@ class Monotype(object):
         """
         for pin in range(self.pinBase, self.pinBase + 32):
             wiringpi.digitalWrite(pin, 0)
-
-    def emergency_cleanup(self):
-        """emergency_cleanup():
-
-        If the machine is stopped, we need to turn the pump off and then turn
-        all the lines off. Otherwise, the machine will keep pumping
-        while it shouldnot (e.g. after a splash).
-
-        The program will hold execution until the operator clears the situation,
-        it needs turning the machine at least one full revolution.
-
-        The program MUST turn the pump off to go on.
-        """
-        pumpOff = False
-        self.UI.display('Stopping the pump...')
-        while not pumpOff:
-        # Try stopping the pump until we succeed!
-        # Keep calling process_signals until it returns True
-        # (the machine receives and processes the pump stop signal)
-            pumpOff = self.process_signals(['N', 'J', '0005'])
-        else:
-            self.UI.display('Pump stopped. All valves off...')
-            self.deactivate_valves()
-            time.sleep(1)
-            return True
 
     def machine_stopped(self):
         """machine_stopped():
@@ -569,7 +570,7 @@ class MonotypeSimulation(object):
 
         Ask if user wants to simulate the machine stop.
         """
-        def send_signals_to_caster(signals, timeout=5):
+        def send_signals_to_caster(signals, timeout):
             prompt = '[Enter] to cast or [S] to stop? '
             if self.UI.enter_data(prompt) in ['s', 'S']:
                 self.UI.display('Simulating machine stop...')
@@ -594,12 +595,13 @@ class MonotypeSimulation(object):
             The program MUST turn the pump off to go on.
             """
             pumpOff = False
+            stopSignal = ['N', 'J', '0005']
             self.UI.display('Stopping the pump...')
             while not pumpOff:
             # Try stopping the pump until we succeed!
             # Keep calling process_signals until it returns True
             # (the machine receives and processes the pump stop signal)
-                pumpOff = send_signals_to_caster(['N', 'J', '0005'])
+                pumpOff = send_signals_to_caster(stopSignal, machineTimeout)
             else:
                 self.UI.display('Pump stopped. All valves off...')
                 self.deactivate_valves()
