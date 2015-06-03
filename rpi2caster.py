@@ -437,9 +437,9 @@ class Monotype(object):
         while not send_signals_to_caster(signals, machineTimeout):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
-            if not self.caster.machine_stopped():
+            if not self.machine_stopped():
                 # This happens when user chooses the "back to menu" option
-                self.caster.emergency_cleanup()
+                self.emergency_cleanup()
                 return False
             # Else - the loop starts over and the program tries to cast
             # the combination again.
@@ -567,12 +567,32 @@ class MonotypeSimulation(object):
     def process_signals(self, signals, machineTimeout=5):
         """Simulates sending signals to the caster.
 
-        Just wait for feedback from user, as we don't have a sensor.
+        Ask if user wants to simulate the machine stop.
         """
-        self.UI.enter_data('Press [ENTER] to simulate sensor going ON')
-        self.activate_valves(signals)
-        self.UI.enter_data('Press [ENTER] to simulate sensor going OFF')
-        self.deactivate_valves()
+        def send_signals_to_caster(signals):
+            prompt = '[Enter] to cast or [S] to stop? '
+            if self.UI.enter_data(prompt) in 'sS':
+                self.UI.display('Simulating machine stop...')
+                return False
+            self.UI.display('Turning the valves on...')
+            self.activate_valves(signals)
+            self.UI.display('Turning the valves off...')
+            self.deactivate_valves()
+            self.UI.display('Sequence cast successfully.')
+            return True
+        # End of subroutine definitions
+        while not send_signals_to_caster(signals, machineTimeout):
+            # Keep trying to cast the combination, or do the emergency
+            # cleanup (stop the pump, turn off the valves) and exit
+            if not self.machine_stopped():
+                # This happens when user chooses the "back to menu" option
+                self.emergency_cleanup()
+                return False
+            # Else - the loop starts over and the program tries to cast
+            # the combination again.
+        else:
+            # Successful ending - the combination has been cast
+            return True
 
     def activate_valves(self, signals):
         """If there are any signals, print them out"""
@@ -583,27 +603,19 @@ class MonotypeSimulation(object):
 
     def deactivate_valves(self):
         """No need to do anything"""
-        self.UI.display('The valves would be deactivated now.')
+        self.UI.display('Deactivating all valves...')
 
     def detect_rotation(self):
         """Detect rotation:
 
-        FIXME: implement raw input breaking on timeout"""
-        '''TODO: make this function work...
-        self.UI.debug_info('Now, the program would check if the machine '
-                           'is rotating.\n')
-        startTime = time.time()
-        answer = None
-        while answer is None and time.time() < (startTime + 5):
-            prompt = ('Press [ENTER] (to simulate rotation) '
-                      'or wait 5sec (to simulate machine off)\n')
-            answer = self.UI.enter_data(prompt)
+        Ask if the machine is rotating or not (for testing
+        the machine not running scenario).
+        """
+        prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
+        if self.UI.enter_data(prompt) in 'nN':
+            return False
         else:
-            self.machine_stopped()
-            """Recurse:"""
-            self.detect_rotation()
-        '''
-        pass
+            return True
 
     def machine_stopped(self):
         """Machine stopped:
@@ -623,6 +635,31 @@ class MonotypeSimulation(object):
                    '[C]ontinue, return to [M]enu or [E]xit program? ')
         choice = self.UI.simple_menu(message, options).upper()
         options[choice]()
+
+    def emergency_cleanup(self):
+        """emergency_cleanup():
+
+        If the machine is stopped, we need to turn the pump off and then turn
+        all the lines off. Otherwise, the machine will keep pumping
+        while it shouldnot (e.g. after a splash).
+
+        The program will hold execution until the operator clears the situation,
+        it needs turning the machine at least one full revolution.
+
+        The program MUST turn the pump off to go on.
+        """
+        pumpOff = False
+        self.UI.display('Stopping the pump...')
+        while not pumpOff:
+        # Try stopping the pump until we succeed!
+        # Keep calling process_signals until it returns True
+        # (the machine receives and processes the pump stop signal)
+            pumpOff = self.process_signals(['N', 'J', '0005'])
+        else:
+            self.UI.display('Pump stopped. All valves off...')
+            self.deactivate_valves()
+            time.sleep(1)
+            return True
 
     def __exit__(self, *args):
         self.deactivate_valves()
@@ -743,19 +780,16 @@ class Casting(object):
             if signals:
             # Now check if we had O, 15 and strip them
                 signals = parsing.strip_O_and_15(signals)
-            # Keep trying to cast the sequence, until either:
-            # -the character has been cast (s_s_t_c returns True),
-            # -operator aborts casting (machine_stopped returns False).
-            # Do emergency cleanup (ensure that the pump is off).
-                while not self.caster.process_signals(signals):
-                    if not self.caster.machine_stopped():
-                        self.caster.emergency_cleanup()
-                        # Check the aborted line so we can get back to it
-                        self.lineAborted = currentLine
-                        self.UI.display('\nCasting aborted on line %i.'
-                                        % self.lineAborted)
-                        self.UI.hold_on_exit()
-                        return False
+            # Cast the sequence and determine the outcome
+            # (True on success, False on failure i.e. abort)
+                if not self.caster.process_signals(signals):
+                # On failure - abort the whole job.
+                # Check the aborted line so we can get back to it.
+                    self.lineAborted = currentLine
+                    self.UI.display('\nCasting aborted on line %i.'
+                                    % self.lineAborted)
+                    self.UI.hold_on_exit()
+                    return False
         # After casting is finished, notify the user
         self.UI.display('\nCasting finished!')
         self.UI.hold_on_exit()
