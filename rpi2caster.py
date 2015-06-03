@@ -612,10 +612,15 @@ class MonotypeSimulation(object):
         the machine not running scenario).
         """
         prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
-        if self.UI.enter_data(prompt) in 'nN':
-            return False
-        else:
+        if self.UI.enter_data(prompt) not in 'nN':
+        # Machine is running
             return True
+        elif self.machine_stopped():
+        # Check again recursively:
+            return self.detect_rotation()
+        else:
+        # This will lead to return to menu
+            return False
 
     def machine_stopped(self):
         """Machine stopped:
