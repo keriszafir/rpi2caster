@@ -569,9 +569,9 @@ class MonotypeSimulation(object):
 
         Ask if user wants to simulate the machine stop.
         """
-        def send_signals_to_caster(signals):
+        def send_signals_to_caster(signals, timeout):
             prompt = '[Enter] to cast or [S] to stop? '
-            if self.UI.enter_data(prompt) in 'sS':
+            if self.UI.enter_data(prompt) in ['s', 'S']:
                 self.UI.display('Simulating machine stop...')
                 return False
             self.UI.display('Turning the valves on...')
@@ -612,7 +612,7 @@ class MonotypeSimulation(object):
         the machine not running scenario).
         """
         prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
-        if self.UI.enter_data(prompt) not in 'nN':
+        if self.UI.enter_data(prompt) not in ['n', 'N']:
         # Machine is running
             return True
         elif self.machine_stopped():
