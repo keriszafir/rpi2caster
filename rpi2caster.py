@@ -415,7 +415,7 @@ class Monotype(object):
                     # end of "air in" phase, turn off the valves
                         self.deactivate_valves()
                         previousState = 0
-                        # Successful ending
+                        # Signals sent to the caster - successful ending
                         return True
                 else:
                 # Timeout with no signals - failed ending
@@ -724,16 +724,15 @@ class Casting(object):
             # True if casting went OK, or False if shit happened and
             # the operator decided to abort casting. In this case,
             # remember the last line being cast and finish.
-                castingSuccessful = self.caster.send_signals_to_caster(signals)
-                if not castingSuccessful:
+                if (not self.caster.send_signals_to_caster(signals)
+                and not self.machine_stopped()):
                     self.lineAborted = currentLine
-                # Stop doing the "for line in content" loop:
-                    break
+                    self.UI.display('\nCasting aborted on line %i.'
+                                    % self.lineAborted)
+                    self.UI.hold_on_exit()
+                    return False
         # After casting is finished, notify the user
-        if self.lineAborted:
-            self.UI.display('\nCasting aborted on line %i.' % self.lineAborted)
-        else:
-            self.UI.display('\nCasting finished!')
+        self.UI.display('\nCasting finished!')
         self.UI.hold_on_exit()
         return True
 
