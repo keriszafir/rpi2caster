@@ -725,7 +725,7 @@ class Casting(object):
             # the operator decided to abort casting. In this case,
             # remember the last line being cast and finish.
                 if (not self.caster.send_signals_to_caster(signals)
-                and not self.machine_stopped()):
+                and not self.caster.machine_stopped()):
                     self.lineAborted = currentLine
                     self.UI.display('\nCasting aborted on line %i.'
                                     % self.lineAborted)
