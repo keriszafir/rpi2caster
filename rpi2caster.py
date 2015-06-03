@@ -481,8 +481,6 @@ class Monotype(object):
         # Helper function - continue casting.
             return True
         def return_to_menu():
-        # Make sure pump is off and no valves are activated.
-            self.emergency_cleanup()
             return False
         def exit_program():
         # Make sure pump is off and no valves are activated.
@@ -720,17 +718,19 @@ class Casting(object):
             if signals:
             # Now check if we had O, 15 and strip them
                 signals = parsing.strip_O_and_15(signals)
-            # Cast the combination and determine the exit status.
-            # True if casting went OK, or False if shit happened and
-            # the operator decided to abort casting. In this case,
-            # remember the last line being cast and finish.
-                if (not self.caster.send_signals_to_caster(signals)
-                and not self.caster.machine_stopped()):
-                    self.lineAborted = currentLine
-                    self.UI.display('\nCasting aborted on line %i.'
-                                    % self.lineAborted)
-                    self.UI.hold_on_exit()
-                    return False
+            # Keep trying to cast the sequence, until either:
+            # -the character has been cast (s_s_t_c returns True),
+            # -operator aborts casting (machine_stopped returns False).
+            # Do emergency cleanup (ensure that the pump is off).
+                while not self.caster.send_signals_to_caster(signals):
+                    if not self.caster.machine_stopped():
+                        self.caster.emergency_cleanup()
+                        # Check the aborted line so we can get back to it
+                        self.lineAborted = currentLine
+                        self.UI.display('\nCasting aborted on line %i.'
+                                        % self.lineAborted)
+                        self.UI.hold_on_exit()
+                        return False
         # After casting is finished, notify the user
         self.UI.display('\nCasting finished!')
         self.UI.hold_on_exit()
