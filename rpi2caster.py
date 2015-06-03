@@ -569,7 +569,7 @@ class MonotypeSimulation(object):
 
         Ask if user wants to simulate the machine stop.
         """
-        def send_signals_to_caster(signals, timeout):
+        def send_signals_to_caster(signals, timeout=5):
             prompt = '[Enter] to cast or [S] to stop? '
             if self.UI.enter_data(prompt) in ['s', 'S']:
                 self.UI.display('Simulating machine stop...')
@@ -580,13 +580,38 @@ class MonotypeSimulation(object):
             self.deactivate_valves()
             self.UI.display('Sequence cast successfully.')
             return True
+        def emergency_cleanup():
+            """emergency_cleanup():
+
+            If the machine is stopped, we need to turn the pump off and then
+            turn all the lines off. Otherwise, the machine will keep pumping
+            while it shouldnot (e.g. after a splash).
+
+            The program will hold execution until the operator clears the
+            situation, it needs turning the machine at least one full
+            revolution.
+
+            The program MUST turn the pump off to go on.
+            """
+            pumpOff = False
+            self.UI.display('Stopping the pump...')
+            while not pumpOff:
+            # Try stopping the pump until we succeed!
+            # Keep calling process_signals until it returns True
+            # (the machine receives and processes the pump stop signal)
+                pumpOff = send_signals_to_caster(['N', 'J', '0005'])
+            else:
+                self.UI.display('Pump stopped. All valves off...')
+                self.deactivate_valves()
+                time.sleep(1)
+                return True
         # End of subroutine definitions
         while not send_signals_to_caster(signals, machineTimeout):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
             if not self.machine_stopped():
                 # This happens when user chooses the "back to menu" option
-                self.emergency_cleanup()
+                emergency_cleanup()
                 return False
             # Else - the loop starts over and the program tries to cast
             # the combination again.
@@ -642,31 +667,6 @@ class MonotypeSimulation(object):
                    '[C]ontinue, return to [M]enu or [E]xit program? ')
         choice = self.UI.simple_menu(message, options).upper()
         return options[choice]()
-
-    def emergency_cleanup(self):
-        """emergency_cleanup():
-
-        If the machine is stopped, we need to turn the pump off and then turn
-        all the lines off. Otherwise, the machine will keep pumping
-        while it shouldnot (e.g. after a splash).
-
-        The program will hold execution until the operator clears the situation,
-        it needs turning the machine at least one full revolution.
-
-        The program MUST turn the pump off to go on.
-        """
-        pumpOff = False
-        self.UI.display('Stopping the pump...')
-        while not pumpOff:
-        # Try stopping the pump until we succeed!
-        # Keep calling process_signals until it returns True
-        # (the machine receives and processes the pump stop signal)
-            pumpOff = self.process_signals(['N', 'J', '0005'])
-        else:
-            self.UI.display('Pump stopped. All valves off...')
-            self.deactivate_valves()
-            time.sleep(1)
-            return True
 
     def __exit__(self, *args):
         self.deactivate_valves()
