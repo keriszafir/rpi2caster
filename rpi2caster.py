@@ -433,7 +433,7 @@ class Monotype(object):
                     else:
                     # Timeout with no signals - failed ending
                         return False
-        def emergency_cleanup(self):
+        def emergency_cleanup():
             """emergency_cleanup():
     
             If the machine is stopped, we need to turn the pump off and then
@@ -465,7 +465,7 @@ class Monotype(object):
             # cleanup (stop the pump, turn off the valves) and exit
             if not self.machine_stopped():
                 # This happens when user chooses the "back to menu" option
-                self.emergency_cleanup()
+                emergency_cleanup()
                 return False
             # Else - the loop starts over and the program tries to cast
             # the combination again.
@@ -510,8 +510,6 @@ class Monotype(object):
         def return_to_menu():
             return False
         def exit_program():
-        # Make sure pump is off and no valves are activated.
-            self.emergency_cleanup()
             self.UI.exit_program()
         # Display a menu for the user to decide what to do
         options = {'C' : continue_casting,
