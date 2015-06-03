@@ -361,8 +361,8 @@ class Monotype(object):
                 # This will lead to return to menu
                     return False
 
-    def send_signals_to_caster(self, signals, machineTimeout=5):
-        """send_signals_to_caster(signals, machineTimeout):
+    def process_signals(self, signals, machineTimeout=5):
+        """process_signals(signals, machineTimeout):
 
         Checks for the machine's rotation, sends the signals (activates
         solenoid valves) after the caster is in the "air bar down" position.
@@ -373,11 +373,20 @@ class Monotype(object):
         stopping the machine for a short time - not recommended as the
         mould cools down and type quality can deteriorate).
 
+        If the operator decides to go on with casting, the aborted sequence
+        will be re-cast so as to avoid missing characters in the composition.
+
+        Safety measure: this function will call "emergency_cleanup" routine
+        whenever the operator decides to go back to menu or exit program
+        after the machine stops rotating during casting. This is to ensure
+        that the pump will not stay on afterwards, leading to lead squirts
+        or any other unwanted effects.
+
         When casting, the pace is dictated by the caster and its RPM. Thus,
         we can't arbitrarily set the intervals between valve ON and OFF
         signals. We need to get feedback from the machine, and we can use
         contact switch (unreliable in the long run), magnet & reed switch
-        (not precise enough) or a sensor + LED (very precise).
+        (not precise enough) or a photocell sensor + LED (very precise).
         We can use a paper tower's operating lever for obscuring the sensor
         (like John Cornelisse did), or we can use a partially obscured disc
         attached to the caster's shaft (like Bill Welliver did).
@@ -385,41 +394,58 @@ class Monotype(object):
         valve block assembly, and the latter allows for very precise tweaking
         of duty cycle (bright/dark area ratio) and phase shift (disc's position
         relative to 0 degrees caster position).
-
-        Detect events on a sensor input, and if a rising or falling edge
-        is detected, determine the input's logical state (high or low).
-        If high - check if it was previously low to be sure. Then send
-        all signals passed as an argument (tuple or list).
-        In the next cycle, turn all the valves off and exit the loop.
-        Set the previous state each time the valves are turned on or off.
         """
-        with open(self.sensorGPIOValueFile, 'r') as gpiostate:
-            po = select.epoll()
-            po.register(gpiostate, select.POLLPRI)
-            previousState = 0
-            while True:
-            # Polling the interrupt file
-                events = po.poll(machineTimeout)
-                if events:
-                # Normal control flow when the machine is working
-                # (cycle sensor generates events)
-                    gpiostate.seek(0)
-                    sensorState = int(gpiostate.read())
-                    if sensorState == 1 and previousState == 0:
-                    # Now, the air bar on paper tower would go down -
-                    # we got signal from sensor to let the air in
-                        self.activate_valves(signals)
-                        previousState = 1
-                    elif sensorState == 0 and previousState == 1:
-                    # Air bar on paper tower goes back up -
-                    # end of "air in" phase, turn off the valves
-                        self.deactivate_valves()
-                        previousState = 0
-                        # Signals sent to the caster - successful ending
-                        return True
-                else:
-                # Timeout with no signals - failed ending
-                    return False
+        def send_signals_to_caster(signals, timeout):
+            """send_signals_to_caster:
+
+            Sends a combination of signals passed in function's arguments
+            to the caster. This function also checks if the machine cycle
+            sensor changes its state, and decides whether it's an "air on"
+            phase (turn on the valves) or "air off" phase (turn off the valves,
+            end function, return True to signal the success).
+            If no signals are detected within a given timeout - returns False
+            (to signal the casting failure).
+            """
+            with open(self.sensorGPIOValueFile, 'r') as gpiostate:
+                po = select.epoll()
+                po.register(gpiostate, select.POLLPRI)
+                previousState = 0
+                while True:
+                # Polling the interrupt file
+                    events = po.poll(timeout)
+                    if events:
+                    # Normal control flow when the machine is working
+                    # (cycle sensor generates events)
+                        gpiostate.seek(0)
+                        sensorState = int(gpiostate.read())
+                        if sensorState == 1 and previousState == 0:
+                        # Now, the air bar on paper tower would go down -
+                        # we got signal from sensor to let the air in
+                            self.activate_valves(signals)
+                            previousState = 1
+                        elif sensorState == 0 and previousState == 1:
+                        # Air bar on paper tower goes back up -
+                        # end of "air in" phase, turn off the valves
+                            self.deactivate_valves()
+                            previousState = 0
+                            # Signals sent to the caster - successful ending
+                            return True
+                    else:
+                    # Timeout with no signals - failed ending
+                        return False
+        # End of subroutine definitions
+        while not send_signals_to_caster(signals, machineTimeout):
+            # Keep trying to cast the combination, or do the emergency
+            # cleanup (stop the pump, turn off the valves) and exit
+            if not self.caster.machine_stopped():
+                # This happens when user chooses the "back to menu" option
+                self.caster.emergency_cleanup()
+                return False
+            # Else - the loop starts over and the program tries to cast
+            # the combination again.
+        else:
+            # Successful ending - the combination has been cast
+            return True
 
     def activate_valves(self, signals):
         """activate_valves(signals):
@@ -462,9 +488,9 @@ class Monotype(object):
         self.UI.display('Stopping the pump...')
         while not pumpOff:
         # Try stopping the pump until we succeed!
-        # Keep calling send_signals_to_caster until it returns True
+        # Keep calling process_signals until it returns True
         # (the machine receives and processes the pump stop signal)
-            pumpOff = self.send_signals_to_caster(['N', 'J', '0005'])
+            pumpOff = self.process_signals(['N', 'J', '0005'])
         else:
             self.UI.display('Pump stopped. All valves off...')
             self.deactivate_valves()
@@ -538,7 +564,7 @@ class MonotypeSimulation(object):
         self.UI.debugMode = True
         return self
 
-    def send_signals_to_caster(self, signals, machineTimeout=5):
+    def process_signals(self, signals, machineTimeout=5):
         """Simulates sending signals to the caster.
 
         Just wait for feedback from user, as we don't have a sensor.
@@ -721,7 +747,7 @@ class Casting(object):
             # -the character has been cast (s_s_t_c returns True),
             # -operator aborts casting (machine_stopped returns False).
             # Do emergency cleanup (ensure that the pump is off).
-                while not self.caster.send_signals_to_caster(signals):
+                while not self.caster.process_signals(signals):
                     if not self.caster.machine_stopped():
                         self.caster.emergency_cleanup()
                         # Check the aborted line so we can get back to it
@@ -815,7 +841,7 @@ class Casting(object):
         # Set machine_stopped timeout at 120s.
         for combination in combinations:
             self.UI.display(' '.join(combination))
-            self.caster.send_signals_to_caster(combination, 120)
+            self.caster.process_signals(combination, 120)
         self.UI.display('\nTesting finished!')
         self.UI.hold_on_exit()
         return True
@@ -922,13 +948,13 @@ class Casting(object):
             self.UI.display('Casting line %i of %i' % (currentLine + 1, lines))
             self.UI.display('0005 wedge at ' + pos0005)
         # Abort casting if something goes wrong:
-            if not self.caster.send_signals_to_caster(set0005):
+            if not self.caster.process_signals(set0005):
                 lineAborted = currentLine
                 break
             self.UI.display('0075 wedge at ' + pos0075)
             self.UI.display('Starting the pump...')
         # Abort casting if something goes wrong:
-            if not self.caster.send_signals_to_caster(set0075):
+            if not self.caster.process_signals(set0075):
                 lineAborted = currentLine
                 break
         # Start casting characters
@@ -940,8 +966,8 @@ class Casting(object):
                 self.UI.display(info)
                 parsing.strip_O_and_15(combination)
             # Break the "characters" loop if casting abnormally stopped
-            # (i.e. send_signals_to_caster returned False)
-                if not self.caster.send_signals_to_caster(combination):
+            # (i.e. process_signals returned False)
+                if not self.caster.process_signals(combination):
                     lineAborted = currentLine
                     break
         # Skip the rest of the "for" loop for the aborted job
@@ -949,10 +975,10 @@ class Casting(object):
                 break
         # If everything went normally, put the line out to the galley
             self.UI.display('Putting line to the galley...')
-            self.caster.send_signals_to_caster(galleyTrip)
+            self.caster.process_signals(galleyTrip)
         # After casting sorts we need to stop the pump
             self.UI.display('Stopping the pump...')
-            self.caster.send_signals_to_caster(set0005)
+            self.caster.process_signals(set0005)
         if lineAborted:
             self.UI.display('Casting aborted at line %i' % lineAborted)
             return False
