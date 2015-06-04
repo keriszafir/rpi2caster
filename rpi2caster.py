@@ -873,16 +873,16 @@ class Casting(object):
         intro = ('This will check if the valves, pin blocks and 0075, S, '
                  '0005 mechanisms are working. Press return to continue... ')
         self.UI.enter_data(intro)
-        combinations = [['0075'], ['S'], ['0005'], ['1'], ['2'], ['3'],
-                        ['4'], ['5'], ['6'], ['7'], ['8'], ['9'], ['10'],
-                        ['11'], ['12'], ['13'], ['14'], ['A'], ['B'],
-                        ['C'], ['D'], ['E'], ['F'], ['G'], ['H'], ['I'],
-                        ['J'], ['K'], ['L'], ['M'], ['N'], ['O15']]
+        combinations = (['0075', 'S', '0005']
+                        + [str(n) for n in range(1, 15)]
+                        + [s for s in 'ABCDEFGHIJKLMNO'])
         # Send all the combinations to the caster, one by one.
         # Set machine_stopped timeout at 120s.
-        for combination in combinations:
-            self.UI.display(' '.join(combination))
-            self.caster.process_signals(combination, 120)
+        for code in combinations:
+            self.UI.display(code)
+            code = parsing.signals_parser(code)
+            code = parsing.convert_O15(code)
+            self.caster.process_signals(code, 120)
         self.UI.display('\nTesting finished!')
         self.UI.hold_on_exit()
         return True
