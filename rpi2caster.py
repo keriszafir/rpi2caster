@@ -474,12 +474,13 @@ class Monotype(object):
             """
             def continue_casting():
             # Helper function - continue casting.
-                self.UI.debug_info('Continuing...')
                 return True
             def return_to_menu():
             # Make sure the pump is turned off!
+            # Raise an exception to be caught by higher-level functions
+            # from the Casting class
                 emergency_cleanup()
-                self.UI.debug_info('Back to menu...')
+                raise newexceptions.CastingAborted
                 return False
             def exit_program():
             # Also make sure the pump is turned off.
@@ -521,13 +522,9 @@ class Monotype(object):
                 return True
         # End of subroutine definitions
         while not send_signals_to_caster(signals, 30):
-            # Keep trying to cast the combination, or do the emergency
-            # cleanup (stop the pump, turn off the valves) and exit
-            if not continue_after_machine_stopped():
-                # This happens when user chooses the "back to menu" option
-                return False
-            # Else - the loop starts over and the program tries to cast
-            # the combination again.
+            # Keep trying to cast the combination, or end here
+            # (subroutine will throw an exception if operator exits)
+            continue_after_machine_stopped()
         else:
             # Successful ending - the combination has been cast
             return True
@@ -627,7 +624,10 @@ class MonotypeSimulation(object):
                 return True
             def return_to_menu():
             # Make sure the pump is turned off!
+            # Raise an exception to be caught by higher-level functions
+            # from the Casting class
                 emergency_cleanup()
+                raise newexceptions.CastingAborted
                 return False
             def exit_program():
             # Also make sure the pump is turned off.
@@ -669,13 +669,9 @@ class MonotypeSimulation(object):
                 return True
         # End of subroutine definitions
         while not send_signals_to_caster(signals, 30):
-            # Keep trying to cast the combination, or do the emergency
-            # cleanup (stop the pump, turn off the valves) and exit
-            if not continue_after_machine_stopped():
-                # Raise a custom exception
-                raise newexceptions.CastingAborted
-            # Else - the loop starts over and the program tries to cast
-            # the combination again.
+            # Keep trying to cast the combination, or end here
+            # (subroutine will throw an exception if operator exits)
+            continue_after_machine_stopped()
         else:
             # Successful ending - the combination has been cast
             return True
