@@ -339,6 +339,29 @@ class Monotype(object):
         # Let's give it 30 seconds timeout
         time_start = time.time()
         time_max = 30
+        # Subroutine definition
+        def continue_after_machine_not_rotating():
+            """continue_after_machine_not_rotating
+
+            Allows user to decide what to do if the machine is not rotating.
+            Continue, abort or exit program.
+            """
+            def continue_casting():
+            # Helper function - continue casting.
+                return True
+            def return_to_menu():
+                return False
+            def exit_program():
+                self.UI.exit_program()
+                return False
+            options = {'C' : continue_casting,
+                       'M' : return_to_menu,
+                       'E' : exit_program}
+            message = ('Machine not running - you need to start it first.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
+            choice = self.UI.simple_menu(message, options).upper()
+            return options[choice]()
+        # End of subroutine definition
         # Check for sensor signals, keep checking until max time is exceeded
         # or target number of cycles is reached
         with open(self.sensorGPIOValueFile, 'r') as gpiostate:
@@ -363,7 +386,7 @@ class Monotype(object):
                 if cycles > cycles_max:
                     self.UI.display('\nOkay, the machine is running...\n')
                     return True
-                elif self._machine_stopped():
+                elif continue_after_machine_not_rotating():
                 # Check again recursively:
                     return self.detect_rotation()
                 else:
@@ -442,17 +465,44 @@ class Monotype(object):
                     else:
                     # Timeout with no signals - failed ending
                         return False
+        def continue_after_machine_stopped():
+            """continue_after_machine_stopped:
+
+            This allows us to choose whether we want to continue,
+            return to menu or exit if the machine is stopped during casting.
+            """
+            def continue_casting():
+            # Helper function - continue casting.
+                self.UI.debug_info('Continuing...')
+                return True
+            def return_to_menu():
+            # Make sure the pump is turned off!
+                emergency_cleanup()
+                self.UI.debug_info('Back to menu...')
+                return False
+            def exit_program():
+            # Also make sure the pump is turned off.
+                emergency_cleanup()
+                self.UI.exit_program()
+                return False
+            options = {'C' : continue_casting,
+                       'M' : return_to_menu,
+                       'E' : exit_program}
+            message = ('Machine has stopped running! Check what happened.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
+            choice = self.UI.simple_menu(message, options).upper()
+            return options[choice]()
         def emergency_cleanup():
-            """emergency_cleanup():
-    
+            """emergency_cleanup:
+
             If the machine is stopped, we need to turn the pump off and then
             turn all the lines off. Otherwise, the machine will keep pumping
             while it shouldnot (e.g. after a splash).
-    
+
             The program will hold execution until the operator clears
             the situation, it needs turning the machine at least one
             full revolution.
-    
+
             The program MUST turn the pump off to move on.
             """
             pumpOff = False
@@ -472,9 +522,8 @@ class Monotype(object):
         while not send_signals_to_caster(signals, 30):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
-            if not self._machine_stopped():
+            if not continue_after_machine_stopped():
                 # This happens when user chooses the "back to menu" option
-                emergency_cleanup()
                 return False
             # Else - the loop starts over and the program tries to cast
             # the combination again.
@@ -506,28 +555,6 @@ class Monotype(object):
         """
         for pin in range(self.pinBase, self.pinBase + 32):
             wiringpi.digitalWrite(pin, 0)
-
-    def _machine_stopped(self):
-        """_machine_stopped():
-
-        This allows us to choose whether we want to continue, return to menu
-        or exit if the machine is stopped during casting.
-        """
-        def continue_casting():
-        # Helper function - continue casting.
-            return True
-        def return_to_menu():
-            return False
-        def exit_program():
-            self.UI.exit_program()
-        # Display a menu for the user to decide what to do
-        options = {'C' : continue_casting,
-                   'M' : return_to_menu,
-                   'E' : exit_program}
-        message = ("Machine not running! Check what's going on.\n"
-                   "[C]ontinue, return to [M]enu or [E]xit program? ")
-        choice = self.UI.simple_menu(message, options).upper()
-        return options[choice]()
 
     def cleanup(self):
         """cleanup():
@@ -588,6 +615,33 @@ class MonotypeSimulation(object):
             self.deactivate_valves()
             self.UI.display('Sequence cast successfully.')
             return True
+        def continue_after_machine_stopped():
+            """continue_after_machine_stopped:
+
+            This allows us to choose whether we want to continue,
+            return to menu or exit if the machine is stopped during casting.
+            """
+            def continue_casting():
+            # Helper function - continue casting.
+                self.UI.debug_info('Continuing...')
+                return True
+            def return_to_menu():
+            # Make sure the pump is turned off!
+                emergency_cleanup()
+                self.UI.debug_info('Back to menu...')
+                return False
+            def exit_program():
+            # Also make sure the pump is turned off.
+                emergency_cleanup()
+                self.UI.exit_program()
+                return False
+            options = {'C' : continue_casting,
+                       'M' : return_to_menu,
+                       'E' : exit_program}
+            message = ('Machine has stopped running! Check what happened.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
+            choice = self.UI.simple_menu(message, options).upper()
+            return options[choice]()
         def emergency_cleanup():
             """emergency_cleanup():
 
@@ -618,9 +672,8 @@ class MonotypeSimulation(object):
         while not send_signals_to_caster(signals, 30):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
-            if not self._machine_stopped():
+            if not continue_after_machine_stopped():
                 # This happens when user chooses the "back to menu" option
-                emergency_cleanup()
                 return False
             # Else - the loop starts over and the program tries to cast
             # the combination again.
@@ -631,13 +684,12 @@ class MonotypeSimulation(object):
     def activate_valves(self, signals):
         """If there are any signals, print them out"""
         if len(signals) != 0:
-            message = ('The valves: %s would be activated now.'
-                       % ' '.join(signals))
+            message = ('Activating valves: ' + ' '.join(signals))
             self.UI.display(message)
 
     def deactivate_valves(self):
         """No need to do anything"""
-        self.UI.display('Deactivating all valves...')
+        self.UI.display('Valves deactivated.')
 
     def detect_rotation(self):
         """Detect rotation:
@@ -645,37 +697,38 @@ class MonotypeSimulation(object):
         Ask if the machine is rotating or not (for testing
         the machine not running scenario).
         """
+        # Subroutine definition
+        def continue_after_machine_not_rotating():
+            """continue_after_machine_not_rotating
+
+            Allows user to decide what to do if the machine is not rotating.
+            Continue, abort or exit program.
+            """
+            def continue_casting():
+            # Helper function - continue casting.
+                return True
+            def return_to_menu():
+                return False
+            def exit_program():
+                self.UI.exit_program()
+                return False
+            options = {'C' : continue_casting,
+                       'M' : return_to_menu,
+                       'E' : exit_program}
+            message = ('Machine not running - you need to start it first.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
+            choice = self.UI.simple_menu(message, options).upper()
+            return options[choice]()
         prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
         if self.UI.enter_data(prompt) not in ['n', 'N']:
         # Machine is running
             return True
-        elif self._machine_stopped():
+        elif continue_after_machine_not_rotating():
         # Check again recursively:
             return self.detect_rotation()
         else:
         # This will lead to return to menu
             return False
-
-    def _machine_stopped(self):
-        """Machine stopped:
-
-        This allows us to choose whether we want to continue, return to menu
-        or exit if the machine is stopped during casting.
-        """
-        def continue_casting():
-        # Helper function - continue casting.
-            self.UI.debug_info('Continuing...')
-            return True
-        def return_to_menu():
-            self.UI.debug_info('Back to menu...')
-            return False
-        options = {'C' : continue_casting,
-                   'M' : return_to_menu,
-                   'E' : self.UI.exit_program}
-        message = ('Machine not running! Check what happened.\n'
-                   '[C]ontinue, return to [M]enu or [E]xit program? ')
-        choice = self.UI.simple_menu(message, options).upper()
-        return options[choice]()
 
     def __exit__(self, *args):
         self.deactivate_valves()
