@@ -13,6 +13,15 @@ a group of valves. On the "air bar up" signal, valves are turned off and
 the program reads another code sequence, just like the original paper
 tower.
 
+The application consists of several layers:
+layer 5 - user interface
+layer 4 - casting job layer which implements the logic (Casting class)
+layer 3 - signals processing for the caster, or mockup caster for testing
+layer 2 - lower-level hardware control routines
+          (activate_valves, deactivate_valves and send_signals_to_caster)
+layer 1 - dependencies: wiringPi library, sysfs GPIO interface
+layer 0 - hardware, kernel and /dev filesystem
+
 In "punching" mode, the program sends code sequences to the paper tower
 (controlled by valves as well) in arbitrary time intervals, and there is
 no machine feedback.
@@ -354,7 +363,7 @@ class Monotype(object):
                 if cycles > cycles_max:
                     self.UI.display('\nOkay, the machine is running...\n')
                     return True
-                elif self.machine_stopped():
+                elif self._machine_stopped():
                 # Check again recursively:
                     return self.detect_rotation()
                 else:
@@ -463,7 +472,7 @@ class Monotype(object):
         while not send_signals_to_caster(signals, 30):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
-            if not self.machine_stopped():
+            if not self._machine_stopped():
                 # This happens when user chooses the "back to menu" option
                 emergency_cleanup()
                 return False
@@ -498,8 +507,8 @@ class Monotype(object):
         for pin in range(self.pinBase, self.pinBase + 32):
             wiringpi.digitalWrite(pin, 0)
 
-    def machine_stopped(self):
-        """machine_stopped():
+    def _machine_stopped(self):
+        """_machine_stopped():
 
         This allows us to choose whether we want to continue, return to menu
         or exit if the machine is stopped during casting.
@@ -609,7 +618,7 @@ class MonotypeSimulation(object):
         while not send_signals_to_caster(signals, 30):
             # Keep trying to cast the combination, or do the emergency
             # cleanup (stop the pump, turn off the valves) and exit
-            if not self.machine_stopped():
+            if not self._machine_stopped():
                 # This happens when user chooses the "back to menu" option
                 emergency_cleanup()
                 return False
@@ -640,14 +649,14 @@ class MonotypeSimulation(object):
         if self.UI.enter_data(prompt) not in ['n', 'N']:
         # Machine is running
             return True
-        elif self.machine_stopped():
+        elif self._machine_stopped():
         # Check again recursively:
             return self.detect_rotation()
         else:
         # This will lead to return to menu
             return False
 
-    def machine_stopped(self):
+    def _machine_stopped(self):
         """Machine stopped:
 
         This allows us to choose whether we want to continue, return to menu
@@ -877,7 +886,7 @@ class Casting(object):
                         + [str(n) for n in range(1, 15)]
                         + [s for s in 'ABCDEFGHIJKLMNO'])
         # Send all the combinations to the caster, one by one.
-        # Set machine_stopped timeout at 120s.
+        # Set _machine_stopped timeout at 120s.
         for code in combinations:
             self.UI.display(code)
             code = parsing.signals_parser(code)
