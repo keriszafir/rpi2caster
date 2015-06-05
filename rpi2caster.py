@@ -88,6 +88,21 @@ class Monotype(object):
         """
         self.UI = UI
         self.name = name
+        self.isPerforator = None
+        self.interfaceID = None
+        self.unitAdding = None
+        self.diecaseSystem = None
+        self.emergencyGPIO = None
+        self.sensorGPIO = None
+        self.mcp0Address = None
+        self.mcp1Address = None
+        self.pinBase = None
+        self.signalsArrangement = None
+        self.lock = None
+        self.sensorGPIOEdgeFile = None
+        self.sensorGPIOValueFile = None
+        self.wiringPiPinNumber = None
+
         # Check if config file is readable first
         try:
             with open(configPath, 'r'):
@@ -95,7 +110,6 @@ class Monotype(object):
             self.cfg = ConfigParser.SafeConfigParser()
             self.cfg.read(self.configPath)
             self.caster_setup()
-            self.lock = False
         except IOError:
             self.UI.display('Cannot open config file:', configPath)
         # It's not configured yet - we'll do it when needed, and only once:
@@ -123,7 +137,7 @@ class Monotype(object):
         # Default caster parameters:
         self.isPerforator = False
         self.interfaceID = 0
-        self.unitAdding = 0
+        self.unitAdding = False
         self.diecaseSystem = 'norm17'
         # Default interface parameters:
         self.emergencyGPIO = 24
@@ -248,11 +262,11 @@ class Monotype(object):
         If the config file is correct, it returns a list:
         [emergencyGPIO, sensorGPIO, mcp0Address, mcp1Address, pinBase]
 
-        emergencyGPIO - BCM number for emergency stop button GPIO
-        sensorGPIO        - BCM number for sensor GPIO
+        emergencyGPIO   - BCM number for emergency stop button GPIO
+        sensorGPIO      - BCM number for sensor GPIO
         mcp0Address     - I2C address for 1st MCP23017
         mcp1Address     - I2C address for 2nd MCP23017
-        pinBase             - pin numbering base for GPIO outputs on MCP23017
+        pinBase         - pin numbering base for GPIO outputs on MCP23017
 
         Multiple interfaces attached to a single Raspberry Pi:
 
@@ -341,6 +355,7 @@ class Monotype(object):
         time_start = time.time()
         time_max = 30
         # Subroutine definition
+
         def continue_after_machine_not_rotating():
             """continue_after_machine_not_rotating
 
@@ -351,10 +366,9 @@ class Monotype(object):
             # Helper function - continue casting.
                 return True
             def return_to_menu():
-                return False
+                raise newexceptions.ReturnToMenu
             def exit_program():
-                self.UI.exit_program()
-                return False
+                raise newexceptions.ExitProgram
             options = {'C' : continue_casting,
                        'M' : return_to_menu,
                        'E' : exit_program}
@@ -362,6 +376,7 @@ class Monotype(object):
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = self.UI.simple_menu(message, options).upper()
             return options[choice]()
+
         # End of subroutine definition
         # Check for sensor signals, keep checking until max time is exceeded
         # or target number of cycles is reached
@@ -428,6 +443,7 @@ class Monotype(object):
         of duty cycle (bright/dark area ratio) and phase shift (disc's position
         relative to 0 degrees caster position).
         """
+        # Subroutine definitions
         def send_signals_to_caster(signals, timeout):
             """send_signals_to_caster:
 
@@ -466,6 +482,7 @@ class Monotype(object):
                     else:
                     # Timeout with no signals - failed ending
                         return False
+
         def continue_after_machine_stopped():
             """continue_after_machine_stopped:
 
@@ -481,12 +498,10 @@ class Monotype(object):
             # from the Casting class
                 emergency_cleanup()
                 raise newexceptions.CastingAborted
-                return False
             def exit_program():
             # Also make sure the pump is turned off.
                 emergency_cleanup()
-                self.UI.exit_program()
-                return False
+                raise newexceptions.ExitProgram
             options = {'C' : continue_casting,
                        'M' : return_to_menu,
                        'E' : exit_program}
@@ -494,6 +509,7 @@ class Monotype(object):
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = self.UI.simple_menu(message, options).upper()
             return options[choice]()
+
         def emergency_cleanup():
             """emergency_cleanup:
 
@@ -522,11 +538,11 @@ class Monotype(object):
                 return True
         # End of subroutine definitions
         while not send_signals_to_caster(signals, 30):
-            # Keep trying to cast the combination, or end here
-            # (subroutine will throw an exception if operator exits)
+        # Keep trying to cast the combination, or end here
+        # (subroutine will throw an exception if operator exits)
             continue_after_machine_stopped()
         else:
-            # Successful ending - the combination has been cast
+        # Successful ending - the combination has been cast
             return True
 
     def activate_valves(self, signals):
@@ -628,12 +644,10 @@ class MonotypeSimulation(object):
             # from the Casting class
                 emergency_cleanup()
                 raise newexceptions.CastingAborted
-                return False
             def exit_program():
             # Also make sure the pump is turned off.
                 emergency_cleanup()
-                self.UI.exit_program()
-                return False
+                raise newexceptions.ExitProgram
             options = {'C' : continue_casting,
                        'M' : return_to_menu,
                        'E' : exit_program}
@@ -703,10 +717,9 @@ class MonotypeSimulation(object):
             # Helper function - continue casting.
                 return True
             def return_to_menu():
-                return False
+                raise newexceptions.ReturnToMenu
             def exit_program():
-                self.UI.exit_program()
-                return False
+                raise newexceptions.ExitProgram
             options = {'C' : continue_casting,
                        'M' : return_to_menu,
                        'E' : exit_program}
@@ -762,6 +775,7 @@ class Casting(object):
         self.ribbon = []
         self.lineAborted = None
         self.metadata = {}
+        self.diecase = None
 
     def __enter__(self):
         self.UI.debug_info('Entering casting job context...')
@@ -797,10 +811,8 @@ class Casting(object):
                  'on screen while the machine casts the type.\n'
                  'Turn on the machine and the program will start.\n')
         self.UI.display(intro)
-        # Start only after the machine is running,
-        # go back to menu if aborted
-        if not self.caster.detect_rotation():
-            return False
+        # Start only after the machine is running
+        self.caster.detect_rotation()
         # Read the reversed file contents, line by line, then parse
         # the lines, display comments & code combinations, and feed the
         # combinations to the caster
@@ -1042,8 +1054,8 @@ class Casting(object):
         combination = parsing.strip_O_and_15(combination)
         # Check if the machine is running first, end here if not
         self.UI.display('Start the machine...')
-        if not self.caster.detect_rotation():
-            return False
+        self.caster.detect_rotation()
+        # We're here because the machine is rotating. Start casting the job...
         for currentLine in range(1, lines + 1):
         # Cast each line and if the CastingAborted exception is caught,
         # remember the last line and stop casting.
@@ -1171,6 +1183,10 @@ class Casting(object):
                 return False
             # Read the metadata at the beginning of the ribbon file
             self.metadata = parsing.get_metadata(self.ribbon)
+            try:
+                self.diecase = self.metadata['diecase']
+            except KeyError:
+                pass
             # Reset the "line aborted" on a new casting job
             self.lineAborted = None
             return True
@@ -1245,7 +1261,7 @@ class Casting(object):
             else:
                 self.UI.display('No ribbon to preview!')
             self.UI.enter_data('[Enter] to return to menu...')
-        
+
         def exit_program():
             raise newexceptions.ExitProgram
 
