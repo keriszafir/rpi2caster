@@ -1245,6 +1245,9 @@ class Casting(object):
             else:
                 self.UI.display('No ribbon to preview!')
             self.UI.enter_data('[Enter] to return to menu...')
+        
+        def exit_program():
+            raise newexceptions.ExitProgram
 
         # End of menu subroutines
         # Now construct the menu, starting with available options
@@ -1266,7 +1269,7 @@ class Casting(object):
                     6 : self.send_combination,
                     7 : self.align_wedges,
                     8 : heatup,
-                    0 : self.UI.exit_program}
+                    0 : exit_program}
         h = ('rpi2caster - CAT (Computer-Aided Typecasting) '
              'for Monotype Composition or Type and Rule casters.'
              '\n\n'
@@ -1283,11 +1286,14 @@ class Casting(object):
                     commands[choice]()
                 else:
                 # Use the caster context for everything that needs it.
+                # (casting, punching, testing routines)
                     with self.caster:
                         commands[choice]()
             except newexceptions.ReturnToMenu:
+            # Will skip to the end of the loop, and start all over
                 pass
             except newexceptions.ExitProgram:
+            # Will exit program
                 self.UI.exit_program()
 
     def __exit__(self, *args):
