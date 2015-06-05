@@ -741,7 +741,6 @@ class MonotypeSimulation(object):
     def __exit__(self, *args):
         self.deactivate_valves()
         self.UI.debug_info('Exiting caster/keyboard simulation context.')
-        pass
 
 
 class Casting(object):
@@ -967,60 +966,69 @@ class Casting(object):
         Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
         """
-        self.UI.clear()
-        self.UI.display('Calibration and Sort Casting:\n\n')
-        prompt = 'Enter column and row symbols (default: G 5): '
-        signals = self.UI.enter_data(prompt)
-        if not signals:
-            signals = 'G 5'
-        # Ask for number of sorts and lines
-        prompt = '\nHow many sorts? (default: 10): '
-        n = self.UI.enter_data(prompt)
-        # Default to 10 if user enters non-positive number or letters
-        if not n.isdigit() or int(n) < 0:
-            n = 10
-        else:
-            n = int(n)
-        prompt = '\nHow many lines? (default: 1): '
-        lines = self.UI.enter_data(prompt)
-        # Default to 10 if user enters non-positive number or letters
-        if not lines.isdigit() or int(lines) < 0:
-            lines = 1
-        else:
-            lines = int(lines)
-        # Warn if we want to cast too many sorts from a single matrix
-        warning = ('Warning: you want to cast a single character more than '
-                   '10 times. This may lead to matrix overheating!\n')
-        if n > 10:
-            self.UI.display(warning)
-        # Use a simple menu to ask if the entered parameters are correct
-        def cast_it():
-        # TODO: get rid of the ugly recursive calling!
-        # Subroutine to cast chosen signals and/or repeat.
-            if not self.cast_from_matrix(signals, n, lines):
-            # If casting failed, exit to menu
-                return False
-            options = {'R' : cast_it,
-                       'C' : self.cast_sorts,
-                       'M' : self.main_menu,
-                       'E' : self.UI.exit_program}
-            message = ('\nCasting finished!\n '
-                       '[R]epeat sequence, [C]hange code, [M]enu or [E]xit? ')
-            choice = self.UI.simple_menu(message, options).upper()
-            # Execute choice
-            options[choice]()
-            # End of casting subroutine.
-        # After entering parameters, ask the operator if they're OK
-        options = {'O' : cast_it,
-                   'C' : self.cast_sorts,
-                   'M' : self.main_menu,
-                   'E' : self.UI.exit_program}
-        message = ('Casting %s, %i lines of %i sorts.\n'
-                   '[O]K, [C]hange code/quantity, [M]enu or [E]xit? '
-                   % (signals, lines, n))
-        choice = self.UI.simple_menu(message, options).upper()
-        # Execute choice
-        options[choice]()
+        while True:
+        # Outer loop
+            self.UI.clear()
+            self.UI.display('Calibration and Sort Casting:\n\n')
+            prompt = 'Enter column and row symbols (default: G 5): '
+            signals = self.UI.enter_data(prompt)
+            if not signals:
+                signals = 'G 5'
+            # Ask for number of sorts and lines
+            prompt = '\nHow many sorts? (default: 10): '
+            n = self.UI.enter_data(prompt)
+            # Default to 10 if user enters non-positive number or letters
+            if not n.isdigit() or int(n) < 0:
+                n = 10
+            else:
+                n = int(n)
+            prompt = '\nHow many lines? (default: 1): '
+            lines = self.UI.enter_data(prompt)
+            # Default to 10 if user enters non-positive number or letters
+            if not lines.isdigit() or int(lines) < 0:
+                lines = 1
+            else:
+                lines = int(lines)
+            # Warn if we want to cast too many sorts from a single matrix
+            warning = ('Warning: you want to cast a single character more than '
+                       '10 times. This may lead to matrix overheating!\n')
+            if n > 10:
+                self.UI.display(warning)
+            # After entering parameters, ask the operator if they're OK
+            try:
+                while True:
+                # Inner loop
+                # Menu subroutines
+                    def cast_it():
+                        """Cast the combination or go back to menu"""
+                        if self.cast_from_matrix(signals, n, lines):
+                            self.UI.display('Casting finished successfully.')
+                        else:
+                            raise newexceptions.ReturnToMenu
+                    def different():
+                        """Start the outer loop again - with new parameters"""
+                        raise newexceptions.ChangeParameters
+                    def return_to_menu():
+                        """Throw an exception caught by the menu function"""
+                        raise newexceptions.ReturnToMenu
+                    def exit_program():
+                        """Throw an exception caught by the menu function"""
+                        raise newexceptions.ExitProgram
+                    # End of menu subroutines.
+                    options = {'C' : cast_it,
+                               'D' : different,
+                               'M' : return_to_menu,
+                               'E' : exit_program}
+                    message = ('Casting %s, %i lines of %i sorts.\n'
+                               '[C]ast it, [D]ifferent code/quantity, '
+                               '[M]enu or [E]xit? '
+                               % (signals, lines, n))
+                    choice = self.UI.simple_menu(message, options).upper()
+                    # Execute choice
+                    options[choice]()
+            except newexceptions.ChangeParameters:
+            # Skip the menu and casting altogether, repeat the outer loop
+                pass
 
     def cast_from_matrix(self, signals, n=5, lines=1, pos0075=3, pos0005=8):
         """cast_from_matrix(combination, n, pos0075, pos0005):
@@ -1136,28 +1144,38 @@ class Casting(object):
                  'wedges to 0075:3 and 0005:8, \nand cast 10 spaces with the '
                  'S-needle. You then have to compare the length of these two '
                  'sets. \nIf they are identical, all is OK. '
-                 'If not, you have to adjust the 52D space transfer wedge.\n\n'
-                 'Turn on the machine...')
+                 'If not, you have to adjust the 52D space transfer wedge.')
         self.UI.display(intro)
-        # Cast 10 spaces without correction.
-        # End here if casting unsuccessful.
-        self.UI.display('Now casting with a normal wedge only.')
-        if not self.cast_from_matrix(spaceAt, 10):
-            return False
-        # Cast 10 spaces with the S-needle.
-        # End here if casting unsuccessful.
-        self.UI.display('Now casting with justification wedges...')
-        if not self.cast_from_matrix(spaceAt + 'S', 10):
-            return False
-        # Finished. Return to menu.
-        options = {'R' : self.align_wedges,
-                   'M' : self.main_menu,
-                   'E' : self.UI.exit_program}
-        message = ('Done. Compare the lengths and adjust if needed.'
-                   '\n[R]epeat, [M]enu or [E]xit? ')
-        choice = self.UI.simple_menu(message, options).upper()
-        # Execute choice
-        options[choice]()
+        while True:
+            # Subroutines for menu options
+            def continue_aligning():
+                pass
+            def back_to_menu():
+                raise newexceptions.ReturnToMenu
+            def exit_program():
+                raise newexceptions.ExitProgram
+            # Finished. Return to menu.
+            options = {'C' : continue_aligning,
+                       'M' : back_to_menu,
+                       'E' : exit_program}
+            message = '\n[C]ontinue, [M]enu or [E]xit? '
+            choice = self.UI.simple_menu(message, options).upper()
+            # Execute choice
+            options[choice]()
+            #
+            # Cast 10 spaces without correction.
+            # End here if casting unsuccessful.
+            self.UI.display('Now casting with a normal wedge only.')
+            if not self.cast_from_matrix(spaceAt, 10):
+                continue
+            # Cast 10 spaces with the S-needle.
+            # End here if casting unsuccessful.
+            self.UI.display('Now casting with justification wedges...')
+            if not self.cast_from_matrix(spaceAt + 'S', 10):
+                continue
+            # At the end of successful sequence, some info for the user:
+            self.UI.display('Done. Compare the lengths and adjust if needed.')
+
 
     def main_menu(self):
         """main_menu:
@@ -1254,15 +1272,15 @@ class Casting(object):
             and displays its contents line by line, or displays
             an error message.
             """
-            if self.ribbon:
-                self.UI.clear()
-                self.UI.display('Ribbon preview:\n')
-                self.UI.display('\n'.join([line for line in self.ribbon]))
-            else:
-                self.UI.display('No ribbon to preview!')
+            self.UI.clear()
+            self.UI.display('Ribbon preview:\n')
+            self.UI.display('\n'.join([line for line in self.ribbon]))
             self.UI.enter_data('[Enter] to return to menu...')
 
         def exit_program():
+            """exit_program:
+
+            Throws an exception caught after the option is chosen."""
             raise newexceptions.ExitProgram
 
         # End of menu subroutines
@@ -1273,7 +1291,7 @@ class Casting(object):
                    4 : 'Cast sorts',
                    5 : 'Test the valves and pinblocks',
                    6 : 'Lock the caster on a specified diecase position',
-                   7 : 'Calibrate the 0005 and 0075 wedges',
+                   7 : 'Calibrate the 52D space transfer wedge',
                    8 : 'Cast two lines of 20 quads to heat up the mould',
                    0 : 'Exit program'}
         # Commands: {option_name : function}
@@ -1314,7 +1332,6 @@ class Casting(object):
 
     def __exit__(self, *args):
         self.UI.debug_info('Exiting casting job context.')
-        pass
 
 
 class Session(object):

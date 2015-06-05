@@ -17,9 +17,19 @@ class ReturnToMenu(Exception):
 
     Exception raised when a method wants to exit to menu.
     """
+    pass
 
 class ExitProgram(Exception):
     """ExitProgram
 
     Exception raised when user decides to exit program.
     """
+    pass
+
+class ChangeParameters(Exception):
+    """ChangeParameters
+
+    Exception raised when user decides to change parameters
+    in a current routine.
+    """
+    pass
