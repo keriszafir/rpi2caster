@@ -944,9 +944,10 @@ class Casting(object):
                 self.caster.process_signals(code, 120)
         except newexceptions.CastingAborted:
             return False
-        self.UI.display('\nTesting finished!')
-        self.UI.hold_on_exit()
-        return True
+        else:
+            self.UI.display('\nTesting finished!')
+            self.UI.hold_on_exit()
+            return True
 
     def cast_sorts(self):
         """cast_sorts():
@@ -1074,7 +1075,7 @@ class Casting(object):
                 self.caster.process_signals(set0005)
             except newexceptions.CastingAborted:
                 self.lineAborted = currentLine
-                self.UI.display('Casting aborted on line %i' 
+                self.UI.display('Casting aborted on line %i'
                                 % self.lineAborted)
                 return False
         # We'll be here if casting ends successfully
@@ -1173,6 +1174,7 @@ class Casting(object):
             # Reset the "line aborted" on a new casting job
             self.lineAborted = None
             return True
+
         def debug_notice():
             """debug_notice
 
@@ -1182,6 +1184,7 @@ class Casting(object):
                 return '\n\nThe program is now in debugging mode!'
             else:
                 return ''
+
         def additional_info():
             """additional_info:
 
@@ -1205,6 +1208,7 @@ class Casting(object):
                             + str(self.lineAborted))
             # Convert it all to a multiline string
             return '\n'.join(info)
+
         def heatup():
             """heatup
 
@@ -1214,6 +1218,7 @@ class Casting(object):
             """
             self.UI.clear()
             self.cast_from_matrix('O15', n=20, lines=2)
+
         def cast_or_punch():
             """cast_or_punch:
 
@@ -1225,6 +1230,7 @@ class Casting(object):
                 return ('Punch composition', self.punch_composition)
             else:
                 return ('Cast composition', self.cast_composition)
+
         def preview_ribbon():
             """preview_ribbon:
 
@@ -1239,6 +1245,7 @@ class Casting(object):
             else:
                 self.UI.display('No ribbon to preview!')
             self.UI.enter_data('[Enter] to return to menu...')
+
         # End of menu subroutines
         # Now construct the menu, starting with available options
         options = {1 : 'Load a ribbon file',
@@ -1266,15 +1273,22 @@ class Casting(object):
              'This program reads a ribbon (input file) '
              'and casts the type on a composition caster.'
              + debug_notice() + '\n\nMain Menu:')
-        choice = self.UI.menu(options, header=h, footer=additional_info())
-        # Call the function and return to menu.
-        # Use the caster context for everything that needs it.
-        if choice in [0, 1, 2]:
-            commands[choice]()
-        else:
-            with self.caster:
-                commands[choice]()
-        self.main_menu()
+        # Keep displaying the menu and go back here after any method ends
+        while True:
+            choice = self.UI.menu(options, header=h, footer=additional_info())
+            # Call the function and return to menu.
+            try:
+            # Catch "return to menu" and "exit program" exceptions here
+                if choice in [0, 1, 2]:
+                    commands[choice]()
+                else:
+                # Use the caster context for everything that needs it.
+                    with self.caster:
+                        commands[choice]()
+            except newexceptions.ReturnToMenu:
+                pass
+            except newexceptions.ExitProgram:
+                self.UI.exit_program()
 
     def __exit__(self, *args):
         self.UI.debug_info('Exiting casting job context.')

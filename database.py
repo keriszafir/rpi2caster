@@ -123,13 +123,13 @@ class Database(object):
             # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS wedges ('
                                'id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
-                               'wedge_id TEXT NOT NULL, '
+                               'wedge_number TEXT NOT NULL, '
                                'set_width REAL NOT NULL, '
                                'brit_pica TEXT NOT NULL, '
                                'steps TEXT NOT NULL)')
             # Then add an entry:
                 cursor.execute('INSERT INTO wedges ( '
-                               'wedge_id,set_width,old_pica,steps'
+                               'wedge_number,set_width,old_pica,steps'
                                ') VALUES (?, ?, ?, ?)''', data)
                 self.db.commit()
                 return True
@@ -158,7 +158,7 @@ class Database(object):
             try:
                 cursor = self.db.cursor()
                 cursor.execute('SELECT * FROM wedges '
-                               'WHERE wedge_id = ? AND set_width = ?',
+                               'WHERE wedge_number = ? AND set_width = ?',
                                [wedgeName, setWidth])
                 wedge = cursor.fetchone()
                 if wedge is None:
