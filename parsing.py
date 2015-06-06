@@ -4,6 +4,7 @@
 This module contains file- and line-parsing methods."""
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 
+
 def read_file(filename):
     """Tries to read a file.
 
@@ -20,6 +21,7 @@ def read_file(filename):
             return content
     except IOError:
         return False
+
 
 def get_metadata(content):
     """get_metadata:
@@ -96,6 +98,7 @@ def comments_parser(input_data):
     # Return a list with unprocessed signals and comment
     return [raw_signals.strip(), comment.strip()]
 
+
 def count_lines_and_characters(contents):
     """Count newlines and characters+spaces in ribbon file.
 
@@ -114,6 +117,7 @@ def count_lines_and_characters(contents):
             all_lines += 1
     return [all_lines, all_chars]
 
+
 def count_combinations(contents):
     """Count all combinations in ribbon file.
 
@@ -127,6 +131,7 @@ def count_combinations(contents):
             all_combinations += 1
     # Return the number
     return all_combinations
+
 
 def signals_parser(raw_signals):
     """signals_parser(raw_signals):
@@ -162,9 +167,11 @@ def signals_parser(raw_signals):
     # Return a list containing all signals
     return columns + rows + justification
 
+
 def strip_o_and_15(signals):
     """Strip O and 15 signals from input sequence, we don't cast them"""
     return [s for s in signals if s not in ['O', '15']]
+
 
 def convert_o15(input_signals):
     """Convert O or 15 to O15.
@@ -180,6 +187,7 @@ def convert_o15(input_signals):
     # Now remove the individual O and 15 signals and return the result
     return strip_o_and_15(signals)
 
+
 def check_newline(signals):
     """check_newline(signals):
 
@@ -189,6 +197,7 @@ def check_newline(signals):
     """
     return (set(['0005', '0075']).issubset(signals)
             or set(['N', 'K', 'J']).issubset(signals))
+
 
 def check_character(signals):
     """Check if the combination is a character.

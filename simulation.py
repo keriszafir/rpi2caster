@@ -31,7 +31,7 @@ class Monotype(object):
         self.UI.display('This is not an actual caster or interface. ')
         self.UI.enter_data('Press [ENTER] to continue...')
         # Debugging is ON by default
-        self.UI.debugMode = True
+        self.UI.debug_mode = True
         return self
 
     def process_signals(self, signals, machine_timeout=5):

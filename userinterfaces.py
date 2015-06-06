@@ -21,9 +21,9 @@ class TextUI(object):
     supports UTF-8 too.
     """
 
-    def __init__(self, debugMode=False):
+    def __init__(self, debug_mode=False):
     # Get the debug-mode from input parameters
-        self.debugMode = debugMode
+        self.debug_mode = debug_mode
 
     def __enter__(self):
         """Try to call main menu for a job.
@@ -38,18 +38,6 @@ class TextUI(object):
             print '\nUser pressed ctrl-C. Exiting.'
         finally:
             print '\nGoodbye!\n'
-
-    def tab_complete(text, state):
-        """tab_complete(text, state):
-
-        This function enables tab key auto-completion when you
-        enter the filename.
-        """
-        return (glob.glob(text+'*')+[None])[state]
-    # Set readline parameters
-    readline.set_completer_delims(' \t\n;')
-    readline.parse_and_bind('tab: complete')
-    readline.set_completer(tab_complete)
 
     def menu(self, options, header='', footer=''):
         """menu(options={'foo':'bar','baz':'qux'}
@@ -67,7 +55,7 @@ class TextUI(object):
 
         choices - options to be entered by user
         """
-        yourChoice = ''
+        your_choice = ''
         choices = []
         # Clear the screen, display header and add two empty lines
         self.clear()
@@ -84,8 +72,8 @@ class TextUI(object):
                 choices.append(str(choice))
         try:
         # If an option "0." is available, print it at the end
-            optionNumberZero = options[0]
-            print '\n\t', 0, ' : ', optionNumberZero
+            option_zero = options[0]
+            print '\n\t', 0, ' : ', option_zero
             choices.append('0')
         except KeyError:
             pass
@@ -95,15 +83,15 @@ class TextUI(object):
         # Add an empty line to separate prompt
         print '\n'
         # Ask for user input
-        while yourChoice not in choices:
-            yourChoice = raw_input('Your choice: ')
+        while your_choice not in choices:
+            your_choice = raw_input('Your choice: ')
         else:
         # Valid option is chosen, return integer if options were numbers,
         # else return string
             try:
-                return int(yourChoice)
+                return int(your_choice)
             except ValueError:
-                return yourChoice
+                return your_choice
 
     def clear(self):
         # Clear screen
@@ -117,20 +105,20 @@ class TextUI(object):
 
     def debug_info(self, *args):
         # Print debug message to screen if in debug mode
-        if self.debugMode:
+        if self.debug_mode:
             for arg in args:
                 print arg,
             print '\n'
 
     def debug_enter_data(self, message):
         # For debug-specific data or confirmations
-        if self.debugMode:
+        if self.debug_mode:
             return raw_input(message)
 
 
     def exception_handler(self):
         # Raise caught exceptions in debug mode
-        if self.debugMode:
+        if self.debug_mode:
             print sys.exc_info()
 
     def enter_data(self, message):
@@ -138,21 +126,43 @@ class TextUI(object):
         return raw_input(message)
 
     def enter_input_filename(self):
+        def tab_complete(text, state):
+            """tab_complete(text, state):
+    
+            This function enables tab key auto-completion when you
+            enter the filename.
+            """
+            return (glob.glob(text+'*')+[None])[state]
+        # Set readline parameters
+        readline.set_completer_delims(' \t\n;')
+        readline.parse_and_bind('tab: complete')
+        readline.set_completer(tab_complete)
         # Enter the input filename; check if the file is readable
-        fn = raw_input('\n Enter the input file name: ')
-        fn = os.path.realpath(fn)
+        filename = raw_input('\n Enter the input file name: ')
+        filename = os.path.realpath(filename)
         try:
-            with open(fn, 'r'):
-                return fn
+            with open(filename, 'r'):
+                return filename
         except IOError:
             raw_input('Wrong filename or file not readable!')
             return ''
 
     def enter_output_filename(self):
+        def tab_complete(text, state):
+            """tab_complete(text, state):
+    
+            This function enables tab key auto-completion when you
+            enter the filename.
+            """
+            return (glob.glob(text+'*')+[None])[state]
+        # Set readline parameters
+        readline.set_completer_delims(' \t\n;')
+        readline.parse_and_bind('tab: complete')
+        readline.set_completer(tab_complete)
         # Enter the output filename; no check here
-        fn = raw_input('\n Enter the output file name: ')
-        fn = os.path.realpath(fn)
-        return fn
+        filename = raw_input('\n Enter the output file name: ')
+        filename = os.path.realpath(filename)
+        return filename
 
     def hold_on_exit(self):
         raw_input('Press [Enter] to return to main menu...')
@@ -197,7 +207,7 @@ class WebInterface(object):
     def __enter__(self):
         return self
 
-    def webUI(self):
+    def web_UI(self):
         """This is a placeholder for web interface method. Nothing yet..."""
         pass
 

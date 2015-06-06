@@ -100,7 +100,7 @@ class Typesetter(object):
             self.main_menu()
         def debug_notice():
         # Prints a notice if the program is in debug mode:
-            if self.UI.debugMode:
+            if self.UI.debug_mode:
                 return '\n\nThe program is now in debugging mode!'
             else:
                 return ''

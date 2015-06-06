@@ -64,9 +64,6 @@ import simulation
 import userinterfaces
 # Custom exceptions
 import newexceptions
-# MCP23017 driver & hardware abstraction layer library:
-UI = userinterfaces.TextUI()
-
 
 class Casting(object):
     """Casting:
@@ -92,12 +89,12 @@ class Casting(object):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
 
-    def __init__(self, ribbonFile=''):
+    def __init__(self, ribbon_file=''):
         self.UI = None
         self.caster = None
-        self.ribbonFile = ribbonFile
+        self.ribbon_file = ribbon_file
         self.ribbon = []
-        self.lineAborted = None
+        self.line_aborted = None
         self.metadata = {}
         self.diecase = None
 
@@ -113,21 +110,21 @@ class Casting(object):
         last characters are cast first, after setting the justification.
         """
         # Count all characters and lines in the ribbon
-        [linesAll, charsAll] = parsing.count_lines_and_characters(self.ribbon)
+        [all_lines, all_chars] = parsing.count_lines_and_characters(self.ribbon)
         # Characters already cast - start with zero
-        currentChar = 0
-        charsLeft = charsAll
+        current_char = 0
+        chars_left = all_chars
         # Line currently cast: since the caster casts backwards
         # (from the last to the first line), this will decrease.
-        currentLine = linesAll
+        current_line = all_lines
         # The program counts galley trip sequences and determines line count.
         # The first code to send to machine is galley trip (which also sets the
         # justification wedges and turns the pump on). So, subtract this one
         # to have the correct number of lines.
-        linesAll -= 1
+        all_lines -= 1
         # Show the numbers to the operator
-        self.UI.display('Lines found in ribbon: %i' % linesAll)
-        self.UI.display('Characters: %i' % charsAll)
+        self.UI.display('Lines found in ribbon: %i' % all_lines)
+        self.UI.display('Characters: %i' % all_chars)
         # For casting, we need to read the contents in reversed order
         content = reversed(self.ribbon)
         # Display a little explanation
@@ -143,39 +140,39 @@ class Casting(object):
         for line in content:
         # Parse the row, return a list of signals and a comment.
         # Both can have zero or positive length.
-            [rawSignals, comment] = parsing.comments_parser(line)
+            [raw_signals, comment] = parsing.comments_parser(line)
         # Parse the signals
-            signals = parsing.signals_parser(rawSignals)
+            signals = parsing.signals_parser(raw_signals)
             # A string with information for user: signals, comments, etc.
-            userInfo = ''
+            info_for_user = ''
             if parsing.check_newline(signals):
             # Decrease the counter for each started new line
-                currentLine -= 1
+                current_line -= 1
             # Percent of all lines done:
-                linePercentDone = 100 * (linesAll - currentLine) / linesAll
+                line_percent_done = 100 * (all_lines - current_line) / all_lines
             # Display number of the working line,
             # number of all remaining lines, percent done
-                userInfo += ('Starting line: %i of %i, %i%% done...\n'
-                             % (currentLine, linesAll, linePercentDone))
+                info_for_user += ('Starting line: %i of %i, %i%% done...\n'
+                             % (current_line, all_lines, line_percent_done))
             elif parsing.check_character(signals):
             # Increase the current character and decrease characters left,
             # then do some calculations
-                currentChar += 1
-                charsLeft -= 1
+                current_char += 1
+                chars_left -= 1
             # % of chars to cast in the line
-                charPercentDone = 100 * currentChar / charsAll
+                char_percent_done = 100 * current_char / all_chars
             # Display number of chars done,
             # number of all and remaining chars, % done
-                userInfo += ('Casting character: %i / %i, '
+                info_for_user += ('Casting character: %i / %i, '
                              '%i remaining, %i%% done...\n'
-                             % (currentChar, charsAll,
-                                charsLeft, charPercentDone))
+                             % (current_char, all_chars,
+                                chars_left, char_percent_done))
         # Append signals to be cast
-            userInfo += ' '.join(signals).ljust(15)
+            info_for_user += ' '.join(signals).ljust(15)
         # Add comment
-            userInfo += comment
+            info_for_user += comment
             # Display the info
-            self.UI.display(userInfo)
+            self.UI.display(info_for_user)
         # Proceed with casting only if code is explicitly stated
         # (i.e. O15 = cast, empty list = don't cast)
             if signals:
@@ -186,9 +183,9 @@ class Casting(object):
                 except newexceptions.CastingAborted:
                 # On failure - abort the whole job.
                 # Check the aborted line so we can get back to it.
-                    self.lineAborted = currentLine
+                    self.line_aborted = current_line
                     self.UI.display('\nCasting aborted on line %i.'
-                                    % self.lineAborted)
+                                    % self.line_aborted)
                     self.UI.hold_on_exit()
                     return False
         # After casting is finished, notify the user
@@ -215,8 +212,8 @@ class Casting(object):
         Basically: less than two signals - no ribbon advance...
         """
         # Count a number of combinations punched in ribbon
-        combinationsAll = parsing.count_combinations(self.ribbon)
-        self.UI.display('Combinations in ribbon: %i', combinationsAll)
+        all_combinations = parsing.count_combinations(self.ribbon)
+        self.UI.display('Combinations in ribbon: %i', all_combinations)
         # Wait until the operator confirms.
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the paper tower punches the ribbon.\n')
@@ -227,19 +224,19 @@ class Casting(object):
         for line in self.ribbon:
         # Parse the row, return a list of signals and a comment.
         # Both can have zero or positive length.
-            [rawSignals, comment] = parsing.comments_parser(line)
+            [raw_signals, comment] = parsing.comments_parser(line)
         # Parse the signals
-            signals = parsing.signals_parser(rawSignals)
+            signals = parsing.signals_parser(raw_signals)
         # A string with information for user: signals, comments, etc.
-            userInfo = ''
+            info_for_user = ''
         # Add signals to be cast
             if signals:
-                userInfo += ' '.join(signals).ljust(20)
+                info_for_user += ' '.join(signals).ljust(20)
         # Add comment
             if comment:
-                userInfo += comment
+                info_for_user += comment
         # Display the info
-            self.UI.display(userInfo)
+            self.UI.display(info_for_user)
         # Send the signals, adding O+15 whenever needed
             if signals:
             # Convert O or 15 to a combined O+15 signal:"""
@@ -301,12 +298,12 @@ class Casting(object):
                 signals = 'G 5'
             # Ask for number of sorts and lines
             prompt = '\nHow many sorts? (default: 10): '
-            n = self.UI.enter_data(prompt)
+            number = self.UI.enter_data(prompt)
             # Default to 10 if user enters non-positive number or letters
-            if not n.isdigit() or int(n) < 0:
-                n = 10
+            if not number.isdigit() or int(number) < 0:
+                number = 10
             else:
-                n = int(n)
+                number = int(number)
             prompt = '\nHow many lines? (default: 1): '
             lines = self.UI.enter_data(prompt)
             # Default to 10 if user enters non-positive number or letters
@@ -317,7 +314,7 @@ class Casting(object):
             # Warn if we want to cast too many sorts from a single matrix
             warning = ('Warning: you want to cast a single character more than '
                        '10 times. This may lead to matrix overheating!\n')
-            if n > 10:
+            if number > 10:
                 self.UI.display(warning)
             # After entering parameters, ask the operator if they're OK
             try:
@@ -326,7 +323,7 @@ class Casting(object):
                 # Menu subroutines
                     def cast_it():
                         """Cast the combination or go back to menu"""
-                        if self.cast_from_matrix(signals, n, lines):
+                        if self.cast_from_matrix(signals, number, lines):
                             self.UI.display('Casting finished successfully.')
                         else:
                             raise newexceptions.ReturnToMenu
@@ -347,7 +344,7 @@ class Casting(object):
                     message = ('Casting %s, %i lines of %i sorts.\n'
                                '[C]ast it, [D]ifferent code/quantity, '
                                '[M]enu or [E]xit? '
-                               % (signals, lines, n))
+                               % (signals, lines, number))
                     choice = self.UI.simple_menu(message, options).upper()
                     # Execute choice
                     options[choice]()
@@ -355,7 +352,7 @@ class Casting(object):
             # Skip the menu and casting altogether, repeat the outer loop
                 pass
 
-    def cast_from_matrix(self, signals, n=5, lines=1, pos0075=3, pos0005=8):
+    def cast_from_matrix(self, signals, num=5, lines=1, pos0075=3, pos0005=8):
         """cast_from_matrix(combination, n, pos0075, pos0005):
 
         Casts n sorts from combination of signals (list),
@@ -373,7 +370,7 @@ class Casting(object):
         NKJ = 0005 + 0075
         """
         # Reset the aborted line counter
-        self.lineAborted = None
+        self.line_aborted = None
         # Convert the positions to strings
         pos0005 = str(pos0005)
         pos0075 = str(pos0075)
@@ -381,7 +378,7 @@ class Casting(object):
         set0005 = ['N', 'J', '0005', pos0005]
         set0075 = ['N', 'K', '0075', pos0075]
         # Galley trip signal
-        galleyTrip = ['N', 'K', 'J', '0005', '0075']
+        galley_trip = ['N', 'K', 'J', '0005', '0075']
         # Parse the combination
         combination = parsing.signals_parser(signals)
         combination = parsing.strip_o_and_15(combination)
@@ -389,13 +386,13 @@ class Casting(object):
         self.UI.display('Start the machine...')
         self.caster.detect_rotation()
         # We're here because the machine is rotating. Start casting the job...
-        for currentLine in range(1, lines + 1):
+        for current_line in range(1, lines + 1):
         # Cast each line and if the CastingAborted exception is caught,
         # remember the last line and stop casting.
             try:
             # Cast the sorts: set wedges, turn pump on, cast, line out
             # Set up the justification, turn the pump on
-                self.UI.display('Casting line %i of %i' % (currentLine, lines))
+                self.UI.display('Casting line %i of %i' % (current_line, lines))
                 self.UI.display('0005 wedge at ' + pos0005)
                 self.caster.process_signals(set0005)
                 self.UI.display('0075 wedge at ' + pos0075)
@@ -404,23 +401,23 @@ class Casting(object):
             # Start casting characters
                 self.UI.display('Casting characters...')
             # Cast n combinations of row & column, one by one
-                for i in range(1, n+1):
+                for i in range(1, num + 1):
                     info = ('%s - casting character %i of %i, %i%% done.'
                             % (' '.join(combination).ljust(20),
-                               i, n, 100 * i / n))
+                               i, num, 100 * i / num))
                     self.UI.display(info)
                     parsing.strip_o_and_15(combination)
                     self.caster.process_signals(combination)
             # If everything went normally, put the line out to the galley
                 self.UI.display('Putting line to the galley...')
-                self.caster.process_signals(galleyTrip)
+                self.caster.process_signals(galley_trip)
             # After casting sorts we need to stop the pump
                 self.UI.display('Stopping the pump...')
                 self.caster.process_signals(set0005)
             except newexceptions.CastingAborted:
-                self.lineAborted = currentLine
+                self.line_aborted = current_line
                 self.UI.display('Casting aborted on line %i'
-                                % self.lineAborted)
+                                % self.line_aborted)
                 return False
         # We'll be here if casting ends successfully
         return True
@@ -449,8 +446,8 @@ class Casting(object):
         self.caster.deactivate_valves()
         return True
 
-    def align_wedges(self, spaceAt='G5'):
-        """align_wedges(spaceAt='G5'):
+    def align_wedges(self, space_position='G5'):
+        """align_wedges(space_position='G5'):
 
         Allows to align the justification wedges so that when you're
         casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -473,10 +470,13 @@ class Casting(object):
         while True:
             # Subroutines for menu options
             def continue_aligning():
+                """Cast spaces with and without S-needle"""
                 pass
             def back_to_menu():
+                """Go back to main menu"""
                 raise newexceptions.ReturnToMenu
             def exit_program():
+                """Exit program"""
                 raise newexceptions.ExitProgram
             # Finished. Return to menu.
             options = {'C' : continue_aligning,
@@ -490,12 +490,12 @@ class Casting(object):
             # Cast 10 spaces without correction.
             # End here if casting unsuccessful.
             self.UI.display('Now casting with a normal wedge only.')
-            if not self.cast_from_matrix(spaceAt, 10):
+            if not self.cast_from_matrix(space_position, 10):
                 continue
             # Cast 10 spaces with the S-needle.
             # End here if casting unsuccessful.
             self.UI.display('Now casting with justification wedges...')
-            if not self.cast_from_matrix(spaceAt + 'S', 10):
+            if not self.cast_from_matrix(space_position + 'S', 10):
                 continue
             # At the end of successful sequence, some info for the user:
             self.UI.display('Done. Compare the lengths and adjust if needed.')
@@ -516,8 +516,8 @@ class Casting(object):
             Asks the user for the ribbon filename.
             Checks if the file is readable, and pre-processes it.
             """
-            self.ribbonFile = self.UI.enter_input_filename()
-            self.ribbon = parsing.read_file(self.ribbonFile)
+            self.ribbon_file = self.UI.enter_input_filename()
+            self.ribbon = parsing.read_file(self.ribbon_file)
             # If file read failed, end here
             if not self.ribbon:
                 self.UI.display('Error reading file!')
@@ -530,7 +530,7 @@ class Casting(object):
             except KeyError:
                 pass
             # Reset the "line aborted" on a new casting job
-            self.lineAborted = None
+            self.line_aborted = None
             return True
 
         def debug_notice():
@@ -538,7 +538,7 @@ class Casting(object):
 
             Prints a notice if the program is in debug mode.
             """
-            if self.UI.debugMode:
+            if self.UI.debug_mode:
                 return '\n\nThe program is now in debugging mode!'
             else:
                 return ''
@@ -552,8 +552,8 @@ class Casting(object):
             """
             info = []
             # Add ribbon filename, if any
-            if self.ribbonFile:
-                info.append('Input file name: ' + self.ribbonFile)
+            if self.ribbon_file:
+                info.append('Input file name: ' + self.ribbon_file)
             # Add a caster name
             info.append('Using caster: ' + self.caster.name)
             # Add metadata for ribbon
@@ -561,9 +561,9 @@ class Casting(object):
                 value = str(self.metadata[parameter])
                 info.append(str(parameter).capitalize() + ': ' + value)
             # Display the line last casting was aborted on, if applicable:
-            if self.lineAborted:
+            if self.line_aborted:
                 info.append('Last casting was aborted on line '
-                            + str(self.lineAborted))
+                            + str(self.line_aborted))
             # Convert it all to a multiline string
             return '\n'.join(info)
 
@@ -575,7 +575,7 @@ class Casting(object):
             Casts two lines of em-quads, which can be thrown back to the pot.
             """
             self.UI.clear()
-            self.cast_from_matrix('O15', n=20, lines=2)
+            self.cast_from_matrix('O15', num=20, lines=2)
 
         def cast_or_punch():
             """cast_or_punch:
@@ -628,15 +628,16 @@ class Casting(object):
                     7 : self.align_wedges,
                     8 : heatup,
                     0 : exit_program}
-        h = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-             'for Monotype Composition or Type and Rule casters.'
-             '\n\n'
-             'This program reads a ribbon (input file) '
-             'and casts the type on a composition caster.'
-             + debug_notice() + '\n\nMain Menu:')
+        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+                  'for Monotype Composition or Type and Rule casters.'
+                  '\n\n'
+                  'This program reads a ribbon (input file) '
+                  'and casts the type on a composition caster.'
+                  + debug_notice() + '\n\nMain Menu:')
         # Keep displaying the menu and go back here after any method ends
         while True:
-            choice = self.UI.menu(options, header=h, footer=additional_info())
+            choice = self.UI.menu(options, header=header,
+                                  footer=additional_info())
             # Call the function and return to menu.
             try:
             # Catch "return to menu" and "exit program" exceptions here
@@ -701,7 +702,7 @@ class Session(object):
         try:
             if isinstance(job, Casting):
                 assert (isinstance(caster, monotype.Monotype)
-                or isinstance(caster, simulation.Monotype))
+                        or isinstance(caster, simulation.Monotype))
         # Set up mutual dependencies
                 job.caster = caster
                 caster.UI = UI
@@ -718,8 +719,7 @@ class Session(object):
 # And now, for something completely different...
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
-    caster = monotype.Monotype(name='mkart-cc')
-    UI = userinterfaces.TextUI()
-    db = database.Database()
-    job = Casting()
-    session = Session(job, caster, UI, db)
+    session = Session(Casting(),
+                      monotype.Monotype(name='mkart-cc'),
+                      userinterfaces.TextUI(),
+                      database.Database())

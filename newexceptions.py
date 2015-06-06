@@ -19,12 +19,14 @@ class ReturnToMenu(Exception):
     """
     pass
 
+
 class ExitProgram(Exception):
     """ExitProgram
 
     Exception raised when user decides to exit program.
     """
     pass
+
 
 class ChangeParameters(Exception):
     """ChangeParameters
