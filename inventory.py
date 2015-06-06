@@ -11,6 +11,8 @@ UI = userinterfaces.TextUI()
 import database
 db = database.Database()
 
+import newexceptions
+
 class Inventory(object):
     """Inventory management class:
 
@@ -205,6 +207,9 @@ class Inventory(object):
         self.db.list_wedges()
 
     def main_menu(self):
+        def exit_program():
+            """Helper subroutine, throws an exception to exit the program"""
+            raise newexceptions.ExitProgram
         options = {1 : 'List matrix cases',
                    2 : 'Show matrix case layout',
                    3 : 'Add a new, empty matrix case',
@@ -224,18 +229,22 @@ class Inventory(object):
                     7 : self.list_wedges,
                     8 : self.add_wedge,
                     9 : self.delete_wedge,
-                    0 : self.UI.exit_program}
-        h = 'Setup utility for rpi2caster CAT.\nMain menu:'
-        choice = self.UI.menu(options, header=h, footer='')
-        # Execute it!
-        with self.db:
-            commands[choice]()
-        self.UI.hold_on_exit()
-        self.main_menu()
+                    0 : exit_program}
+        while True:
+            h = 'Setup utility for rpi2caster CAT.\nMain menu:'
+            choice = self.UI.menu(options, header=h, footer='')
+            try:
+                # Execute it!
+                with self.db:
+                    commands[choice]()
+                self.UI.hold_on_exit()
+            except newexceptions.ReturnToMenu:
+                pass
+            except newexceptions.ExitProgram:
+                self.UI.exit_program()
 
     def __exit__(self, *args):
         self.UI.debug_info('Exiting inventory management job context.')
-        pass
 
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':

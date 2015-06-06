@@ -22,6 +22,9 @@ import time
 # User interface
 from userinterfaces import TextUI
 
+# Exceptions module
+import newexceptions
+
 # Database
 import database
 
@@ -141,6 +144,10 @@ class Typesetter(object):
                             % (self.setWidth, self.unitLineLength))
         # Convert it all to a multiline string:"""
             return '\n'.join(info)
+        def exit_program():
+            """Throws an exception to exit the program"""
+            raise newexceptions.ExitProgram
+        # End of subroutines.
         # Now construct a menu.
         # Commands: {option_name : function}
         commands = {1 : choose_input_filename,
@@ -151,17 +158,22 @@ class Typesetter(object):
                     6 : self.calculate_units,
                     7 : self.choose_machine_settings,
                     8 : self.translate,
-                    0 : self.UI.exit_program}
+                    0 : exit_program}
         h = ('rpi2caster - CAT (Computer-Aided Typecasting) '
              'for Monotype Composition or Type and Rule casters. \n\n'
              'This program reads a ribbon (input file) and casts the type '
              'on a Composition Caster, \n'
              'or punches a paper tape with a pneumatic perforator.'
              + debug_notice() + '\n\nMain Menu:')
-        choice = self.UI.menu(options, header=h, footer=additional_info())
-        # Call the function and return to menu.
-        commands[choice]()
-        self.main_menu()
+        while True:
+            choice = self.UI.menu(options, header=h, footer=additional_info())
+            # Call the function and return to menu.
+            try:
+                commands[choice]()
+            except newexceptions.ReturnToMenu:
+                pass
+            except newexceptions.ExitProgram:
+                self.UI.exit_program()
 
     def enter_line_length(self):
         """enter_line_length():
