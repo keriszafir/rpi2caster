@@ -2,6 +2,7 @@
 """Parser methods.
 
 This module contains file- and line-parsing methods."""
+COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 
 def read_file(filename):
     """Tries to read a file.
@@ -11,9 +12,9 @@ def read_file(filename):
 # Open a file with signals, test if it's readable and return its contents
     try:
         content = []
-        with open(filename, 'r') as inputfile:
-            contentGenerator = inputfile.readlines()
-            for line in contentGenerator:
+        with open(filename, 'r') as input_file:
+            content_generator = input_file.readlines()
+            for line in content_generator:
             # Strip newline characters from lines
                 content.append(line.strip('\n'))
             return content
@@ -22,7 +23,7 @@ def read_file(filename):
 
 def get_metadata(content):
     """get_metadata:
-    
+
     Catches the parameters included at the beginning of the ribbon.
     These parameters are used for storing diecase ID, set width, title etc.
     and serve mostly informational purposes, but can also be used for
@@ -36,7 +37,7 @@ def get_metadata(content):
     parameters = ['diecase', 'title', 'author', 'unit-shift', 'justification']
     symbols = ['=', ':', ' ']
     result = []
-    # Work on an unmodified copy and delete lines from the sequence 
+    # Work on an unmodified copy and delete lines from the sequence
     for line in content[:]:
         for parameter in parameters:
             if line.startswith(parameter):
@@ -50,14 +51,14 @@ def get_metadata(content):
                         pass
                 content.remove(line)
     return dict(result)
-        
 
-def comments_parser(inputData):
-    """comments_parser(inputData):
+
+def comments_parser(input_data):
+    """comments_parser(input_data):
 
     Parses an input string, and returns a list with two elements:
     -the Monotype signals (unprocessed),
-    -any comments delimited by symbols from commentSymbols list.
+    -any comments delimited by symbols from COMMENT_SYMBOLS list.
     We need to work on strings. Convert any lists, integers etc.
 
     Looks for any comment symbols defined here - **, *, ##, #, // etc.
@@ -79,57 +80,56 @@ def comments_parser(inputData):
                            turns pump off, displays comment.
     """
     try:
-        ' '.join(inputData)
+        ' '.join(input_data)
     except:
-        inputData = str(inputData)
+        input_data = str(input_data)
 
-    commentSymbols = ['**', '*', '//', '##', '#']
     # Assume we don't have a comment...
-    rawSignals = inputData
+    raw_signals = input_data
     comment = ''
     # ...then look for comment symbols and parse them:
-    for symbol in commentSymbols:
-        if symbol in inputData:
+    for symbol in COMMENT_SYMBOLS:
+        if symbol in input_data:
         # Split on the first encountered symbol
-            [rawSignals, comment] = inputData.split(symbol, 1)
+            [raw_signals, comment] = input_data.split(symbol, 1)
             break
     # Return a list with unprocessed signals and comment
-    return [rawSignals.strip(), comment.strip()]
+    return [raw_signals.strip(), comment.strip()]
 
 def count_lines_and_characters(contents):
     """Count newlines and characters+spaces in ribbon file.
 
     This is usually called when pre-processing the file.
     """
-    linesAll = 0
-    charsAll = 0
+    all_lines = 0
+    all_chars = 0
     for line in contents:
     # Strip comments
         signals = comments_parser(line)[0]
     # Parse the signals part of the line
         signals = signals_parser(signals)
         if check_character(signals):
-            charsAll += 1
+            all_chars += 1
         elif check_newline(signals):
-            linesAll += 1
-    return [linesAll, charsAll]
+            all_lines += 1
+    return [all_lines, all_chars]
 
 def count_combinations(contents):
     """Count all combinations in ribbon file.
 
     This is usually called when pre-processing the file."""
-    combinationsAll = 0
+    all_combinations = 0
     for line in contents:
     # Strip comments
         signals = comments_parser(line)[0]
     # If there are signals, increment the combinations counter
         if signals_parser(signals):
-            combinationsAll += 1
+            all_combinations += 1
     # Return the number
-    return combinationsAll
+    return all_combinations
 
-def signals_parser(rawSignals):
-    """signals_parser(rawSignals):
+def signals_parser(raw_signals):
+    """signals_parser(raw_signals):
 
     Parses a string with Monotype signals on input.
     Skips all but the "useful" signals: A...O, 1...15, 0005, S, 0075.
@@ -139,28 +139,26 @@ def signals_parser(rawSignals):
     Filter out all non-alphanumeric characters and whitespace.
     Convert to uppercase.
     """
-    rawSignals = filter(str.isalnum, rawSignals).upper()
-    # Codes for columns, rows and justification will be stored
-    # separately and sorted on output
-    rows = []
+    raw_signals = ''.join([x for x in raw_signals if x.isalnum()]).upper()
     # Build a list of justification signals
-    justification = [sig for sig in ['0005', '0075'] if sig in rawSignals]
+    justification = [sig for sig in ['0005', '0075'] if sig in raw_signals]
     # Remove these signals from the input string
     for sig in justification:
     # We operate on a string, so cannot remove the item...
-        rawSignals = rawSignals.replace(sig, '')
+        raw_signals = raw_signals.replace(sig, '')
     # Look for any numbers between 16 and 100, remove them
     for n in range(100, 15, -1):
-        rawSignals = rawSignals.replace(str(n), '')
+        raw_signals = raw_signals.replace(str(n), '')
     # From remaining numbers, determine row numbers.
-    # Don't repeat yourself - if number is found twice, it'll be appended
-    # to the rows only once.
+    # The highest number will be removed from the raw_signals to avoid
+    # erroneously adding its digits as signals.
+    rows = []
     for n in range(15, 0, -1):
-        if str(n) in rawSignals and str(n) not in rows:
+        if str(n) in raw_signals:
+            raw_signals = raw_signals.replace(str(n), '')
             rows.append(str(n))
-        rawSignals = rawSignals.replace(str(n), '')
     # Columns + S justification signal
-    columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in rawSignals]
+    columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in raw_signals]
     # Return a list containing all signals
     return columns + rows + justification
 
@@ -168,13 +166,15 @@ def strip_O_and_15(signals):
     # Strip O and 15 signals from input sequence, we don't cast them
     return [s for s in signals if s not in ['O', '15']]
 
-def convert_O15(inputSignals):
+def convert_O15(input_signals):
     """Convert O or 15 to O15.
 
     Combines O and 15 signals to a single O15 signal that can be fed
     to keyboard control routines when punching the ribbon.
+
+    Does not modify the original argument.
     """
-    signals = inputSignals
+    signals = input_signals
     if 'O' in signals or '15' in signals:
         signals.append('O15')
     # Now remove the individual O and 15 signals and return the result
