@@ -81,7 +81,7 @@ def comments_parser(input_data):
     """
     try:
         ' '.join(input_data)
-    except:
+    except TypeError:
         input_data = str(input_data)
 
     # Assume we don't have a comment...
@@ -147,26 +147,26 @@ def signals_parser(raw_signals):
     # We operate on a string, so cannot remove the item...
         raw_signals = raw_signals.replace(sig, '')
     # Look for any numbers between 16 and 100, remove them
-    for n in range(100, 15, -1):
-        raw_signals = raw_signals.replace(str(n), '')
+    for number in range(100, 15, -1):
+        raw_signals = raw_signals.replace(str(number), '')
     # From remaining numbers, determine row numbers.
     # The highest number will be removed from the raw_signals to avoid
     # erroneously adding its digits as signals.
     rows = []
-    for n in range(15, 0, -1):
-        if str(n) in raw_signals:
-            raw_signals = raw_signals.replace(str(n), '')
-            rows.append(str(n))
+    for number in range(15, 0, -1):
+        if str(number) in raw_signals:
+            raw_signals = raw_signals.replace(str(number), '')
+            rows.append(str(number))
     # Columns + S justification signal
     columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in raw_signals]
     # Return a list containing all signals
     return columns + rows + justification
 
-def strip_O_and_15(signals):
-    # Strip O and 15 signals from input sequence, we don't cast them
+def strip_o_and_15(signals):
+    """Strip O and 15 signals from input sequence, we don't cast them"""
     return [s for s in signals if s not in ['O', '15']]
 
-def convert_O15(input_signals):
+def convert_o15(input_signals):
     """Convert O or 15 to O15.
 
     Combines O and 15 signals to a single O15 signal that can be fed
@@ -178,7 +178,7 @@ def convert_O15(input_signals):
     if 'O' in signals or '15' in signals:
         signals.append('O15')
     # Now remove the individual O and 15 signals and return the result
-    return strip_O_and_15(signals)
+    return strip_o_and_15(signals)
 
 def check_newline(signals):
     """check_newline(signals):
