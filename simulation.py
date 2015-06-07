@@ -135,7 +135,7 @@ class Monotype(object):
 
     def activate_valves(self, signals):
         """If there are any signals, print them out"""
-        if len(signals) != 0:
+        if signals:
             message = ('Activating valves: ' + ' '.join(signals))
             ui.display(message)
 

@@ -27,7 +27,7 @@ except ImportError:
 
 
 class Monotype(object):
-    """Monotype(job, name, confFilePath):
+    """Monotype(name):
 
     A class which stores all hardware-layer methods, related to caster control.
     This class requires a caster name, and a database object.
@@ -75,19 +75,6 @@ class Monotype(object):
         unit-adding disabled,
         diecase format 15x17.
         """
-        # Default caster parameters:
-        self.is_perforator = False
-        self.interface_id = 0
-        self.unit_adding = False
-        self.diecase_system = 'norm17'
-        # Default interface parameters:
-        self.emergency_gpio = 24
-        self.sensor_gpio = 17
-        self.mcp0_address = 0x20
-        self.mcp1_address = 0x21
-        self.pin_base = 65
-        self.signals_arrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
-                                    '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
         # Next, this method reads caster data from conffile and sets up
         # instance attributes for the caster.
         # In case there is no data, the function will run on default settings.
@@ -95,22 +82,26 @@ class Monotype(object):
         # The same for the interface settings:
         self.get_interface_settings()
         # When debugging, display all caster info:
-        output = {'\nCaster parameters:\n' : '',
-                  'Using caster name: ' : self.name,
+        output = {'Using caster name: ' : self.name,
                   'Is a perforator? ' : self.is_perforator,
-                  '\nInterface parameters:\n' : '',
                   'Interface ID: ' : self.interface_id,
                   '1st MCP23017 I2C address: ' : self.mcp0_address,
                   '2nd MCP23017 I2C address: ' : self.mcp1_address,
                   'MCP23017 pin base for GPIO numbering: ' : self.pin_base,
-                  'Signals arrangement: ' : self.signals_arrangement,
-                  'Emergency button GPIO: ' : self.emergency_gpio,
-                  'Sensor GPIO: ' : self.sensor_gpio}
+                  'Signals arrangement: ' : self.signals_arrangement}
+        # Display this info only for casters and not perforators:
+        if not self.is_perforator:
+            output['Emergency button GPIO: '] = self.emergency_gpio
+            output['Sensor GPIO: '] = self.sensor_gpio
+            output['Diecase system: '] = self.diecase_system
+            output['Unit adding: '] = self.unit_adding
+        # Iterate over the dict and print the output
         for parameter in output:
             ui.debug_info(parameter, output[parameter])
+        # Info displayed. Wait for user to read it and continue...
         prompt = '[Enter] to continue...'
         ui.debug_enter_data(prompt)
-
+        # Input configuration for sensor and emergency stop button
         # This is done only for a caster interface:
         if not self.is_perforator:
         # Set up an input for machine cycle sensor:
@@ -175,13 +166,25 @@ class Monotype(object):
         unit_adding [0,1] - whether the machine has a unit-adding attachment,
         interface_id [0,1,2,3] - ID of the interface connected to the caster.
         """
-        self.is_perforator = cfg_parser.get_config(self.name, 'is.perforator')
+        if cfg_parser.section_not_found(self.name):
+            # Default caster parameters:
+            self.is_perforator = False
+            self.interface_id = 0
+            self.unit_adding = False
+            self.diecase_system = 'norm17'
+            self.unit_adding = False
+            self.diecase_system = 'norm17'
+            # End here if caster not found in config
+            return False
+        self.is_perforator = cfg_parser.get_config(self.name, 'is_perforator')
         self.interface_id = cfg_parser.get_config(self.name, 'interface_id')
         if not self.is_perforator:
         # Get caster parameters from conffile
             self.unit_adding = cfg_parser.get_config(self.name, 'unit_adding')
             self.diecase_system = cfg_parser.get_config(self.name,
                                                         'diecase_system')
+        # Caster correctly configured
+        return True
 
     def get_interface_settings(self):
         """get_interface_settings():
@@ -241,11 +244,24 @@ class Monotype(object):
         3                  164                 (pin_base2 + 32)
         """
         iface_name = 'Interface' + str(self.interface_id)
+        if cfg_parser.section_not_found(iface_name):
+            # Set default parameters if interface not found in config:
+            self.emergency_gpio = 24
+            self.sensor_gpio = 17
+            self.mcp0_address = 0x20
+            self.mcp1_address = 0x21
+            self.pin_base = 65
+            self.signals_arrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,'
+                                        '0005,0075,'
+                                        'A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
+            # Signal that we're on fallback
+            return False
         if not self.is_perforator:
             # Emergency stop and sensor are valid only for casters,
             # perforators do not have them
             self.emergency_gpio = cfg_parser.get_config(iface_name, 'stop_gpio')
             self.sensor_gpio = cfg_parser.get_config(iface_name, 'sensor_gpio')
+        # Set up MCP23017 interface parameters
         self.mcp0_address = cfg_parser.get_config(iface_name, 'mcp0_address')
         self.mcp1_address = cfg_parser.get_config(iface_name, 'mcp1_address')
         self.pin_base = cfg_parser.get_config(iface_name, 'pin_base')
@@ -254,6 +270,8 @@ class Monotype(object):
         # ...and get the signals order for it:
         self.signals_arrangement = cfg_parser.get_config('SignalsArrangements',
                                                          signals_arr)
+        # Interface configured successfully - return True
+        return True
 
     def detect_rotation(self):
         """detect_rotation():
@@ -479,10 +497,9 @@ class Monotype(object):
         Do nothing if the function receives an empty sequence, which will
         occur if we cast with the matrix found at position O15.
         """
-        if signals:
-            for sig in signals:
-                pin = self.interface_pin_number[sig]
-                wiringpi.digitalWrite(pin, 1)
+        pins = [self.interface_pin_number[sig] for sig in signals]
+        for pin in pins:
+            wiringpi.digitalWrite(pin, 1)
 
     def deactivate_valves(self):
         """deactivate_valves():

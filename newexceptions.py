@@ -12,6 +12,14 @@ class CastingAborted(Exception):
     pass
 
 
+class EmergencyStop(Exception):
+    """EmergencyStop
+
+    Exception raised when user pushes the emergency stop button to abort.
+    """
+    pass
+
+
 class ReturnToMenu(Exception):
     """ReturnToMenu
 
@@ -33,5 +41,13 @@ class ChangeParameters(Exception):
 
     Exception raised when user decides to change parameters
     in a current routine.
+    """
+    pass
+
+
+class ConfigFileUnavailable(Exception):
+    """ConfigFileUnavailable
+
+    Exception raised when a config file does not exist or cannot be read.
     """
     pass

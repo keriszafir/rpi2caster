@@ -49,6 +49,13 @@ stops sending codes to the caster and sends a 0005 combination instead.
 The pump is immediately stopped.
 """
 
+# Imports
+import text_ui
+import casting
+import monotype
+import database
+import simulation
+
 
 class Session(object):
     """TextUI:
@@ -59,10 +66,17 @@ class Session(object):
     supports UTF-8 too.
     """
 
-    def __init__(self, ui='text_ui', job='casting', caster='monotype'):
-        self.ui = __import__(ui)
-        self.job = __import__(job)
-        self.caster = __import__(caster)
+    def __init__(self, ui, db, job, caster):
+        """Instantiates job, caster, database classes to work with"""
+        self.ui = ui
+        self.job = job
+        self.caster = caster
+        self.database = db
+        
+        self.job.caster = self.caster
+        self.job.db = self.database
+        
+        self.database.job = self.job
 
     def __enter__(self):
         """Try to call main menu for a job.
@@ -82,67 +96,11 @@ class Session(object):
         self.ui.debug_info('Exiting text UI context.')
 
 
-class Deprecated(object):
-    """Session:
-
-    This is a top-level abstraction layer.
-    Used for injecting dependencies for objects.
-    """
-    def __init__(self, job, caster, UI, db):
-        # Set dependencies as object attributes.
-        # Make sure we've got an UI first.
-        try:
-            assert (isinstance(UI, userinterfaces.TextUI)
-                    or isinstance(UI, userinterfaces.WebInterface))
-        except NameError:
-            print 'Error: User interface not specified!'
-            exit()
-        except AssertionError:
-            print 'Error: User interface of incorrect type!'
-            exit()
-        # Make sure database and config are of the correct type
-        try:
-            assert isinstance(db, database.Database)
-        except NameError:
-        # Not set up? Move on
-            pass
-        except AssertionError:
-        # We can be sure that UI can handle this now
-            UI.display('Invalid database!')
-            UI.exit_program()
-        # We need a job: casting, setup, typesetting...
-        try:
-        # Any job needs UI and database
-            job.UI = UI
-            job.db = db
-        # UI needs job context
-            UI.job = job
-        except NameError:
-            UI.display('Job not specified!')
-        # Database needs UI to communicate messages to user
-        db.UI = UI
-        # Assure that we're using a caster or simulator for casting
-        try:
-            if isinstance(job, Casting):
-                assert (isinstance(caster, monotype.Monotype)
-                        or isinstance(caster, simulation.Monotype))
-        # Set up mutual dependencies
-                job.caster = caster
-                caster.UI = UI
-                caster.job = job
-        except (AssertionError, NameError, AttributeError):
-            UI.display('You cannot do any casting without a proper caster!')
-            UI.exit_program()
-        # An __enter__ method of UI will call main_menu method in job
-        with job:
-            pass
-
-
-
-
-
 # End of class definitions.
 # And now, for something completely different...
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
-    session = Session(caster='simulation')
+    session = Session(caster=simulation.Monotype(),
+                      job=casting.Casting(),
+                      db=database.Database(),
+                      ui=text_ui)
