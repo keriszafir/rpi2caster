@@ -14,37 +14,6 @@ import glob
 debug_mode = False
 
 
-class Session(object):
-    """TextUI:
-
-    Use this class for creating a text-based console user interface.
-    A caster object must be created before instantiating this class.
-    Suitable for controlling a caster from the local terminal or via SSH,
-    supports UTF-8 too.
-    """
-
-    def __init__(self):
-    # Get the debug-mode from input parameters
-        pass
-
-    def __enter__(self):
-        """Try to call main menu for a job.
-
-        Display a message when user presses ctrl-C.
-        """
-        # Print some debug info
-        debug_info('Entering text UI context...')
-        try:
-            pass
-        except KeyboardInterrupt:
-            print '\nUser pressed ctrl-C. Exiting.'
-        finally:
-            print '\nGoodbye!\n'
-
-    def __exit__(self, *args):
-        debug_info('Exiting text UI context.')
-
-
 def menu(options, header='', footer=''):
     """menu(options={'foo':'bar','baz':'qux'}
                     header=foo,

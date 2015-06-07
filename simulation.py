@@ -10,6 +10,8 @@ without an access to the actual caster.
 import time
 # Custom exceptions module
 import newexceptions
+# User interface
+import text_ui as ui
 
 class Monotype(object):
     """Monotype (mockup)
@@ -20,18 +22,17 @@ class Monotype(object):
     """
 
     def __init__(self, name='Monotype Simulator', is_perforator=False):
-        self.UI = None
         self.name = name
         self.is_perforator = is_perforator
 
     def __enter__(self):
-        self.UI.debug_info('Entering caster/keyboard simulation context...')
+        ui.debug_info('Entering caster/keyboard simulation context...')
         # Display some info
-        self.UI.display('Using caster name:', self.name)
-        self.UI.display('This is not an actual caster or interface. ')
-        self.UI.enter_data('Press [ENTER] to continue...')
+        ui.display('Using caster name:', self.name)
+        ui.display('This is not an actual caster or interface. ')
+        ui.enter_data('Press [ENTER] to continue...')
         # Debugging is ON by default
-        self.UI.debug_mode = True
+        ui.debug_mode = True
         return self
 
     def process_signals(self, signals, machine_timeout=5):
@@ -51,18 +52,18 @@ class Monotype(object):
             """
             timeout = timeout
             prompt = '[Enter] to cast or [S] to stop? '
-            if self.UI.enter_data(prompt) in ['s', 'S']:
-                self.UI.display('Simulating machine stop...')
+            if ui.enter_data(prompt) in ['s', 'S']:
+                ui.display('Simulating machine stop...')
                 return False
-            self.UI.display('Turning the valves on...')
+            ui.display('Turning the valves on...')
             self.activate_valves(signals)
-            self.UI.display('Turning the valves off...')
+            ui.display('Turning the valves off...')
             self.deactivate_valves()
-            self.UI.display('Sequence cast successfully.')
+            ui.display('Sequence cast successfully.')
             return True
 
-        def continue_after_machine_stopped():
-            """continue_after_machine_stopped:
+        def stop_menu():
+            """stop_menu:
 
             This allows us to choose whether we want to continue,
             return to menu or exit if the machine is stopped during casting.
@@ -96,7 +97,7 @@ class Monotype(object):
                        'E' : exit_program}
             message = ('Machine has stopped running! Check what happened.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
-            choice = self.UI.simple_menu(message, options).upper()
+            choice = ui.simple_menu(message, options).upper()
             return options[choice]()
 
         def emergency_cleanup():
@@ -112,14 +113,14 @@ class Monotype(object):
             """
             pump_off = False
             stop_signal = ['N', 'J', '0005']
-            self.UI.display('Stopping the pump...')
+            ui.display('Stopping the pump...')
             while not pump_off:
             # Try stopping the pump until we succeed!
             # Keep calling process_signals until it returns True
             # (the machine receives and processes the pump stop signal)
                 pump_off = send_signals_to_caster(stop_signal, machine_timeout)
             else:
-                self.UI.display('Pump stopped. All valves off...')
+                ui.display('Pump stopped. All valves off...')
                 self.deactivate_valves()
                 time.sleep(1)
                 return True
@@ -127,7 +128,7 @@ class Monotype(object):
         while not send_signals_to_caster(signals, 30):
             # Keep trying to cast the combination, or end here
             # (subroutine will throw an exception if operator exits)
-            continue_after_machine_stopped()
+            stop_menu()
         else:
             # Successful ending - the combination has been cast
             return True
@@ -136,11 +137,11 @@ class Monotype(object):
         """If there are any signals, print them out"""
         if len(signals) != 0:
             message = ('Activating valves: ' + ' '.join(signals))
-            self.UI.display(message)
+            ui.display(message)
 
     def deactivate_valves(self):
         """No need to do anything"""
-        self.UI.display('Valves deactivated.')
+        ui.display('Valves deactivated.')
 
     def detect_rotation(self):
         """Detect rotation:
@@ -169,10 +170,10 @@ class Monotype(object):
                        'E' : exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
-            choice = self.UI.simple_menu(message, options).upper()
+            choice = ui.simple_menu(message, options).upper()
             return options[choice]()
         prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
-        if self.UI.enter_data(prompt) not in ['n', 'N']:
+        if ui.enter_data(prompt) not in ['n', 'N']:
         # Machine is running
             return True
         elif start_the_machine():
@@ -184,4 +185,4 @@ class Monotype(object):
 
     def __exit__(self, *args):
         self.deactivate_valves()
-        self.UI.debug_info('Exiting caster/keyboard simulation context.')
+        ui.debug_info('Exiting caster/keyboard simulation context.')

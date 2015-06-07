@@ -5,8 +5,7 @@
 
 Allows to add, list and delete wedges and diecases.
 """
-import userinterfaces
-UI = userinterfaces.TextUI()
+import text_ui as ui
 
 import database
 db = database.Database()
@@ -23,13 +22,11 @@ class Inventory(object):
     """
 
     def __init__(self):
-        self.UI = UI
         self.db = database.Database()
 
     def __enter__(self):
-        self.UI.debug_info('Entering inventory management job context...')
-        with self.UI:
-            self.main_menu()
+        ui.debug_info('Entering inventory management job context...')
+        self.main_menu()
 
     # Placeholders for functionality not implemented yet:
     def list_diecases(self):
@@ -105,7 +102,7 @@ class Inventory(object):
                      'MONOSPACE' : '9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9'}
         # Enter the wedge name:
         while not wedgeName:
-            wedgeName = self.UI.enter_data('Enter the wedge name, e.g. S5 '
+            wedgeName = ui.enter_data('Enter the wedge name, e.g. S5 '
                                            '(very typical, default): ')
             if not wedgeName:
                 wedgeName = 'S5'
@@ -115,7 +112,7 @@ class Inventory(object):
         # Enter the set width:
         while not setWidth:
             prompt = 'Enter the wedge set width as decimal, e.g. 9.75E: '
-            setWidth = self.UI.enter_data(prompt)
+            setWidth = ui.enter_data(prompt)
         # Determine if it's a British pica wedge automatically - E is present:
         if setWidth[-1].upper() == 'E':
             setWidth = setWidth[:-1]
@@ -124,7 +121,7 @@ class Inventory(object):
         # Otherwise, let user choose if it's American or British pica:
             options = {'A' : False, 'B' : True}
             message = '[A]merican (0.1660"), or [B]ritish (0.1667") pica? '
-            choice = self.UI.simple_menu(message, options).upper()
+            choice = ui.simple_menu(message, options).upper()
             britPica = options[choice]
         try:
             setWidth = float(setWidth)
@@ -140,7 +137,7 @@ class Inventory(object):
                 prompt = ('Enter the wedge unit values for steps 1...16, '
                           'separated by commas. If empty, entering values '
                           'for wedge S5 (very common): ')
-                rawSteps = self.UI.enter_data(prompt)
+                rawSteps = ui.enter_data(prompt)
                 if not rawSteps:
                     rawSteps = wedgeData['S5']
             rawSteps = rawSteps.split(',')
@@ -159,47 +156,47 @@ class Inventory(object):
                        '\nThis is almost certainly a mistake.\n')
             stepsOK = ('The wedge has ', len(steps), 'steps. That is OK.')
             if len(steps) < 15:
-                self.UI.display(warnMin)
+                ui.display(warnMin)
             elif len(steps) > 16:
-                self.UI.display(warnMax)
+                ui.display(warnMax)
             else:
-                self.UI.display(stepsOK)
+                ui.display(stepsOK)
         # Display a summary:
         summary = {'Wedge' : wedgeName,
                    'Set width' : setWidth,
                    'British pica wedge?' : britPica}
         for parameter in summary:
-            self.UI.display(parameter, ':', summary[parameter])
+            ui.display(parameter, ':', summary[parameter])
         # Loop over all unit values in wedge's steps and display them:
         for i, step in zip(range(len(steps)), steps):
-            self.UI.display('Step', i+1, 'unit value:', step, '\n')
+            ui.display('Step', i+1, 'unit value:', step, '\n')
         # Subroutines:
         def commit_wedge():
             if self.db.add_wedge(wedgeName, setWidth, britPica, steps):
-                self.UI.display('Wedge added successfully.')
+                ui.display('Wedge added successfully.')
             else:
-                self.UI.display('Failed to add wedge!')
+                ui.display('Failed to add wedge!')
         def reenter():
-            self.UI.enter_data('Enter parameters again from scratch... ')
+            ui.enter_data('Enter parameters again from scratch... ')
             self.add_wedge()
         # Confirmation menu:
         message = ('\nCommit wedge to database? \n'
                    '[Y]es / [N]o (enter values again) / return to [M]enu: ')
         options = {'Y' : commit_wedge, 'N' : reenter, 'M' : self.main_menu}
-        ans = self.UI.simple_menu(message, options).upper()
+        ans = ui.simple_menu(message, options).upper()
         options[ans]()
 
     def delete_wedge(self):
         """Used for deleting a wedge from database.
         """
         self.list_wedges()
-        ID = self.UI.enter_data('Enter the wedge ID to delete: ')
+        ID = ui.enter_data('Enter the wedge ID to delete: ')
         if ID.isdigit():
             ID = int(ID)
             if self.db.delete_wedge(ID):
-                self.UI.display('Wedge deleted successfully.')
+                ui.display('Wedge deleted successfully.')
         else:
-            self.UI.display('Wedge ID must be a number!')
+            ui.display('Wedge ID must be a number!')
 
     def list_wedges(self):
         """lists all wedges we have
@@ -232,19 +229,19 @@ class Inventory(object):
                     0 : exit_program}
         while True:
             h = 'Setup utility for rpi2caster CAT.\nMain menu:'
-            choice = self.UI.menu(options, header=h, footer='')
+            choice = ui.menu(options, header=h, footer='')
             try:
                 # Execute it!
                 with self.db:
                     commands[choice]()
-                self.UI.hold_on_exit()
+                ui.hold_on_exit()
             except newexceptions.ReturnToMenu:
                 pass
             except newexceptions.ExitProgram:
-                self.UI.exit_program()
+                ui.exit_program()
 
     def __exit__(self, *args):
-        self.UI.debug_info('Exiting inventory management job context.')
+        ui.debug_info('Exiting inventory management job context.')
 
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':

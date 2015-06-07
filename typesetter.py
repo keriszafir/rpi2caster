@@ -10,37 +10,19 @@ calculates justification figures and outputs the combinations of Monotype
 signals, one by one, to the file or database. These sequences are to be read
 and parsed by the casting program, which sends the signals to the machine.
 """
-
-# IMPORTS, and warnings if package is not found in system:
-unmetDependencies = []
-
 # Typical libs, used by most routines:
-import sys
-import os
 import time
-
 # User interface
-from userinterfaces import TextUI
-
+import text_ui as ui
 # Exceptions module
 import newexceptions
-
 # Database
 import database
-
 # HTML/XML parser:
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    unmetDependencies.append('BeautifulSoup: python-bs4')
-
-# Warn about unmet dependencies:
-if unmetDependencies:
-    warning = 'Unmet dependencies - some functionality will not work:\n'
-    for dep in unmetDependencies:
-        warning += (dep + '\n')
-    print warning
-    time.sleep(2)
+    ui.display('BeautifulSoup 4 not installed!')
 
 
 class Typesetter(object):
@@ -54,7 +36,6 @@ class Typesetter(object):
     """
 
     def __init__(self):
-        self.UI = TextUI()
         self.diecase = ''
         self.setWidth = 0
         self.typeface = ''
@@ -72,12 +53,11 @@ class Typesetter(object):
         self.outputFile = ''
 
     def __enter__(self):
-        with self.UI:
-            self.UI.debug_info('Entering typesetting job context...')
-            self.main_menu()
+        ui.debug_info('Entering typesetting job context...')
+        self.main_menu()
 
     def main_menu(self):
-        """Calls self.UI.menu() with options,
+        """Calls ui.menu() with options,
         a header and a footer.
 
         Options: {option_name : description}
@@ -93,14 +73,14 @@ class Typesetter(object):
                    0 : 'Exit program'}
         # Declare local functions for menu options:
         def choose_input_filename():
-            self.inputFile = self.UI.enter_input_filename()
+            self.inputFile = ui.enter_input_filename()
             self.main_menu()
         def choose_output_filename():
-            self.outputFile = self.UI.enter_output_filename()
+            self.outputFile = ui.enter_output_filename()
             self.main_menu()
         def debug_notice():
         # Prints a notice if the program is in debug mode:
-            if self.UI.debug_mode:
+            if ui.debug_mode:
                 return '\n\nThe program is now in debugging mode!'
             else:
                 return ''
@@ -166,14 +146,14 @@ class Typesetter(object):
              'or punches a paper tape with a pneumatic perforator.'
              + debug_notice() + '\n\nMain Menu:')
         while True:
-            choice = self.UI.menu(options, header=h, footer=additional_info())
+            choice = ui.menu(options, header=h, footer=additional_info())
             # Call the function and return to menu.
             try:
                 commands[choice]()
             except newexceptions.ReturnToMenu:
                 pass
             except newexceptions.ExitProgram:
-                self.UI.exit_program()
+                ui.exit_program()
 
     def enter_line_length(self):
         """enter_line_length():
@@ -201,7 +181,7 @@ class Typesetter(object):
                    'cm - centimeters,\n'
                    'mm - millimeters,\n'
                    'in - inches\n')
-        choice = self.UI.simple_menu(message, options)
+        choice = ui.simple_menu(message, options)
         self.measurement = options[choice]
 
     def choose_diecase(self):
@@ -582,11 +562,11 @@ class Typesetter(object):
         TODO: make an option accessible in menu only if diecase is chosen.
         """
         if not self.layout:
-            self.UI.display('Diecase not chosen, no layout to check!')
+            ui.display('Diecase not chosen, no layout to check!')
             time.sleep(1)
             self.main_menu()
         for variant in self.layout:
-            self.UI.display('\nMatrices for variant: ' + variant + '\n\n'
+            ui.display('\nMatrices for variant: ' + variant + '\n\n'
                             + 'Char:'.ljust(8)
                             + 'Column:'.ljust(8)
                             + 'Row:'.ljust(8)
@@ -601,11 +581,11 @@ class Typesetter(object):
                 except IndexError:
                     units = self.wedgeUnits[row]
              # Now display the data:"""
-                self.UI.display(character.strip().ljust(8)
+                ui.display(character.strip().ljust(8)
                                 + column.ljust(8) + str(row).ljust(8)
                                 + str(units).ljust(8))
         # Keep displaying the data until user presses return:"""
-        self.UI.enter_data('Press return to go back to menu....')
+        ui.enter_data('Press return to go back to menu....')
 
     def choose_machine_settings(self):
         """choose_machine_settings:
@@ -629,7 +609,7 @@ class Typesetter(object):
         TODO: implement TeX hyphenation algorithm
         """
         if not self.inputFile or not self.outputFile:
-            self.UI.display('You must specify the input '
+            ui.display('You must specify the input '
                             'and output filenames first!')
             time.sleep(1)
 
@@ -793,7 +773,7 @@ class Typesetter(object):
         if self.measurement and self.lineLength:
             self.calculate_line_length()
         else:
-            self.UI.display('Line length and meas. units not specified!')
+            ui.display('Line length and meas. units not specified!')
             time.sleep(1)
             self.main_menu()
         # Calculate the multi-set unit value:
@@ -818,7 +798,7 @@ class Typesetter(object):
         return spaceWidth
 
     def __exit__(self, *args):
-        self.UI.debug_info('Exiting typesetting job context.')
+        ui.debug_info('Exiting typesetting job context.')
 
 
 # End of class definitions.

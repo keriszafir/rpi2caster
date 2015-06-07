@@ -9,7 +9,7 @@ import sys
 import time
 
 # User interface
-from userinterfaces import TextUI
+import text_ui as ui
 
 # Config parser for reading the interface settings
 import ConfigParser
@@ -31,7 +31,7 @@ except ImportError:
 
 
 class Database(object):
-    """Database(databasePath, confFilePath):
+    """Database(database_path, confFilePath):
 
     A class containing all methods related to storing, retrieving
     and deleting data from a SQLite3 database used for config.
@@ -56,19 +56,18 @@ class Database(object):
     Usually you run setup with sudo.
     """
 
-    def __init__(self, databasePath='database/monotype.db',
-                 configPath='/etc/rpi2caster.conf'):
-        self.UI = TextUI()
-        self.databasePath = databasePath
-        self.configPath = configPath
+    def __init__(self, database_path='database/monotype.db',
+                 config_path='/etc/rpi2caster.conf'):
+        self.database_path = database_path
+        self.config_path = config_path
         # Connect to the database when entering the object's context
         self.db = None
 
     def __enter__(self):
-        self.UI.debug_info('Entering database context...')
+        ui.debug_info('Entering database context...')
         self.database_setup()
-        self.UI.debug_info('Using database path:', self.databasePath)
-        self.db = sqlite3.connect(self.databasePath)
+        ui.debug_info('Using database path:', self.database_path)
+        self.db = sqlite3.connect(self.database_path)
         return self
 
     def database_setup(self):
@@ -78,17 +77,17 @@ class Database(object):
         set in conffile. If none of them is found, the program will use
         hardcoded default.
         """
-        if not self.databasePath:
+        if not self.database_path:
             config = ConfigParser.SafeConfigParser()
-            config.read(self.configPath)
+            config.read(self.config_path)
         # Look database path up in conffile:
             try:
-                self.databasePath = config.get('Database', 'path')
+                self.database_path = config.get('Database', 'path')
             except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
             # Revert to defaults if database not configured properly:
-                self.databasePath = 'database/monotype.db'
-                self.UI.debug_info('Database path not found in conffile. '
-                                   'Using default:', self.databasePath)
+                self.database_path = 'database/monotype.db'
+                ui.debug_info('Database path not found in conffile. '
+                              'Using default:', self.database_path)
 
     def add_wedge(self, wedgeName, setWidth, britPica, steps):
         """add_wedge(wedgeName, setWidth, britPica, steps):
@@ -135,8 +134,8 @@ class Database(object):
                 return True
             except:
             # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot add wedge!')
-                self.UI.exception_handler()
+                ui.display('Database error: cannot add wedge!')
+                ui.exception_handler()
                 return False
 
     def wedge_by_name_and_width(self, wedgeName, setWidth):
@@ -162,13 +161,13 @@ class Database(object):
                                [wedgeName, setWidth])
                 wedge = cursor.fetchone()
                 if wedge is None:
-                    self.UI.display('No wedge %s - %f found in database!'
-                                    % (wedgeName, setWidth))
+                    ui.display('No wedge %s - %f found in database!'
+                               % (wedgeName, setWidth))
                     return False
                 else:
                     wedge = list(wedge)
-                    self.UI.display('Wedge %s-%fset found in database - OK'
-                                    % (wedgeName, setWidth))
+                    ui.display('Wedge %s-%fset found in database - OK'
+                               % (wedgeName, setWidth))
                 # Change return value of britPica to boolean:
                     wedge[3] = bool(wedge[3])
                 # Change return value of steps to list:
@@ -177,8 +176,8 @@ class Database(object):
                     return wedge
             except:
             # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot get wedge!')
-                self.UI.exception_handler()
+                ui.display('Database error: cannot get wedge!')
+                ui.exception_handler()
 
     def wedge_by_id(self, ID):
         """wedge_by_id(ID):
@@ -200,7 +199,7 @@ class Database(object):
                 cursor.execute('SELECT * FROM wedges WHERE id = ? ', [ID])
                 wedge = cursor.fetchone()
                 if wedge is None:
-                    self.UI.display('Wedge not found!')
+                    ui.display('Wedge not found!')
                     return False
                 else:
                     wedge = list(wedge)
@@ -212,8 +211,8 @@ class Database(object):
                     return wedge
             except:
             # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot get wedge!')
-                self.UI.exception_handler()
+                ui.display('Database error: cannot get wedge!')
+                ui.exception_handler()
 
     def delete_wedge(self, ID):
         """delete_wedge(self, ID):
@@ -233,11 +232,11 @@ class Database(object):
                     return True
                 except:
                 # In debug mode, display exception code & stack trace.
-                    self.UI.display('Database error: cannot delete wedge!')
-                    self.UI.exception_handler()
+                    ui.display('Database error: cannot delete wedge!')
+                    ui.exception_handler()
                     return False
         else:
-            self.UI.display('Nothing to delete.')
+            ui.display('Nothing to delete.')
             return False
 
     def list_wedges(self):
@@ -264,21 +263,21 @@ class Database(object):
                           + 'Brit. pica'.center(10)
                           + 'unit arrangement'
                           + '\n')
-                self.UI.display(header)
+                ui.display(header)
                 while True:
                     wedge = cursor.fetchone()
                     if wedge is not None:
                         record = ''
                         for field in wedge:
                             record += str(field).ljust(10)
-                        self.UI.display(record)
+                        ui.display(record)
                     else:
                         break
                 return True
             except:
             # In debug mode, display exception code & stack trace."""
-                self.UI.display('Database error: cannot list wedges!')
-                self.UI.exception_handler()
+                ui.display('Database error: cannot list wedges!')
+                ui.exception_handler()
                 return False
 
     def diecase_by_series_and_size(self, typeSeries, typeSize):
@@ -304,7 +303,7 @@ class Database(object):
                         break
                 if not matches:
                 # List is empty. Notify the user:
-                    self.UI.display('Sorry - no results found.')
+                    ui.display('Sorry - no results found.')
                     time.sleep(1)
                     return False
                 elif len(matches) == 1:
@@ -317,13 +316,13 @@ class Database(object):
                 # Display a menu with diecases from 1 to the last:
                     options = dict(zip(range(1, len(matches) + 1), IDs))
                     header = 'Choose a diecase:'
-                    choice = self.UI.menu(options, header)
+                    choice = ui.menu(options, header)
                 # Return a list with chosen diecase's parameters:
                     return options[choice]
             except:
             # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot find diecase data!')
-                self.UI.exception_handler()
+                ui.display('Database error: cannot find diecase data!')
+                ui.exception_handler()
                 return False
 
     def diecase_by_id(self, diecaseID):
@@ -343,15 +342,15 @@ class Database(object):
                     return diecase
                 else:
                 # Otherwise, notify the user, return False:
-                    self.UI.display('Sorry - no results found.')
+                    ui.display('Sorry - no results found.')
                     time.sleep(1)
                     return False
             except:
             # In debug mode, display exception code & stack trace.
-                self.UI.display('Database error: cannot find diecase data!')
-                self.UI.exception_handler()
+                ui.display('Database error: cannot find diecase data!')
+                ui.exception_handler()
                 return False
 
     def __exit__(self, *args):
-        self.UI.debug_info('Exiting database context.')
+        ui.debug_info('Exiting database context.')
         
