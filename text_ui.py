@@ -11,7 +11,7 @@ import os
 import readline
 import glob
 
-debug_mode = False
+DEBUG_MODE = False
 
 
 def menu(options, header='', footer=''):
@@ -80,20 +80,20 @@ def display(*args):
 
 def debug_info(*args):
     """Prints debug messages to screen if in debug mode"""
-    if debug_mode:
+    if DEBUG_MODE:
         for arg in args:
             print arg,
         print '\n'
 
 def debug_enter_data(message):
     """For debug-specific data or confirmations"""
-    if debug_mode:
+    if DEBUG_MODE:
         return raw_input(message)
 
 
 def exception_handler():
     """Raise caught exceptions in debug mode"""
-    if debug_mode:
+    if DEBUG_MODE:
         print sys.exc_info()
 
 def enter_data(message):

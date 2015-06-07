@@ -10,8 +10,9 @@ without an access to the actual caster.
 import time
 # Custom exceptions module
 import newexceptions
-# User interface
+# Default user interface
 import text_ui as ui
+
 
 class Monotype(object):
     """Monotype (mockup)
@@ -32,7 +33,7 @@ class Monotype(object):
         ui.display('This is not an actual caster or interface. ')
         ui.enter_data('Press [ENTER] to continue...')
         # Debugging is ON by default
-        ui.debug_mode = True
+        ui.DEBUG_MODE = True
         return self
 
     def process_signals(self, signals, machine_timeout=5):

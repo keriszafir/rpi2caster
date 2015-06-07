@@ -495,7 +495,7 @@ class Casting(object):
 
             Prints a notice if the program is in debug mode.
             """
-            if ui.debug_mode:
+            if ui.DEBUG_MODE:
                 return '\n\nThe program is now in debugging mode!'
             else:
                 return ''

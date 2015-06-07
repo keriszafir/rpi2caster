@@ -1,12 +1,13 @@
 #!/usr/bin/python
-import rpi2caster
-import casting
-import text_ui as ui
-import database
+import text_ui
+from rpi2caster import Session, set_ui
 import simulation
+import casting
+import database
 
-session = rpi2caster.Session(
-                             job=casting.Casting(),
-                             db=database.Database('database/monotype.db'),
-                             caster=simulation.Monotype()
-                            )
+UI = set_ui([simulation, casting, database])
+
+with Session(job=casting.Casting(),
+            db=database.Database('database/monotype.db'),
+            caster=simulation.Monotype()) as session:
+    pass

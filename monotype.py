@@ -12,19 +12,16 @@ import select
 import time
 # Custom exceptions
 import newexceptions
-# User interface
-import text_ui as ui
 # Configuration parser functions
 import cfg_parser
+# Default user interface
+import text_ui as ui
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:
     import wiringpi2 as wiringpi
 except ImportError:
     print 'Missing dependency: wiringPi2 Python bindings: wiringpi2-python'
     print 'Caster control will not work!'
-# Set up a default user interface object:
-# Instantiate a default text user interface
-
 
 class Monotype(object):
     """Monotype(name):
@@ -152,9 +149,8 @@ class Monotype(object):
         from the config file (where it is represented by a section, whose
         name is the same as the caster's).
 
-        The parameters returned are:
-        [diecase_system, unit_adding, interface_id]
-
+        Sets up the instance attributes for the caster.
+        If caster section is not found in conffile - reverts to defaults.
         where:
         diecase_system - caster's diecase layout and a method of
         accessing 16th row, if applicable:
@@ -190,58 +186,8 @@ class Monotype(object):
         """get_interface_settings():
 
         Reads a configuration file and gets interface parameters.
-
-        If the config file is correct, it returns a list:
-        [emergency_gpio, sensor_gpio, mcp0_address, mcp1_address, pin_base]
-
-        emergency_gpio    - BCM number for emergency stop button GPIO
-        sensor_gpio       - BCM number for sensor GPIO
-        mcp0_address     - I2C address for 1st MCP23017
-        mcp1_address     - I2C address for 2nd MCP23017
-        pin_base         - pin numbering base for GPIO outputs on MCP23017
-
-        Multiple interfaces attached to a single Raspberry Pi:
-
-        It's possible to use up to four interfaces (i.e. 2xMCP23017, 4xULN2803)
-        for a single Raspberry. It can be used for operating multiple casters,
-        or a caster and a keyboard's paper tower, simultaneously (without
-        detaching a valve block from the paper tower and moving it elsewhere).
-
-        These interfaces should be identified by numbers: 0, 1, 2, 3.
-
-        Each of the MCP23017 chips has to have unique I2C addresses. They are
-        set by pulling the A0, A1, A2 pins up (to 3.3V) or down (to GND).
-        There are 2^3 = 8 possible addresses, and an interface uses two chips,
-        so you can use up to four interfaces.
-
-        It's best to order the MCP23017 chips' addresses ascending, i.e.
-
-        interface_id   mcp0 pin        mcp1 pin        mcp0         mcp1
-                       A2,A1,A0        A2,A1,A0        address      address
-        0              000             001             0x20         0x21
-        1              010             011             0x22         0x23
-        2              100             101             0x24         0x25
-        3              110             111             0x26         0x27
-
-        where 0 means the pin is pulled down, and 1 means pin pulled up.
-
-        As for pin_base parameter, it's the wiringPi's way of identifying GPIOs
-        on MCP23017 extenders. WiringPi is an abstraction layer which allows
-        you to control (read/write) pins on MCP23017 just like you do it on
-        typical Raspberry Pi's GPIO pins. Thus you don't have to send bytes
-        to registers.
-        The initial 64 GPIO numbers are reserved for Broadcom SoC,
-        so the lowest pin base you can use is 65.
-        Each interface (2xMCP23017) uses 32 pins.
-
-        If you are using multiple interfaces per Raspberry, you SHOULD
-        assign the following pin bases to each interface:
-
-        interface_id       pin_base
-        0                  65
-        1                  98                  (pin_base0 + 32)
-        2                  131                 (pin_base1 + 32)
-        3                  164                 (pin_base2 + 32)
+        Sets up instance attributes.
+        If a section cannot be read - sets up defaults instead.
         """
         iface_name = 'Interface' + str(self.interface_id)
         if cfg_parser.section_not_found(iface_name):

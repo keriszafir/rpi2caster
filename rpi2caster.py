@@ -48,13 +48,14 @@ When an interrupt on a certain Raspberry Pi's GPIO is detected, the program
 stops sending codes to the caster and sends a 0005 combination instead.
 The pump is immediately stopped.
 """
-
-# Imports
 import text_ui
-import casting
-import monotype
-import database
-import simulation
+UI = text_ui
+
+def set_ui(dependencies, userinterface=UI):
+    """Sets the user interface for dependencies"""
+    for module in dependencies:
+        module.ui = userinterface
+    return userinterface
 
 
 class Session(object):
@@ -66,16 +67,15 @@ class Session(object):
     supports UTF-8 too.
     """
 
-    def __init__(self, ui, db, job, caster):
+    def __init__(self, db, job, caster):
         """Instantiates job, caster, database classes to work with"""
-        self.ui = ui
         self.job = job
         self.caster = caster
         self.database = db
-        
+
         self.job.caster = self.caster
         self.job.db = self.database
-        
+
         self.database.job = self.job
 
     def __enter__(self):
@@ -84,7 +84,7 @@ class Session(object):
         Display a message when user presses ctrl-C.
         """
         # Print some debug info
-        self.ui.debug_info('Entering text UI context...')
+        UI.debug_info('Entering text UI context...')
         try:
             self.job.main_menu()
         except KeyboardInterrupt:
@@ -93,14 +93,21 @@ class Session(object):
             print '\nGoodbye!\n'
 
     def __exit__(self, *args):
-        self.ui.debug_info('Exiting text UI context.')
+        UI.debug_info('Exiting text UI context.')
 
 
 # End of class definitions.
 # And now, for something completely different...
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
-    session = Session(caster=simulation.Monotype(),
-                      job=casting.Casting(),
-                      db=database.Database(),
-                      ui=text_ui)
+    # Imports
+    import text_ui
+    import monotype
+    import database
+    import casting
+    DEP = [monotype, database, casting]
+    UI = set_ui(DEP, text_ui)
+    with Session(caster=monotype.Monotype('mkart-cc'),
+                 job=casting.Casting(),
+                 db=database.Database()) as session:
+        pass

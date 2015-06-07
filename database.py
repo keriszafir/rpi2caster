@@ -89,16 +89,16 @@ class Database(object):
                 ui.debug_info('Database path not found in conffile. '
                               'Using default:', self.database_path)
 
-    def add_wedge(self, wedgeName, setWidth, britPica, steps):
-        """add_wedge(wedgeName, setWidth, britPica, steps):
+    def add_wedge(self, wedge_name, set_width, brit_pica, steps):
+        """add_wedge(wedge_name, set_width, brit_pica, steps):
 
         Registers a wedge in our database.
         Returns True if successful, False otherwise.
 
         Arguments:
-        wedgeName - wedge's number, e.g. S5 or 1160. String, cannot be null.
-        setWidth - set width of a wedge, e.g. 9.75. Float, cannot be null.
-        britPica - 1 or True if it's a British pica system (1pica = 0.1667")
+        wedge_name - wedge's number, e.g. S5 or 1160. String, cannot be null.
+        set_width - set width of a wedge, e.g. 9.75. Float, cannot be null.
+        brit_pica - 1 or True if it's a British pica system (1pica = 0.1667")
         0 or False if it's an American pica system (1pica = 0.1660")
 
         If the wedge has "E" at the end of its number (e.g. 5-12E),
@@ -115,7 +115,7 @@ class Database(object):
 
         # data - a list with wedge parameters to be written,
         # a unit arrangement (list of wedge's steps) is JSON-encoded
-        data = [wedgeName, setWidth, str(britPica), json.dumps(steps)]
+        data = [wedge_name, set_width, str(brit_pica), json.dumps(steps)]
         with self.db:
             try:
                 cursor = self.db.cursor()
@@ -138,17 +138,17 @@ class Database(object):
                 ui.exception_handler()
                 return False
 
-    def wedge_by_name_and_width(self, wedgeName, setWidth):
-        """wedge_by_name_and_width(wedgeName, setWidth):
+    def wedge_by_name_and_width(self, wedge_name, set_width):
+        """wedge_by_name_and_width(wedge_name, set_width):
 
         Looks up a wedge with given ID and set width in database.
         Useful when coding a ribbon - wedge is obtained from diecase data.
 
         If wedge is registered, function returns:
         ID - unique, int (e.g. 0),
-        wedgeName - string (e.g. S5) - wedge name
-        setWidth - float (e.g. 9.75) - set width,
-        britPica - bool - whether this is an old-pica ("E") wedge or not,
+        wedge_name - string (e.g. S5) - wedge name
+        set_width - float (e.g. 9.75) - set width,
+        brit_pica - bool - whether this is an old-pica ("E") wedge or not,
         steps - list of unit values for all wedge's steps.
 
         Else, function returns False.
@@ -158,21 +158,21 @@ class Database(object):
                 cursor = self.db.cursor()
                 cursor.execute('SELECT * FROM wedges '
                                'WHERE wedge_number = ? AND set_width = ?',
-                               [wedgeName, setWidth])
+                               [wedge_name, set_width])
                 wedge = cursor.fetchone()
                 if wedge is None:
                     ui.display('No wedge %s - %f found in database!'
-                               % (wedgeName, setWidth))
+                               % (wedge_name, set_width))
                     return False
                 else:
                     wedge = list(wedge)
                     ui.display('Wedge %s-%fset found in database - OK'
-                               % (wedgeName, setWidth))
-                # Change return value of britPica to boolean:
+                               % (wedge_name, set_width))
+                # Change return value of brit_pica to boolean:
                     wedge[3] = bool(wedge[3])
                 # Change return value of steps to list:
                     wedge[4] = json.loads(wedge[4])
-                # Return [ID, wedgeName, setWidth, britPica, steps]:
+                # Return [ID, wedge_name, set_width, brit_pica, steps]:
                     return wedge
             except:
             # In debug mode, display exception code & stack trace.
@@ -186,9 +186,9 @@ class Database(object):
 
         If so, returns:
         ID - unique, int (e.g. 0),
-        wedgeName - string (e.g. S5) - wedge name
-        setWidth - float (e.g. 9.75) - set width,
-        britPica - bool - whether this is a British pica wedge or not,
+        wedge_name - string (e.g. S5) - wedge name
+        set_width - float (e.g. 9.75) - set width,
+        brit_pica - bool - whether this is a British pica wedge or not,
         steps - list of unit values for all wedge's steps.
 
         Else, returns False.
@@ -203,11 +203,11 @@ class Database(object):
                     return False
                 else:
                     wedge = list(wedge)
-                # Change return value of britPica to boolean:
+                # Change return value of brit_pica to boolean:
                     wedge[3] = bool(wedge[3])
                 # Change return value of steps to list:
                     wedge[4] = json.loads(wedge[4])
-                # Return [ID, wedgeName, setWidth, britPica, steps]:
+                # Return [ID, wedge_name, set_width, brit_pica, steps]:
                     return wedge
             except:
             # In debug mode, display exception code & stack trace.
@@ -247,9 +247,9 @@ class Database(object):
         Prints the following to stdout:
 
         ID - unique, int (e.g. 0),
-        wedgeName - string (e.g. S5) - wedge name
-        setWidth - float (e.g. 9.75) - set width,
-        britPica - bool - whether this is an old-pica ("E") wedge or not,
+        wedge_name - string (e.g. S5) - wedge name
+        set_width - float (e.g. 9.75) - set width,
+        brit_pica - bool - whether this is an old-pica ("E") wedge or not,
         steps - list of unit values for all wedge's steps.
 
         Returns True if successful, False otherwise.
@@ -280,8 +280,8 @@ class Database(object):
                 ui.exception_handler()
                 return False
 
-    def diecase_by_series_and_size(self, typeSeries, typeSize):
-        """diecase_by_series_and_size(typeSeries, typeSize):
+    def diecase_by_series_and_size(self, type_series, type_size):
+        """diecase_by_series_and_size(type_series, type_size):
 
         Searches for diecase metadata, based on the desired type series
         and size. Allows to choose one of the diecases found.
@@ -291,7 +291,7 @@ class Database(object):
                 cursor = self.db.cursor()
                 cursor.execute('SELECT * FROM diecases '
                                'WHERE type_series = "%s" AND size = %i',
-                               (typeSeries, typeSize))
+                               (type_series, type_size))
             # Initialize a list of matching diecases:
                 matches = []
                 while True:
@@ -310,23 +310,25 @@ class Database(object):
                     return matches[0]
                 else:
                 # More than one match - decide which one to use:
-                    IDs = []
-                    for diecase in matches:
-                        IDs.append(diecase[0])
+                    idents = [record[0] for record in matches]
+                # Associate diecases with IDs to select one later
+                    assoc = dict(zip(idents, matches))
                 # Display a menu with diecases from 1 to the last:
-                    options = dict(zip(range(1, len(matches) + 1), IDs))
+                    options = dict(zip(range(1, len(matches) + 1), idents))
                     header = 'Choose a diecase:'
                     choice = ui.menu(options, header)
+                # Choose one
+                    chosen_id = options[choice]
                 # Return a list with chosen diecase's parameters:
-                    return options[choice]
+                    return assoc[chosen_id]
             except:
             # In debug mode, display exception code & stack trace.
                 ui.display('Database error: cannot find diecase data!')
                 ui.exception_handler()
                 return False
 
-    def diecase_by_id(self, diecaseID):
-        """diecase_by_id(diecaseID):
+    def diecase_by_id(self, diecase_id):
+        """diecase_by_id(diecase_id):
 
         Searches for diecase metadata, based on the unique diecase ID.
         """
@@ -334,7 +336,7 @@ class Database(object):
             try:
                 cursor = self.db.cursor()
                 cursor.execute('SELECT * FROM diecases WHERE id = "%s"'
-                               % diecaseID)
+                               % diecase_id)
             # Return diecase if found:
                 diecase = cursor.fetchone()
                 if diecase is not None:
@@ -353,4 +355,3 @@ class Database(object):
 
     def __exit__(self, *args):
         ui.debug_info('Exiting database context.')
-        
