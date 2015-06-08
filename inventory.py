@@ -217,8 +217,7 @@ def main_menu():
         choice = ui.menu(options, header=h, footer='')
         try:
             # Execute it!
-            with db:
-                commands[choice]()
+            commands[choice]()
             ui.hold_on_exit()
         except newexceptions.ReturnToMenu:
             pass
@@ -228,4 +227,6 @@ def main_menu():
 
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
+    with db:
+        pass
     main_menu()

@@ -51,3 +51,10 @@ class ConfigFileUnavailable(Exception):
     Exception raised when a config file does not exist or cannot be read.
     """
     pass
+
+class WrongConfiguration(Exception):
+    """WrongConfiguration
+
+    Exception raised when a parameter is not configured correctly.
+    """
+    pass

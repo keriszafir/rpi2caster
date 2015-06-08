@@ -7,27 +7,25 @@ Database-related classes for rpi2caster suite.
 # IMPORTS:
 import sys
 import time
-
-# User interface
-import text_ui as ui
-
-# Config parser for reading the interface settings
-import ConfigParser
-
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 try:
     import json
 except ImportError:
     import simplejson as json
-
-# rpi2caster uses sqlite3 database for storing caster, interface,
+# this module uses sqlite3 database for storing caster, interface,
 # wedge, diecase & matrix parameters:
 try:
     import sqlite3
 except ImportError:
     print 'Missing dependency: sqlite3'
     sys.exit()
+# Custom exceptions
+import newexceptions
+# User interface
+import text_ui as ui
+# Config parser for reading the interface settings
+import cfg_parser
 
 
 class Database(object):
@@ -56,38 +54,34 @@ class Database(object):
     Usually you run setup with sudo.
     """
 
-    def __init__(self, database_path='database/monotype.db',
-                 config_path='/etc/rpi2caster.conf'):
-        self.database_path = database_path
-        self.config_path = config_path
-        # Connect to the database when entering the object's context
-        self.db = None
+    def __init__(self, database_path='', config_path=''):
+        """init:
+
+        Sets up config path (specified or default),
+        sets up database path (specified, set up in config, then default),
+        """
+        # Update cfg_parser's CONFIG_PATH or keep it default
+        cfg_parser.CONFIG_PATH = config_path or cfg_parser.CONFIG_PATH
+        # Database path selection priority:
+        # 1. explicitly stated on class instantiation
+        # 2. found in conffile
+        # 3. hardcoded default: database/monotype.db
+        self.database_path = (database_path
+                              or cfg_parser.get_config('Database', 'path')
+                              or 'database/monotype.db')
+        # Connect to the database
+        try:
+            self.db = sqlite3.connect(self.database_path)
+        except sqlite3.OperationalError:
+            raise newexceptions.WrongConfiguration('Database cannot be opened')
 
     def __enter__(self):
         ui.debug_info('Entering database context...')
-        self.database_setup()
-        ui.debug_info('Using database path:', self.database_path)
-        self.db = sqlite3.connect(self.database_path)
+        ui.debug_info('Using conffile: ', cfg_parser.CONFIG_PATH)
+        ui.debug_info('Using database path: ', self.database_path)
+        ui.debug_enter_data('[Enter] to continue...')
         return self
 
-    def database_setup(self):
-        """Initialize database:
-
-        Database path passed to class has priority over database path
-        set in conffile. If none of them is found, the program will use
-        hardcoded default.
-        """
-        if not self.database_path:
-            config = ConfigParser.SafeConfigParser()
-            config.read(self.config_path)
-        # Look database path up in conffile:
-            try:
-                self.database_path = config.get('Database', 'path')
-            except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
-            # Revert to defaults if database not configured properly:
-                self.database_path = 'database/monotype.db'
-                ui.debug_info('Database path not found in conffile. '
-                              'Using default:', self.database_path)
 
     def add_wedge(self, wedge_name, set_width, brit_pica, steps):
         """add_wedge(wedge_name, set_width, brit_pica, steps):
