@@ -82,8 +82,8 @@ class Monotype(object):
         output = {'Using caster name: ' : self.name,
                   'Is a perforator? ' : self.is_perforator,
                   'Interface ID: ' : self.interface_id,
-                  '1st MCP23017 I2C address: ' : self.mcp0_address,
-                  '2nd MCP23017 I2C address: ' : self.mcp1_address,
+                  '1st MCP23017 I2C address: ' : hex(self.mcp0_address),
+                  '2nd MCP23017 I2C address: ' : hex(self.mcp1_address),
                   'MCP23017 pin base for GPIO numbering: ' : self.pin_base,
                   'Signals arrangement: ' : self.signals_arrangement}
         # Display this info only for casters and not perforators:

@@ -47,13 +47,20 @@ def get_config(section_name, option_name):
         # Get the value and decide what to do with it
         value = cfg.get(section_name, option_name)
         try:
-            if value.lower() in TRUE_ALIASES:
+            if value.lower().startswith('0x'):
+                # Value is a hexstring: 0x or 0X
+                return int(value, 16)
+            elif value.lower() in ['none', 'null']:
+                # Value was specified to be None or null
+                return None
+            elif value.lower() in TRUE_ALIASES:
                 # Return boolean True if option was marked as 1, on, true, yes
                 return True
             elif value.lower() in FALSE_ALIASES:
                 # Return False if the option was marked as 0, off, false, no
                 return False
         except AttributeError:
+            # Do nothing if the value has no method we tried
             pass
         # Return the raw value - a list, a string, None etc.
         return value
