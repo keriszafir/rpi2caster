@@ -72,7 +72,7 @@ class Database(object):
         # Connect to the database
         try:
             self.db = sqlite3.connect(self.database_path)
-        except sqlite3.OperationalError:
+        except (sqlite3.OperationalError, sqlite3.DatabaseError):
             raise newexceptions.WrongConfiguration('Database cannot be opened')
 
     def __enter__(self):
@@ -83,33 +83,35 @@ class Database(object):
         return self
 
 
-    def add_wedge(self, wedge_name, set_width, brit_pica, steps):
-        """add_wedge(wedge_name, set_width, brit_pica, steps):
+    def add_wedge(self, wedge_name, set_width, brit_pica, unit_arrangement):
+        """add_wedge:
 
         Registers a wedge in our database.
         Returns True if successful, False otherwise.
 
         Arguments:
-        wedge_name - wedge's number, e.g. S5 or 1160. String, cannot be null.
-        set_width - set width of a wedge, e.g. 9.75. Float, cannot be null.
-        brit_pica - 1 or True if it's a British pica system (1pica = 0.1667")
-        0 or False if it's an American pica system (1pica = 0.1660")
+        wedge_name - wedge number, e.g. S5 or 1160, str or int, not null.
+        set_width - set width of a wedge, e.g. 9.75. float, not null.
+        brit_pica - True if it's a British pica system (1pica = 0.1667")
+                    False if it's an American pica system (1pica = 0.1660")
 
         If the wedge has "E" at the end of its number (e.g. 5-12E),
         then it was made for European countries which used Didot points
         and ciceros (1cicero = 0.1776"), but the unit calculations were all
         based on the British pica.
 
-        steps - a wedge's unit arrangement - list of unit values for each
-        of the wedge's steps (i.e. diecase rows). Cannot be null.
+        unit_arrangement - a wedge's unit arrangement - list of unit values
+        for each of the wedge's steps (i.e. diecase rows). Not null.
 
         An additional column, id, will be created and auto-incremented.
         This will be an unique identifier of a wedge.
         """
 
         # data - a list with wedge parameters to be written,
-        # a unit arrangement (list of wedge's steps) is JSON-encoded
-        data = [wedge_name, set_width, str(brit_pica), json.dumps(steps)]
+        # boolean brit_pica must be converted to int,
+        # a unit arrangement is a JSON-encoded list
+        data = [wedge_name, set_width, int(brit_pica),
+                json.dumps(unit_arrangement)]
         with self.db:
             try:
                 cursor = self.db.cursor()
@@ -118,15 +120,16 @@ class Database(object):
                                'id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
                                'wedge_number TEXT NOT NULL, '
                                'set_width REAL NOT NULL, '
-                               'brit_pica TEXT NOT NULL, '
-                               'steps TEXT NOT NULL)')
+                               'brit_pica INTEGER NOT NULL, '
+                               'unit_arrangement TEXT NOT NULL)')
             # Then add an entry:
-                cursor.execute('INSERT INTO wedges ( '
-                               'wedge_number,set_width,old_pica,steps'
+                cursor.execute('INSERT INTO wedges ('
+                               'wedge_number,set_width,'
+                               'brit_pica,unit_arrangement'
                                ') VALUES (?, ?, ?, ?)''', data)
                 self.db.commit()
                 return True
-            except:
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # In debug mode, display exception code & stack trace.
                 ui.display('Database error: cannot add wedge!')
                 ui.exception_handler()
@@ -168,10 +171,11 @@ class Database(object):
                     wedge[4] = json.loads(wedge[4])
                 # Return [ID, wedge_name, set_width, brit_pica, steps]:
                     return wedge
-            except:
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # In debug mode, display exception code & stack trace.
                 ui.display('Database error: cannot get wedge!')
                 ui.exception_handler()
+                return False
 
     def wedge_by_id(self, ID):
         """wedge_by_id(ID):
@@ -203,13 +207,14 @@ class Database(object):
                     wedge[4] = json.loads(wedge[4])
                 # Return [ID, wedge_name, set_width, brit_pica, steps]:
                     return wedge
-            except:
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # In debug mode, display exception code & stack trace.
                 ui.display('Database error: cannot get wedge!')
                 ui.exception_handler()
+                return False
 
-    def delete_wedge(self, ID):
-        """delete_wedge(self, ID):
+    def delete_wedge(self, w_id):
+        """delete_wedge:
 
         Deletes a wedge with given unique ID from the database
         (useful in case we no longer have the wedge).
@@ -218,13 +223,13 @@ class Database(object):
 
         First, the function checks if the wedge is in the database at all.
         """
-        if self.wedge_by_id(ID):
+        if self.wedge_by_id(w_id):
             with self.db:
                 try:
                     cursor = self.db.cursor()
-                    cursor.execute('DELETE FROM wedges WHERE id = ?', [ID])
+                    cursor.execute('DELETE FROM wedges WHERE id = ?', [w_id])
                     return True
-                except:
+                except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # In debug mode, display exception code & stack trace.
                     ui.display('Database error: cannot delete wedge!')
                     ui.exception_handler()
@@ -255,20 +260,19 @@ class Database(object):
                 header = ('\n' + 'ID'.center(10)
                           + 'wedge No'.center(10)
                           + 'Brit. pica'.center(10)
-                          + 'unit arrangement'
+                          + 'Unit arrangement'
                           + '\n')
                 ui.display(header)
+                # Initialize a loop, end after last wedge is displayed
                 while True:
                     wedge = cursor.fetchone()
-                    if wedge is not None:
-                        record = ''
-                        for field in wedge:
-                            record += str(field).ljust(10)
-                        ui.display(record)
-                    else:
+                    if not wedge:
                         break
-                return True
-            except:
+                    record = [str(field).ljust(10) for field in wedge]
+                    ui.display(' '.join(record))
+                else:
+                    return True
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # In debug mode, display exception code & stack trace."""
                 ui.display('Database error: cannot list wedges!')
                 ui.exception_handler()
@@ -315,7 +319,7 @@ class Database(object):
                     chosen_id = options[choice]
                 # Return a list with chosen diecase's parameters:
                     return assoc[chosen_id]
-            except:
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # In debug mode, display exception code & stack trace.
                 ui.display('Database error: cannot find diecase data!')
                 ui.exception_handler()
@@ -341,7 +345,7 @@ class Database(object):
                     ui.display('Sorry - no results found.')
                     time.sleep(1)
                     return False
-            except:
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
             # In debug mode, display exception code & stack trace.
                 ui.display('Database error: cannot find diecase data!')
                 ui.exception_handler()
