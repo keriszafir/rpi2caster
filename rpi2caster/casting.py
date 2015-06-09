@@ -600,16 +600,13 @@ class Casting(object):
                   + debug_notice() + '\n\nMain Menu:')
         # Keep displaying the menu and go back here after any method ends
         while True:
-            choice = ui.menu(options, header=header,
-                             footer=additional_info())
-            # Call the function and return to menu.
             try:
             # Catch "return to menu" and "exit program" exceptions here
-                choice()
+                ui.menu(options, header=header, footer=additional_info())()
             except newexceptions.ReturnToMenu:
             # Will skip to the end of the loop, and start all over
                 pass
-            except newexceptions.ExitProgram:
+            except (KeyboardInterrupt, newexceptions.ExitProgram):
             # Will exit program
                 ui.exit_program()
 

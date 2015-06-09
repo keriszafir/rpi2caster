@@ -76,8 +76,6 @@ class Session(object):
         self.job.caster = self.caster
         self.job.db = self.database
 
-        self.database.job = self.job
-
     def __enter__(self):
         """Try to call main menu for a job.
 
