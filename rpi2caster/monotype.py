@@ -425,7 +425,7 @@ class Monotype(object):
                 time.sleep(1)
                 return True
         # End of subroutine definitions
-        while not send_signals_to_caster(signals, 30):
+        while not send_signals_to_caster(signals, cycle_timeout):
         # Keep trying to cast the combination, or end here
         # (subroutine will throw an exception if operator exits)
             stop_menu()
