@@ -11,15 +11,15 @@ signals, one by one, to the file or database. These sequences are to be read
 and parsed by the casting program, which sends the signals to the machine.
 """
 # New division model
-from __future__ import division
+from __future__ import division, absolute_import
 # Typical libs, used by most routines:
 import time
 # User interface
-import text_ui as ui
+from rpi2caster import text_ui as ui
 # Exceptions module
-import newexceptions
+from rpi2caster import exceptions
 # Inventory management (until I find a better way for db abstraction...)
-import inventory
+from rpi2caster import inventory
 # HTML/XML parser:
 try:
     from bs4 import BeautifulSoup
@@ -118,7 +118,7 @@ class Typesetter(object):
             return '\n'.join(info)
         def exit_program():
             """Throws an exception to exit the program"""
-            raise newexceptions.ExitProgram
+            raise exceptions.ExitProgram
         # End of subroutines.
         # Now construct a menu.
         # Commands: {option_name : function}
@@ -143,9 +143,9 @@ class Typesetter(object):
             # Call the function and return to menu.
             try:
                 ui.menu(options, header=hdr, footer=additional_info())()
-            except newexceptions.ReturnToMenu:
+            except exceptions.ReturnToMenu:
                 pass
-            except (KeyboardInterrupt, newexceptions.ExitProgram):
+            except (KeyboardInterrupt, exceptions.ExitProgram):
                 ui.exit_program()
 
     def enter_line_length(self):

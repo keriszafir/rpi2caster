@@ -5,12 +5,11 @@
 
 Allows to add, list and delete wedges and diecases.
 """
-import text_ui as ui
-
-import database
+from __future__ import absolute_import
+from rpi2caster import text_ui as ui
+from rpi2caster import database
+from rpi2caster import exceptions
 DB = database.Database()
-
-import newexceptions
 
 
 # Placeholders for functionality not implemented yet:
@@ -276,10 +275,10 @@ def add_wedge():
             ui.enter_data('Enter parameters again from scratch... ')
         def return_to_menu():
             """Return to menu (main menu will catch the exception)"""
-            raise newexceptions.ReturnToMenu
+            raise exceptions.ReturnToMenu
         def exit_program():
             """Exit program (main menu will catch the exception)"""
-            raise newexceptions.ExitProgram
+            raise exceptions.ExitProgram
         # Confirmation menu:
         message = ('\nCommit wedge to database? \n'
                    '[Y]es, [N]o (enter values again), [M]enu or [E]xit? ')
@@ -303,7 +302,7 @@ def delete_wedge():
             prompt = 'Enter the wedge ID to delete (leave blank to exit): '
             w_id = ui.enter_data(prompt)
             if not w_id:
-                raise newexceptions.ReturnToMenu
+                raise exceptions.ReturnToMenu
             w_id = int(w_id)
         except (ValueError, TypeError):
             pass
@@ -336,8 +335,8 @@ def main_menu():
     """Display the main menu for inventory management"""
     def exit_program():
         """Helper subroutine, throws an exception to exit the program"""
-        raise newexceptions.ExitProgram
-        
+        raise exceptions.ExitProgram
+
     options = [('Exit program', exit_program),
                ('List matrix cases', list_diecases),
                ('Show matrix case layout', show_diecase_layout),
@@ -353,9 +352,9 @@ def main_menu():
         try:
             ui.menu(options, header=header, footer='')()
             ui.hold_on_exit()
-        except newexceptions.ReturnToMenu:
+        except exceptions.ReturnToMenu:
             pass
-        except (KeyboardInterrupt, newexceptions.ExitProgram):
+        except (KeyboardInterrupt, exceptions.ExitProgram):
             ui.exit_program()
 
 

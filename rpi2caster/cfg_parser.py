@@ -4,10 +4,11 @@ conffile_parser
 
 Module for reading and writing configuration from/to conffile.
 """
+from __future__ import absolute_import
 # Config parser for reading the interface settings
 import ConfigParser
 # Custom exceptions
-import newexceptions
+from rpi2caster import exceptions
 # Define some module constants
 CONFIG_PATH = 'rpi2caster.conf'
 TRUE_ALIASES = ['true', 'on', 'yes']
@@ -26,7 +27,7 @@ def initialize_config():
             cfg.read(CONFIG_PATH)
             return cfg
     except IOError:
-        raise newexceptions.ConfigFileUnavailable
+        raise exceptions.ConfigFileUnavailable
 
 
 def get_config(section_name, option_name):

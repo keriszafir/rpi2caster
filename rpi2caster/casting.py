@@ -13,14 +13,15 @@ A module for everything related to working on a Monotype composition caster:
 """
 
 # IMPORTS:
+from __future__ import absolute_import
 # Built-in time library
 import time
 # Signals parsing methods for rpi2caster
 import parsing
 # User interfaces module for rpi2caster:
-import text_ui as ui
+from rpi2caster import text_ui as ui
 # Custom exceptions
-import newexceptions
+from rpi2caster import exceptions
 
 
 def use_caster(func):
@@ -147,7 +148,7 @@ class Casting(object):
                 # Cast the sequence
                 try:
                     self.caster.process_signals(signals)
-                except newexceptions.CastingAborted:
+                except exceptions.CastingAborted:
                 # On failure - abort the whole job.
                 # Check the aborted line so we can get back to it.
                     self.line_aborted = current_line
@@ -244,7 +245,7 @@ class Casting(object):
                 code = parsing.signals_parser(code)
                 code = parsing.convert_o15(code)
                 self.caster.process_signals(code, 120)
-        except newexceptions.CastingAborted:
+        except exceptions.CastingAborted:
             return False
         else:
             ui.display('\nTesting finished!')
@@ -296,16 +297,16 @@ class Casting(object):
                         if self.cast_from_matrix(signals, number, lines):
                             ui.display('Casting finished successfully.')
                         else:
-                            raise newexceptions.ReturnToMenu
+                            raise exceptions.ReturnToMenu
                     def different():
                         """Start the outer loop again - with new parameters"""
-                        raise newexceptions.ChangeParameters
+                        raise exceptions.ChangeParameters
                     def return_to_menu():
                         """Throw an exception caught by the menu function"""
-                        raise newexceptions.ReturnToMenu
+                        raise exceptions.ReturnToMenu
                     def exit_program():
                         """Throw an exception caught by the menu function"""
-                        raise newexceptions.ExitProgram
+                        raise exceptions.ExitProgram
                     # End of menu subroutines.
                     options = {'C' : cast_it,
                                'D' : different,
@@ -318,7 +319,7 @@ class Casting(object):
                     choice = ui.simple_menu(message, options).upper()
                     # Execute choice
                     options[choice]()
-            except newexceptions.ChangeParameters:
+            except exceptions.ChangeParameters:
             # Skip the menu and casting altogether, repeat the outer loop
                 pass
 
@@ -385,7 +386,7 @@ class Casting(object):
             # After casting sorts we need to stop the pump
                 ui.display('Stopping the pump...')
                 self.caster.process_signals(set0005)
-            except newexceptions.CastingAborted:
+            except exceptions.CastingAborted:
                 self.line_aborted = current_line
                 ui.display('Casting aborted on line %i'
                            % self.line_aborted)
@@ -447,10 +448,10 @@ class Casting(object):
                 pass
             def back_to_menu():
                 """Go back to main menu"""
-                raise newexceptions.ReturnToMenu
+                raise exceptions.ReturnToMenu
             def exit_program():
                 """Exit program"""
-                raise newexceptions.ExitProgram
+                raise exceptions.ExitProgram
             # Finished. Return to menu.
             options = {'C' : continue_aligning,
                        'M' : back_to_menu,
@@ -581,7 +582,7 @@ def main_menu(work=Casting()):
         """exit_program:
 
         Throws an exception caught after the option is chosen."""
-        raise newexceptions.ExitProgram
+        raise exceptions.ExitProgram
 
     # End of menu subroutines
     # Now construct the menu, starting with available options
@@ -606,9 +607,9 @@ def main_menu(work=Casting()):
         try:
         # Catch "return to menu" and "exit program" exceptions here
             ui.menu(options, header=header, footer=additional_info())()
-        except newexceptions.ReturnToMenu:
+        except exceptions.ReturnToMenu:
         # Will skip to the end of the loop, and start all over
             pass
-        except (KeyboardInterrupt, newexceptions.ExitProgram):
+        except (KeyboardInterrupt, exceptions.ExitProgram):
         # Will exit program
             ui.exit_program()

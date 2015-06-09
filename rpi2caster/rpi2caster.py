@@ -3,10 +3,12 @@
 """rpi2caster
 
 Session management for the rpi2caster package
-TODO: get this thing to set up objects dynamically (i.e. changing a caster etc.)
+TODO: get this thing to set up objects dynamically
+(i.e. changing a caster etc.)
 """
-import text_ui
-UI = text_ui
+from __future__ import absolute_import
+from rpi2caster import text_ui as UI
+
 
 def set_ui(dependencies, userinterface=UI):
     """Sets the user interface for dependencies"""
@@ -60,7 +62,7 @@ if __name__ == '__main__':
     import database
     import casting
     DEP = [monotype, database, casting]
-    UI = set_ui(DEP, text_ui)
+    UI = set_ui(DEP, UI)
     with Session(caster=monotype.Monotype('mkart-cc'),
                  job=casting.Casting(),
                  db=database.Database()) as session:

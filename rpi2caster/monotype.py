@@ -6,16 +6,17 @@ This module contains low- and mid-level caster control routines for
 a physical Monotype composition caster, linked via pneumatic valves
 and MCP23017 IC's to the Raspberry Pi.
 """
+from __future__ import absolute_import
 # Essential for polling the sensor for state change:
 import select
 # Built-in time library
 import time
 # Custom exceptions
-import newexceptions
+from rpi2caster import exceptions
 # Configuration parser functions
-import cfg_parser
+from rpi2caster import cfg_parser
 # Default user interface
-import text_ui as ui
+from rpi2caster import text_ui as ui
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:
     import wiringpi2 as wiringpi
@@ -245,10 +246,10 @@ class Monotype(object):
                 return True
             def return_to_menu():
                 """Raise an exception to return to main menu"""
-                raise newexceptions.ReturnToMenu
+                raise exceptions.ReturnToMenu
             def exit_program():
                 """Raise an exception to exit program"""
-                raise newexceptions.ExitProgram
+                raise exceptions.ExitProgram
             options = {'C' : continue_casting,
                        'M' : return_to_menu,
                        'E' : exit_program}
@@ -381,7 +382,7 @@ class Monotype(object):
                 from the Casting class
                 """
                 emergency_cleanup()
-                raise newexceptions.CastingAborted
+                raise exceptions.CastingAborted
 
             def exit_program():
                 """exit_program
@@ -389,7 +390,7 @@ class Monotype(object):
                 Helper function - throws an exception to exit the program.
                 Also makes sure the pump is turned off."""
                 emergency_cleanup()
-                raise newexceptions.ExitProgram
+                raise exceptions.ExitProgram
             # End of subroutine definitions
             # Now, a little menu...
             options = {'C' : continue_casting,

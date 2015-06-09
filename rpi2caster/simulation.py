@@ -6,12 +6,13 @@ A module which allows to simulate working with a Monotype composition caster,
 and should be used for testing the higher-level casting routines
 without an access to the actual caster.
 """
+from __future__ import absolute_import
 # Built-in time module
 import time
 # Custom exceptions module
-import newexceptions
+from rpi2caster import exceptions
 # Default user interface
-import text_ui as ui
+from rpi2caster import text_ui as ui
 
 
 class Monotype(object):
@@ -81,7 +82,7 @@ class Monotype(object):
                 from the Casting class
                 """
                 emergency_cleanup()
-                raise newexceptions.CastingAborted
+                raise exceptions.CastingAborted
 
             def exit_program():
                 """exit_program
@@ -89,7 +90,7 @@ class Monotype(object):
                 Helper function - throws an exception to exit the program.
                 Also makes sure the pump is turned off."""
                 emergency_cleanup()
-                raise newexceptions.ExitProgram
+                raise exceptions.ExitProgram
 
             # End of subroutine definitions
             # Now, a little menu
@@ -162,10 +163,10 @@ class Monotype(object):
                 return True
             def return_to_menu():
                 """Raise an exception to return to main menu"""
-                raise newexceptions.ReturnToMenu
+                raise exceptions.ReturnToMenu
             def exit_program():
                 """Raise an exception to exit program"""
-                raise newexceptions.ExitProgram
+                raise exceptions.ExitProgram
             options = {'C' : continue_casting,
                        'M' : return_to_menu,
                        'E' : exit_program}

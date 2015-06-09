@@ -5,6 +5,7 @@ Database:
 Database-related classes for rpi2caster suite.
 """
 # IMPORTS:
+from __future__ import absolute_import
 import sys
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
@@ -20,9 +21,9 @@ except ImportError:
     print 'Missing dependency: sqlite3'
     sys.exit()
 # Custom exceptions
-import newexceptions
+from rpi2caster import exceptions
 # Config parser for reading the interface settings
-import cfg_parser
+from rpi2caster import cfg_parser
 
 
 class Database(object):
@@ -70,7 +71,7 @@ class Database(object):
         try:
             self.db_connection = sqlite3.connect(self.database_path)
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            raise newexceptions.WrongConfiguration('Database cannot be opened')
+            raise exceptions.WrongConfiguration('Database cannot be opened')
 
     def __enter__(self):
         return self

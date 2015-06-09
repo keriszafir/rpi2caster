@@ -6,7 +6,6 @@ This module contains user interfaces to be used by rpi2caster suite.
 """
 
 # IMPORTS for text user interface
-import sys
 import os
 import readline
 import glob
