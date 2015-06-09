@@ -58,7 +58,15 @@ class Casting(object):
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
         self.main_menu()
+    
+    def use_caster(func):
+        """Method decorator for requiring caster context"""
+        def func_wrapper(self, *args, **kwargs):
+            with self.caster:
+                return func(self, *args, **kwargs)
+        return func_wrapper
 
+    @use_caster
     def cast_composition(self):
         """cast_composition()
 
@@ -150,6 +158,7 @@ class Casting(object):
         ui.hold_on_exit()
         return True
 
+    @use_caster
     def punch_composition(self):
         """punch_composition():
 
@@ -211,6 +220,7 @@ class Casting(object):
         ui.hold_on_exit()
         return True
 
+    @use_caster
     def line_test(self):
         """line_test():
 
@@ -239,6 +249,7 @@ class Casting(object):
             ui.hold_on_exit()
             return True
 
+    @use_caster
     def cast_sorts(self):
         """cast_sorts():
 
@@ -309,6 +320,7 @@ class Casting(object):
             # Skip the menu and casting altogether, repeat the outer loop
                 pass
 
+    @use_caster
     def cast_from_matrix(self, signals, num=5, lines=1, pos0075=3, pos0005=8):
         """cast_from_matrix(combination, n, pos0075, pos0005):
 
@@ -379,6 +391,7 @@ class Casting(object):
         # We'll be here if casting ends successfully
         return True
 
+    @use_caster
     def send_combination(self):
         """send_combination():
 
@@ -403,6 +416,7 @@ class Casting(object):
         self.caster.deactivate_valves()
         return True
 
+    @use_caster
     def align_wedges(self, space_position='G5'):
         """align_wedges(space_position='G5'):
 
@@ -609,8 +623,7 @@ class Casting(object):
             # Call the function and return to menu.
             try:
             # Catch "return to menu" and "exit program" exceptions here
-                with self.caster:
-                    choice()
+                choice()
             except newexceptions.ReturnToMenu:
             # Will skip to the end of the loop, and start all over
                 pass
