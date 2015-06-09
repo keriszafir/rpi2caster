@@ -16,8 +16,8 @@ import time
 import text_ui as ui
 # Exceptions module
 import newexceptions
-# Database
-import database
+# Inventory management (until I find a better way for db abstraction...)
+import inventory
 # HTML/XML parser:
 try:
     from bs4 import BeautifulSoup
@@ -80,7 +80,7 @@ class Typesetter(object):
             self.main_menu()
         def debug_notice():
         # Prints a notice if the program is in debug mode:
-            if ui.debug_mode:
+            if ui.DEBUG_MODE:
                 return '\n\nThe program is now in debugging mode!'
             else:
                 return ''
@@ -545,9 +545,7 @@ class Typesetter(object):
         except:
             pass
         # Choose a wedge based on wedge number and set size:
-        with self.database:
-            wedgeSteps = self.database.wedge_by_name_and_width(self.wedge,
-                                                               self.setWidth)[4]
+        wedgeSteps = inventory.wedge_by_name_and_width(wedge, setWidth)[4]
         # Get unit values for that wedge:
         self.wedgeUnits = dict(zip(range(1, 17), wedgeSteps))
 

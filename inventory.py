@@ -8,24 +8,70 @@ Allows to add, list and delete wedges and diecases.
 import text_ui as ui
 
 import database
-db = database.Database()
+DB = database.Database()
 
 import newexceptions
 
 
 # Placeholders for functionality not implemented yet:
 def list_diecases():
+    """Not implemented yet"""
     pass
+
+
 def show_diecase_layout():
+    """Not implemented yet"""
     pass
+
+
+def lookup_diecase(type_series, type_size):
+    """lookup_diecase
+
+    Searches for a diecase of given type series (e.g. 327) and size (e.g. 12),
+    if several matches found - allows to choose one of them, returns data.
+    """
+    matches = DB.diecase_by_series_and_size(type_series, type_size)
+    if not matches:
+    # List is empty. Notify the user:
+        ui.display('Sorry - no results found.')
+        return False
+    elif len(matches) == 1:
+    # One result found
+        return matches[0]
+    else:
+    # More than one match - decide which one to use:
+        idents = [record[0] for record in matches]
+    # Associate diecases with IDs to select one later
+        assoc = dict(zip(idents, matches))
+    # Display a menu with diecases from 1 to the last:
+        options = dict([(i, k) for i, k in enumerate(matches, start=1)])
+        header = 'Choose a diecase:'
+        choice = ui.menu(options, header)
+    # Choose one
+        chosen_id = options[choice]
+    # Return a list with chosen diecase's parameters:
+        return assoc[chosen_id]
+
+
 def add_diecase():
+    """Not implemented yet"""
     pass
+
+
 def edit_diecase():
+    """Not implemented yet"""
     pass
+
+
 def clear_diecase():
+    """Not implemented yet"""
     pass
+
+
 def delete_diecase():
+    """Not implemented yet"""
     pass
+
 
 def add_wedge():
     """add_wedge()
@@ -64,28 +110,28 @@ def add_wedge():
     very common and most casting workshops have a few of them.
     """
     # Thanks to John Cornelisse for those unit arrangements!
-    wedge_data = {5: [5,6,7,8,9,9,9,10,10,11,12,13,14,15,18,18],
-                  96: [5,6,7,8,9,9,10,10,11,12,13,14,15,16,18,18],
-                  111: [5,6,7,8,8,8,9,9,9,9,10,12,12,13,15,15],
-                  334: [5,6,7,8,9,9,10,10,11,11,13,14,15,16,18,18],
-                  344: [5,6,7,9,9,9,10,11,11,12,12,13,14,15,16,16],
-                  377: [5,6,7,8,8,9,9,10,10,11,12,13,14,15,18,18],
-                  409: [5,6,7,8,8,9,9,10,10,11,12,13,14,15,16,16],
-                  467: [5,6,7,8,8,9,9,9,10,11,12,13,14,15,18,18],
-                  486: [5,7,6,8,9,11,10,10,13,12,14,15,15,18,16,16],
-                  526: [5,6,7,8,9,9,10,10,11,12,13,14,15,17,18,18],
-                  536: [5,6,7,8,9,9,10,10,11,12,13,14,15,17,18,18],
-                  562: [5,6,7,8,9,9,9,10,11,12,13,14,15,17,18,18],
-                  607: [5,6,7,8,9,9,9,9,10,11,12,13,14,15,18,18],
-                  611: [6,6,7,9,9,10,11,11,12,12,13,14,15,16,18,18],
-                  674: [5,6,7,8,8,9,9,9,10,10,11,12,13,14,15,18],
-                  724: [5,6,7,8,8,9,9,10,10,11,13,14,15,16,18,18],
-                  990: [5,5,6,7,8,9,9,9,9,10,10,11,13,14,18,18],
-                  1063: [5,6,8,9,9,9,9,10,12,12,13,14,15,15,18,18],
-                  1329: [4,5,7,8,9,9,9,9,10,10,11,12,12,13,15,15],
-                  1331: [4,5,7,8,8,9,9,9,9,10,11,12,12,13,15,15],
-                  1406: [4,5,6,7,8,8,9,9,9,9,10,10,11,12,13,15],
-                  'TPWR': [9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9]}
+    wedges = {5: [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18],
+              96: [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18, 18],
+              111: [5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15, 15],
+              334: [5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 13, 14, 15, 16, 18, 18],
+              344: [5, 6, 7, 9, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 16],
+              377: [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18],
+              409: [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 16],
+              467: [5, 6, 7, 8, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18, 18],
+              486: [5, 7, 6, 8, 9, 11, 10, 10, 13, 12, 14, 15, 15, 18, 16, 16],
+              526: [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18, 18],
+              536: [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18, 18],
+              562: [5, 6, 7, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 17, 18, 18],
+              607: [5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18, 18],
+              611: [6, 6, 7, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 18, 18],
+              674: [5, 6, 7, 8, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
+              724: [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 13, 14, 15, 16, 18, 18],
+              990: [5, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 11, 13, 14, 18, 18],
+              1063: [5, 6, 8, 9, 9, 9, 9, 10, 12, 12, 13, 14, 15, 15, 18, 18],
+              1329: [4, 5, 7, 8, 9, 9, 9, 9, 10, 10, 11, 12, 12, 13, 15, 15],
+              1331: [4, 5, 7, 8, 8, 9, 9, 9, 9, 10, 11, 12, 12, 13, 15, 15],
+              1406: [4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 10, 10, 11, 12, 13, 15],
+              'TPWR': [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]}
     # Repeat the procedure all over again, if necessary
     # (can be exited by raising an exception)
     while True:
@@ -97,12 +143,14 @@ def add_wedge():
         ui.clear()
         ui.display('Adding a wedge:\n\n'
                    'To use a wedge/stopbar definition in rpi2caster, you must '
-                   'add the wedge to the database. Enter the wedge name '
-                   'you can see on the wedge, and the program will try to '
-                   'determine its width and unit arrangement.\n'
+                   'add the wedge to the database. \n'
+                   'Enter the wedge name  you can see on the wedge, and the '
+                   'program will try to determine \n'
+                   'its width and unit arrangement.\n'
                    'The set width will usually be a fractional number - you '
-                   'must enter it as a decimal fraction (e.g. 9 1/4 = 9.25), '
-                   'with point or comma as delimiter.\n'
+                   'must enter it \n'
+                   'as a decimal fraction (e.g. 9 1/4 = 9.25), '
+                   'with point or comma as delimiter.\n\n'
                    'Some special wedges are:\n'
                    '"setwidth AK" - it is a 5-series wedge,\n'
                    'typewriter wedges (monospace, uniform width) - enter '
@@ -126,11 +174,11 @@ def add_wedge():
         # For wedges made for European countries that use the Didot system
         # (these wedges were based on the old British pica, i.e. 18 units 12 set
         # type was .1667" wide)
-            ui.display('The letter E at the end means that this wedge was made for'
-                       ' European market, and is based on British pica = .1667".')
+            ui.display('The letter E at the end means that this wedge was '
+                       'made for European market, and based on pica =.1667".')
             brit_pica = True
             # Parse the input data to get the name and set width
-            
+            (wedge_name, set_width) = wedge_name.strip('E').split('-')
         else:
         # For wedges marked as "5-6.5" etc.
             (wedge_name, set_width) = wedge_name.split('-')
@@ -175,7 +223,7 @@ def add_wedge():
         # (no need to enter the unit arrangement manually)
         try:
             # Look up the unit arrangement
-            unit_arrangement = wedge_data[wedge_name]
+            unit_arrangement = wedges[wedge_name]
         except KeyError:
             # Unknown wedge
             unit_arrangement = None
@@ -198,7 +246,7 @@ def add_wedge():
             warn_max = ('Warning: the wedge you entered has more than 16 steps!'
                         '\nThis is almost certainly a mistake.\n')
             ua_ok = ('The wedge has %i steps. That is OK.'
-                        % len(unit_arrangement))
+                     % len(unit_arrangement))
             if len(unit_arrangement) < 15:
                 ui.display(warn_min)
             elif len(unit_arrangement) > 16:
@@ -216,11 +264,13 @@ def add_wedge():
             ui.display('Step', i+1, 'unit value:', step, '\n')
         # Subroutines:
         def commit_wedge():
-            if db.add_wedge(wedge_name, set_width, brit_pica, unit_arrangement):
+            """Give feedback to user on result"""
+            if DB.add_wedge(wedge_name, set_width, brit_pica, unit_arrangement):
                 ui.display('Wedge added successfully.')
                 return True
             else:
                 ui.display('Failed to add wedge!')
+                return False
         def reenter():
             """Loop over again"""
             ui.enter_data('Enter parameters again from scratch... ')
@@ -242,22 +292,48 @@ def add_wedge():
 
 def delete_wedge():
     """Used for deleting a wedge from database.
+
+    Lists wedges
     """
-    list_wedges()
-    ID = ui.enter_data('Enter the wedge ID to delete: ')
-    if ID.isdigit():
-        ID = int(ID)
-        if db.delete_wedge(ID):
-            ui.display('Wedge deleted successfully.')
+    ui.clear()
+    got_any = list_wedges()
+    # Do it only if we have wedges (depends on list_wedges retval)
+    while got_any:
+        try:
+            prompt = 'Enter the wedge ID to delete (leave blank to exit): '
+            w_id = ui.enter_data(prompt)
+            if not w_id:
+                raise newexceptions.ReturnToMenu
+            w_id = int(w_id)
+        except (ValueError, TypeError):
+            pass
+        else:
+            break
+    if DB.delete_wedge(w_id):
+        ui.display('Wedge deleted successfully.')
     else:
-        ui.display('Wedge ID must be a number!')
+        ui.display('Cannot delete wedge!')
 
 def list_wedges():
     """lists all wedges we have
     """
-    db.list_wedges()
+    results = DB.list_wedges()
+    if results:
+        header = ('\n' + 'ID'.center(10)
+                  + 'wedge No'.center(10)
+                  + 'Brit. pica'.center(10)
+                  + 'Unit arrangement'
+                  + '\n')
+        ui.display(header)
+        for result in results:
+            ui.display(result)
+        return True
+    else:
+        ui.display('No wedges found.')
+        return False
 
 def main_menu():
+    """Display the main menu for inventory management"""
     def exit_program():
         """Helper subroutine, throws an exception to exit the program"""
         raise newexceptions.ExitProgram
@@ -282,8 +358,8 @@ def main_menu():
                 9 : delete_wedge,
                 0 : exit_program}
     while True:
-        h = 'Setup utility for rpi2caster CAT.\nMain menu:'
-        choice = ui.menu(options, header=h, footer='')
+        header = 'Setup utility for rpi2caster CAT.\nMain menu:'
+        choice = ui.menu(options, header=header, footer='')
         try:
             # Execute it!
             commands[choice]()
@@ -296,6 +372,6 @@ def main_menu():
 
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
-    with db:
+    with DB:
         pass
     main_menu()

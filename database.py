@@ -6,7 +6,6 @@ Database-related classes for rpi2caster suite.
 """
 # IMPORTS:
 import sys
-import time
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 try:
@@ -22,8 +21,6 @@ except ImportError:
     sys.exit()
 # Custom exceptions
 import newexceptions
-# User interface
-import text_ui as ui
 # Config parser for reading the interface settings
 import cfg_parser
 
@@ -71,15 +68,11 @@ class Database(object):
                               or 'database/monotype.db')
         # Connect to the database
         try:
-            self.db = sqlite3.connect(self.database_path)
+            self.db_connection = sqlite3.connect(self.database_path)
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             raise newexceptions.WrongConfiguration('Database cannot be opened')
 
     def __enter__(self):
-        ui.debug_info('Entering database context...')
-        ui.debug_info('Using conffile: ', cfg_parser.CONFIG_PATH)
-        ui.debug_info('Using database path: ', self.database_path)
-        ui.debug_enter_data('[Enter] to continue...')
         return self
 
 
@@ -112,9 +105,9 @@ class Database(object):
         # a unit arrangement is a JSON-encoded list
         data = [wedge_name, set_width, int(brit_pica),
                 json.dumps(unit_arrangement)]
-        with self.db:
+        with self.db_connection:
             try:
-                cursor = self.db.cursor()
+                cursor = self.db_connection.cursor()
             # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS wedges ('
                                'id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
@@ -127,12 +120,9 @@ class Database(object):
                                'wedge_number,set_width,'
                                'brit_pica,unit_arrangement'
                                ') VALUES (?, ?, ?, ?)''', data)
-                self.db.commit()
+                self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # In debug mode, display exception code & stack trace.
-                ui.display('Database error: cannot add wedge!')
-                ui.exception_handler()
                 return False
 
     def wedge_by_name_and_width(self, wedge_name, set_width):
@@ -150,35 +140,28 @@ class Database(object):
 
         Else, function returns False.
         """
-        with self.db:
+        with self.db_connection:
             try:
-                cursor = self.db.cursor()
+                cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges '
                                'WHERE wedge_number = ? AND set_width = ?',
                                [wedge_name, set_width])
                 wedge = cursor.fetchone()
-                if wedge is None:
-                    ui.display('No wedge %s - %f found in database!'
-                               % (wedge_name, set_width))
-                    return False
-                else:
+                try:
                     wedge = list(wedge)
-                    ui.display('Wedge %s-%fset found in database - OK'
-                               % (wedge_name, set_width))
                 # Change return value of brit_pica to boolean:
                     wedge[3] = bool(wedge[3])
                 # Change return value of steps to list:
                     wedge[4] = json.loads(wedge[4])
-                # Return [ID, wedge_name, set_width, brit_pica, steps]:
-                    return wedge
+                except (TypeError, ValueError):
+                    pass
+                # Return wedge - list or None:
+                return wedge
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # In debug mode, display exception code & stack trace.
-                ui.display('Database error: cannot get wedge!')
-                ui.exception_handler()
                 return False
 
-    def wedge_by_id(self, ID):
-        """wedge_by_id(ID):
+    def wedge_by_id(self, w_id):
+        """wedge_by_id:
 
         Gets parameters for a wedge with given ID.
 
@@ -191,26 +174,20 @@ class Database(object):
 
         Else, returns False.
         """
-        with self.db:
+        with self.db_connection:
             try:
-                cursor = self.db.cursor()
-                cursor.execute('SELECT * FROM wedges WHERE id = ? ', [ID])
+                cursor = self.db_connection.cursor()
+                cursor.execute('SELECT * FROM wedges WHERE id = ? ', [w_id])
                 wedge = cursor.fetchone()
-                if wedge is None:
-                    ui.display('Wedge not found!')
-                    return False
-                else:
+                if wedge:
                     wedge = list(wedge)
-                # Change return value of brit_pica to boolean:
+                    # Change return value of brit_pica to boolean:
                     wedge[3] = bool(wedge[3])
-                # Change return value of steps to list:
+                    # Change return value of steps to list:
                     wedge[4] = json.loads(wedge[4])
-                # Return [ID, wedge_name, set_width, brit_pica, steps]:
-                    return wedge
+                # Return wedge (or implicitly None, if wedge not found)
+                return wedge
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # In debug mode, display exception code & stack trace.
-                ui.display('Database error: cannot get wedge!')
-                ui.exception_handler()
                 return False
 
     def delete_wedge(self, w_id):
@@ -224,19 +201,15 @@ class Database(object):
         First, the function checks if the wedge is in the database at all.
         """
         if self.wedge_by_id(w_id):
-            with self.db:
+            with self.db_connection:
                 try:
-                    cursor = self.db.cursor()
+                    cursor = self.db_connection.cursor()
                     cursor.execute('DELETE FROM wedges WHERE id = ?', [w_id])
                     return True
                 except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # In debug mode, display exception code & stack trace.
-                    ui.display('Database error: cannot delete wedge!')
-                    ui.exception_handler()
                     return False
         else:
-            ui.display('Nothing to delete.')
-            return False
+            return None
 
     def list_wedges(self):
         """list_wedges(self):
@@ -253,29 +226,20 @@ class Database(object):
 
         Returns True if successful, False otherwise.
         """
-        with self.db:
+        with self.db_connection:
             try:
-                cursor = self.db.cursor()
+                cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges')
-                header = ('\n' + 'ID'.center(10)
-                          + 'wedge No'.center(10)
-                          + 'Brit. pica'.center(10)
-                          + 'Unit arrangement'
-                          + '\n')
-                ui.display(header)
                 # Initialize a loop, end after last wedge is displayed
+                results = []
                 while True:
                     wedge = cursor.fetchone()
                     if not wedge:
                         break
                     record = [str(field).ljust(10) for field in wedge]
-                    ui.display(' '.join(record))
-                else:
-                    return True
+                    results.append(' '.join(record))
+                return results
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # In debug mode, display exception code & stack trace."""
-                ui.display('Database error: cannot list wedges!')
-                ui.exception_handler()
                 return False
 
     def diecase_by_series_and_size(self, type_series, type_size):
@@ -284,45 +248,15 @@ class Database(object):
         Searches for diecase metadata, based on the desired type series
         and size. Allows to choose one of the diecases found.
         """
-        with self.db:
+        with self.db_connection:
             try:
-                cursor = self.db.cursor()
+                cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM diecases '
                                'WHERE type_series = "%s" AND size = %i',
                                (type_series, type_size))
             # Initialize a list of matching diecases:
-                matches = []
-                while True:
-                    diecase = cursor.fetchone()
-                    if diecase is not None:
-                        diecase = list(diecase)
-                        matches.append(diecase)
-                    else:
-                        break
-                if not matches:
-                # List is empty. Notify the user:
-                    ui.display('Sorry - no results found.')
-                    time.sleep(1)
-                    return False
-                elif len(matches) == 1:
-                    return matches[0]
-                else:
-                # More than one match - decide which one to use:
-                    idents = [record[0] for record in matches]
-                # Associate diecases with IDs to select one later
-                    assoc = dict(zip(idents, matches))
-                # Display a menu with diecases from 1 to the last:
-                    options = dict(zip(range(1, len(matches) + 1), idents))
-                    header = 'Choose a diecase:'
-                    choice = ui.menu(options, header)
-                # Choose one
-                    chosen_id = options[choice]
-                # Return a list with chosen diecase's parameters:
-                    return assoc[chosen_id]
+                return cursor.fetchall()
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # In debug mode, display exception code & stack trace.
-                ui.display('Database error: cannot find diecase data!')
-                ui.exception_handler()
                 return False
 
     def diecase_by_id(self, diecase_id):
@@ -330,26 +264,19 @@ class Database(object):
 
         Searches for diecase metadata, based on the unique diecase ID.
         """
-        with self.db:
+        with self.db_connection:
             try:
-                cursor = self.db.cursor()
+                cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM diecases WHERE id = "%s"'
                                % diecase_id)
             # Return diecase if found:
                 diecase = cursor.fetchone()
-                if diecase is not None:
-                    diecase = list(diecase)
-                    return diecase
-                else:
-                # Otherwise, notify the user, return False:
-                    ui.display('Sorry - no results found.')
-                    time.sleep(1)
-                    return False
+                try:
+                    return list(diecase)
+                except (ValueError, TypeError):
+                    return None
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            # In debug mode, display exception code & stack trace.
-                ui.display('Database error: cannot find diecase data!')
-                ui.exception_handler()
                 return False
 
     def __exit__(self, *args):
-        ui.debug_info('Exiting database context.')
+        pass

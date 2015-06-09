@@ -101,7 +101,6 @@ class Session(object):
 # Initialize the console interface when running the program directly.
 if __name__ == '__main__':
     # Imports
-    import text_ui
     import monotype
     import database
     import casting
