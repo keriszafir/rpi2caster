@@ -566,6 +566,17 @@ class Casting(object):
 
         # End of menu subroutines
         # Now construct the menu, starting with available options
+        options = [('Exit program', exit_program),
+                   ('Load a ribbon file', choose_ribbon_filename),
+                   ('Preview ribbon', preview_ribbon),
+                   cast_or_punch(),
+                   ('Cast sorts', self.cast_sorts),
+                   ('Test the valves and pinblocks', self.line_test),
+                   ('Send specified signals to caster', self.send_combination),
+                   ('Calibrate the space transfer wedge', self.align_wedges),
+                   ('Cast some quads to heat up the mould', heatup)]
+
+        """ turning it off
         options = {1 : 'Load a ribbon file',
                    2 : 'Preview ribbon',
                    3 : cast_or_punch()[0],
@@ -584,7 +595,7 @@ class Casting(object):
                     6 : self.send_combination,
                     7 : self.align_wedges,
                     8 : heatup,
-                    0 : exit_program}
+                    0 : exit_program}"""
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.'
                   '\n\n'
@@ -598,13 +609,8 @@ class Casting(object):
             # Call the function and return to menu.
             try:
             # Catch "return to menu" and "exit program" exceptions here
-                if choice in [0, 1, 2]:
-                    commands[choice]()
-                else:
-                # Use the caster context for everything that needs it.
-                # (casting, punching, testing routines)
-                    with self.caster:
-                        commands[choice]()
+                with self.caster:
+                    choice()
             except newexceptions.ReturnToMenu:
             # Will skip to the end of the loop, and start all over
                 pass

@@ -15,7 +15,7 @@ DEBUG_MODE = False
 
 
 def menu(options, header='', footer=''):
-    """menu(options={'foo':'bar','baz':'qux'}
+    """menu(options=[(name1, opt1), (name2, opt2)...],
                     header=foo,
                     footer=bar):
 
@@ -30,27 +30,22 @@ def menu(options, header='', footer=''):
 
     choices - options to be entered by user
     """
-    your_choice = ''
-    choices = []
     # Clear the screen, display header and add two empty lines
     clear()
     if header:
         print header
         print
     # Display all the options; we'll take care of 0 later
-    for choice in options:
-        if choice != 0:
-        # Print the option choice and displayed text
-            print '\t', choice, ' : ', options[choice], '\n'
-        # Add this option to possible choices.
-        # We need to convert it to string first.
-            choices.append(str(choice))
+    options = dict([(i, option) for i, option in enumerate(options)])
+    # Menu body
+    # Tab indent, option number, option name (not processing option 0 yet!)
+    print '\n'.join(['\t %i : %s \n' % (k, options[k][0])
+                     for k in sorted(options) if k])
+    # Option 0 is displayed last, add some whitespace around it
     try:
-    # If an option "0." is available, print it at the end
-        option_zero = options[0]
-        print '\n\t', 0, ' : ', option_zero
-        choices.append('0')
+        print '\n\n\t %i : %s \n' % (0, options[0][0])
     except KeyError:
+        # Theoretically, there's always an option number zero... but if not?
         pass
     # Print footer, if defined
     if footer:
@@ -58,19 +53,24 @@ def menu(options, header='', footer=''):
     # Add an empty line to separate prompt
     print '\n'
     # Ask for user input
-    while your_choice not in choices:
+    your_choice = ''
+    while your_choice not in options:
+        # Wait until user enters proper data
         your_choice = raw_input('Your choice: ')
-    else:
-    # Valid option is chosen, return integer if options were numbers,
-    # else return string
         try:
-            return int(your_choice)
+            your_choice = int(your_choice)
         except ValueError:
-            return your_choice
+            # Entered anything non-digit - repeat
+            your_choice = ''
+    # At last, we have chosen a valid option...
+    # Return a corresponding value - which is option[1]
+    return options[your_choice][1]
+
 
 def clear():
     """Clears the screen"""
     os.system('clear')
+
 
 def display(*args):
     """Displays info for the user - print all in one line"""
@@ -78,12 +78,14 @@ def display(*args):
         print arg,
     print '\n'
 
+
 def debug_info(*args):
     """Prints debug messages to screen if in debug mode"""
     if DEBUG_MODE:
         for arg in args:
             print arg,
         print '\n'
+
 
 def debug_enter_data(message):
     """For debug-specific data or confirmations"""
@@ -95,6 +97,7 @@ def exception_handler():
     """Raise caught exceptions in debug mode"""
     if DEBUG_MODE:
         print sys.exc_info()
+
 
 def enter_data(message):
     """Let user enter the data"""
@@ -125,6 +128,7 @@ def enter_input_filename():
     except IOError:
         raw_input('Wrong filename or file not readable!')
         return ''
+
 
 def enter_output_filename():
     """Allows user to enter output filename (without checking if readable)"""
