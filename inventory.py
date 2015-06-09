@@ -337,36 +337,25 @@ def main_menu():
     def exit_program():
         """Helper subroutine, throws an exception to exit the program"""
         raise newexceptions.ExitProgram
-    options = {1 : 'List matrix cases',
-               2 : 'Show matrix case layout',
-               3 : 'Add a new, empty matrix case',
-               4 : 'Edit matrix case layout',
-               5 : 'Clear matrix case layout',
-               6 : 'Delete matrix case',
-               7 : 'List wedges',
-               8 : 'Add wedge',
-               9 : 'Delete wedge',
-               0 : 'Exit program'}
-    commands = {1 : list_diecases,
-                2 : show_diecase_layout,
-                3 : add_diecase,
-                4 : edit_diecase,
-                5 : clear_diecase,
-                6 : delete_diecase,
-                7 : list_wedges,
-                8 : add_wedge,
-                9 : delete_wedge,
-                0 : exit_program}
+        
+    options = [('Exit program', exit_program),
+               ('List matrix cases', list_diecases),
+               ('Show matrix case layout', show_diecase_layout),
+               ('Add a new, empty matrix case', add_diecase),
+               ('Edit matrix case layout', edit_diecase),
+               ('Clear matrix case layout', clear_diecase),
+               ('Delete matrix case', delete_diecase),
+               ('List wedges', list_wedges),
+               ('Add wedge', add_wedge),
+               ('Delete wedge', delete_wedge)]
     while True:
         header = 'Setup utility for rpi2caster CAT.\nMain menu:'
-        choice = ui.menu(options, header=header, footer='')
         try:
-            # Execute it!
-            commands[choice]()
+            ui.menu(options, header=header, footer='')()
             ui.hold_on_exit()
         except newexceptions.ReturnToMenu:
             pass
-        except newexceptions.ExitProgram:
+        except (KeyboardInterrupt, newexceptions.ExitProgram):
             ui.exit_program()
 
 

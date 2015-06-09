@@ -23,6 +23,15 @@ import text_ui as ui
 import newexceptions
 
 
+def use_caster(func):
+    """Method decorator for requiring the caster context"""
+    def func_wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        with self.caster:
+            return func(self, *args, **kwargs)
+    return func_wrapper
+
+
 class Casting(object):
     """Casting:
 
@@ -58,13 +67,6 @@ class Casting(object):
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
         self.main_menu()
-    
-    def use_caster(func):
-        """Method decorator for requiring caster context"""
-        def func_wrapper(self, *args, **kwargs):
-            with self.caster:
-                return func(self, *args, **kwargs)
-        return func_wrapper
 
     @use_caster
     def cast_composition(self):
@@ -590,26 +592,6 @@ class Casting(object):
                    ('Calibrate the space transfer wedge', self.align_wedges),
                    ('Cast some quads to heat up the mould', heatup)]
 
-        """ turning it off
-        options = {1 : 'Load a ribbon file',
-                   2 : 'Preview ribbon',
-                   3 : cast_or_punch()[0],
-                   4 : 'Cast sorts',
-                   5 : 'Test the valves and pinblocks',
-                   6 : 'Lock the caster on a specified diecase position',
-                   7 : 'Calibrate the 52D space transfer wedge',
-                   8 : 'Cast two lines of 20 quads to heat up the mould',
-                   0 : 'Exit program'}
-        # Commands: {option_name : function}
-        commands = {1 : choose_ribbon_filename,
-                    2 : preview_ribbon,
-                    3 : cast_or_punch()[1],
-                    4 : self.cast_sorts,
-                    5 : self.line_test,
-                    6 : self.send_combination,
-                    7 : self.align_wedges,
-                    8 : heatup,
-                    0 : exit_program}"""
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.'
                   '\n\n'
