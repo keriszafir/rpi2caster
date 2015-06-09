@@ -9,6 +9,7 @@ from __future__ import absolute_import
 import ConfigParser
 # Custom exceptions
 from rpi2caster import exceptions
+
 # Define some module constants
 CONFIG_PATH = 'rpi2caster.conf'
 TRUE_ALIASES = ['true', 'on', 'yes']

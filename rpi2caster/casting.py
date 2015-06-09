@@ -17,7 +17,7 @@ from __future__ import absolute_import
 # Built-in time library
 import time
 # Signals parsing methods for rpi2caster
-import parsing
+from rpi2caster import parsing
 # User interfaces module for rpi2caster:
 from rpi2caster import text_ui as ui
 # Custom exceptions

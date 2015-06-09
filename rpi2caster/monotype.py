@@ -24,6 +24,7 @@ except ImportError:
     print 'Missing dependency: wiringPi2 Python bindings: wiringpi2-python'
     print 'Caster control will not work!'
 
+
 class Monotype(object):
     """Monotype(name):
 

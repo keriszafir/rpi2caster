@@ -6,7 +6,6 @@ Database-related classes for rpi2caster suite.
 """
 # IMPORTS:
 from __future__ import absolute_import
-import sys
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 try:
@@ -19,7 +18,7 @@ try:
     import sqlite3
 except ImportError:
     print 'Missing dependency: sqlite3'
-    sys.exit()
+    exit()
 # Custom exceptions
 from rpi2caster import exceptions
 # Config parser for reading the interface settings
