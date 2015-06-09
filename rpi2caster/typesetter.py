@@ -10,6 +10,8 @@ calculates justification figures and outputs the combinations of Monotype
 signals, one by one, to the file or database. These sequences are to be read
 and parsed by the casting program, which sends the signals to the machine.
 """
+# New division model
+from __future__ import division
 # Typical libs, used by most routines:
 import time
 # User interface
@@ -37,20 +39,20 @@ class Typesetter(object):
 
     def __init__(self):
         self.diecase = ''
-        self.setWidth = 0
+        self.set_width = 0
         self.typeface = ''
-        self.typeSeries = ''
-        self.diecaseID = ''
-        self.typeSize = ''
+        self.type_series = ''
+        self.diecase_id = ''
+        self.type_size = ''
         self.wedge = ''
-        self.diecaseSystem = ''
-        self.layout = []
-        self.lineLength = ''
-        self.singlesetUnitLineLength = ''
-        self.unitLineLength = ''
+        self.diecase_system = ''
+        self.diecase_layout = []
+        self.line_length = ''
+        self.fu_line_length = ''
+        self.unit_line_length = ''
         self.measurement = ''
-        self.inputFile = ''
-        self.outputFile = ''
+        self.input_file = ''
+        self.output_file = ''
 
     def __enter__(self):
         """Do nothing"""
@@ -58,17 +60,17 @@ class Typesetter(object):
 
     def main_menu(self):
         """main_menu
-        
+
         Calls ui.menu() with options, a header and a footer.
         Also defines some subroutines for appending information.
         """
 
         # Declare local functions for menu options:
         def choose_input_filename():
-            self.inputFile = ui.enter_input_filename()
+            self.input_file = ui.enter_input_filename()
             self.main_menu()
         def choose_output_filename():
-            self.outputFile = ui.enter_output_filename()
+            self.output_file = ui.enter_output_filename()
             self.main_menu()
         def debug_notice():
         # Prints a notice if the program is in debug mode:
@@ -79,39 +81,39 @@ class Typesetter(object):
         # Start with empty list:
             info = []
         # Add ribbon filename, if any:
-            if self.inputFile:
-                info.append('Input file name: ' + self.inputFile)
+            if self.input_file:
+                info.append('Input file name: ' + self.input_file)
         # Add ribbon filename, if any:
-            if self.outputFile:
-                info.append('Output file name: ' + self.outputFile)
+            if self.output_file:
+                info.append('Output file name: ' + self.output_file)
         # Add a diecase info:
             if self.diecase:
                 info.append('\nDiecase info:\n')
-                info.append('Using diecase ID: ' + str(self.diecaseID))
+                info.append('Using diecase ID: ' + str(self.diecase_id))
                 info.append('Typeface: ' + str(self.typeface))
-                info.append('Series: ' + str(self.typeSeries))
-                info.append('Size: ' + str(self.typeSize))
+                info.append('Series: ' + str(self.type_series))
+                info.append('Size: ' + str(self.type_size))
                 info.append('Stopbar/wedge: ' + str(self.wedge))
-                info.append('Set width: ' + str(self.setWidth))
-                info.append('Diecase system: ' + str(self.diecaseSystem))
+                info.append('Set width: ' + str(self.set_width))
+                info.append('Diecase system: ' + str(self.diecase_system))
             # Get type variants from retrieved data:"""
                 variants = []
-                for variant in self.layout:
+                for variant in self.diecase_layout:
                     variants.append(variant)
                 if variants:
                     info.append('Variants: ' + ', '.join(variants) + '\n')
         # Add a desired measure (line length):"""
-            if self.lineLength:
+            if self.line_length:
                 info.append('Line length: %i %s'
-                            % (self.lineLength, self.measurement))
+                            % (self.line_length, self.measurement))
         # Unit line length in 1-set (fundamental) units:"""
-            if self.singlesetUnitLineLength:
+            if self.fu_line_length:
                 info.append('Line length in 1-set units: %i'
-                            % self.singlesetUnitLineLength)
+                            % self.fu_line_length)
         # Unit line length in multiset units:"""
-            if self.unitLineLength:
+            if self.unit_line_length:
                 info.append('Line length in %i-set units: %i'
-                            % (self.setWidth, self.unitLineLength))
+                            % (self.set_width, self.unit_line_length))
         # Convert it all to a multiline string:"""
             return '\n'.join(info)
         def exit_program():
@@ -151,12 +153,12 @@ class Typesetter(object):
 
         Sets the line length and allows to specify measurement units.
         """
-        if self.lineLength:
-            self.lineLength = ''
-        while not self.lineLength.isdigit():
-            self.lineLength = raw_input('Enter the desired line length: ')
+        if self.line_length:
+            self.line_length = ''
+        while not self.line_length.isdigit():
+            self.line_length = raw_input('Enter the desired line length: ')
         else:
-            self.lineLength = int(self.lineLength)
+            self.line_length = int(self.line_length)
         # The line length is set.
         # Now choose the measurement units from a menu.
         options = {'c' : 'cicero',
@@ -181,13 +183,13 @@ class Typesetter(object):
         Placeholder: we'll import hardcoded 327-12 TNR for now...
         TODO: implement a proper diecase choice!
         """
-        diecaseID = '327-12-KS01'
+        diecase_id = '327-12-KS01'
         typeface = 'Times New Roman'
         series = 327
         size = '12D'
-        setWidth = 12
+        set_width = 12
         wedge = 'S5'
-        diecaseSystem = 'shift'
+        diecase_system = 'shift'
         layout = {'roman' : {'a' : ('H', 9, 7),
                              'ą' : ('K', 9, 7),
                              'b' : ('E', 11, 7),
@@ -504,41 +506,41 @@ class Typesetter(object):
                              #"'" : (),
                              #'’' : ()
                              }}
-        self.diecase = (diecaseID, typeface, series,
-                        size, wedge, setWidth, diecaseSystem, layout)
+        self.diecase = (diecase_id, typeface, series,
+                        size, wedge, set_width, diecase_system, layout)
         # TODO: End of placeholder code.
-        [self.diecaseID, self.typeface, self.typeSeries,
-         self.typeSize, self.wedge, self.setWidth,
-         self.diecaseSystem, self.layout] = self.diecase
+        [self.diecase_id, self.typeface, self.type_series,
+         self.type_size, self.wedge, self.set_width,
+         self.diecase_system, self.diecase_layout] = self.diecase
         # Try to construct character maps for all variants:
         try:
-            self.romanCharset = self.layout['roman']
+            self.romanCharset = self.diecase_layout['roman']
         except:
             pass
         try:
-            self.boldCharset = self.layout['bold']
+            self.boldCharset = self.diecase_layout['bold']
         except:
             pass
         try:
-            self.italicCharset = self.layout['italic']
+            self.italicCharset = self.diecase_layout['italic']
         except:
             pass
         try:
-            self.smallcapsCharset = self.layout['smallcaps']
+            self.smallcapsCharset = self.diecase_layout['smallcaps']
         except:
             pass
         try:
-            self.subscriptCharset = self.layout['subscript']
+            self.subscriptCharset = self.diecase_layout['subscript']
         except:
             pass
         try:
-            self.superscriptCharset = self.layout['superscript']
+            self.superscriptCharset = self.diecase_layout['superscript']
         except:
             pass
         # Choose a wedge based on wedge number and set size:
-        wedgeSteps = inventory.wedge_by_name_and_width(wedge, setWidth)[4]
+        wedge_ua = inventory.wedge_by_name_and_width(wedge, set_width)[4]
         # Get unit values for that wedge:
-        self.wedgeUnits = dict(zip(range(1, 17), wedgeSteps))
+        self.wedgeUnits = dict(zip(range(1, 17), wedge_ua))
 
     def display_diecase_layout(self):
         """display_diecase_layout:
@@ -550,17 +552,17 @@ class Typesetter(object):
         Sanity check: we must have chosen a diecase first...
         TODO: make an option accessible in menu only if diecase is chosen.
         """
-        if not self.layout:
+        if not self.diecase_layout:
             ui.display('Diecase not chosen, no layout to check!')
             time.sleep(1)
             self.main_menu()
-        for variant in self.layout:
+        for variant in self.diecase_layout:
             ui.display('\nMatrices for variant: ' + variant + '\n\n'
                             + 'Char:'.ljust(8)
                             + 'Column:'.ljust(8)
                             + 'Row:'.ljust(8)
                             + 'Units:'.ljust(8))
-            variantCharset = self.layout[variant]
+            variantCharset = self.diecase_layout[variant]
             for character in variantCharset:
                 parameters = variantCharset[character]
                 column = parameters[0]
@@ -597,14 +599,14 @@ class Typesetter(object):
         TODO: work on this routine and make justified type,
         TODO: implement TeX hyphenation algorithm
         """
-        if not self.inputFile or not self.outputFile:
+        if not self.input_file or not self.output_file:
             ui.display('You must specify the input '
                             'and output filenames first!')
             time.sleep(1)
 
     @staticmethod
-    def calculate_wedges(setWidth, units):
-        """calculate_wedges(setWidth, units):
+    def calculate_wedges(set_width, units):
+        """calculate_wedges(set_width, units):
 
         Calculate the 0005 and 0075 wedge positions based on the unit width
         difference (positive or negative) for the given set width.
@@ -637,7 +639,7 @@ class Typesetter(object):
         but condensed type will have a lower set number.
 
         And 1 Monotype fundamental unit is defined as 1/18em. Thus, the width
-        of 1 unit 1 set = 1/18 pp; 1 unit multi-set = setWidth/18 pp.
+        of 1 unit 1 set = 1/18 pp; 1 unit multi-set = set_width/18 pp.
 
         All things considered, let's convert the unit to inches:
 
@@ -665,7 +667,7 @@ class Typesetter(object):
 
         The S5 wedge moves with a matrix case, and for row 1, the characters
         will be 5 units wide. So, the width will be:
-        W(5u) = setWidth * 5/1296 = 0.003858" * setWidth.
+        W(5u) = set_width * 5/1296 = 0.003858" * set_width.
 
         Now, we want to cast the character with the S-needle.
         Instead of the lower transfer wedge 62D, the upper transfer wedge 52D
@@ -693,7 +695,7 @@ class Typesetter(object):
         The equivalent 0005 and 0075 wedge positions for a 5-unit character
         in the 1st row (if we decide to cast it with the S-needle) will be:
 
-        steps = 5/1296 * 2000 * setWidth
+        steps = 5/1296 * 2000 * set_width
 
         (so it is proportional to set width).
         For example, consider the 5 unit 12 set type, and we have:
@@ -708,7 +710,7 @@ class Typesetter(object):
         If any of the wedge step numbers is 0, set 1 instead (a wedge must
         be in position 1...15).
         """
-        steps = 2000/1296 * setWidth * units
+        steps = 2000/1296 * set_width * units
         steps = int(steps)
         steps0075 = steps // 15
         steps0005 = steps % 15
@@ -747,11 +749,10 @@ class Typesetter(object):
         # by 12*18 = 216:
         fundamentalUnitWidth = baseEmWidth / 216
         # Convert the line length in picas/ciceros to inches:
-        inchLineLength = self.lineLength * inchWidth[self.measurement]
+        inch_line_length = self.line_length * inchWidth[self.measurement]
         # Now, we need to calculate how many units of a given set
         # the row will contain. Round that to an integer and return the result.
-        self.singlesetUnitLineLength = round(
-        inchLineLength / fundamentalUnitWidth)
+        self.fu_line_length = round(inch_line_length / fundamentalUnitWidth)
 
     def calculate_units(self):
         """calculate_units:
@@ -759,7 +760,7 @@ class Typesetter(object):
         Calculates line length in 1-set units, and if the set number is given,
         calculates in multi-set units as well.
         """
-        if self.measurement and self.lineLength:
+        if self.measurement and self.line_length:
             self.calculate_line_length()
         else:
             ui.display('Line length and meas. units not specified!')
@@ -767,8 +768,7 @@ class Typesetter(object):
             self.main_menu()
         # Calculate the multi-set unit value:
         try:
-            self.unitLineLength = round(
-            self.singlesetUnitLineLength / self.setWidth)
+            self.unit_line_length = round(self.fu_line_length / self.set_width)
         except ZeroDivisionError:
             pass
 
