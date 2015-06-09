@@ -93,12 +93,6 @@ def debug_enter_data(message):
         return raw_input(message)
 
 
-def exception_handler():
-    """Raise caught exceptions in debug mode"""
-    if DEBUG_MODE:
-        print sys.exc_info()
-
-
 def enter_data(message):
     """Let user enter the data"""
     return raw_input(message)
