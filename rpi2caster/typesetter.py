@@ -57,20 +57,12 @@ class Typesetter(object):
         return self
 
     def main_menu(self):
-        """Calls ui.menu() with options,
-        a header and a footer.
-
-        Options: {option_name : description}
+        """main_menu
+        
+        Calls ui.menu() with options, a header and a footer.
+        Also defines some subroutines for appending information.
         """
-        options = {1 : 'Load a text file',
-                   2 : 'Specify an output file name',
-                   3 : 'Choose diecase',
-                   4 : 'Display diecase layout',
-                   5 : 'Enter line length',
-                   6 : 'Calculate units',
-                   7 : 'Choose machine settings',
-                   8 : 'Translate text to Monotype code',
-                   0 : 'Exit program'}
+
         # Declare local functions for menu options:
         def choose_input_filename():
             self.inputFile = ui.enter_input_filename()
@@ -80,10 +72,8 @@ class Typesetter(object):
             self.main_menu()
         def debug_notice():
         # Prints a notice if the program is in debug mode:
-            if ui.DEBUG_MODE:
-                return '\n\nThe program is now in debugging mode!'
-            else:
-                return ''
+            info = '\n\nThe program is now in debugging mode!'
+            return ui.DEBUG_MODE and info or ''
         def additional_info():
         # Displays additional info as a main menu footer.
         # Start with empty list:
@@ -130,29 +120,30 @@ class Typesetter(object):
         # End of subroutines.
         # Now construct a menu.
         # Commands: {option_name : function}
-        commands = {1 : choose_input_filename,
-                    2 : choose_output_filename,
-                    3 : self.choose_diecase,
-                    4 : self.display_diecase_layout,
-                    5 : self.enter_line_length,
-                    6 : self.calculate_units,
-                    7 : self.choose_machine_settings,
-                    8 : self.translate,
-                    0 : exit_program}
-        h = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-             'for Monotype Composition or Type and Rule casters. \n\n'
-             'This program reads a ribbon (input file) and casts the type '
-             'on a Composition Caster, \n'
-             'or punches a paper tape with a pneumatic perforator.'
-             + debug_notice() + '\n\nMain Menu:')
+        hdr = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+               'for Monotype Composition or Type and Rule casters. \n\n'
+               'This program reads a ribbon (input file) and casts the type '
+               'on a Composition Caster, \n'
+               'or punches a paper tape with a pneumatic perforator.'
+               + debug_notice() + '\n\nMain Menu:')
+        # Option list for menu:
+        options = [('Exit program', exit_program),
+                   ('Load a text file', choose_input_filename),
+                   ('Specify an output file name', choose_output_filename),
+                   ('Choose diecase', self.choose_diecase),
+                   ('Display diecase layout', self.display_diecase_layout),
+                   ('Enter line length', self.enter_line_length),
+                   ('Calculate units', self.calculate_units),
+                   ('Choose machine settings', self.choose_machine_settings),
+                   ('Translate text to Monotype code', self.translate)]
+
         while True:
-            choice = ui.menu(options, header=h, footer=additional_info())
             # Call the function and return to menu.
             try:
-                commands[choice]()
+                ui.menu(options, header=hdr, footer=additional_info())()
             except newexceptions.ReturnToMenu:
                 pass
-            except newexceptions.ExitProgram:
+            except (KeyboardInterrupt, newexceptions.ExitProgram):
                 ui.exit_program()
 
     def enter_line_length(self):

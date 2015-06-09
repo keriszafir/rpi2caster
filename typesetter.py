@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+"""Typesetter script
+
+Used for running the typesetter program.
+"""
 from rpi2caster import typesetter
-ts = typesetter.Typesetter()
-ts.main_menu()
+T = typesetter.Typesetter()
+T.main_menu()

@@ -66,7 +66,7 @@ class Casting(object):
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
-        self.main_menu()
+        main_menu()
 
     @use_caster
     def cast_composition(self):
@@ -473,142 +473,142 @@ class Casting(object):
             # At the end of successful sequence, some info for the user:
             ui.display('Done. Compare the lengths and adjust if needed.')
 
-
-    def main_menu(self):
-        """main_menu:
-
-        Calls ui.menu() with options, a header and a footer.
-        Options: {option_name : description}
-        Header: string displayed over menu
-        Footer: string displayed under menu (all info will be added here).
-        """
-        # Declare subroutines for menu options
-        def choose_ribbon_filename():
-            """choose_ribbon_filename
-
-            Asks the user for the ribbon filename.
-            Checks if the file is readable, and pre-processes it.
-            """
-            self.ribbon_file = ui.enter_input_filename()
-            self.ribbon = parsing.read_file(self.ribbon_file)
-            # If file read failed, end here
-            if not self.ribbon:
-                ui.display('Error reading file!')
-                time.sleep(1)
-                return False
-            # Read the metadata at the beginning of the ribbon file
-            self.metadata = parsing.get_metadata(self.ribbon)
-            try:
-                self.diecase = self.metadata['diecase']
-            except KeyError:
-                pass
-            # Reset the "line aborted" on a new casting job
-            self.line_aborted = None
-            return True
-
-        def debug_notice():
-            """debug_notice
-
-            Prints a notice if the program is in debug mode.
-            """
-            if ui.DEBUG_MODE:
-                return '\n\nThe program is now in debugging mode!'
-            else:
-                return ''
-
-        def additional_info():
-            """additional_info:
-
-            Displays additional info as a menu footer.
-            Starts with an empty list, and checks whether the casting job
-            objects has attributes that are parameters to be displayed.
-            """
-            info = []
-            # Add ribbon filename, if any
-            if self.ribbon_file:
-                info.append('Input file name: ' + self.ribbon_file)
-            # Add a caster name
-            info.append('Using caster: ' + self.caster.name)
-            # Add metadata for ribbon
-            for parameter in self.metadata:
-                value = str(self.metadata[parameter])
-                info.append(str(parameter).capitalize() + ': ' + value)
-            # Display the line last casting was aborted on, if applicable:
-            if self.line_aborted:
-                info.append('Last casting was aborted on line '
-                            + str(self.line_aborted))
-            # Convert it all to a multiline string
-            return '\n'.join(info)
-
-        def heatup():
-            """heatup
-
-            Allows to heat up the mould before casting, in order to
-            stabilize the mould temperature (affects the type quality).
-            Casts two lines of em-quads, which can be thrown back to the pot.
-            """
-            ui.clear()
-            self.cast_from_matrix('O15', num=20, lines=2)
-
-        def cast_or_punch():
-            """cast_or_punch:
-
-            Determines if the caster specified for the job is actually
-            a perforator - if so, a "punch ribbon" feature will be
-            available instead of "cast composition".
-            """
-            if self.caster.is_perforator:
-                return ('Punch composition', self.punch_composition)
-            else:
-                return ('Cast composition', self.cast_composition)
-
-        def preview_ribbon():
-            """preview_ribbon:
-
-            Determines if we have a ribbon file that can be previewed,
-            and displays its contents line by line, or displays
-            an error message.
-            """
-            ui.clear()
-            ui.display('Ribbon preview:\n')
-            ui.display('\n'.join([line for line in self.ribbon]))
-            ui.enter_data('[Enter] to return to menu...')
-
-        def exit_program():
-            """exit_program:
-
-            Throws an exception caught after the option is chosen."""
-            raise newexceptions.ExitProgram
-
-        # End of menu subroutines
-        # Now construct the menu, starting with available options
-        options = [('Exit program', exit_program),
-                   ('Load a ribbon file', choose_ribbon_filename),
-                   ('Preview ribbon', preview_ribbon),
-                   cast_or_punch(),
-                   ('Cast sorts', self.cast_sorts),
-                   ('Test the valves and pinblocks', self.line_test),
-                   ('Send specified signals to caster', self.send_combination),
-                   ('Calibrate the space transfer wedge', self.align_wedges),
-                   ('Cast some quads to heat up the mould', heatup)]
-
-        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-                  'for Monotype Composition or Type and Rule casters.'
-                  '\n\n'
-                  'This program reads a ribbon (input file) '
-                  'and casts the type on a composition caster.'
-                  + debug_notice() + '\n\nMain Menu:')
-        # Keep displaying the menu and go back here after any method ends
-        while True:
-            try:
-            # Catch "return to menu" and "exit program" exceptions here
-                ui.menu(options, header=header, footer=additional_info())()
-            except newexceptions.ReturnToMenu:
-            # Will skip to the end of the loop, and start all over
-                pass
-            except (KeyboardInterrupt, newexceptions.ExitProgram):
-            # Will exit program
-                ui.exit_program()
-
     def __exit__(self, *args):
         ui.debug_info('Exiting casting job context.')
+
+
+def main_menu(work=Casting()):
+    """main_menu:
+
+    Calls ui.menu() with options, a header and a footer.
+    Options: {option_name : description}
+    Header: string displayed over menu
+    Footer: string displayed under menu (all info will be added here).
+    """
+    # Declare subroutines for menu options
+    def choose_ribbon_filename():
+        """choose_ribbon_filename
+
+        Asks the user for the ribbon filename.
+        Checks if the file is readable, and pre-processes it.
+        """
+        work.ribbon_file = ui.enter_input_filename()
+        work.ribbon = parsing.read_file(work.ribbon_file)
+        # If file read failed, end here
+        if not work.ribbon:
+            ui.display('Error reading file!')
+            time.sleep(1)
+            return False
+        # Read the metadata at the beginning of the ribbon file
+        work.metadata = parsing.get_metadata(work.ribbon)
+        try:
+            work.diecase = work.metadata['diecase']
+        except KeyError:
+            pass
+        # Reset the "line aborted" on a new casting job
+        work.line_aborted = None
+        return True
+
+    def debug_notice():
+        """debug_notice
+
+        Prints a notice if the program is in debug mode.
+        """
+        if ui.DEBUG_MODE:
+            return '\n\nThe program is now in debugging mode!'
+        else:
+            return ''
+
+    def additional_info():
+        """additional_info:
+
+        Displays additional info as a menu footer.
+        Starts with an empty list, and checks whether the casting job
+        objects has attributes that are parameters to be displayed.
+        """
+        info = []
+        # Add ribbon filename, if any
+        if work.ribbon_file:
+            info.append('Input file name: ' + work.ribbon_file)
+        # Add a caster name
+        info.append('Using caster: ' + work.caster.name)
+        # Add metadata for ribbon
+        for parameter in work.metadata:
+            value = str(work.metadata[parameter])
+            info.append(str(parameter).capitalize() + ': ' + value)
+        # Display the line last casting was aborted on, if applicable:
+        if work.line_aborted:
+            info.append('Last casting was aborted on line '
+                        + str(work.line_aborted))
+        # Convert it all to a multiline string
+        return '\n'.join(info)
+
+    def heatup():
+        """heatup
+
+        Allows to heat up the mould before casting, in order to
+        stabilize the mould temperature (affects the type quality).
+        Casts two lines of em-quads, which can be thrown back to the pot.
+        """
+        ui.clear()
+        work.cast_from_matrix('O15', num=20, lines=2)
+
+    def cast_or_punch():
+        """cast_or_punch:
+
+        Determines if the caster specified for the job is actually
+        a perforator - if so, a "punch ribbon" feature will be
+        available instead of "cast composition".
+        """
+        if work.caster.is_perforator:
+            return ('Punch composition', work.punch_composition)
+        else:
+            return ('Cast composition', work.cast_composition)
+
+    def preview_ribbon():
+        """preview_ribbon:
+
+        Determines if we have a ribbon file that can be previewed,
+        and displays its contents line by line, or displays
+        an error message.
+        """
+        ui.clear()
+        ui.display('Ribbon preview:\n')
+        ui.display('\n'.join([line for line in work.ribbon]))
+        ui.enter_data('[Enter] to return to menu...')
+
+    def exit_program():
+        """exit_program:
+
+        Throws an exception caught after the option is chosen."""
+        raise newexceptions.ExitProgram
+
+    # End of menu subroutines
+    # Now construct the menu, starting with available options
+    options = [('Exit program', exit_program),
+               ('Load a ribbon file', choose_ribbon_filename),
+               ('Preview ribbon', preview_ribbon),
+               cast_or_punch(),
+               ('Cast sorts', work.cast_sorts),
+               ('Test the valves and pinblocks', work.line_test),
+               ('Send specified signals to caster', work.send_combination),
+               ('Calibrate the space transfer wedge', work.align_wedges),
+               ('Cast some quads to heat up the mould', heatup)]
+
+    header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+              'for Monotype Composition or Type and Rule casters.'
+              '\n\n'
+              'This program reads a ribbon (input file) '
+              'and casts the type on a composition caster.'
+              + debug_notice() + '\n\nMain Menu:')
+    # Keep displaying the menu and go back here after any method ends
+    while True:
+        try:
+        # Catch "return to menu" and "exit program" exceptions here
+            ui.menu(options, header=header, footer=additional_info())()
+        except newexceptions.ReturnToMenu:
+        # Will skip to the end of the loop, and start all over
+            pass
+        except (KeyboardInterrupt, newexceptions.ExitProgram):
+        # Will exit program
+            ui.exit_program()

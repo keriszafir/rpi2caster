@@ -1,7 +1,12 @@
 #!/usr/bin/env python
-from rpi2caster import casting
-from rpi2caster import monotype
-caster = monotype.Monotype()
-job = casting.Casting()
-job.caster = caster
-job.main_menu()
+"""Cast
+
+Used for casting actual type.
+"""
+from rpi2caster import casting, monotype
+# C - caster, J - job (casting)
+C = monotype.Monotype()
+J = casting.Casting()
+# set up a caster for this job
+J.caster = C
+casting.main_menu(J)
