@@ -217,34 +217,19 @@ class Database(object):
         else:
             return None
 
-    def list_wedges(self):
-        """list_wedges(self):
+    def get_all_wedges(self):
+        """get_all_wedges(self):
 
-        Lists all wedges stored in database, with their step unit values.
+        Gets all wedges stored in database, with their step unit values.
 
-        Prints the following to stdout:
-
-        ID - unique, int (e.g. 0),
-        wedge_name - string (e.g. S5) - wedge name
-        set_width - float (e.g. 9.75) - set width,
-        brit_pica - bool - whether this is an old-pica ("E") wedge or not,
-        steps - list of unit values for all wedge's steps.
-
-        Returns True if successful, False otherwise.
+        Returns a list of all wedges found.
         """
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges')
                 # Initialize a loop, end after last wedge is displayed
-                results = []
-                while True:
-                    wedge = cursor.fetchone()
-                    if not wedge:
-                        break
-                    record = [str(field).ljust(10) for field in wedge]
-                    results.append(' '.join(record))
-                return results
+                return cursor.fetchall()
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 return False
 

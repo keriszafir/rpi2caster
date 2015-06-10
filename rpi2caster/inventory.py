@@ -260,6 +260,7 @@ def add_wedge():
         ans = ui.simple_menu(message, options).upper()
         options[ans]()
 
+
 def delete_wedge():
     """Used for deleting a wedge from database.
 
@@ -284,23 +285,22 @@ def delete_wedge():
     else:
         ui.display('Cannot delete wedge!')
 
+
 def list_wedges():
-    """lists all wedges we have
-    """
-    results = DB.list_wedges()
-    if results:
-        header = ('\n' + 'ID'.center(10)
-                  + 'wedge No'.center(10)
-                  + 'Brit. pica'.center(10)
-                  + 'Unit arrangement'
-                  + '\n')
-        ui.display(header)
-        for result in results:
-            ui.display(result)
-        return True
-    else:
-        ui.display('No wedges found.')
-        return False
+    """Lists all wedges we have."""
+    results = DB.get_all_wedges()
+    if not results:
+        raise exceptions.NoMatchingData
+    ui.display('\n' + 'wedge id'.ljust(15)
+               + 'wedge No'.ljust(15)
+               + 'set width'.ljust(15)
+               + 'Brit. pica?'.ljust(15)
+               + 'Unit arrangement'
+               + '\n')
+    for wedge in results:
+        ui.display(''.join([str(field).ljust(15) for field in wedge]))
+    return True
+
 
 def main_menu():
     """Display the main menu for inventory management"""
@@ -325,6 +325,9 @@ def main_menu():
             ui.hold_on_exit()
         except exceptions.ReturnToMenu:
             pass
+        except exceptions.NoMatchingData:
+            ui.display('No matching data found!')
+            ui.hold_on_exit()
         except (KeyboardInterrupt, exceptions.ExitProgram):
             ui.exit_program()
 
