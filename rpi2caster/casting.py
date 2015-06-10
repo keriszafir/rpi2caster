@@ -403,22 +403,24 @@ class Casting(object):
         (useful for calibration). It also checks the signals' validity.
         """
         while True:
+            # You can enter new signals or exit
             prompt = ('Enter the signals to send to the caster, '
                       'or leave empty to return to menu: ')
             signals = ui.enter_data(prompt)
+            # Turn off any valves that were on (from previous combination)
+            self.caster.deactivate_valves()
             if not signals:
+                # Escape the infinite loop here
                 raise exceptions.ReturnToMenu
-        # Parse the combination, get the signals (first item returned
-        # by the parsing function)
+            # Parse the combination, get the signals (first item returned
+            # by the parsing function)
             signals = parsing.signals_parser(signals)
-        # Add O+15 signal if it was desired
+            # Add O+15 signal if it was desired
             signals = parsing.convert_o15(signals)
-        # Turn the valves on
+            # Turn the valves on
             ui.display(' '.join(signals))
             self.caster.activate_valves(signals)
-        # Wait until user decides to stop sending those signals to valves
-            ui.enter_data('Press [Enter] to stop. ')
-            self.caster.deactivate_valves()
+            # Start over.
 
     @use_caster
     def align_wedges(self, space_position='G5'):
