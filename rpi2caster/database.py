@@ -70,7 +70,7 @@ class Database(object):
         try:
             self.db_connection = sqlite3.connect(self.database_path)
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
-            raise exceptions.WrongConfiguration('Database cannot be opened')
+            raise exceptions.WrongConfiguration('Cannot connect to database!')
 
     def __enter__(self):
         return self
@@ -108,14 +108,14 @@ class Database(object):
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-            # Create the table first:
+                # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS wedges ('
                                'id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
                                'wedge_number TEXT NOT NULL, '
                                'set_width REAL NOT NULL, '
                                'brit_pica INTEGER NOT NULL, '
                                'unit_arrangement TEXT NOT NULL)')
-            # Then add an entry:
+                # Then add an entry:
                 cursor.execute('INSERT INTO wedges ('
                                'wedge_number,set_width,'
                                'brit_pica,unit_arrangement'
@@ -123,7 +123,8 @@ class Database(object):
                 self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return False
+                # Database failed
+                raise exceptions.DatabaseQueryError
 
     def wedge_by_name_and_width(self, wedge_name, set_width):
         """wedge_by_name_and_width(wedge_name, set_width):
@@ -147,19 +148,18 @@ class Database(object):
                                'WHERE wedge_number = ? AND set_width = ?',
                                [wedge_name, set_width])
                 wedge = cursor.fetchone()
-                try:
-                    wedge = list(wedge)
+                wedge = list(wedge)
                 # Change return value of brit_pica to boolean:
-                    wedge[3] = bool(wedge[3])
+                wedge[3] = bool(wedge[3])
                 # Change return value of steps to list:
-                    wedge[4] = json.loads(wedge[4])
-                    return wedge
-                except (TypeError, ValueError, IndexError):
-                    # No data or corrupted data found
-                    raise exceptions.NoMatchingData
-            # Database error happened:
+                wedge[4] = json.loads(wedge[4])
+                return wedge
+            except (TypeError, ValueError, IndexError):
+                # No data or cannot process it
+                raise exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return False
+                # Database failed
+                raise exceptions.DatabaseQueryError
 
     def wedge_by_id(self, w_id):
         """wedge_by_id:
@@ -180,20 +180,19 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges WHERE id = ? ', [w_id])
                 wedge = cursor.fetchone()
-                try:
-                    wedge = list(wedge)
-                    # Change return value of brit_pica to boolean:
-                    wedge[3] = bool(wedge[3])
-                    # Change return value of steps to list:
-                    wedge[4] = json.loads(wedge[4])
-                    # Return wedge
-                    return wedge
-                except (TypeError, ValueError, IndexError):
-                    # No data or corrupted data found
-                    raise exceptions.NoMatchingData
-            # Database error happened:
+                wedge = list(wedge)
+                # Change return value of brit_pica to boolean:
+                wedge[3] = bool(wedge[3])
+                # Change return value of steps to list:
+                wedge[4] = json.loads(wedge[4])
+                # Return wedge
+                return wedge
+            except (TypeError, ValueError, IndexError):
+                # No data or cannot process it
+                raise exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return False
+                # Database failed
+                raise exceptions.DatabaseQueryError
 
     def delete_wedge(self, w_id):
         """delete_wedge:
@@ -205,39 +204,46 @@ class Database(object):
 
         First, the function checks if the wedge is in the database at all.
         """
-        if self.wedge_by_id(w_id):
-            with self.db_connection:
-                try:
-                    cursor = self.db_connection.cursor()
-                    cursor.execute('DELETE FROM wedges WHERE id = ?', [w_id])
-                    return True
-                #Database error happened:
-                except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                    return False
-        else:
-            return None
+        # Check if wedge is there (will raise an exception if not)
+        # We don't care about the retval which is a list.
+        self.wedge_by_id(w_id)
+        # Okay, proceed:
+        with self.db_connection:
+            try:
+                cursor = self.db_connection.cursor()
+                cursor.execute('DELETE FROM wedges WHERE id = ?', [w_id])
+                return True
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Database failed
+                raise exceptions.DatabaseQueryError
 
     def get_all_wedges(self):
         """get_all_wedges(self):
 
         Gets all wedges stored in database, with their step unit values.
 
-        Returns a list of all wedges found.
+        Returns a list of all wedges found or raises an exception.
         """
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges')
-                # Initialize a loop, end after last wedge is displayed
-                return cursor.fetchall()
+                # Check if we got any:
+                results = cursor.fetchall()
+                if not results:
+                    raise exceptions.NoMatchingData
+                return results
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return False
+                # Database failed
+                raise exceptions.DatabaseQueryError
 
     def diecase_by_series_and_size(self, type_series, type_size):
         """diecase_by_series_and_size(type_series, type_size):
 
         Searches for diecase metadata, based on the desired type series
         and size. Allows to choose one of the diecases found.
+        
+        Returns a list of results or raises an exception.
         """
         with self.db_connection:
             try:
@@ -245,10 +251,13 @@ class Database(object):
                 cursor.execute('SELECT * FROM diecases '
                                'WHERE type_series = "%s" AND size = %i',
                                (type_series, type_size))
-            # Initialize a list of matching diecases:
-                return cursor.fetchall()
+                # Check if we got any:
+                results = cursor.fetchall()
+                if not results:
+                    raise exceptions.NoMatchingData
+                return results
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return False
+                raise exceptions.DatabaseQueryError
 
     def diecase_by_id(self, diecase_id):
         """diecase_by_id(diecase_id):
@@ -260,15 +269,15 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM diecases WHERE id = "%s"'
                                % diecase_id)
-            # Return diecase if found:
+                # Return diecase if found:
                 diecase = cursor.fetchone()
-                try:
-                    return list(diecase)
-                except (ValueError, TypeError, IndexError):
-                # No data or corrupted data found
-                    raise exceptions.NoMatchingData
+                return list(diecase)
+            except (TypeError, ValueError, IndexError):
+                # No data or cannot process it
+                raise exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return False
+                # Database failed
+                raise exceptions.DatabaseQueryError
 
     def __exit__(self, *args):
         pass

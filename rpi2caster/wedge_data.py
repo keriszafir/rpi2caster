@@ -99,10 +99,10 @@ def add_wedge():
                    '"tpwr setwidth" for those.')
         while not wedge_name:
         # Ask for the wedge name and set width as it is written on the wedge
-            prompt = ('Wedge name: ')
-            wedge_name = ui.enter_data(prompt).upper()
+            prompt = ('Wedge name (leave blank to return to menu): ')
+            wedge_name = ui.enter_data(prompt) or exceptions.return_to_menu()
         # For countries that use comma as decimal delimiter, convert to point:
-            wedge_name = wedge_name.replace(',', '.')
+            wedge_name = wedge_name.replace(',', '.').upper()
         if 'AK' in wedge_name:
         # For the old designation of 5-series wedges
             set_width = float(wedge_name.replace('AK', '').strip())
@@ -169,9 +169,7 @@ def add_wedge():
         except KeyError:
             # Unknown wedge
             unit_arrangement = None
-        # Enter manually f failed
-        if not unit_arrangement:
-        # Check if we have the values hardcoded already:
+            # Check if we have the values hardcoded already:
             prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
                       'separated by commas.\n')
             while not unit_arrangement:
@@ -179,7 +177,7 @@ def add_wedge():
                 unit_arrangement = ui.enter_data(prompt).split(',')
         # Now we need to be sure that all whitespace is stripped,
         # and the value written to database is a list of integers
-            unit_arrangement = [int(step.strip()) for step in unit_arrangement]
+            unit_arrangement = [int(i.strip()) for i in unit_arrangement]
         # Display warning if the number of steps is anything other than
         # 15 or 16 (15 is most common, 16 was used for HMN and KMN systems).
         # If length is correct, tell user it's OK.
@@ -195,40 +193,39 @@ def add_wedge():
                 ui.display(warn_max)
             else:
                 ui.display(ua_ok)
-        # Display a summary:
-        summary = {'Wedge' : wedge_name,
-                   'Set width' : set_width,
-                   'British pica wedge?' : brit_pica}
-        for parameter in summary:
-            ui.display(parameter, ':', summary[parameter])
-        # Loop over all values in wedge's unit arrangement, and display them:
-        for i, step in enumerate(unit_arrangement):
-            ui.display('Step', i+1, 'unit value:', step, '\n')
+        # Display a summary with wedge's values:
+        user_info = []
+        user_info.append('Wedge: ' + str(wedge_name))
+        user_info.append('Set width: ' + str(set_width))
+        user_info.append('British pica wedge?: ' + str(brit_pica))
+        user_info.append('Unit arrangement for that wedge:')
+        rows_line = ''.join([str(i).ljust(5) for i in range(1, 16)])
+        unit_values_line = ''.join([str(u).ljust(5) for u in unit_arrangement])
+        data = ('Row:'.ljust(8) + rows_line + '\n'
+                + 'Units:'.ljust(8) + unit_values_line + '\n')
+        user_info.append(data)
+        # Display the info
+        ui.display('\n'.join(user_info))
         # Subroutines:
         def commit_wedge():
             """Give feedback to user on result"""
-            if DB.add_wedge(wedge_name, set_width, brit_pica, unit_arrangement):
+            try:
+                DB.add_wedge(wedge_name, set_width, brit_pica, unit_arrangement)
                 ui.display('Wedge added successfully.')
                 return True
-            else:
+            except exceptions.DatabaseQueryError:
                 ui.display('Failed to add wedge!')
                 return False
         def reenter():
             """Loop over again"""
             ui.enter_data('Enter parameters again from scratch... ')
-        def return_to_menu():
-            """Return to menu (main menu will catch the exception)"""
-            raise exceptions.ReturnToMenu
-        def exit_program():
-            """Exit program (main menu will catch the exception)"""
-            raise exceptions.ExitProgram
         # Confirmation menu:
         message = ('\nCommit wedge to database? \n'
                    '[Y]es, [N]o (enter values again), [M]enu or [E]xit? ')
         options = {'Y' : commit_wedge,
                    'N' : reenter,
-                   'M' : return_to_menu,
-                   'E' : exit_program}
+                   'M' : exceptions.return_to_menu,
+                   'E' : exceptions.exit_program}
         ans = ui.simple_menu(message, options).upper()
         options[ans]()
 
@@ -236,30 +233,27 @@ def add_wedge():
 def delete_wedge():
     """Used for deleting a wedge from database.
 
-    Lists wedges
+    Lists wedges, then allows user to choose ID.
     """
     ui.clear()
     # Do it only if we have wedges (depends on list_wedges retval)
     while list_wedges():
         try:
             prompt = 'Enter the wedge ID to delete (leave blank to exit): '
-            w_id = ui.enter_data(prompt)
-            if not w_id:
-                raise exceptions.ReturnToMenu
+            w_id = ui.enter_data(prompt) or exceptions.return_to_menu()
             w_id = int(w_id)
         except (ValueError, TypeError):
             # Not number? Skip wedge deletion, start over.
-            pass
-        if DB.delete_wedge(w_id):
+            continue
+        # Ask for confirmation
+        ans = ui.simple_menu('Are you sure? [Y / N]', {'Y': 'Y', 'N': 'N'})
+        if ans in ['y', 'Y'] and DB.delete_wedge(w_id):
             ui.display('Wedge deleted successfully.')
-        ui.clear()
 
 
 def list_wedges():
     """Lists all wedges we have."""
     results = DB.get_all_wedges()
-    if not results:
-        raise exceptions.NoMatchingData
     ui.display('\n' + 'wedge id'.ljust(15)
                + 'wedge No'.ljust(15)
                + 'set width'.ljust(15)

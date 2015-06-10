@@ -19,11 +19,7 @@ def lookup_diecase(type_series, type_size):
     if several matches found - allows to choose one of them, returns data.
     """
     matches = DB.diecase_by_series_and_size(type_series, type_size)
-    if not matches:
-    # List is empty. Notify the user:
-        ui.display('Sorry - no results found.')
-        return False
-    elif len(matches) == 1:
+    if len(matches) == 1:
     # One result found
         return matches[0]
     else:
@@ -32,7 +28,7 @@ def lookup_diecase(type_series, type_size):
     # Associate diecases with IDs to select one later
         assoc = dict(zip(idents, matches))
     # Display a menu with diecases from 1 to the last:
-        options = dict([(i, k) for i, k in enumerate(matches, start=1)])
+        options = [(i, k) for i, k in enumerate(matches, start=1)]
         header = 'Choose a diecase:'
         choice = ui.menu(options, header)
     # Choose one

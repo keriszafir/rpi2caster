@@ -63,6 +63,31 @@ class WrongConfiguration(Exception):
 
 class NoMatchingData(Exception):
     """NoMatchingData
-    
+
     Raised when a database query yields no matches.
     """
+    pass
+
+
+class DatabaseQueryError(Exception):
+    """DatabaseConnectionError
+
+    Raised by the low-level database module as a general exception
+    if a SQL query fails to execute.
+    """
+    pass
+
+
+def return_to_menu():
+    """Wrapper for raising ReturnToMenu where a function is needed"""
+    raise ReturnToMenu
+
+
+def exit_program():
+    """Wrapper for raising ReturnToMenu where a function is needed"""
+    raise ExitProgram
+
+
+def change_parameters():
+    """Wrapper for raising ChangeParameters where a function is needed"""
+    raise ChangeParameters
