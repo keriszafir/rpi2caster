@@ -264,9 +264,8 @@ class Casting(object):
             ui.clear()
             ui.display('Calibration and Sort Casting:\n\n')
             prompt = 'Enter column and row symbols (default: G 5): '
-            signals = ui.enter_data(prompt)
-            if not signals:
-                signals = 'G 5'
+            # Got no signals? Use G5.
+            signals = ui.enter_data(prompt) or 'G 5'
             # Ask for number of sorts and lines
             prompt = '\nHow many sorts? (default: 10): '
             number = ui.enter_data(prompt)

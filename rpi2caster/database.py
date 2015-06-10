@@ -153,10 +153,11 @@ class Database(object):
                     wedge[3] = bool(wedge[3])
                 # Change return value of steps to list:
                     wedge[4] = json.loads(wedge[4])
-                except (TypeError, ValueError):
-                    pass
-                # Return wedge - list or None:
-                return wedge
+                    return wedge
+                except (TypeError, ValueError, IndexError):
+                    # No data or corrupted data found
+                    raise exceptions.NoMatchingData
+            # Database error happened:
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 return False
 
@@ -179,14 +180,18 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges WHERE id = ? ', [w_id])
                 wedge = cursor.fetchone()
-                if wedge:
+                try:
                     wedge = list(wedge)
                     # Change return value of brit_pica to boolean:
                     wedge[3] = bool(wedge[3])
                     # Change return value of steps to list:
                     wedge[4] = json.loads(wedge[4])
-                # Return wedge (or implicitly None, if wedge not found)
-                return wedge
+                    # Return wedge
+                    return wedge
+                except (TypeError, ValueError, IndexError):
+                    # No data or corrupted data found
+                    raise exceptions.NoMatchingData
+            # Database error happened:
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 return False
 
@@ -206,6 +211,7 @@ class Database(object):
                     cursor = self.db_connection.cursor()
                     cursor.execute('DELETE FROM wedges WHERE id = ?', [w_id])
                     return True
+                #Database error happened:
                 except (sqlite3.OperationalError, sqlite3.DatabaseError):
                     return False
         else:
@@ -273,8 +279,9 @@ class Database(object):
                 diecase = cursor.fetchone()
                 try:
                     return list(diecase)
-                except (ValueError, TypeError):
-                    return None
+                except (ValueError, TypeError, IndexError):
+                # No data or corrupted data found
+                    raise exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 return False
 
