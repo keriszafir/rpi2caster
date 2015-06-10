@@ -267,9 +267,8 @@ def delete_wedge():
     Lists wedges
     """
     ui.clear()
-    got_any = list_wedges()
     # Do it only if we have wedges (depends on list_wedges retval)
-    while got_any:
+    while list_wedges():
         try:
             prompt = 'Enter the wedge ID to delete (leave blank to exit): '
             w_id = ui.enter_data(prompt)
@@ -277,13 +276,11 @@ def delete_wedge():
                 raise exceptions.ReturnToMenu
             w_id = int(w_id)
         except (ValueError, TypeError):
+            # Not number? Skip wedge deletion, start over.
             pass
-        else:
-            break
-    if DB.delete_wedge(w_id):
-        ui.display('Wedge deleted successfully.')
-    else:
-        ui.display('Cannot delete wedge!')
+        if DB.delete_wedge(w_id):
+            ui.display('Wedge deleted successfully.')
+        ui.clear()
 
 
 def list_wedges():
