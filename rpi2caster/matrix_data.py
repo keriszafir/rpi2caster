@@ -5,6 +5,7 @@ Module containing functions for diecase retrieval and parsing,
 diecase storing, parameter searches.
 """
 
+from __future__ import absolute_import
 from rpi2caster import text_ui as ui
 from rpi2caster import exceptions
 from rpi2caster import database
@@ -38,3 +39,36 @@ def lookup_diecase(type_series, type_size):
         chosen_id = options[choice]
     # Return a list with chosen diecase's parameters:
         return assoc[chosen_id]
+
+
+
+
+# Placeholders for functionality not implemented yet:
+def list_diecases():
+    """Not implemented yet"""
+    pass
+
+
+def show_diecase_layout():
+    """Not implemented yet"""
+    pass
+
+
+def add_diecase():
+    """Not implemented yet"""
+    pass
+
+
+def edit_diecase():
+    """Not implemented yet"""
+    pass
+
+
+def clear_diecase():
+    """Not implemented yet"""
+    pass
+
+
+def delete_diecase():
+    """Not implemented yet"""
+    pass
