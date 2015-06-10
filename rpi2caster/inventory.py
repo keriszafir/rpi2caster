@@ -327,8 +327,3 @@ def main_menu():
             ui.hold_on_exit()
         except (KeyboardInterrupt, exceptions.ExitProgram):
             ui.exit_program()
-
-
-# Initialize the console interface when running the program directly.
-if __name__ == '__main__':
-    main_menu()

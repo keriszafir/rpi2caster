@@ -788,11 +788,3 @@ class Typesetter(object):
 
     def __exit__(self, *args):
         ui.debug_info('Exiting typesetting job context.')
-
-
-# End of class definitions.
-# And now, for something completely different...
-# Initialize the console interface when running the program directly.
-if __name__ == '__main__':
-    typesetter = Typesetter()
-    typesetter.main_menu()
