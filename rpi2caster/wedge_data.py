@@ -74,29 +74,31 @@ def add_wedge():
               1331: [4, 5, 7, 8, 8, 9, 9, 9, 9, 10, 11, 12, 12, 13, 15, 15],
               1406: [4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 10, 10, 11, 12, 13, 15],
               'TPWR': [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]}
+    # Start with a clear screen
+    ui.clear()
+    # Display an explanation once
+    ui.display('Adding a wedge:\n\n'
+               'To use a wedge/stopbar definition in rpi2caster, you must '
+               'add the wedge to the database. \n'
+               'Enter the wedge name  you can see on the wedge, and the '
+               'program will try to determine \n'
+               'its width and unit arrangement.\n'
+               'The set width will usually be a fractional number - you '
+               'must enter it \n'
+               'as a decimal fraction (e.g. 9 1/4 = 9.25), '
+               'with point or comma as delimiter.\n\n'
+               'Some special wedges are:\n'
+               '"setwidth AK" - it is a 5-series wedge,\n'
+               'typewriter wedges (monospace, uniform width) - enter '
+               '"tpwr setwidth" for those.')
+    while True:
     # Repeat the procedure all over again, if necessary
     # (can be exited by raising an exception)
-    while True:
-        # Enter the wedge name:
+    # Enter the wedge name first:
         wedge_name = ''
         set_width = ''
         brit_pica = None
         unit_arrangement = None
-        ui.clear()
-        ui.display('Adding a wedge:\n\n'
-                   'To use a wedge/stopbar definition in rpi2caster, you must '
-                   'add the wedge to the database. \n'
-                   'Enter the wedge name  you can see on the wedge, and the '
-                   'program will try to determine \n'
-                   'its width and unit arrangement.\n'
-                   'The set width will usually be a fractional number - you '
-                   'must enter it \n'
-                   'as a decimal fraction (e.g. 9 1/4 = 9.25), '
-                   'with point or comma as delimiter.\n\n'
-                   'Some special wedges are:\n'
-                   '"setwidth AK" - it is a 5-series wedge,\n'
-                   'typewriter wedges (monospace, uniform width) - enter '
-                   '"tpwr setwidth" for those.')
         while not wedge_name:
         # Ask for the wedge name and set width as it is written on the wedge
             prompt = ('Wedge name (leave blank to return to menu): ')
@@ -206,28 +208,11 @@ def add_wedge():
         user_info.append(data)
         # Display the info
         ui.display('\n'.join(user_info))
-        # Subroutines:
-        def commit_wedge():
-            """Give feedback to user on result"""
-            try:
-                DB.add_wedge(wedge_name, set_width, brit_pica, unit_arrangement)
+        # Ask for confirmation
+        ans = ui.simple_menu('Commit? [Y / N]', {'Y': 'Y', 'N': 'N'})
+        if ans in ['y', 'Y']:
+            if DB.add_wedge(wedge_name, set_width, brit_pica, unit_arrangement):
                 ui.display('Wedge added successfully.')
-                return True
-            except exceptions.DatabaseQueryError:
-                ui.display('Failed to add wedge!')
-                return False
-        def reenter():
-            """Loop over again"""
-            ui.enter_data('Enter parameters again from scratch... ')
-        # Confirmation menu:
-        message = ('\nCommit wedge to database? \n'
-                   '[Y]es, [N]o (enter values again), [M]enu or [E]xit? ')
-        options = {'Y' : commit_wedge,
-                   'N' : reenter,
-                   'M' : exceptions.return_to_menu,
-                   'E' : exceptions.exit_program}
-        ans = ui.simple_menu(message, options).upper()
-        options[ans]()
 
 
 def delete_wedge():

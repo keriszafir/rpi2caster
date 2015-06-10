@@ -268,14 +268,14 @@ class Casting(object):
             signals = ui.enter_data(prompt) or 'G 5'
             # Ask for number of sorts and lines
             prompt = '\nHow many sorts? (default: 10): '
-            number = ui.enter_data(prompt)
+            number = ui.enter_data(prompt) or 10
             # Default to 10 if user enters non-positive number or letters
             if not number.isdigit() or int(number) < 0:
                 number = 10
             else:
                 number = int(number)
             prompt = '\nHow many lines? (default: 1): '
-            lines = ui.enter_data(prompt)
+            lines = ui.enter_data(prompt) or 1
             # Default to 10 if user enters non-positive number or letters
             if not lines.isdigit() or int(lines) < 0:
                 lines = 1
@@ -578,17 +578,10 @@ def main_menu(work=Casting()):
         ui.clear()
         ui.display('Ribbon preview:\n')
         ui.display('\n'.join([line for line in work.ribbon]))
-        ui.enter_data('[Enter] to return to menu...')
-
-    def exit_program():
-        """exit_program:
-
-        Throws an exception caught after the option is chosen."""
-        raise exceptions.ExitProgram
-
+        ui.hold_on_exit()
     # End of menu subroutines
     # Now construct the menu, starting with available options
-    options = [('Exit program', exit_program),
+    options = [('Exit program', exceptions.exit_program),
                ('Load a ribbon file', choose_ribbon_filename),
                ('Preview ribbon', preview_ribbon),
                cast_or_punch(),

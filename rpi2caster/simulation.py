@@ -74,8 +74,8 @@ class Monotype(object):
                 """Helper function - continue casting."""
                 return True
 
-            def return_to_menu():
-                """return_to_menu
+            def with_cleanup_return_to_menu():
+                """with_cleanup_return_to_menu
 
                 Aborts casting. Makes sure the pump is turned off.
                 Raise an exception to be caught by higher-level functions
@@ -84,8 +84,8 @@ class Monotype(object):
                 emergency_cleanup()
                 raise exceptions.CastingAborted
 
-            def exit_program():
-                """exit_program
+            def with_cleanup_exit_program():
+                """with_cleanup_exit_program
 
                 Helper function - throws an exception to exit the program.
                 Also makes sure the pump is turned off."""
@@ -95,8 +95,8 @@ class Monotype(object):
             # End of subroutine definitions
             # Now, a little menu
             options = {'C' : continue_casting,
-                       'M' : return_to_menu,
-                       'E' : exit_program}
+                       'M' : with_cleanup_return_to_menu,
+                       'E' : with_cleanup_exit_program}
             message = ('Machine has stopped running! Check what happened.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = ui.simple_menu(message, options).upper()
@@ -161,15 +161,9 @@ class Monotype(object):
             def continue_casting():
                 """Helper function - continue casting."""
                 return True
-            def return_to_menu():
-                """Raise an exception to return to main menu"""
-                raise exceptions.ReturnToMenu
-            def exit_program():
-                """Raise an exception to exit program"""
-                raise exceptions.ExitProgram
             options = {'C' : continue_casting,
-                       'M' : return_to_menu,
-                       'E' : exit_program}
+                       'M' : exceptions.return_to_menu,
+                       'E' : exceptions.exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = ui.simple_menu(message, options).upper()

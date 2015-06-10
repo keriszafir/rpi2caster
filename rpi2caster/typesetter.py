@@ -18,8 +18,8 @@ import time
 from rpi2caster import text_ui as ui
 # Exceptions module
 from rpi2caster import exceptions
-# Inventory management (until I find a better way for db abstraction...)
-from rpi2caster import inventory
+# Wedge and database operations
+from rpi2caster import matrix_data, wedge_data
 # HTML/XML parser:
 try:
     from bs4 import BeautifulSoup
@@ -116,9 +116,6 @@ class Typesetter(object):
                             % (self.set_width, self.unit_line_length))
         # Convert it all to a multiline string:"""
             return '\n'.join(info)
-        def exit_program():
-            """Throws an exception to exit the program"""
-            raise exceptions.ExitProgram
         # End of subroutines.
         # Now construct a menu.
         # Commands: {option_name : function}
@@ -129,7 +126,7 @@ class Typesetter(object):
                'or punches a paper tape with a pneumatic perforator.'
                + debug_notice() + '\n\nMain Menu:')
         # Option list for menu:
-        options = [('Exit program', exit_program),
+        options = [('Exit program', exceptions.exit_program),
                    ('Load a text file', choose_input_filename),
                    ('Specify an output file name', choose_output_filename),
                    ('Choose diecase', self.choose_diecase),

@@ -37,8 +37,6 @@ def lookup_diecase(type_series, type_size):
         return assoc[chosen_id]
 
 
-
-
 # Placeholders for functionality not implemented yet:
 def list_diecases():
     """Not implemented yet"""

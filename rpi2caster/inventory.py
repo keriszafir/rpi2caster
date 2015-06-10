@@ -14,11 +14,7 @@ from rpi2caster import wedge_data
 
 def main_menu():
     """Display the main menu for inventory management"""
-    def exit_program():
-        """Helper subroutine, throws an exception to exit the program"""
-        raise exceptions.ExitProgram
-
-    options = [('Exit program', exit_program),
+    options = [('Exit program', exceptions.exit_program),
                ('List matrix cases', matrix_data.list_diecases),
                ('Show matrix case layout', matrix_data.show_diecase_layout),
                ('Add a new, empty matrix case', matrix_data.add_diecase),
@@ -37,6 +33,9 @@ def main_menu():
             pass
         except exceptions.NoMatchingData:
             ui.display('No matching data found!')
+            ui.hold_on_exit()
+        except exceptions.DatabaseQueryError:
+            ui.display('Database query error!')
             ui.hold_on_exit()
         except (KeyboardInterrupt, exceptions.ExitProgram):
             ui.exit_program()
