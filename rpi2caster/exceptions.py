@@ -2,12 +2,13 @@
 """
 Exceptions
 
-Contains custom exceptions for all rpi2caster modules.
+Contains custom exceptions for the rpi2caster package.
 """
+
 class CastingAborted(Exception):
     """CastingAborted
 
-    Exception which is raised when casting is aborted due to machine stop.
+    Raised when casting is aborted due to machine stop.
     """
     pass
 
@@ -15,7 +16,7 @@ class CastingAborted(Exception):
 class EmergencyStop(Exception):
     """EmergencyStop
 
-    Exception raised when user pushes the emergency stop button to abort.
+    Raised when user pushes the emergency stop button to abort.
     """
     pass
 
@@ -23,7 +24,7 @@ class EmergencyStop(Exception):
 class ReturnToMenu(Exception):
     """ReturnToMenu
 
-    Exception raised when a method wants to exit to menu.
+    Raised when a method wants to exit to menu.
     """
     pass
 
@@ -31,7 +32,7 @@ class ReturnToMenu(Exception):
 class ExitProgram(Exception):
     """ExitProgram
 
-    Exception raised when user decides to exit program.
+    Raised when user decides to exit program.
     """
     pass
 
@@ -39,8 +40,7 @@ class ExitProgram(Exception):
 class ChangeParameters(Exception):
     """ChangeParameters
 
-    Exception raised when user decides to change parameters
-    in a current routine.
+    Raised when user decides to change parameters in a current routine.
     """
     pass
 
@@ -48,13 +48,21 @@ class ChangeParameters(Exception):
 class ConfigFileUnavailable(Exception):
     """ConfigFileUnavailable
 
-    Exception raised when a config file does not exist or cannot be read.
+    Raised when a config file does not exist or cannot be read.
     """
     pass
+
 
 class WrongConfiguration(Exception):
     """WrongConfiguration
 
-    Exception raised when a parameter is not configured correctly.
+    Raised when a parameter is not configured correctly.
     """
     pass
+
+
+class NoMatchingData(Exception):
+    """NoMatchingData
+    
+    Raised when a database query yields no matches.
+    """
