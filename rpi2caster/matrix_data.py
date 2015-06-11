@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """matrix_data
 
 Module containing functions for diecase retrieval and parsing,

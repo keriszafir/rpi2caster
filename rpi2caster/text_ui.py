@@ -69,15 +69,15 @@ def clear():
     os.system('clear')
 
 
-def display(*args):
+def display(*args, **kwargs):
     """Displays info for the user - print all in one line"""
-    print(args)  # TODO: add newline
+    print(*args, **kwargs)  # TODO: add newline
 
 
-def debug_info(*args):
+def debug_info(*args, **kwargs):
     """Prints debug messages to screen if in debug mode"""
     if DEBUG_MODE:
-        print(args)  # TODO: add newline
+        print(*args, **kwargs)  # TODO: add newline
 
 
 def debug_enter_data(message):

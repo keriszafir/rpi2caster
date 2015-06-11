@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 conffile_parser
 
 Module for reading and writing configuration from/to conffile.
 """
 # Config parser for reading the interface settings
-import ConfigParser
+import configparser
 # Custom exceptions
 from rpi2caster import exceptions
 
@@ -23,7 +22,7 @@ def initialize_config():
     """
     try:
         with open(CONFIG_PATH, 'r'):
-            cfg = ConfigParser.SafeConfigParser()
+            cfg = configparser.SafeConfigParser()
             cfg.read(CONFIG_PATH)
             return cfg
     except IOError:
@@ -65,7 +64,7 @@ def get_config(section_name, option_name):
             pass
         # Return the raw value - a list, a string, None etc.
         return value
-    except (ConfigParser.NoSectionError, ConfigParser.NoOptionError):
+    except (configparser.NoSectionError, configparser.NoOptionError):
         # If section or option is not configured, return None
         return None
 

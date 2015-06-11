@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 typesetter - program for generating the code sequence fed to
 a Monotype composition caster or type&rule caster.
@@ -21,7 +20,7 @@ from rpi2caster import matrix_data, wedge_data
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    ui.display('BeautifulSoup 4 not installed!')
+    raise exceptions.MissingDependency('BeautifulSoup 4 not installed!')
 
 
 class Typesetter(object):
