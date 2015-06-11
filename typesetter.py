@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Typesetter script
 
 Used for running the typesetter program.

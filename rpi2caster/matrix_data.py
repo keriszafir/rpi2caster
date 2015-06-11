@@ -4,8 +4,6 @@
 Module containing functions for diecase retrieval and parsing,
 diecase storing, parameter searches.
 """
-
-from __future__ import absolute_import
 from rpi2caster import text_ui as ui
 from rpi2caster import exceptions
 from rpi2caster import database
@@ -20,20 +18,20 @@ def lookup_diecase(type_series, type_size):
     """
     matches = DB.diecase_by_series_and_size(type_series, type_size)
     if len(matches) == 1:
-    # One result found
+        # One result found
         return matches[0]
     else:
-    # More than one match - decide which one to use:
+        # More than one match - decide which one to use:
         idents = [record[0] for record in matches]
-    # Associate diecases with IDs to select one later
+        # Associate diecases with IDs to select one later
         assoc = dict(zip(idents, matches))
-    # Display a menu with diecases from 1 to the last:
+        # Display a menu with diecases from 1 to the last:
         options = [(i, k) for i, k in enumerate(matches, start=1)]
         header = 'Choose a diecase:'
         choice = ui.menu(options, header)
-    # Choose one
+        # Choose one
         chosen_id = options[choice]
-    # Return a list with chosen diecase's parameters:
+        # Return a list with chosen diecase's parameters:
         return assoc[chosen_id]
 
 

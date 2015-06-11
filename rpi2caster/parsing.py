@@ -17,7 +17,7 @@ def read_file(filename):
         with open(filename, 'r') as input_file:
             content_generator = input_file.readlines()
             for line in content_generator:
-            # Strip newline characters from lines
+                # Strip newline characters from lines
                 content.append(line.strip('\n'))
             return content
     except IOError:
@@ -93,14 +93,14 @@ def comments_parser(input_data):
     # ...then look for comment symbols and parse them:
     for symbol in COMMENT_SYMBOLS:
         if symbol in input_data:
-        # Split on the first encountered symbol
+            # Split on the first encountered symbol
             [raw_signals, comment] = input_data.split(symbol, 1)
             break
     # Return a list with unprocessed signals and comment
     return [raw_signals.strip(), comment.strip()]
 
 
-def count_lines_and_characters(contents):
+def count_lines_and_chars(contents):
     """Count newlines and characters+spaces in ribbon file.
 
     This is usually called when pre-processing the file.
@@ -108,9 +108,9 @@ def count_lines_and_characters(contents):
     all_lines = 0
     all_chars = 0
     for line in contents:
-    # Strip comments
+        # Strip comments
         signals = comments_parser(line)[0]
-    # Parse the signals part of the line
+        # Parse the signals part of the line
         signals = signals_parser(signals)
         if check_character(signals):
             all_chars += 1
@@ -125,9 +125,9 @@ def count_combinations(contents):
     This is usually called when pre-processing the file."""
     all_combinations = 0
     for line in contents:
-    # Strip comments
+        # Strip comments
         signals = comments_parser(line)[0]
-    # If there are signals, increment the combinations counter
+        # If there are signals, increment the combinations counter
         if signals_parser(signals):
             all_combinations += 1
     # Return the number
@@ -150,7 +150,7 @@ def signals_parser(raw_signals):
     justification = [sig for sig in ['0005', '0075'] if sig in raw_signals]
     # Remove these signals from the input string
     for sig in justification:
-    # We operate on a string, so cannot remove the item...
+        # We operate on a string, so cannot remove the item...
         raw_signals = raw_signals.replace(sig, '')
     # Look for any numbers between 16 and 100, remove them
     for number in range(100, 15, -1):
@@ -196,8 +196,8 @@ def check_newline(signals):
     This is called for each new line when parsing the ribbon file
     during casting.
     """
-    return (set(['0005', '0075']).issubset(signals)
-            or set(['N', 'K', 'J']).issubset(signals))
+    return (set(['0005', '0075']).issubset(signals) or
+            set(['N', 'K', 'J']).issubset(signals))
 
 
 def check_character(signals):
@@ -209,8 +209,8 @@ def check_character(signals):
     0005 0075 (galley trip) or NKJ (galley trip, unit-adding),
     empty sequence.
     """
-    return (signals
-            and not '0005' in signals
-            and not '0075' in signals
-            and not set(['N', 'K']).issubset(signals)
-            and not set(['N', 'J']).issubset(signals))
+    return (signals and
+            '0005' not in signals and
+            '0075' not in signals and not
+            set(['N', 'K']).issubset(signals) and not
+            set(['N', 'J']).issubset(signals))

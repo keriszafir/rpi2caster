@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 user-interfaces
 
@@ -32,30 +31,29 @@ def menu(options, header='', footer=''):
     # Clear the screen, display header and add two empty lines
     clear()
     if header:
-        print header
-        print
+        print(header)  # TODO add newline
     # Display all the options; we'll take care of 0 later
     options = dict([(i, option) for i, option in enumerate(options)])
     # Menu body
     # Tab indent, option number, option name (not processing option 0 yet!)
-    print '\n'.join(['\t %i : %s \n' % (k, options[k][0])
-                     for k in sorted(options) if k])
+    print('\n'.join(['\t %i : %s \n' % (k, options[k][0])
+                     for k in sorted(options) if k]))
     # Option 0 is displayed last, add some whitespace around it
     try:
-        print '\n\n\t %i : %s \n' % (0, options[0][0])
+        print('\n\n\t %i : %s \n' % (0, options[0][0]))
     except KeyError:
         # Theoretically, there's always an option number zero... but if not?
         pass
     # Print footer, if defined
     if footer:
-        print '\n' + footer
+        print(footer)  # TODO: add newline
     # Add an empty line to separate prompt
-    print '\n'
+    print('\n')
     # Ask for user input
     your_choice = ''
     while your_choice not in options:
         # Wait until user enters proper data
-        your_choice = raw_input('Your choice: ')
+        your_choice = input('Your choice: ')
         try:
             your_choice = int(your_choice)
         except ValueError:
@@ -73,28 +71,24 @@ def clear():
 
 def display(*args):
     """Displays info for the user - print all in one line"""
-    for arg in args:
-        print arg,
-    print '\n'
+    print(args)  # TODO: add newline
 
 
 def debug_info(*args):
     """Prints debug messages to screen if in debug mode"""
     if DEBUG_MODE:
-        for arg in args:
-            print arg,
-        print '\n'
+        print(args)  # TODO: add newline
 
 
 def debug_enter_data(message):
     """For debug-specific data or confirmations"""
     if DEBUG_MODE:
-        return raw_input(message)
+        return input(message)
 
 
 def enter_data(message):
     """Let user enter the data"""
-    return raw_input(message)
+    return input(message)
 
 
 def tab_complete(text, state):
@@ -113,13 +107,13 @@ def enter_input_filename():
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the input filename; check if the file is readable
-    filename = raw_input('\n Enter the input file name: ')
+    filename = input('\n Enter the input file name: ')
     filename = os.path.realpath(filename)
     try:
         with open(filename, 'r'):
             return filename
     except IOError:
-        raw_input('Wrong filename or file not readable!')
+        input('Wrong filename or file not readable!')
         return ''
 
 
@@ -130,14 +124,14 @@ def enter_output_filename():
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the output filename; no check here
-    filename = raw_input('\n Enter the output file name: ')
+    filename = input('\n Enter the output file name: ')
     filename = os.path.realpath(filename)
     return filename
 
 
 def hold_on_exit():
     """Waits for user to press return before going back to menu"""
-    raw_input('Press [Enter] to return to main menu...')
+    input('Press [Enter] to return to main menu...')
 
 
 def simple_menu(message, options):
@@ -151,7 +145,7 @@ def simple_menu(message, options):
     """
     ans = ''
     while ans.upper() not in options and ans.lower() not in options:
-        ans = raw_input(message)
+        ans = input(message)
     return ans
 
 
@@ -162,5 +156,5 @@ def exit_program():
     This is because we may do something specific in different UIs,
     so an abstraction layer may come in handy.
     """
-    print 'Goodbye!'
+    print('Goodbye!')
     exit()

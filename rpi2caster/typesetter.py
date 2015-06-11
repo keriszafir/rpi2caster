@@ -1,4 +1,3 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
 typesetter - program for generating the code sequence fed to
@@ -10,8 +9,6 @@ calculates justification figures and outputs the combinations of Monotype
 signals, one by one, to the file or database. These sequences are to be read
 and parsed by the casting program, which sends the signals to the machine.
 """
-# New division model
-from __future__ import division, absolute_import
 # Typical libs, used by most routines:
 import time
 # User interface
@@ -69,24 +66,27 @@ class Typesetter(object):
         def choose_input_filename():
             self.input_file = ui.enter_input_filename()
             self.main_menu()
+
         def choose_output_filename():
             self.output_file = ui.enter_output_filename()
             self.main_menu()
+
         def debug_notice():
-        # Prints a notice if the program is in debug mode:
+            # Prints a notice if the program is in debug mode:
             info = '\n\nThe program is now in debugging mode!'
             return ui.DEBUG_MODE and info or ''
+
         def additional_info():
-        # Displays additional info as a main menu footer.
-        # Start with empty list:
+            # Displays additional info as a main menu footer.
+            # Start with empty list:
             info = []
-        # Add ribbon filename, if any:
+            # Add ribbon filename, if any:
             if self.input_file:
                 info.append('Input file name: ' + self.input_file)
-        # Add ribbon filename, if any:
+            # Add ribbon filename, if any:
             if self.output_file:
                 info.append('Output file name: ' + self.output_file)
-        # Add a diecase info:
+            # Add a diecase info:
             if self.diecase:
                 info.append('\nDiecase info:\n')
                 info.append('Using diecase ID: ' + str(self.diecase_id))
@@ -123,8 +123,8 @@ class Typesetter(object):
                'for Monotype Composition or Type and Rule casters. \n\n'
                'This program reads a ribbon (input file) and casts the type '
                'on a Composition Caster, \n'
-               'or punches a paper tape with a pneumatic perforator.'
-               + debug_notice() + '\n\nMain Menu:')
+               'or punches a paper tape with a pneumatic perforator.' +
+               debug_notice() + '\n\nMain Menu:')
         # Option list for menu:
         options = [('Exit program', exceptions.exit_program),
                    ('Load a text file', choose_input_filename),
@@ -153,17 +153,17 @@ class Typesetter(object):
         if self.line_length:
             self.line_length = ''
         while not self.line_length.isdigit():
-            self.line_length = raw_input('Enter the desired line length: ')
+            self.line_length = ui.enter_data('Enter the desired line length: ')
         else:
             self.line_length = int(self.line_length)
         # The line length is set.
         # Now choose the measurement units from a menu.
-        options = {'c' : 'cicero',
-                   'b' : 'britPica',
-                   'a' : 'amerPica',
-                   'cm' : 'cm',
-                   'mm' : 'mm',
-                   'in' : 'in'}
+        options = {'c': 'cicero',
+                   'b': 'britPica',
+                   'a': 'amerPica',
+                   'cm': 'cm',
+                   'mm': 'mm',
+                   'in': 'in'}
         message = ('Select measurement units:\n'
                    'a - American pica (0.1660"),\n'
                    'b - British pica (0.1667"),\n'
@@ -535,9 +535,9 @@ class Typesetter(object):
         except:
             pass
         # Choose a wedge based on wedge number and set size:
-        wedge_ua = inventory.wedge_by_name_and_width(wedge, set_width)[4]
+        wedge_ua = wedge_data.wedge_by_name_and_width(wedge, set_width)[4]
         # Get unit values for that wedge:
-        self.wedgeUnits = dict(zip(range(1, 17), wedge_ua))
+        self.wedgeUnits = dict(zip([i for i in range(1, 17)], wedge_ua))
 
     def display_diecase_layout(self):
         """display_diecase_layout:
@@ -554,11 +554,11 @@ class Typesetter(object):
             time.sleep(1)
             self.main_menu()
         for variant in self.diecase_layout:
-            ui.display('\nMatrices for variant: ' + variant + '\n\n'
-                            + 'Char:'.ljust(8)
-                            + 'Column:'.ljust(8)
-                            + 'Row:'.ljust(8)
-                            + 'Units:'.ljust(8))
+            ui.display('\nMatrices for variant: ' + variant + '\n\n' +
+                       'Char:'.ljust(8) +
+                       'Column:'.ljust(8) +
+                       'Row:'.ljust(8) +
+                       'Units:'.ljust(8))
             variantCharset = self.diecase_layout[variant]
             for character in variantCharset:
                 parameters = variantCharset[character]
@@ -568,10 +568,10 @@ class Typesetter(object):
                     units = parameters[2]
                 except IndexError:
                     units = self.wedgeUnits[row]
-             # Now display the data:"""
-                ui.display(character.strip().ljust(8)
-                                + column.ljust(8) + str(row).ljust(8)
-                                + str(units).ljust(8))
+                # Now display the data:"""
+                ui.display(character.strip().ljust(8) +
+                           column.ljust(8) + str(row).ljust(8) +
+                           str(units).ljust(8))
         # Keep displaying the data until user presses return:"""
         ui.enter_data('Press return to go back to menu....')
 
@@ -579,8 +579,8 @@ class Typesetter(object):
         """choose_machine_settings:
 
         Chooses the machine settings - diecase format (15x15, 15x17,
-        16x17 HMN, KMN or unit-shift), justification mode (0005, 0075 or NJ, NK)
-        and whether there's a unit-shift attachment.
+        16x17 HMN, KMN or unit-shift), justification mode
+        (0005, 0075 or NJ, NK) and whether there's a unit-shift attachment.
 
         TODO: implement the function
         """
@@ -598,7 +598,7 @@ class Typesetter(object):
         """
         if not self.input_file or not self.output_file:
             ui.display('You must specify the input '
-                            'and output filenames first!')
+                       'and output filenames first!')
             time.sleep(1)
 
     @staticmethod
@@ -725,12 +725,12 @@ class Typesetter(object):
         We must know the line length and measurement unit first.
         If not, throw an error.
         """
-        inchWidth = {'britPica' : 0.1667,
-                     'amerPica' : 0.1660,
-                     'cicero' : 0.1776,
-                     'mm' : 0.03937,
-                     'cm' : 0.3937,
-                     'in' : 1}
+        inchWidth = {'britPica': 0.1667,
+                     'amerPica': 0.1660,
+                     'cicero': 0.1776,
+                     'mm': 0.03937,
+                     'cm': 0.3937,
+                     'in': 1}
         if self.measurement not in inchWidth:
             return False
         # Base em width is a width (in inches) of a single em -

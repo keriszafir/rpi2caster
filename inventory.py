@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Inventory
 
 Script for managing diecases and wedges.

@@ -4,7 +4,6 @@ conffile_parser
 
 Module for reading and writing configuration from/to conffile.
 """
-from __future__ import absolute_import
 # Config parser for reading the interface settings
 import ConfigParser
 # Custom exceptions

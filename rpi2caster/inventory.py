@@ -1,11 +1,9 @@
-#!/usr/bin/python
 # -*- coding: utf-8 -*-
 
 """Inventory:
 
 Allows to add, list and delete wedges and diecases.
 """
-from __future__ import absolute_import
 from rpi2caster import text_ui as ui
 from rpi2caster import exceptions
 from rpi2caster import matrix_data

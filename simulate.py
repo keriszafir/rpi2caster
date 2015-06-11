@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Simulate
 
 Casting simulation without an actual caster, for development/testing.

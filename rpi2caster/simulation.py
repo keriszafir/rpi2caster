@@ -6,7 +6,6 @@ A module which allows to simulate working with a Monotype composition caster,
 and should be used for testing the higher-level casting routines
 without an access to the actual caster.
 """
-from __future__ import absolute_import
 # Built-in time module
 import time
 # Custom exceptions module
@@ -94,9 +93,9 @@ class Monotype(object):
 
             # End of subroutine definitions
             # Now, a little menu
-            options = {'C' : continue_casting,
-                       'M' : with_cleanup_return_to_menu,
-                       'E' : with_cleanup_exit_program}
+            options = {'C': continue_casting,
+                       'M': with_cleanup_return_to_menu,
+                       'E': with_cleanup_exit_program}
             message = ('Machine has stopped running! Check what happened.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = ui.simple_menu(message, options).upper()
@@ -117,9 +116,9 @@ class Monotype(object):
             stop_signal = ['N', 'J', '0005']
             ui.display('Stopping the pump...')
             while not pump_off:
-            # Try stopping the pump until we succeed!
-            # Keep calling process_signals until it returns True
-            # (the machine receives and processes the pump stop signal)
+                # Try stopping the pump until we succeed!
+                # Keep calling process_signals until it returns True
+                # (the machine receives and processes the pump stop signal)
                 pump_off = send_signals_to_caster(stop_signal, machine_timeout)
             else:
                 ui.display('Pump stopped. All valves off...')
@@ -161,22 +160,22 @@ class Monotype(object):
             def continue_casting():
                 """Helper function - continue casting."""
                 return True
-            options = {'C' : continue_casting,
-                       'M' : exceptions.return_to_menu,
-                       'E' : exceptions.exit_program}
+            options = {'C': continue_casting,
+                       'M': exceptions.return_to_menu,
+                       'E': exceptions.exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = ui.simple_menu(message, options).upper()
             return options[choice]()
         prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
         if ui.enter_data(prompt) not in ['n', 'N']:
-        # Machine is running
+            # Machine is running
             return True
         elif start_the_machine():
-        # Check again recursively:
+            # Check again recursively:
             return self.detect_rotation()
         else:
-        # This will lead to return to menu
+            # This will lead to return to menu
             return False
 
     def __exit__(self, *args):

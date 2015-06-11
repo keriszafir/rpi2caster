@@ -6,7 +6,6 @@ This module contains low- and mid-level caster control routines for
 a physical Monotype composition caster, linked via pneumatic valves
 and MCP23017 IC's to the Raspberry Pi.
 """
-from __future__ import absolute_import
 # Essential for polling the sensor for state change:
 import select
 # Built-in time library
@@ -21,8 +20,7 @@ from rpi2caster import text_ui as ui
 try:
     import wiringpi2 as wiringpi
 except ImportError:
-    print 'Missing dependency: wiringPi2 Python bindings: wiringpi2-python'
-    print 'Caster control will not work!'
+    raise exceptions.MissingDependency('You must install wiringpi2!')
 
 
 class Monotype(object):
@@ -40,7 +38,7 @@ class Monotype(object):
         self.interface_id = None
         self.unit_adding = None
         self.diecase_system = None
-        self.emergency_gpio = None
+        self.emerg_gpio = None
         self.sensor_gpio = None
         self.mcp0_address = None
         self.mcp1_address = None
@@ -81,16 +79,16 @@ class Monotype(object):
         # The same for the interface settings:
         self.get_interface_settings()
         # When debugging, display all caster info:
-        output = {'Using caster name: ' : self.name,
-                  'Is a perforator? ' : self.is_perforator,
-                  'Interface ID: ' : self.interface_id,
-                  '1st MCP23017 I2C address: ' : hex(self.mcp0_address),
-                  '2nd MCP23017 I2C address: ' : hex(self.mcp1_address),
-                  'MCP23017 pin base for GPIO numbering: ' : self.pin_base,
-                  'Signals arrangement: ' : self.signals_arrangement}
+        output = {'Using caster name: ': self.name,
+                  'Is a perforator? ': self.is_perforator,
+                  'Interface ID: ': self.interface_id,
+                  '1st MCP23017 I2C address: ': hex(self.mcp0_address),
+                  '2nd MCP23017 I2C address: ': hex(self.mcp1_address),
+                  'MCP23017 pin base for GPIO numbering: ': self.pin_base,
+                  'Signals arrangement: ': self.signals_arrangement}
         # Display this info only for casters and not perforators:
         if not self.is_perforator:
-            output['Emergency button GPIO: '] = self.emergency_gpio
+            output['Emergency button GPIO: '] = self.emerg_gpio
             output['Sensor GPIO: '] = self.sensor_gpio
             output['Diecase system: '] = self.diecase_system
             output['Unit adding: '] = self.unit_adding
@@ -103,11 +101,11 @@ class Monotype(object):
         # Input configuration for sensor and emergency stop button
         # This is done only for a caster interface:
         if not self.is_perforator:
-        # Set up an input for machine cycle sensor:
+            # Set up an input for machine cycle sensor:
             gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % self.sensor_gpio
             self.sensor_gpio_value_file = gpio_sysfs_path + 'value'
             self.sensor_gpio_edge_file = gpio_sysfs_path + 'edge'
-        # Check if the sensor GPIO has been configured - file is readable:
+            # Check if the sensor GPIO has been configured - file is readable:
             try:
                 with open(self.sensor_gpio_value_file, 'r'):
                     pass
@@ -124,7 +122,8 @@ class Monotype(object):
                     message = ('%s: file does not exist, cannot be read, '
                                'or the interrupt on GPIO %i is not set '
                                'to "both". Check the system configuration.'
-                               % (self.sensor_gpio_edge_file, self.sensor_gpio))
+                               % (self.sensor_gpio_edge_file,
+                                  self.sensor_gpio))
                     ui.display(message)
                     ui.exit_program()
         # Setup the wiringPi MCP23017 chips for valve outputs
@@ -177,7 +176,7 @@ class Monotype(object):
         self.is_perforator = cfg_parser.get_config(self.name, 'is_perforator')
         self.interface_id = cfg_parser.get_config(self.name, 'interface_id')
         if not self.is_perforator:
-        # Get caster parameters from conffile
+            # Get caster parameters from conffile
             self.unit_adding = cfg_parser.get_config(self.name, 'unit_adding')
             self.diecase_system = cfg_parser.get_config(self.name,
                                                         'diecase_system')
@@ -194,7 +193,7 @@ class Monotype(object):
         iface_name = 'Interface' + str(self.interface_id)
         if cfg_parser.section_not_found(iface_name):
             # Set default parameters if interface not found in config:
-            self.emergency_gpio = 24
+            self.emerg_gpio = 24
             self.sensor_gpio = 17
             self.mcp0_address = 0x20
             self.mcp1_address = 0x21
@@ -207,7 +206,7 @@ class Monotype(object):
         if not self.is_perforator:
             # Emergency stop and sensor are valid only for casters,
             # perforators do not have them
-            self.emergency_gpio = cfg_parser.get_config(iface_name, 'stop_gpio')
+            self.emerg_gpio = cfg_parser.get_config(iface_name, 'stop_gpio')
             self.sensor_gpio = cfg_parser.get_config(iface_name, 'sensor_gpio')
         # Set up MCP23017 interface parameters
         self.mcp0_address = cfg_parser.get_config(iface_name, 'mcp0_address')
@@ -245,9 +244,9 @@ class Monotype(object):
             def continue_casting():
                 """Helper function - continue casting."""
                 return True
-            options = {'C' : continue_casting,
-                       'M' : exceptions.return_to_menu,
-                       'E' : exceptions.exit_program}
+            options = {'C': continue_casting,
+                       'M': exceptions.return_to_menu,
+                       'E': exceptions.exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = ui.simple_menu(message, options).upper()
@@ -257,7 +256,8 @@ class Monotype(object):
         # Check for sensor signals, keep checking until max time is exceeded
         # or target number of cycles is reached
         with open(self.sensor_gpio_value_file, 'r') as gpiostate:
-            while time.time() <= time_start + time_max and cycles <= cycles_max:
+            while (time.time() <= time_start + time_max and
+                   cycles <= cycles_max):
                 sensor_signals = select.epoll()
                 sensor_signals.register(gpiostate, select.POLLPRI)
                 events = sensor_signals.poll(0.5)
@@ -273,16 +273,16 @@ class Monotype(object):
                     elif sensor_state == 0 and prev_state == 1:
                         prev_state = 0
             else:
-            # Determine if the loop ended due to timeout (machine not running)
-            # or exceeded number of cycles (machine running):
+                # Check if the loop ended due to timeout (machine not running)
+                # or exceeded number of cycles (machine running):
                 if cycles > cycles_max:
                     ui.display('\nOkay, the machine is running...\n')
                     return True
                 elif start_the_machine():
-                # Check again recursively:
+                    # Check again recursively:
                     return self.detect_rotation()
                 else:
-                # This will lead to return to menu
+                    # This will lead to return to menu
                     return False
 
     def process_signals(self, signals, cycle_timeout=5):
@@ -336,27 +336,27 @@ class Monotype(object):
                 polling.register(gpiostate, select.POLLPRI)
                 prev_state = 0
                 while True:
-                # Polling the interrupt file
+                    # Polling the interrupt file
                     events = polling.poll(timeout)
                     if events:
-                    # Normal control flow when the machine is working
-                    # (cycle sensor generates events)
+                        # Normal control flow when the machine is working
+                        # (cycle sensor generates events)
                         gpiostate.seek(0)
                         sensor_state = int(gpiostate.read())
                         if sensor_state == 1 and prev_state == 0:
-                        # Now, the air bar on paper tower would go down -
-                        # we got signal from sensor to let the air in
+                            # Now, the air bar on paper tower would go down -
+                            # we got signal from sensor to let the air in
                             self.activate_valves(signals)
                             prev_state = 1
                         elif sensor_state == 0 and prev_state == 1:
-                        # Air bar on paper tower goes back up -
-                        # end of "air in" phase, turn off the valves
+                            # Air bar on paper tower goes back up -
+                            # end of "air in" phase, turn off the valves
                             self.deactivate_valves()
                             prev_state = 0
                             # Signals sent to the caster - successful ending
                             return True
                     else:
-                    # Timeout with no signals - failed ending
+                        # Timeout with no signals - failed ending
                         return False
 
         def stop_menu():
@@ -388,9 +388,9 @@ class Monotype(object):
                 raise exceptions.ExitProgram
             # End of subroutine definitions
             # Now, a little menu...
-            options = {'C' : continue_casting,
-                       'M' : with_cleanup_return_to_menu,
-                       'E' : with_cleanup_exit_program}
+            options = {'C': continue_casting,
+                       'M': with_cleanup_return_to_menu,
+                       'E': with_cleanup_exit_program}
             message = ('Machine has stopped running! Check what happened.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
             choice = ui.simple_menu(message, options).upper()
@@ -411,9 +411,9 @@ class Monotype(object):
             stop_signals = ['N', 'J', '0005']
             ui.display('Stopping the pump...')
             while not pump_off:
-            # Try stopping the pump until we succeed!
-            # Keep calling process_signals until it returns True
-            # (the machine receives and processes the pump stop signal)
+                # Try stopping the pump until we succeed!
+                # Keep calling process_signals until it returns True
+                # (the machine receives and processes the pump stop signal)
                 pump_off = send_signals_to_caster(stop_signals, cycle_timeout)
             else:
                 ui.display('Pump stopped. All valves off...')
@@ -422,11 +422,11 @@ class Monotype(object):
                 return True
         # End of subroutine definitions
         while not send_signals_to_caster(signals, cycle_timeout):
-        # Keep trying to cast the combination, or end here
-        # (subroutine will throw an exception if operator exits)
+            # Keep trying to cast the combination, or end here
+            # (subroutine will throw an exception if operator exits)
             stop_menu()
         else:
-        # Successful ending - the combination has been cast
+            # Successful ending - the combination has been cast
             return True
 
     def activate_valves(self, signals):

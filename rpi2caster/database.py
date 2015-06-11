@@ -5,24 +5,22 @@ Database:
 Database-related classes for rpi2caster suite.
 """
 # IMPORTS:
-from __future__ import absolute_import
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 try:
     import json
 except ImportError:
     import simplejson as json
+# Custom exceptions
+from rpi2caster import exceptions
+# Config parser for reading the interface settings
+from rpi2caster import cfg_parser
 # this module uses sqlite3 database for storing caster, interface,
 # wedge, diecase & matrix parameters:
 try:
     import sqlite3
 except ImportError:
-    print 'Missing dependency: sqlite3'
-    exit()
-# Custom exceptions
-from rpi2caster import exceptions
-# Config parser for reading the interface settings
-from rpi2caster import cfg_parser
+    raise exceptions.MissingDependency('Missing dependency: sqlite3')
 
 
 class Database(object):
@@ -63,9 +61,9 @@ class Database(object):
         # 1. explicitly stated on class instantiation
         # 2. found in conffile
         # 3. hardcoded default: database/monotype.db
-        self.database_path = (database_path
-                              or cfg_parser.get_config('Database', 'path')
-                              or 'database/monotype.db')
+        self.database_path = (database_path or
+                              cfg_parser.get_config('Database', 'path') or
+                              'database/monotype.db')
         # Connect to the database
         try:
             self.db_connection = sqlite3.connect(self.database_path)
@@ -74,7 +72,6 @@ class Database(object):
 
     def __enter__(self):
         return self
-
 
     def add_wedge(self, wedge_name, set_width, brit_pica, unit_arrangement):
         """add_wedge:
@@ -242,7 +239,7 @@ class Database(object):
 
         Searches for diecase metadata, based on the desired type series
         and size. Allows to choose one of the diecases found.
-        
+
         Returns a list of results or raises an exception.
         """
         with self.db_connection:

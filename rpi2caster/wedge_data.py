@@ -7,8 +7,6 @@ This sits on top of the database module and is an abstraction layer
 for other modules (like inventory, casting, typesetter).
 Processes the data retrieved from database.
 """
-
-from __future__ import absolute_import
 from rpi2caster import text_ui as ui
 from rpi2caster import exceptions
 from rpi2caster import database
@@ -92,21 +90,21 @@ def add_wedge():
                'typewriter wedges (monospace, uniform width) - enter '
                '"tpwr setwidth" for those.')
     while True:
-    # Repeat the procedure all over again, if necessary
-    # (can be exited by raising an exception)
-    # Enter the wedge name first:
+        # Repeat the procedure all over again, if necessary
+        # (can be exited by raising an exception)
+        # Enter the wedge name first:
         wedge_name = ''
         set_width = ''
         brit_pica = None
         unit_arrangement = None
         while not wedge_name:
-        # Ask for the wedge name and set width as it is written on the wedge
+            # Ask for wedge name and set width as it is written on the wedge
             prompt = ('Wedge name (leave blank to return to menu): ')
             wedge_name = ui.enter_data(prompt) or exceptions.return_to_menu()
         # For countries that use comma as decimal delimiter, convert to point:
             wedge_name = wedge_name.replace(',', '.').upper()
         if 'AK' in wedge_name:
-        # For the old designation of 5-series wedges
+            # For the old designation of 5-series wedges
             set_width = float(wedge_name.replace('AK', '').strip())
             ui.display('This is a 5-series wedge, designated as "AK"')
             wedge_name = '5'
@@ -115,16 +113,16 @@ def add_wedge():
             set_width = float(wedge_name.replace('TPWR', '').strip())
             wedge_name = 'TPWR'
         elif wedge_name.endswith('E'):
-        # For wedges made for European countries that use the Didot system
-        # (these wedges were based on the old British pica, i.e. 18 units 12 set
-        # type was .1667" wide)
+            # For wedges made for European countries that use the Didot system
+            # (these wedges were based on the old British pica,
+            # i.e. 18unit 12set type was .1667" wide)
             ui.display('The letter E at the end means that this wedge was '
                        'made for European market, and based on pica =.1667".')
             brit_pica = True
             # Parse the input data to get the name and set width
             (wedge_name, set_width) = wedge_name.strip('E').split('-')
         else:
-        # For wedges marked as "5-6.5" etc.
+            # For wedges marked as "5-6.5" etc.
             (wedge_name, set_width) = wedge_name.split('-')
         # We now should have a wedge series and set width, as strings.
         # We operate on integers or floats though.
@@ -157,9 +155,9 @@ def add_wedge():
         # We should determine if it's a British or American wedge
         # (18 units 12 set = 1pica = .1667" - British, or .1660" - US )
         if brit_pica is None:
-        # Do it only if undefined
-        # Let user choose if it's American or British pica-based wedge:
-            options = {'A' : False, 'B' : True}
+            # Do it only if undefined
+            # Let user choose if it's American or British pica-based wedge:
+            options = {'A': False, 'B': True}
             message = '[A]merican (0.1660"), or [B]ritish (0.1667") pica? '
             choice = ui.simple_menu(message, options).upper()
             brit_pica = options[choice]
@@ -175,7 +173,7 @@ def add_wedge():
             prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
                       'separated by commas.\n')
             while not unit_arrangement:
-            # Make it a list at once
+                # Make it a list at once
                 unit_arrangement = ui.enter_data(prompt).split(',')
         # Now we need to be sure that all whitespace is stripped,
         # and the value written to database is a list of integers
@@ -183,9 +181,9 @@ def add_wedge():
         # Display warning if the number of steps is anything other than
         # 15 or 16 (15 is most common, 16 was used for HMN and KMN systems).
         # If length is correct, tell user it's OK.
-            warn_min = ('Warning: the wedge you entered has less than 15 steps!'
+            warn_min = ('Warning: the wedge you entered has < 15 steps!'
                         '\nThis is almost certainly a mistake.\n')
-            warn_max = ('Warning: the wedge you entered has more than 16 steps!'
+            warn_max = ('Warning: the wedge you entered has > 16 steps!'
                         '\nThis is almost certainly a mistake.\n')
             ua_ok = ('The wedge has %i steps. That is OK.'
                      % len(unit_arrangement))
@@ -203,15 +201,16 @@ def add_wedge():
         user_info.append('Unit arrangement for that wedge:')
         rows_line = ''.join([str(i).ljust(5) for i in range(1, 16)])
         unit_values_line = ''.join([str(u).ljust(5) for u in unit_arrangement])
-        data = ('Row:'.ljust(8) + rows_line + '\n'
-                + 'Units:'.ljust(8) + unit_values_line + '\n')
+        data = ('Row:'.ljust(8) + rows_line + '\n' +
+                'Units:'.ljust(8) + unit_values_line + '\n')
         user_info.append(data)
         # Display the info
         ui.display('\n'.join(user_info))
         # Ask for confirmation
         ans = ui.simple_menu('Commit? [Y / N]', {'Y': 'Y', 'N': 'N'})
         if ans in ['y', 'Y']:
-            if DB.add_wedge(wedge_name, set_width, brit_pica, unit_arrangement):
+            if DB.add_wedge(wedge_name, set_width,
+                            brit_pica, unit_arrangement):
                 ui.display('Wedge added successfully.')
 
 
@@ -239,12 +238,17 @@ def delete_wedge():
 def list_wedges():
     """Lists all wedges we have."""
     results = DB.get_all_wedges()
-    ui.display('\n' + 'wedge id'.ljust(15)
-               + 'wedge No'.ljust(15)
-               + 'set width'.ljust(15)
-               + 'Brit. pica?'.ljust(15)
-               + 'Unit arrangement'
-               + '\n')
+    ui.display('\n' + 'wedge id'.ljust(15) +
+               'wedge No'.ljust(15) +
+               'set width'.ljust(15) +
+               'Brit. pica?'.ljust(15) +
+               'Unit arrangement' +
+               '\n')
     for wedge in results:
         ui.display(''.join([str(field).ljust(15) for field in wedge]))
     return True
+
+
+def wedge_by_name_and_width(wedge_name, set_width):
+    """Wrapper for database function of the same name"""
+    return DB.wedge_by_name_and_width(wedge_name, set_width)
