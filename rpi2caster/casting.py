@@ -251,7 +251,6 @@ class Casting(object):
             ui.hold_on_exit()
             return True
 
-    @use_caster
     def cast_sorts(self):
         """cast_sorts():
 
@@ -266,24 +265,22 @@ class Casting(object):
             # Got no signals? Use G5.
             signals = ui.enter_data(prompt) or 'G 5'
             # Ask for number of sorts and lines
-            prompt = '\nHow many sorts? (default: 10): '
-            number = ui.enter_data(prompt) or 10
-            # Default to 10 if user enters non-positive number or letters
-            if not number.isdigit() or int(number) < 0:
-                number = 10
-            else:
-                number = int(number)
-            prompt = '\nHow many lines? (default: 1): '
-            lines = ui.enter_data(prompt) or 1
-            # Default to 10 if user enters non-positive number or letters
-            if not lines.isdigit() or int(lines) < 0:
+            try:
+                prompt = '\nHow many sorts? (default: 10): '
+                sorts = ui.enter_data(prompt)
+                sorts = abs(int(sorts))
+            except ValueError:
+                sorts = 10
+            try:
+                prompt = '\nHow many lines? (default: 1): '
+                lines = ui.enter_data(prompt)
+                lines = abs(int(lines))
+            except ValueError:
                 lines = 1
-            else:
-                lines = int(lines)
             # Warn if we want to cast too many sorts from a single matrix
             warning = ('Warning: you want to cast a single character more than'
                        ' 10 times. This may lead to matrix overheating!\n')
-            if number > 10:
+            if sorts > 10:
                 ui.display(warning)
             # After entering parameters, ask the operator if they're OK
             try:
@@ -292,7 +289,7 @@ class Casting(object):
                     # Menu subroutines
                     def cast_it():
                         """Cast the combination or go back to menu"""
-                        if self.cast_from_matrix(signals, number, lines):
+                        if self.cast_from_matrix(signals, sorts, lines):
                             ui.display('Casting finished successfully.')
                         else:
                             raise exceptions.ReturnToMenu
@@ -304,7 +301,7 @@ class Casting(object):
                     message = ('Casting %s, %i lines of %i sorts.\n'
                                '[C]ast it, [D]ifferent code/quantity, '
                                '[M]enu or [E]xit? '
-                               % (signals, lines, number))
+                               % (signals, lines, sorts))
                     choice = ui.simple_menu(message, options).upper()
                     # Execute choice
                     options[choice]()
@@ -313,8 +310,9 @@ class Casting(object):
                 pass
 
     @use_caster
-    def cast_from_matrix(self, signals, num=5, lines=1, pos0075=3, pos0005=8):
-        """cast_from_matrix(combination, n, pos0075, pos0005):
+    def cast_from_matrix(self, signals, num=5, lines=1,
+                         wedge_positions=(3, 8)):
+        """cast_from_matrix(combination, n, lines, (pos0075, pos0005)):
 
         Casts n sorts from combination of signals (list),
         with correction wedges if S needle is in action.
@@ -332,12 +330,10 @@ class Casting(object):
         """
         # Reset the aborted line counter
         self.line_aborted = None
-        # Convert the positions to strings
-        pos0005 = str(pos0005)
-        pos0075 = str(pos0075)
+        (pos_0075, pos_0005) = (str(x) for x in wedge_positions)
         # Signals for setting 0005 and 0075 justification wedges
-        set0005 = ['N', 'J', '0005', pos0005]
-        set0075 = ['N', 'K', '0075', pos0075]
+        set_0005 = ['N', 'J', '0005', pos_0005]
+        set_0075 = ['N', 'K', '0075', pos_0075]
         # Galley trip signal
         galley_trip = ['N', 'K', 'J', '0005', '0075']
         # Parse the combination
@@ -354,11 +350,11 @@ class Casting(object):
                 # Cast the sorts: set wedges, turn pump on, cast, line out
                 # Set up the justification, turn the pump on
                 ui.display('Casting line %i of %i' % (current_line, lines))
-                ui.display('0005 wedge at ' + pos0005)
-                self.caster.process_signals(set0005)
-                ui.display('0075 wedge at ' + pos0075)
+                ui.display('0005 wedge at ' + pos_0005)
+                self.caster.process_signals(set_0005)
+                ui.display('0075 wedge at ' + pos_0075)
                 ui.display('Starting the pump...')
-                self.caster.process_signals(set0075)
+                self.caster.process_signals(set_0075)
                 # Start casting characters
                 ui.display('Casting characters...')
                 # Cast n combinations of row & column, one by one
@@ -374,11 +370,10 @@ class Casting(object):
                 self.caster.process_signals(galley_trip)
                 # After casting sorts we need to stop the pump
                 ui.display('Stopping the pump...')
-                self.caster.process_signals(set0005)
+                self.caster.process_signals(set_0005)
             except exceptions.CastingAborted:
                 self.line_aborted = current_line
-                ui.display('Casting aborted on line %i'
-                           % self.line_aborted)
+                ui.display('Casting aborted on line %i' % self.line_aborted)
                 return False
         # We'll be here if casting ends successfully
         return True
@@ -411,7 +406,6 @@ class Casting(object):
             self.caster.activate_valves(signals)
             # Start over.
 
-    @use_caster
     def align_wedges(self, space_position='G5'):
         """align_wedges(space_position='G5'):
 
