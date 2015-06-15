@@ -188,7 +188,7 @@ class Monotype(object):
                                                 'signals_arrangement')
             # ...and get the signals order for it:
             self.signals_arrangement = cfg_parser.get_config(
-                'SignalsArrangements', signals_arr)
+                'SignalsArrangements', signals_arr).upper()
             # Interface configured successfully - return True
             return True
         except exceptions.NotConfigured:
