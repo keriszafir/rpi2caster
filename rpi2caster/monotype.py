@@ -91,9 +91,6 @@ class Monotype(object):
         # Iterate over the dict and print the output
         for parameter in output:
             ui.debug_info(parameter, output[parameter])
-        # Info displayed. Wait for user to read it and continue...
-        prompt = '[Enter] to continue...'
-        ui.debug_enter_data(prompt)
         # Input configuration for sensor and emergency stop button
         # This is done only for a caster interface:
         if not self.is_perforator:
