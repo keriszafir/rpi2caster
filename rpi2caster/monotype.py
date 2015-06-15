@@ -36,8 +36,6 @@ class Monotype(object):
         self.name = name
         self.is_perforator = None
         self.interface_id = None
-        self.unit_adding = None
-        self.diecase_system = None
         self.emerg_gpio = None
         self.sensor_gpio = None
         self.mcp0_address = None
@@ -49,8 +47,7 @@ class Monotype(object):
         self.sensor_gpio_value_file = None
         self.interface_pin_number = None
 
-        # Configure the caster now
-        self.configured = False
+        # Configure the caster
         self.caster_setup()
 
     def __enter__(self):
@@ -88,10 +85,8 @@ class Monotype(object):
                   'Signals arrangement: ': self.signals_arrangement}
         # Display this info only for casters and not perforators:
         if not self.is_perforator:
-            output['Emergency button GPIO: '] = self.emerg_gpio
+            output['Emergency stop button GPIO: '] = self.emerg_gpio
             output['Sensor GPIO: '] = self.sensor_gpio
-            output['Diecase system: '] = self.diecase_system
-            output['Unit adding: '] = self.unit_adding
         # Iterate over the dict and print the output
         for parameter in output:
             ui.debug_info(parameter, output[parameter])
@@ -138,8 +133,6 @@ class Monotype(object):
         # Assign wiringPi pin numbers on MCP23017s to the Monotype
         # control signals
         self.interface_pin_number = dict(zip(signals_arrangement, pins))
-        # Mark the caster as configured
-        self.configured = True
         # Wait for user confirmation if in debug mode
         ui.debug_enter_data('Caster configured. [Enter] to continue... ')
 
@@ -167,19 +160,10 @@ class Monotype(object):
             # Default caster parameters:
             self.is_perforator = False
             self.interface_id = 0
-            self.unit_adding = False
-            self.diecase_system = 'norm17'
-            self.unit_adding = False
-            self.diecase_system = 'norm17'
             # End here if caster not found in config
             return False
         self.is_perforator = cfg_parser.get_config(self.name, 'is_perforator')
         self.interface_id = cfg_parser.get_config(self.name, 'interface_id')
-        if not self.is_perforator:
-            # Get caster parameters from conffile
-            self.unit_adding = cfg_parser.get_config(self.name, 'unit_adding')
-            self.diecase_system = cfg_parser.get_config(self.name,
-                                                        'diecase_system')
         # Caster correctly configured
         return True
 
@@ -307,9 +291,9 @@ class Monotype(object):
                 if cycles == cycles_max:
                     # Max cycles exceeded = machine is running
                     return True
-            # Timeout with no signals = go to menu
+            # Timeout with no signals = go to stop menu
             self._stop_menu(casting=False)
-            # Start over (or catch an exception elsewhere)
+            # Start over and check again (unless an exception occurred)
 
     def _send_signals_to_caster(self, signals, timeout):
         """_send_signals_to_caster:

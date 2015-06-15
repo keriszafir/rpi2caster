@@ -170,10 +170,11 @@ class Monotype(object):
         while True:
             prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
             if ui.enter_data(prompt) not in ['n', 'N']:
+                # The machine is turning
                 return True
             # Simulate machine stop
             self._stop_menu(casting=False)
-            # Start over
+            # Start over and check again (unless an exception occurred)
 
     def __exit__(self, *args):
         self.deactivate_valves()
