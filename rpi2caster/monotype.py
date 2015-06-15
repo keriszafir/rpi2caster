@@ -277,62 +277,39 @@ class Monotype(object):
         value is exceeded in a time <= time_max, the program assumes that
         the caster is rotating and it can start controlling the machine.
         """
-        cycles = 0
+        # Let's count up to 3 cycles during 30s
         cycles_max = 3
-        # Let's give it 30 seconds timeout
-        time_start = time.time()
         time_max = 30
-        # Subroutine definition
-
-        def start_the_machine():
-            """start_the_machine
-
-            Allows user to decide what to do if the machine is not rotating.
-            Continue, abort or exit program.
-            """
-            def continue_casting():
-                """Helper function - continue casting."""
-                return True
-            options = {'C': continue_casting,
-                       'M': exceptions.return_to_menu,
-                       'E': exceptions.exit_program}
-            message = ('Machine not running - you need to start it first.\n'
-                       '[C]ontinue, return to [M]enu or [E]xit program? ')
-            choice = ui.simple_menu(message, options).upper()
-            return options[choice]()
-
-        # End of subroutine definition
         # Check for sensor signals, keep checking until max time is exceeded
         # or target number of cycles is reached
-        with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
-            while (time.time() <= time_start + time_max and
-                   cycles <= cycles_max):
-                sensor_signals = select.epoll()
-                sensor_signals.register(gpiostate, select.POLLPRI)
-                events = sensor_signals.poll(0.5)
-                # Check if the sensor changes state at all
-                if events:
-                    gpiostate.seek(0)
-                    sensor_state = int(gpiostate.read())
-                    prev_state = 0
-                    # Increment the number of passed machine cycles
-                    if sensor_state == 1 and prev_state == 0:
-                        prev_state = 1
-                        cycles += 1
-                    elif sensor_state == 0 and prev_state == 1:
+        while True:
+            # Reset the cycle counter and timer on each iteration
+            cycles = 0
+            time_start = time.time()
+            timeout = time_start + time_max
+            while time.time() <= timeout:
+                # Keep checking until timeout or max cycles reached
+                with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
+                    sensor_signals = select.epoll()
+                    sensor_signals.register(gpiostate, select.POLLPRI)
+                    events = sensor_signals.poll(0.5)
+                    # Check if the sensor changes state at all
+                    if events:
+                        gpiostate.seek(0)
+                        sensor_state = int(gpiostate.read())
                         prev_state = 0
-            # The loop ended.
-            # Check if it happened due to timeout (machine not running)
-            # or exceeded number of cycles (machine running):
-            if cycles > cycles_max:
-                ui.display('\nOkay, the machine is running...\n')
-                return True
-            elif start_the_machine():
-                # Check again recursively:
-                return self.detect_rotation()
-            else:
-                # This will lead to return to menu
-                return False
+                        # Increment the number of passed machine cycles
+                        if sensor_state == 1 and prev_state == 0:
+                            prev_state = 1
+                            cycles += 1
+                        elif sensor_state == 0 and prev_state == 1:
+                            prev_state = 0
+                if cycles == cycles_max:
+                    # Max cycles exceeded = machine is running
+                    return True
+            # Timeout with no signals = go to menu
+            self._stop_menu(casting=False)
+            # Start over (or catch an exception elsewhere)
 
     def _send_signals_to_caster(self, signals, timeout):
         """_send_signals_to_caster:
@@ -373,7 +350,7 @@ class Monotype(object):
                     # Timeout with no signals - failed ending
                     raise exceptions.MachineStopped
 
-    def _stop_menu(self):
+    def _stop_menu(self, casting=True):
         """_stop_menu:
 
         This allows us to choose whether we want to continue,
@@ -402,11 +379,22 @@ class Monotype(object):
             raise exceptions.ExitProgram
         # End of subroutine definitions
         # Now, a little menu...
-        options = {'C': continue_casting,
-                   'M': with_cleanup_return_to_menu,
-                   'E': with_cleanup_exit_program}
-        message = ('Machine has stopped running! Check what happened.\n'
-                   '[C]ontinue, return to [M]enu or [E]xit program? ')
+        if casting:
+            # This happens when the caster is already casting,
+            # and stops running.
+            options = {'C': continue_casting,
+                       'M': with_cleanup_return_to_menu,
+                       'E': with_cleanup_exit_program}
+            message = ('Machine has stopped running! Check what happened.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
+        else:
+            # This happens if the caster is not yet casting
+            # No need to do cleanup; change description a bit
+            options = {'C': continue_casting,
+                       'M': exceptions.return_to_menu,
+                       'E': exceptions.exit_program}
+            message = ('Machine not running - you need to start it first.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
         choice = ui.simple_menu(message, options).upper()
         return options[choice]()
 

@@ -75,7 +75,7 @@ class Monotype(object):
         ui.display('Sequence cast successfully.')
         return True
 
-    def _stop_menu(self):
+    def _stop_menu(self, casting=True):
         """_stop_menu:
 
         This allows us to choose whether we want to continue,
@@ -102,14 +102,24 @@ class Monotype(object):
             Also makes sure the pump is turned off."""
             self._emergency_cleanup()
             raise exceptions.ExitProgram
-
         # End of subroutine definitions
-        # Now, a little menu
-        options = {'C': continue_casting,
-                   'M': with_cleanup_return_to_menu,
-                   'E': with_cleanup_exit_program}
-        message = ('Machine has stopped running! Check what happened.\n'
-                   '[C]ontinue, return to [M]enu or [E]xit program? ')
+        # Now, a little menu...
+        if casting:
+            # This happens when the caster is already casting,
+            # and stops running.
+            options = {'C': continue_casting,
+                       'M': with_cleanup_return_to_menu,
+                       'E': with_cleanup_exit_program}
+            message = ('Machine has stopped running! Check what happened.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
+        else:
+            # This happens if the caster is not yet casting
+            # No need to do cleanup; change description a bit
+            options = {'C': continue_casting,
+                       'M': exceptions.return_to_menu,
+                       'E': exceptions.exit_program}
+            message = ('Machine not running - you need to start it first.\n'
+                       '[C]ontinue, return to [M]enu or [E]xit program? ')
         choice = ui.simple_menu(message, options).upper()
         return options[choice]()
 
@@ -157,33 +167,13 @@ class Monotype(object):
         Ask if the machine is rotating or not (for testing
         the machine not running scenario).
         """
-        # Subroutine definition
-        def start_the_machine():
-            """start_the_machine
-
-            Allows user to decide what to do if the machine is not rotating.
-            Continue, abort or exit program.
-            """
-            def continue_casting():
-                """Helper function - continue casting."""
+        while True:
+            prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
+            if ui.enter_data(prompt) not in ['n', 'N']:
                 return True
-            options = {'C': continue_casting,
-                       'M': exceptions.return_to_menu,
-                       'E': exceptions.exit_program}
-            message = ('Machine not running - you need to start it first.\n'
-                       '[C]ontinue, return to [M]enu or [E]xit program? ')
-            choice = ui.simple_menu(message, options).upper()
-            return options[choice]()
-        prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
-        if ui.enter_data(prompt) not in ['n', 'N']:
-            # Machine is running
-            return True
-        elif start_the_machine():
-            # Check again recursively:
-            return self.detect_rotation()
-        else:
-            # This will lead to return to menu
-            return False
+            # Simulate machine stop
+            self._stop_menu(casting=False)
+            # Start over
 
     def __exit__(self, *args):
         self.deactivate_valves()
