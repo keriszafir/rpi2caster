@@ -15,7 +15,8 @@ from rpi2caster import exceptions
 # Configuration parser functions
 from rpi2caster import cfg_parser
 # Default user interface
-from rpi2caster.global_settings import USER_INTERFACE as ui
+from rpi2caster import global_settings
+ui = global_settings.USER_INTERFACE
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:
     import wiringpi2 as wiringpi
@@ -30,10 +31,10 @@ class Monotype(object):
     This class requires a caster name, and a database object.
     """
 
-    def __init__(self, name='Monotype'):
+    def __init__(self, name=''):
         """Creates a caster object for a given caster name
         """
-        self.name = name
+        self.name = name or global_settings.CASTER_NAME
         self.is_perforator = None
         self.interface_id = None
         self.emerg_gpio = None
