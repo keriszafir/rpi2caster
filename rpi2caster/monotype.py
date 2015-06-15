@@ -152,14 +152,14 @@ class Monotype(object):
                                                        'is_perforator')
             self.interface_id = cfg_parser.get_config(self.name,
                                                       'interface_id')
+            # Caster correctly configured
+            return True
         except exceptions.NotConfigured:
             # Set defaults and return False
             self.is_perforator = False
             self.interface_id = 0
+            # Signal that we're on fallback
             return False
-        else:
-            # Caster correctly configured
-            return True
 
     def get_interface_settings(self):
         """get_interface_settings():
@@ -169,7 +169,29 @@ class Monotype(object):
         If a section cannot be read - sets up defaults instead.
         """
         iface_name = 'Interface' + str(self.interface_id)
-        if cfg_parser.section_not_found(iface_name):
+        try:
+            if not self.is_perforator:
+                # Emergency stop and sensor are valid only for casters,
+                # perforators do not have them
+                self.emerg_gpio = cfg_parser.get_config(iface_name,
+                                                        'stop_gpio')
+                self.sensor_gpio = cfg_parser.get_config(iface_name,
+                                                         'sensor_gpio')
+            # Set up MCP23017 interface parameters
+            self.mcp0_address = cfg_parser.get_config(iface_name,
+                                                      'mcp0_address')
+            self.mcp1_address = cfg_parser.get_config(iface_name,
+                                                      'mcp1_address')
+            self.pin_base = cfg_parser.get_config(iface_name, 'pin_base')
+            # Check which signals arrangement the interface uses...
+            signals_arr = cfg_parser.get_config(iface_name,
+                                                'signals_arrangement')
+            # ...and get the signals order for it:
+            self.signals_arrangement = cfg_parser.get_config(
+                'SignalsArrangements', signals_arr)
+            # Interface configured successfully - return True
+            return True
+        except exceptions.NotConfigured:
             # Set default parameters if interface not found in config:
             self.emerg_gpio = 24
             self.sensor_gpio = 17
@@ -181,22 +203,6 @@ class Monotype(object):
                                         'A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
             # Signal that we're on fallback
             return False
-        if not self.is_perforator:
-            # Emergency stop and sensor are valid only for casters,
-            # perforators do not have them
-            self.emerg_gpio = cfg_parser.get_config(iface_name, 'stop_gpio')
-            self.sensor_gpio = cfg_parser.get_config(iface_name, 'sensor_gpio')
-        # Set up MCP23017 interface parameters
-        self.mcp0_address = cfg_parser.get_config(iface_name, 'mcp0_address')
-        self.mcp1_address = cfg_parser.get_config(iface_name, 'mcp1_address')
-        self.pin_base = cfg_parser.get_config(iface_name, 'pin_base')
-        # Check which signals arrangement the interface uses...
-        signals_arr = cfg_parser.get_config(iface_name, 'signals_arrangement')
-        # ...and get the signals order for it:
-        self.signals_arrangement = cfg_parser.get_config('SignalsArrangements',
-                                                         signals_arr)
-        # Interface configured successfully - return True
-        return True
 
     def process_signals(self, signals, cycle_timeout=5):
         """process_signals(signals, cycle_timeout):
