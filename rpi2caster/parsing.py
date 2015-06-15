@@ -21,7 +21,7 @@ def read_file(filename):
                 # Strip newline characters from lines
                 content.append(line.strip('\n'))
             return content
-    except IOError:
+    except (IOError, FileNotFoundError):
         return False
 
 

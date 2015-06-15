@@ -28,7 +28,7 @@ def initialize_config():
             cfg = configparser.SafeConfigParser()
             cfg.read(CONFIG_PATH)
             return cfg
-    except IOError:
+    except (IOError, FileNotFoundError):
         raise exceptions.ConfigFileUnavailable
 
 

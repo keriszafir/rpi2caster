@@ -104,21 +104,21 @@ class Monotype(object):
             try:
                 with io.open(self.sensor_gpio_value_file, 'r'):
                     pass
-            except IOError:
+                # Ensure that the interrupts are generated for sensor GPIO
+                # for both rising and falling edge:
+                with io.open(self.sensor_gpio_edge_file, 'r') as edge_file:
+                    if 'both' not in edge_file.read():
+                        message = ('%s: file does not exist, cannot be read, '
+                                   'or the interrupt on GPIO %i is not set '
+                                   'to "both". Check the system configuration.'
+                                   % (self.sensor_gpio_edge_file,
+                                      self.sensor_gpio))
+                        ui.display(message)
+            except (IOError, FileNotFoundError):
                 message = ('%s : file does not exist or cannot be read. '
                            'You must export the GPIO no %s as input first!'
                            % (self.sensor_gpio_value_file, self.sensor_gpio))
                 ui.display(message)
-            # Ensure that the interrupts are generated for sensor GPIO
-            # for both rising and falling edge:
-            with io.open(self.sensor_gpio_edge_file, 'r') as edge_file:
-                if 'both' not in edge_file.read():
-                    message = ('%s: file does not exist, cannot be read, '
-                               'or the interrupt on GPIO %i is not set '
-                               'to "both". Check the system configuration.'
-                               % (self.sensor_gpio_edge_file,
-                                  self.sensor_gpio))
-                    ui.display(message)
         # Setup the wiringPi MCP23017 chips for valve outputs
         wiringpi.mcp23017Setup(self.pin_base, self.mcp0_address)
         wiringpi.mcp23017Setup(self.pin_base + 16, self.mcp1_address)
