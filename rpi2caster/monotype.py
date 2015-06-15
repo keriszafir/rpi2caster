@@ -109,7 +109,6 @@ class Monotype(object):
                            'You must export the GPIO no %s as input first!'
                            % (self.sensor_gpio_value_file, self.sensor_gpio))
                 ui.display(message)
-                ui.exit_program()
             # Ensure that the interrupts are generated for sensor GPIO
             # for both rising and falling edge:
             with io.open(self.sensor_gpio_edge_file, 'r') as edge_file:
@@ -120,7 +119,6 @@ class Monotype(object):
                                % (self.sensor_gpio_edge_file,
                                   self.sensor_gpio))
                     ui.display(message)
-                    ui.exit_program()
         # Setup the wiringPi MCP23017 chips for valve outputs
         wiringpi.mcp23017Setup(self.pin_base, self.mcp0_address)
         wiringpi.mcp23017Setup(self.pin_base + 16, self.mcp1_address)
@@ -146,26 +144,24 @@ class Monotype(object):
         Sets up the instance attributes for the caster.
         If caster section is not found in conffile - reverts to defaults.
         where:
-        diecase_system - caster's diecase layout and a method of
-        accessing 16th row, if applicable:
-             norm15     - old 15x15,
-             norm17     - 15x17 NI, NL,
-             hmn        - 16x17 HMN (rare),
-             kmn        - 16x17 KMN (rare),
-             shift      - 16x17 unit-shift (most modern).
-        unit_adding [0,1] - whether the machine has a unit-adding attachment,
+        is_perforator (1, 0, True, False, on, off) - the caster is a pneumatic
+                      paper ribbon perforator (i.e. keyboard's paper tower).
+                      Perforators don't need sensors nor stop buttons.
         interface_id [0,1,2,3] - ID of the interface connected to the caster.
         """
-        if cfg_parser.section_not_found(self.name):
-            # Default caster parameters:
+        try:
+            self.is_perforator = cfg_parser.get_config(self.name,
+                                                       'is_perforator')
+            self.interface_id = cfg_parser.get_config(self.name,
+                                                      'interface_id')
+        except exceptions.NotConfigured:
+            # Set defaults and return False
             self.is_perforator = False
             self.interface_id = 0
-            # End here if caster not found in config
             return False
-        self.is_perforator = cfg_parser.get_config(self.name, 'is_perforator')
-        self.interface_id = cfg_parser.get_config(self.name, 'interface_id')
-        # Caster correctly configured
-        return True
+        else:
+            # Caster correctly configured
+            return True
 
     def get_interface_settings(self):
         """get_interface_settings():
