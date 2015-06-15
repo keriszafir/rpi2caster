@@ -11,7 +11,7 @@ and parsed by the casting program, which sends the signals to the machine.
 # Typical libs, used by most routines:
 import time
 # User interface
-from rpi2caster import text_ui as ui
+from rpi2caster.global_settings import USER_INTERFACE as ui
 # Exceptions module
 from rpi2caster import exceptions
 # Wedge and database operations

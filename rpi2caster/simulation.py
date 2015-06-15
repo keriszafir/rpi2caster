@@ -10,7 +10,7 @@ import time
 # Custom exceptions module
 from rpi2caster import exceptions
 # Default user interface
-from rpi2caster import text_ui as ui
+from rpi2caster.global_settings import USER_INTERFACE as ui
 
 
 class Monotype(object):
@@ -31,107 +31,115 @@ class Monotype(object):
         ui.display('Using caster name:', self.name)
         ui.display('This is not an actual caster or interface. ')
         ui.enter_data('Press [ENTER] to continue...')
-        # Debugging is ON by default
-        ui.DEBUG_MODE = True
         return self
 
-    def process_signals(self, signals, machine_timeout=5):
+    def process_signals(self, signals, cycle_timeout=5):
         """Simulates sending signals to the caster.
 
         Ask if user wants to simulate the machine stop.
         """
-        def send_signals_to_caster(signals, timeout):
-            """send_signals_to_caster
-
-            Mocku of a real-world sending signals to the interface.
-            We don't have a machine cycle sensor nor valves here,
-            so we have to simulate their action by user's input.
-            This function allows to decide whether the caster is turning
-            or stopped, and then allows to make decision to continue casting,
-            abort or exit program.
-            """
-            timeout = timeout
-            prompt = '[Enter] to cast or [S] to stop? '
-            if ui.enter_data(prompt) in ['s', 'S']:
-                ui.display('Simulating machine stop...')
-                return False
-            ui.display('Turning the valves on...')
-            self.activate_valves(signals)
-            ui.display('Turning the valves off...')
-            self.deactivate_valves()
-            ui.display('Sequence cast successfully.')
-            return True
-
-        def stop_menu():
-            """stop_menu:
-
-            This allows us to choose whether we want to continue,
-            return to menu or exit if the machine is stopped during casting.
-            """
-            def continue_casting():
-                """Helper function - continue casting."""
-                return True
-
-            def with_cleanup_return_to_menu():
-                """with_cleanup_return_to_menu
-
-                Aborts casting. Makes sure the pump is turned off.
-                Raise an exception to be caught by higher-level functions
-                from the Casting class
-                """
-                emergency_cleanup()
-                raise exceptions.CastingAborted
-
-            def with_cleanup_exit_program():
-                """with_cleanup_exit_program
-
-                Helper function - throws an exception to exit the program.
-                Also makes sure the pump is turned off."""
-                emergency_cleanup()
-                raise exceptions.ExitProgram
-
-            # End of subroutine definitions
-            # Now, a little menu
-            options = {'C': continue_casting,
-                       'M': with_cleanup_return_to_menu,
-                       'E': with_cleanup_exit_program}
-            message = ('Machine has stopped running! Check what happened.\n'
-                       '[C]ontinue, return to [M]enu or [E]xit program? ')
-            choice = ui.simple_menu(message, options).upper()
-            return options[choice]()
-
-        def emergency_cleanup():
-            """emergency_cleanup:
-
-            If the machine is stopped, we need to turn the pump off and then
-            turn all the lines off. Otherwise, the machine will keep pumping
-            while it shouldnot (e.g. after a splash).
-
-            The program will hold execution until the operator clears the
-            situation, it needs turning the machine at least one full
-            revolution. The program MUST turn the pump off to go on.
-            """
-            pump_off = False
-            stop_signal = ['N', 'J', '0005']
-            ui.display('Stopping the pump...')
-            while not pump_off:
-                # Try stopping the pump until we succeed!
-                # Keep calling process_signals until it returns True
-                # (the machine receives and processes the pump stop signal)
-                pump_off = send_signals_to_caster(stop_signal, machine_timeout)
+        while True:
+            # Escape this only by returning True on success,
+            # or raising exceptions.CastingAborted, exceptions.ExitProgram
+            # (which will be handled by the methods of the Casting class)
+            try:
+                # Casting cycle
+                # (sensor on - valves on - sensor off - valves off)
+                self._send_signals_to_caster(signals, cycle_timeout)
+            except exceptions.MachineStopped:
+                # Machine stopped during casting - ask what to do
+                self._stop_menu()
             else:
-                ui.display('Pump stopped. All valves off...')
-                self.deactivate_valves()
-                time.sleep(1)
+                # Successful ending - the combination has been cast
                 return True
-        # End of subroutine definitions
-        while not send_signals_to_caster(signals, machine_timeout):
-            # Keep trying to cast the combination, or end here
-            # (subroutine will throw an exception if operator exits)
-            stop_menu()
-        else:
-            # Successful ending - the combination has been cast
+
+    def _send_signals_to_caster(self, signals, cycle_timeout):
+        """send_signals_to_caster
+
+        Mocku of a real-world sending signals to the interface.
+        We don't have a machine cycle sensor nor valves here,
+        so we have to simulate their action by user's input.
+        This function allows to decide whether the caster is turning
+        or stopped, and then allows to make decision to continue casting,
+        abort or exit program.
+        """
+        cycle_timeout = cycle_timeout
+        prompt = '[Enter] to cast or [S] to stop? '
+        if ui.enter_data(prompt) in ['s', 'S']:
+            ui.display('Simulating machine stop...')
+            raise exceptions.MachineStopped
+        ui.display('Turning the valves on...')
+        self.activate_valves(signals)
+        ui.display('Turning the valves off...')
+        self.deactivate_valves()
+        ui.display('Sequence cast successfully.')
+        return True
+
+    def _stop_menu(self):
+        """_stop_menu:
+
+        This allows us to choose whether we want to continue,
+        return to menu or exit if the machine is stopped during casting.
+        """
+        def continue_casting():
+            """Helper function - continue casting."""
             return True
+
+        def with_cleanup_return_to_menu():
+            """with_cleanup_return_to_menu
+
+            Aborts casting. Makes sure the pump is turned off.
+            Raise an exception to be caught by higher-level functions
+            from the Casting class
+            """
+            self._emergency_cleanup()
+            raise exceptions.CastingAborted
+
+        def with_cleanup_exit_program():
+            """with_cleanup_exit_program
+
+            Helper function - throws an exception to exit the program.
+            Also makes sure the pump is turned off."""
+            self._emergency_cleanup()
+            raise exceptions.ExitProgram
+
+        # End of subroutine definitions
+        # Now, a little menu
+        options = {'C': continue_casting,
+                   'M': with_cleanup_return_to_menu,
+                   'E': with_cleanup_exit_program}
+        message = ('Machine has stopped running! Check what happened.\n'
+                   '[C]ontinue, return to [M]enu or [E]xit program? ')
+        choice = ui.simple_menu(message, options).upper()
+        return options[choice]()
+
+    def _emergency_cleanup(self):
+        """_emergency_cleanup:
+
+        If the machine is stopped, we need to turn the pump off and then
+        turn all the lines off. Otherwise, the machine will keep pumping
+        while it shouldnot (e.g. after a splash).
+
+        The program will hold execution until the operator clears the
+        situation, it needs turning the machine at least one full
+        revolution. The program MUST turn the pump off to go on.
+        """
+        pump_off = False
+        stop_signal = ['N', 'J', '0005']
+        ui.display('Stopping the pump...')
+        while not pump_off:
+            try:
+                # Try stopping the pump until we succeed!
+                # Keep calling _send_signals_to_caster until it returns True
+                # (the machine receives and processes the pump stop signal)
+                pump_off = self._send_signals_to_caster(stop_signal, 60)
+            except exceptions.MachineStopped:
+                # Loop over
+                pass
+        ui.display('Pump stopped. All valves off...')
+        self.deactivate_valves()
+        time.sleep(1)
+        return True
 
     def activate_valves(self, signals):
         """If there are any signals, print them out"""

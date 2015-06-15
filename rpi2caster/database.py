@@ -12,8 +12,8 @@ except ImportError:
     import simplejson as json
 # Custom exceptions
 from rpi2caster import exceptions
-# Config parser for reading the interface settings
-from rpi2caster import cfg_parser
+# Get global settings
+from rpi2caster import global_settings
 # this module uses sqlite3 database for storing caster, interface,
 # wedge, diecase & matrix parameters:
 try:
@@ -48,24 +48,16 @@ class Database(object):
     Usually you run setup with sudo.
     """
 
-    def __init__(self, database_path='', config_path=''):
+    def __init__(self):
         """init:
 
         Sets up config path (specified or default),
         sets up database path (specified, set up in config, then default),
         """
-        # Update cfg_parser's CONFIG_PATH or keep it default
-        cfg_parser.CONFIG_PATH = config_path or cfg_parser.CONFIG_PATH
-        # Database path selection priority:
-        # 1. explicitly stated on class instantiation
-        # 2. found in conffile
-        # 3. hardcoded default: database/monotype.db
-        self.database_path = (database_path or
-                              cfg_parser.get_config('Database', 'path') or
-                              'database/monotype.db')
+        database_path = global_settings.DATABASE_PATH or '/var/rpi2caster/db'
         # Connect to the database
         try:
-            self.db_connection = sqlite3.connect(self.database_path)
+            self.db_connection = sqlite3.connect(database_path)
         except (sqlite3.OperationalError, sqlite3.DatabaseError):
             raise exceptions.WrongConfiguration('Cannot connect to database!')
 

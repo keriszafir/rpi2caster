@@ -15,6 +15,11 @@ class CastingAborted(Exception):
     pass
 
 
+class MachineStopped(Exception):
+    """Raised by the caster control routines, when the machine stops."""
+    pass
+
+
 class EmergencyStop(Exception):
     """Raised when user pushes the emergency stop button to abort."""
     pass

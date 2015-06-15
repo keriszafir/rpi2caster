@@ -17,7 +17,7 @@ import time
 # Signals parsing methods for rpi2caster
 from rpi2caster import parsing
 # User interfaces module for rpi2caster:
-from rpi2caster import text_ui as ui
+from rpi2caster.global_settings import USER_INTERFACE as ui
 # Custom exceptions
 from rpi2caster import exceptions
 

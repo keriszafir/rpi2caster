@@ -3,13 +3,16 @@ conffile_parser
 
 Module for reading and writing configuration from/to conffile.
 """
+import io
 # Config parser for reading the interface settings
 import configparser
+# Global settings for rpi2caster
+from rpi2caster import global_settings
 # Custom exceptions
 from rpi2caster import exceptions
 
 # Define some module constants
-CONFIG_PATH = 'rpi2caster.conf'
+CONFIG_PATH = global_settings.CONFIG_PATH or '/etc/rpi2caster.conf'
 TRUE_ALIASES = ['true', 'on', 'yes']
 FALSE_ALIASES = ['false', 'off', 'no']
 
@@ -21,7 +24,7 @@ def initialize_config():
     Throws an exception if errors occur.
     """
     try:
-        with open(CONFIG_PATH, 'r'):
+        with io.open(CONFIG_PATH, 'r'):
             cfg = configparser.SafeConfigParser()
             cfg.read(CONFIG_PATH)
             return cfg

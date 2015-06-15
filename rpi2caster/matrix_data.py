@@ -3,7 +3,7 @@
 Module containing functions for diecase retrieval and parsing,
 diecase storing, parameter searches.
 """
-from rpi2caster import text_ui as ui
+from rpi2caster.global_settings import USER_INTERFACE as ui
 from rpi2caster import exceptions
 from rpi2caster import database
 DB = database.Database()

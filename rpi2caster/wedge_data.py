@@ -6,7 +6,7 @@ This sits on top of the database module and is an abstraction layer
 for other modules (like inventory, casting, typesetter).
 Processes the data retrieved from database.
 """
-from rpi2caster import text_ui as ui
+from rpi2caster.global_settings import USER_INTERFACE as ui
 from rpi2caster import exceptions
 from rpi2caster import database
 DB = database.Database()
@@ -207,10 +207,9 @@ def add_wedge():
         ui.display('\n'.join(user_info))
         # Ask for confirmation
         ans = ui.simple_menu('Commit? [Y / N]', {'Y': 'Y', 'N': 'N'})
-        if ans in ['y', 'Y']:
-            if DB.add_wedge(wedge_name, set_width,
-                            brit_pica, unit_arrangement):
-                ui.display('Wedge added successfully.')
+        if (ans in ['y', 'Y'] and DB.add_wedge(wedge_name, set_width,
+                                               brit_pica, unit_arrangement)):
+            ui.display('Wedge added successfully.')
 
 
 def delete_wedge():
@@ -245,6 +244,7 @@ def list_wedges():
                '\n')
     for wedge in results:
         ui.display(''.join([str(field).ljust(15) for field in wedge]))
+        # TODO: convert the brit_pica value from int to bool
     return True
 
 

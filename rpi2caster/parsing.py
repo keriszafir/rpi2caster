@@ -2,7 +2,9 @@
 
 This module contains file- and line-parsing functions for the casting program.
 """
-COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
+import io
+from rpi2caster.global_settings import COMMENT_SYMBOLS as GLOBAL_CS
+COMMENT_SYMBOLS = GLOBAL_CS or ['**', '*', '//', '##', '#']
 
 
 def read_file(filename):
@@ -13,7 +15,7 @@ def read_file(filename):
 # Open a file with signals, test if it's readable and return its contents
     try:
         content = []
-        with open(filename, 'r') as input_file:
+        with io.open(filename, 'r') as input_file:
             content_generator = input_file.readlines()
             for line in content_generator:
                 # Strip newline characters from lines

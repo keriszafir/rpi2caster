@@ -5,6 +5,7 @@ This module contains user interfaces to be used by rpi2caster suite.
 """
 
 # IMPORTS for text user interface
+import io
 import os
 import readline
 import glob
@@ -110,7 +111,7 @@ def enter_input_filename():
     filename = input('\n Enter the input file name: ')
     filename = os.path.realpath(filename)
     try:
-        with open(filename, 'r'):
+        with io.open(filename, 'r'):
             return filename
     except IOError:
         input('Wrong filename or file not readable!')

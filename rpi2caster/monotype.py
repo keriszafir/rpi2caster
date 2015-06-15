@@ -5,6 +5,7 @@ This module contains low- and mid-level caster control routines for
 a physical Monotype composition caster, linked via pneumatic valves
 and MCP23017 IC's to the Raspberry Pi.
 """
+import io
 # Essential for polling the sensor for state change:
 import select
 # Built-in time library
@@ -14,7 +15,7 @@ from rpi2caster import exceptions
 # Configuration parser functions
 from rpi2caster import cfg_parser
 # Default user interface
-from rpi2caster import text_ui as ui
+from rpi2caster.global_settings import USER_INTERFACE as ui
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:
     import wiringpi2 as wiringpi
@@ -106,7 +107,7 @@ class Monotype(object):
             self.sensor_gpio_edge_file = gpio_sysfs_path + 'edge'
             # Check if the sensor GPIO has been configured - file is readable:
             try:
-                with open(self.sensor_gpio_value_file, 'r'):
+                with io.open(self.sensor_gpio_value_file, 'r'):
                     pass
             except IOError:
                 message = ('%s : file does not exist or cannot be read. '
@@ -116,7 +117,7 @@ class Monotype(object):
                 ui.exit_program()
             # Ensure that the interrupts are generated for sensor GPIO
             # for both rising and falling edge:
-            with open(self.sensor_gpio_edge_file, 'r') as edge_file:
+            with io.open(self.sensor_gpio_edge_file, 'r') as edge_file:
                 if 'both' not in edge_file.read():
                     message = ('%s: file does not exist, cannot be read, '
                                'or the interrupt on GPIO %i is not set '
@@ -219,6 +220,55 @@ class Monotype(object):
         # Interface configured successfully - return True
         return True
 
+    def process_signals(self, signals, cycle_timeout=5):
+        """process_signals(signals, cycle_timeout):
+
+        Checks for the machine's rotation, sends the signals (activates
+        solenoid valves) after the caster is in the "air bar down" position.
+
+        If no machine rotation is detected (sensor input doesn't change
+        its state) during cycle_timeout, calls a function to ask user
+        what to do (can be useful for resuming casting after manually
+        stopping the machine for a short time - not recommended as the
+        mould cools down and type quality can deteriorate).
+
+        If the operator decides to go on with casting, the aborted sequence
+        will be re-cast so as to avoid missing characters in the composition.
+
+        Safety measure: this function will call "emergency_cleanup" routine
+        whenever the operator decides to go back to menu or exit program
+        after the machine stops rotating during casting. This is to ensure
+        that the pump will not stay on afterwards, leading to lead squirts
+        or any other unwanted effects.
+
+        When casting, the pace is dictated by the caster and its RPM. Thus,
+        we can't arbitrarily set the intervals between valve ON and OFF
+        signals. We need to get feedback from the machine, and we can use
+        contact switch (unreliable in the long run), magnet & reed switch
+        (not precise enough) or a photocell sensor + LED (very precise).
+        We can use a paper tower's operating lever for obscuring the sensor
+        (like John Cornelisse did), or we can use a partially obscured disc
+        attached to the caster's shaft (like Bill Welliver did).
+        Both ways are comparable; the former can be integrated with the
+        valve block assembly, and the latter allows for very precise tweaking
+        of duty cycle (bright/dark area ratio) and phase shift (disc's position
+        relative to 0 degrees caster position).
+        """
+        while True:
+            # Escape this only by returning True on success,
+            # or raising exceptions.CastingAborted, exceptions.ExitProgram
+            # (which will be handled by the methods of the Casting class)
+            try:
+                # Casting cycle
+                # (sensor on - valves on - sensor off - valves off)
+                self._send_signals_to_caster(signals, cycle_timeout)
+            except exceptions.MachineStopped:
+                # Machine stopped during casting - ask what to do
+                self._stop_menu()
+            else:
+                # Successful ending - the combination has been cast
+                return True
+
     def detect_rotation(self):
         """detect_rotation():
 
@@ -254,179 +304,139 @@ class Monotype(object):
         # End of subroutine definition
         # Check for sensor signals, keep checking until max time is exceeded
         # or target number of cycles is reached
-        with open(self.sensor_gpio_value_file, 'r') as gpiostate:
+        with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
             while (time.time() <= time_start + time_max and
                    cycles <= cycles_max):
                 sensor_signals = select.epoll()
                 sensor_signals.register(gpiostate, select.POLLPRI)
                 events = sensor_signals.poll(0.5)
-            # Check if the sensor changes state at all
+                # Check if the sensor changes state at all
                 if events:
                     gpiostate.seek(0)
                     sensor_state = int(gpiostate.read())
                     prev_state = 0
-                # Increment the number of passed machine cycles
+                    # Increment the number of passed machine cycles
                     if sensor_state == 1 and prev_state == 0:
                         prev_state = 1
                         cycles += 1
                     elif sensor_state == 0 and prev_state == 1:
                         prev_state = 0
+            # The loop ended.
+            # Check if it happened due to timeout (machine not running)
+            # or exceeded number of cycles (machine running):
+            if cycles > cycles_max:
+                ui.display('\nOkay, the machine is running...\n')
+                return True
+            elif start_the_machine():
+                # Check again recursively:
+                return self.detect_rotation()
             else:
-                # Check if the loop ended due to timeout (machine not running)
-                # or exceeded number of cycles (machine running):
-                if cycles > cycles_max:
-                    ui.display('\nOkay, the machine is running...\n')
-                    return True
-                elif start_the_machine():
-                    # Check again recursively:
-                    return self.detect_rotation()
-                else:
-                    # This will lead to return to menu
-                    return False
+                # This will lead to return to menu
+                return False
 
-    def process_signals(self, signals, cycle_timeout=5):
-        """process_signals(signals, cycle_timeout):
+    def _send_signals_to_caster(self, signals, timeout):
+        """_send_signals_to_caster:
 
-        Checks for the machine's rotation, sends the signals (activates
-        solenoid valves) after the caster is in the "air bar down" position.
-
-        If no machine rotation is detected (sensor input doesn't change
-        its state) during cycle_timeout, calls a function to ask user
-        what to do (can be useful for resuming casting after manually
-        stopping the machine for a short time - not recommended as the
-        mould cools down and type quality can deteriorate).
-
-        If the operator decides to go on with casting, the aborted sequence
-        will be re-cast so as to avoid missing characters in the composition.
-
-        Safety measure: this function will call "emergency_cleanup" routine
-        whenever the operator decides to go back to menu or exit program
-        after the machine stops rotating during casting. This is to ensure
-        that the pump will not stay on afterwards, leading to lead squirts
-        or any other unwanted effects.
-
-        When casting, the pace is dictated by the caster and its RPM. Thus,
-        we can't arbitrarily set the intervals between valve ON and OFF
-        signals. We need to get feedback from the machine, and we can use
-        contact switch (unreliable in the long run), magnet & reed switch
-        (not precise enough) or a photocell sensor + LED (very precise).
-        We can use a paper tower's operating lever for obscuring the sensor
-        (like John Cornelisse did), or we can use a partially obscured disc
-        attached to the caster's shaft (like Bill Welliver did).
-        Both ways are comparable; the former can be integrated with the
-        valve block assembly, and the latter allows for very precise tweaking
-        of duty cycle (bright/dark area ratio) and phase shift (disc's position
-        relative to 0 degrees caster position).
+        Sends a combination of signals passed in function's arguments
+        to the caster. This function also checks if the machine cycle
+        sensor changes its state, and decides whether it's an "air on"
+        phase (turn on the valves) or "air off" phase (turn off the valves,
+        end function, return True to signal the success).
+        If no signals are detected within a given timeout - returns False
+        (to signal the casting failure).
         """
-        # Subroutine definitions
-        def send_signals_to_caster(signals, timeout):
-            """send_signals_to_caster:
+        with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
+            sensor_signals = select.epoll()
+            sensor_signals.register(gpiostate, select.POLLPRI)
+            prev_state = 0
+            while True:
+                # Polling the interrupt file
+                events = sensor_signals.poll(timeout)
+                if events:
+                    # Normal control flow when the machine is working
+                    # (cycle sensor generates events)
+                    gpiostate.seek(0)
+                    sensor_state = int(gpiostate.read())
+                    if sensor_state == 1 and prev_state == 0:
+                        # Now, the air bar on paper tower would go down -
+                        # we got signal from sensor to let the air in
+                        self.activate_valves(signals)
+                        prev_state = 1
+                    elif sensor_state == 0 and prev_state == 1:
+                        # Air bar on paper tower goes back up -
+                        # end of "air in" phase, turn off the valves
+                        self.deactivate_valves()
+                        prev_state = 0
+                        # Signals sent to the caster - successful ending
+                        return True
+                else:
+                    # Timeout with no signals - failed ending
+                    raise exceptions.MachineStopped
 
-            Sends a combination of signals passed in function's arguments
-            to the caster. This function also checks if the machine cycle
-            sensor changes its state, and decides whether it's an "air on"
-            phase (turn on the valves) or "air off" phase (turn off the valves,
-            end function, return True to signal the success).
-            If no signals are detected within a given timeout - returns False
-            (to signal the casting failure).
-            """
-            with open(self.sensor_gpio_value_file, 'r') as gpiostate:
-                polling = select.epoll()
-                polling.register(gpiostate, select.POLLPRI)
-                prev_state = 0
-                while True:
-                    # Polling the interrupt file
-                    events = polling.poll(timeout)
-                    if events:
-                        # Normal control flow when the machine is working
-                        # (cycle sensor generates events)
-                        gpiostate.seek(0)
-                        sensor_state = int(gpiostate.read())
-                        if sensor_state == 1 and prev_state == 0:
-                            # Now, the air bar on paper tower would go down -
-                            # we got signal from sensor to let the air in
-                            self.activate_valves(signals)
-                            prev_state = 1
-                        elif sensor_state == 0 and prev_state == 1:
-                            # Air bar on paper tower goes back up -
-                            # end of "air in" phase, turn off the valves
-                            self.deactivate_valves()
-                            prev_state = 0
-                            # Signals sent to the caster - successful ending
-                            return True
-                    else:
-                        # Timeout with no signals - failed ending
-                        return False
+    def _stop_menu(self):
+        """_stop_menu:
 
-        def stop_menu():
-            """stop_menu:
-
-            This allows us to choose whether we want to continue,
-            return to menu or exit if the machine is stopped during casting.
-            """
-            def continue_casting():
-                """Helper function - continue casting."""
-                return True
-
-            def with_cleanup_return_to_menu():
-                """with_cleanup_return_to_menu
-
-                Aborts casting. Makes sure the pump is turned off.
-                Raise an exception to be caught by higher-level functions
-                from the Casting class
-                """
-                emergency_cleanup()
-                raise exceptions.CastingAborted
-
-            def with_cleanup_exit_program():
-                """with_cleanup_exit_program
-
-                Helper function - throws an exception to exit the program.
-                Also makes sure the pump is turned off."""
-                emergency_cleanup()
-                raise exceptions.ExitProgram
-            # End of subroutine definitions
-            # Now, a little menu...
-            options = {'C': continue_casting,
-                       'M': with_cleanup_return_to_menu,
-                       'E': with_cleanup_exit_program}
-            message = ('Machine has stopped running! Check what happened.\n'
-                       '[C]ontinue, return to [M]enu or [E]xit program? ')
-            choice = ui.simple_menu(message, options).upper()
-            return options[choice]()
-
-        def emergency_cleanup():
-            """emergency_cleanup:
-
-            If the machine is stopped, we need to turn the pump off and then
-            turn all the lines off. Otherwise, the machine will keep pumping
-            while it shouldnot (e.g. after a splash).
-
-            The program will hold execution until the operator clears
-            the situation, it needs turning the machine at least one
-            full revolution. The program MUST turn the pump off to move on.
-            """
-            pump_off = False
-            stop_signals = ['N', 'J', '0005']
-            ui.display('Stopping the pump...')
-            while not pump_off:
-                # Try stopping the pump until we succeed!
-                # Keep calling process_signals until it returns True
-                # (the machine receives and processes the pump stop signal)
-                pump_off = send_signals_to_caster(stop_signals, cycle_timeout)
-            else:
-                ui.display('Pump stopped. All valves off...')
-                self.deactivate_valves()
-                time.sleep(1)
-                return True
-        # End of subroutine definitions
-        while not send_signals_to_caster(signals, cycle_timeout):
-            # Keep trying to cast the combination, or end here
-            # (subroutine will throw an exception if operator exits)
-            stop_menu()
-        else:
-            # Successful ending - the combination has been cast
+        This allows us to choose whether we want to continue,
+        return to menu or exit if the machine is stopped during casting.
+        """
+        def continue_casting():
+            """Helper function - continue casting."""
             return True
+
+        def with_cleanup_return_to_menu():
+            """with_cleanup_return_to_menu
+
+            Aborts casting. Makes sure the pump is turned off.
+            Raise an exception to be caught by higher-level functions
+            from the Casting class
+            """
+            self._emergency_cleanup()
+            raise exceptions.CastingAborted
+
+        def with_cleanup_exit_program():
+            """with_cleanup_exit_program
+
+            Helper function - throws an exception to exit the program.
+            Also makes sure the pump is turned off."""
+            self._emergency_cleanup()
+            raise exceptions.ExitProgram
+        # End of subroutine definitions
+        # Now, a little menu...
+        options = {'C': continue_casting,
+                   'M': with_cleanup_return_to_menu,
+                   'E': with_cleanup_exit_program}
+        message = ('Machine has stopped running! Check what happened.\n'
+                   '[C]ontinue, return to [M]enu or [E]xit program? ')
+        choice = ui.simple_menu(message, options).upper()
+        return options[choice]()
+
+    def _emergency_cleanup(self):
+        """emergency_cleanup:
+
+        If the machine is stopped, we need to turn the pump off and then
+        turn all the lines off. Otherwise, the machine will keep pumping
+        while it shouldnot (e.g. after a splash).
+
+        The program will hold execution until the operator clears
+        the situation, it needs turning the machine at least one
+        full revolution. The program MUST turn the pump off to move on.
+        """
+        pump_off = False
+        stop_signal = ['N', 'J', '0005']
+        ui.display('Stopping the pump...')
+        while not pump_off:
+            try:
+                # Try stopping the pump until we succeed!
+                # Keep calling _send_signals_to_caster until it returns True
+                # (the machine receives and processes the pump stop signal)
+                pump_off = self._send_signals_to_caster(stop_signal, 60)
+            except exceptions.MachineStopped:
+                # Loop over
+                pass
+        ui.display('Pump stopped. All valves off...')
+        self.deactivate_valves()
+        time.sleep(1)
+        return True
 
     def activate_valves(self, signals):
         """activate_valves(signals):
