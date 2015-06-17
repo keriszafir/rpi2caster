@@ -1,0 +1,13 @@
+rpi2caster.bot(x, i) - bottom copper
+          .top(x, i) - top copper
+          .dr(d, i) - drilling
+          .drl - drill rack
+          .MILL(x, i) - milling & dimensions
+          .OEtop(x, i) - parts description, top
+          .OEbot(x, i) - parts description, bottom
+          .MLtop(x, i) - solder mask, top
+          .MLbot(x, i) - solder mask, bottom
+          .PLtop(x, i) - cream, top
+          .PLbot(x, i) - cream, bottom
+          .mnt - pick&place coordinates, top
+          .mnb - pick&place coordinates, bottom
