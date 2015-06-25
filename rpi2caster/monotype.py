@@ -76,11 +76,11 @@ class Monotype(object):
         if not self.is_perforator:
             try:
                 in_settings = cfg_parser.get_input_settings(interface_id)
-                (emerg_gpio, sensor_gpio) = in_settings
+                (emergency_stop_gpio, sensor_gpio) = in_settings
             except exceptions.NotConfigured:
                 # Cannot read config? Use defaults:
                 UI.display('Using hardcoded defaults for interface inputs...')
-                emerg_gpio = 24
+                emergency_stop_gpio = 24
                 sensor_gpio = 17
             # Set up an input for machine cycle sensor:
             gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % sensor_gpio
@@ -94,17 +94,14 @@ class Monotype(object):
                 # for both rising and falling edge:
                 with io.open(self.sensor_gpio_edge_file, 'r') as edge_file:
                     if 'both' not in edge_file.read():
-                        message = ('%s: file does not exist, cannot be read, '
+                        UI.display('%s: file does not exist, cannot be read, '
                                    'or the interrupt on GPIO %i is not set '
                                    'to "both". Check the system configuration.'
-                                   % (self.sensor_gpio_edge_file,
-                                      sensor_gpio))
-                        UI.display(message)
+                                   % (self.sensor_gpio_edge_file, sensor_gpio))
             except (IOError, FileNotFoundError):
-                message = ('%s : file does not exist or cannot be read. '
+                UI.display('%s : file does not exist or cannot be read. '
                            'You must export the GPIO no %s as input first!'
                            % (self.sensor_gpio_value_file, sensor_gpio))
-                UI.display(message)
         # Now configure outputs
         try:
             out_settings = cfg_parser.get_output_settings(interface_id)
@@ -128,7 +125,7 @@ class Monotype(object):
                   'Signals arrangement: ': signals_arrangement}
         # Display this info only for casters and not perforators:
         if not self.is_perforator:
-            output['Emergency stop button GPIO: '] = emerg_gpio
+            output['Emergency stop button GPIO: '] = emergency_stop_gpio
             output['Sensor GPIO: '] = sensor_gpio
         # Iterate over the dict and print the output
         for parameter in output:
@@ -136,7 +133,7 @@ class Monotype(object):
         # Setup the wiringPi MCP23017 chips for valve outputs
         wiringpi.mcp23017Setup(pin_base, mcp0_address)
         wiringpi.mcp23017Setup(pin_base + 16, mcp1_address)
-        pins = [pin for pin in range(pin_base, pin_base + 32)]
+        pins = (pin for pin in range(pin_base, pin_base + 32))
         # Set all I/O lines on MCP23017s as outputs - mode=1
         for pin in pins:
             wiringpi.pinMode(pin, 1)
@@ -336,7 +333,7 @@ class Monotype(object):
         full revolution. The program MUST turn the pump off to move on.
         """
         pump_off = False
-        stop_signal = ['N', 'J', '0005']
+        stop_signal = ('N', 'J', '0005')
         UI.display('Stopping the pump...')
         while not pump_off:
             try:
@@ -362,7 +359,7 @@ class Monotype(object):
         Do nothing if the function receives an empty sequence, which will
         occur if we cast with the matrix found at position O15.
         """
-        pins = [self.interface_pin_number[sig] for sig in signals]
+        pins = (self.interface_pin_number[sig] for sig in signals)
         for pin in pins:
             wiringpi.digitalWrite(pin, 1)
 
