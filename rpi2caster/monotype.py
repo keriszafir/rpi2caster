@@ -133,7 +133,7 @@ class Monotype(object):
         # Setup the wiringPi MCP23017 chips for valve outputs
         wiringpi.mcp23017Setup(pin_base, mcp0_address)
         wiringpi.mcp23017Setup(pin_base + 16, mcp1_address)
-        pins = (pin for pin in range(pin_base, pin_base + 32))
+        pins = [pin for pin in range(pin_base, pin_base + 32)]
         # Set all I/O lines on MCP23017s as outputs - mode=1
         for pin in pins:
             wiringpi.pinMode(pin, 1)
@@ -359,7 +359,7 @@ class Monotype(object):
         Do nothing if the function receives an empty sequence, which will
         occur if we cast with the matrix found at position O15.
         """
-        pins = (self.interface_pin_number[sig] for sig in signals)
+        pins = [self.interface_pin_number[sig] for sig in signals]
         for pin in pins:
             wiringpi.digitalWrite(pin, 1)
 
