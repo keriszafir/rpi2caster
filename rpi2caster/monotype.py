@@ -209,8 +209,9 @@ class Monotype(object):
         # Check for sensor signals, keep checking until max time is exceeded
         # or target number of cycles is reached
         while True:
-            # Reset the cycle counter and timer on each iteration
+            # Reset the cycle counter, input state and timer on each iteration
             cycles = 0
+            prev_state = 0
             time_start = time.time()
             timeout = time_start + time_max
             while time.time() <= timeout:
@@ -223,7 +224,6 @@ class Monotype(object):
                     if events:
                         gpiostate.seek(0)
                         sensor_state = int(gpiostate.read())
-                        prev_state = 0
                         # Increment the number of passed machine cycles
                         if sensor_state == 1 and prev_state == 0:
                             prev_state = 1

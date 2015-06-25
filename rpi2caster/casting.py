@@ -332,10 +332,10 @@ class Casting(object):
         self.line_aborted = None
         (pos_0075, pos_0005) = (str(x) for x in wedge_positions)
         # Signals for setting 0005 and 0075 justification wedges
-        set_0005 = ['N', 'J', '0005', pos_0005]
-        set_0075 = ['N', 'K', '0075', pos_0075]
+        set_0005 = ('N', 'J', '0005', pos_0005)
+        set_0075 = ('N', 'K', '0075', pos_0075)
         # Galley trip signal
-        galley_trip = ['N', 'K', 'J', '0005', '0075']
+        galley_trip = ('N', 'K', 'J', '0005', '0075')
         # Parse the combination
         combination = parsing.signals_parser(signals)
         combination = parsing.strip_o_and_15(combination)
