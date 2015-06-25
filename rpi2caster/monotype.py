@@ -16,7 +16,7 @@ from rpi2caster import exceptions
 from rpi2caster import cfg_parser
 # Default user interface
 from rpi2caster import global_settings
-ui = global_settings.USER_INTERFACE
+UI = global_settings.USER_INTERFACE
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:
     import wiringpi2 as wiringpi
@@ -36,27 +36,18 @@ class Monotype(object):
         """
         self.name = name or global_settings.CASTER_NAME
         self.is_perforator = None
-        self.interface_id = None
-        self.emerg_gpio = None
-        self.sensor_gpio = None
-        self.mcp0_address = None
-        self.mcp1_address = None
-        self.pin_base = None
-        self.signals_arrangement = None
         self.lock = None
         self.sensor_gpio_edge_file = None
         self.sensor_gpio_value_file = None
-        self.interface_pin_number = None
-
         # Configure the caster
-        self.caster_setup()
+        self.interface_pin_number = self.caster_setup()
 
     def __enter__(self):
         """Run the setup when entering the context:
         """
-        ui.debug_info('Entering caster/interface context...')
+        UI.debug_info('Entering caster/interface context...')
         if self.lock:
-            ui.display('Caster %s is already busy!' % self.name)
+            UI.display('Caster %s is already busy!' % self.name)
         else:
             self.lock = True
             return self
@@ -73,29 +64,26 @@ class Monotype(object):
         # Next, this method reads caster data from conffile and sets up
         # instance attributes for the caster.
         # In case there is no data, the function will run on default settings.
-        self.get_caster_settings()
-        # The same for the interface settings:
-        self.get_interface_settings()
-        # When debugging, display all caster info:
-        output = {'Using caster name: ': self.name,
-                  'Is a perforator? ': self.is_perforator,
-                  'Interface ID: ': self.interface_id,
-                  '1st MCP23017 I2C address: ': hex(self.mcp0_address),
-                  '2nd MCP23017 I2C address: ': hex(self.mcp1_address),
-                  'MCP23017 pin base for GPIO numbering: ': self.pin_base,
-                  'Signals arrangement: ': self.signals_arrangement}
-        # Display this info only for casters and not perforators:
+        try:
+            caster_settings = cfg_parser.get_caster_settings(self.name)
+            (self.is_perforator, interface_id) = caster_settings
+        except exceptions.NotConfigured:
+            # Cannot read config? Use defaults:
+            UI.display('Using hardcoded defaults for caster settings...')
+            self.is_perforator = False
+            interface_id = 0
+        # The same for the input settings:
         if not self.is_perforator:
-            output['Emergency stop button GPIO: '] = self.emerg_gpio
-            output['Sensor GPIO: '] = self.sensor_gpio
-        # Iterate over the dict and print the output
-        for parameter in output:
-            ui.debug_info(parameter, output[parameter])
-        # Input configuration for sensor and emergency stop button
-        # This is done only for a caster interface:
-        if not self.is_perforator:
+            try:
+                in_settings = cfg_parser.get_input_settings(interface_id)
+                (emerg_gpio, sensor_gpio) = in_settings
+            except exceptions.NotConfigured:
+                # Cannot read config? Use defaults:
+                UI.display('Using hardcoded defaults for interface inputs...')
+                emerg_gpio = 24
+                sensor_gpio = 17
             # Set up an input for machine cycle sensor:
-            gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % self.sensor_gpio
+            gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % sensor_gpio
             self.sensor_gpio_value_file = gpio_sysfs_path + 'value'
             self.sensor_gpio_edge_file = gpio_sysfs_path + 'edge'
             # Check if the sensor GPIO has been configured - file is readable:
@@ -110,99 +98,53 @@ class Monotype(object):
                                    'or the interrupt on GPIO %i is not set '
                                    'to "both". Check the system configuration.'
                                    % (self.sensor_gpio_edge_file,
-                                      self.sensor_gpio))
-                        ui.display(message)
+                                      sensor_gpio))
+                        UI.display(message)
             except (IOError, FileNotFoundError):
                 message = ('%s : file does not exist or cannot be read. '
                            'You must export the GPIO no %s as input first!'
-                           % (self.sensor_gpio_value_file, self.sensor_gpio))
-                ui.display(message)
+                           % (self.sensor_gpio_value_file, sensor_gpio))
+                UI.display(message)
+        # Now configure outputs
+        try:
+            out_settings = cfg_parser.get_output_settings(interface_id)
+            (mcp0_address, mcp1_address,
+             pin_base, signals_arrangement) = out_settings
+        except exceptions.NotConfigured:
+            # Cannot read config? Use defaults:
+            UI.display('Using hardcoded defaults for interface outputs...')
+            mcp0_address = 0x20
+            mcp1_address = 0x21
+            pin_base = 65
+            signals_arrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
+                                   '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
+        # When debugging, display all caster info:
+        output = {'Using caster name: ': self.name,
+                  'Is a perforator? ': self.is_perforator,
+                  'Interface ID: ': interface_id,
+                  '1st MCP23017 I2C address: ': hex(mcp0_address),
+                  '2nd MCP23017 I2C address: ': hex(mcp1_address),
+                  'MCP23017 pin base for GPIO numbering: ': pin_base,
+                  'Signals arrangement: ': signals_arrangement}
+        # Display this info only for casters and not perforators:
+        if not self.is_perforator:
+            output['Emergency stop button GPIO: '] = emerg_gpio
+            output['Sensor GPIO: '] = sensor_gpio
+        # Iterate over the dict and print the output
+        for parameter in output:
+            UI.debug_info(parameter, output[parameter])
         # Setup the wiringPi MCP23017 chips for valve outputs
-        wiringpi.mcp23017Setup(self.pin_base, self.mcp0_address)
-        wiringpi.mcp23017Setup(self.pin_base + 16, self.mcp1_address)
-        pins = range(self.pin_base, self.pin_base + 32)
+        wiringpi.mcp23017Setup(pin_base, mcp0_address)
+        wiringpi.mcp23017Setup(pin_base + 16, mcp1_address)
+        pins = [pin for pin in range(pin_base, pin_base + 32)]
         # Set all I/O lines on MCP23017s as outputs - mode=1
         for pin in pins:
             wiringpi.pinMode(pin, 1)
-        # Make a nice list out of the signal arrangement string:
-        signals_arrangement = self.signals_arrangement.split(',')
-        # Assign wiringPi pin numbers on MCP23017s to the Monotype
-        # control signals
-        self.interface_pin_number = dict(zip(signals_arrangement, pins))
         # Wait for user confirmation if in debug mode
-        ui.debug_enter_data('Caster configured. [Enter] to continue... ')
-
-    def get_caster_settings(self):
-        """get_caster_settings():
-
-        Reads the settings for a caster with self.name
-        from the config file (where it is represented by a section, whose
-        name is the same as the caster's).
-
-        Sets up the instance attributes for the caster.
-        If caster section is not found in conffile - reverts to defaults.
-        where:
-        is_perforator (1, 0, True, False, on, off) - the caster is a pneumatic
-                      paper ribbon perforator (i.e. keyboard's paper tower).
-                      Perforators don't need sensors nor stop buttons.
-        interface_id [0,1,2,3] - ID of the interface connected to the caster.
-        """
-        try:
-            self.is_perforator = cfg_parser.get_config(self.name,
-                                                       'is_perforator')
-            self.interface_id = cfg_parser.get_config(self.name,
-                                                      'interface_id')
-            # Caster correctly configured
-            return True
-        except exceptions.NotConfigured:
-            # Set defaults and return False
-            self.is_perforator = False
-            self.interface_id = 0
-            # Signal that we're on fallback
-            return False
-
-    def get_interface_settings(self):
-        """get_interface_settings():
-
-        Reads a configuration file and gets interface parameters.
-        Sets up instance attributes.
-        If a section cannot be read - sets up defaults instead.
-        """
-        iface_name = 'Interface' + str(self.interface_id)
-        try:
-            if not self.is_perforator:
-                # Emergency stop and sensor are valid only for casters,
-                # perforators do not have them
-                self.emerg_gpio = cfg_parser.get_config(iface_name,
-                                                        'stop_gpio')
-                self.sensor_gpio = cfg_parser.get_config(iface_name,
-                                                         'sensor_gpio')
-            # Set up MCP23017 interface parameters
-            self.mcp0_address = cfg_parser.get_config(iface_name,
-                                                      'mcp0_address')
-            self.mcp1_address = cfg_parser.get_config(iface_name,
-                                                      'mcp1_address')
-            self.pin_base = cfg_parser.get_config(iface_name, 'pin_base')
-            # Check which signals arrangement the interface uses...
-            signals_arr = cfg_parser.get_config(iface_name,
-                                                'signals_arrangement')
-            # ...and get the signals order for it:
-            self.signals_arrangement = cfg_parser.get_config(
-                'SignalsArrangements', signals_arr).upper()
-            # Interface configured successfully - return True
-            return True
-        except exceptions.NotConfigured:
-            # Set default parameters if interface not found in config:
-            self.emerg_gpio = 24
-            self.sensor_gpio = 17
-            self.mcp0_address = 0x20
-            self.mcp1_address = 0x21
-            self.pin_base = 65
-            self.signals_arrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,'
-                                        '0005,0075,'
-                                        'A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
-            # Signal that we're on fallback
-            return False
+        UI.debug_enter_data('Caster configured. [Enter] to continue... ')
+        # Assign wiringPi pin numbers on MCP23017s to the Monotype
+        # control signals. Return the result.
+        return dict(zip(signals_arrangement.split(','), pins))
 
     def process_signals(self, signals, cycle_timeout=5):
         """process_signals(signals, cycle_timeout):
@@ -379,7 +321,7 @@ class Monotype(object):
                        'E': exceptions.exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
-        choice = ui.simple_menu(message, options).upper()
+        choice = UI.simple_menu(message, options).upper()
         return options[choice]()
 
     def _emergency_cleanup(self):
@@ -395,7 +337,7 @@ class Monotype(object):
         """
         pump_off = False
         stop_signal = ['N', 'J', '0005']
-        ui.display('Stopping the pump...')
+        UI.display('Stopping the pump...')
         while not pump_off:
             try:
                 # Try stopping the pump until we succeed!
@@ -405,7 +347,7 @@ class Monotype(object):
             except exceptions.MachineStopped:
                 # Loop over
                 pass
-        ui.display('Pump stopped. All valves off...')
+        UI.display('Pump stopped. All valves off...')
         self.deactivate_valves()
         time.sleep(1)
         return True
@@ -431,11 +373,11 @@ class Monotype(object):
         Call this function to avoid outputs staying turned on if something
         goes wrong, esp. in case of abnormal program termination.
         """
-        for pin in range(self.pin_base, self.pin_base + 32):
+        for pin in self.interface_pin_number:
             wiringpi.digitalWrite(pin, 0)
 
     def __exit__(self, *args):
         """On exit, do the cleanup:
         """
-        ui.debug_info('Exiting caster/interface context.')
+        UI.debug_info('Exiting caster/interface context.')
         self.lock = False
