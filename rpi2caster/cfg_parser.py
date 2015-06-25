@@ -89,13 +89,7 @@ def get_caster_settings(caster_name):
     from the config file (where it is represented by a section, whose
     name is the same as the caster's).
 
-    Sets up the instance attributes for the caster.
-    If caster section is not found in conffile - reverts to defaults.
-    where:
-    is_perforator (1, 0, True, False, on, off) - the caster is a pneumatic
-                  paper ribbon perforator (i.e. keyboard's paper tower).
-                  Perforators don't need sensors nor stop buttons.
-    interface_id [0,1,2,3] - ID of the interface connected to the caster.
+    Returns perforator flag and interface ID.
     """
     is_perforator = get_config(caster_name, 'is_perforator')
     interface_id = get_config(caster_name, 'interface_id')
