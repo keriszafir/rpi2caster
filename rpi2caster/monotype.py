@@ -373,7 +373,7 @@ class Monotype(object):
         Call this function to avoid outputs staying turned on if something
         goes wrong, esp. in case of abnormal program termination.
         """
-        for pin in self.interface_pin_number:
+        for pin in self.interface_pin_number.values():
             wiringpi.digitalWrite(pin, 0)
 
     def __exit__(self, *args):
