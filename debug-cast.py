@@ -4,7 +4,7 @@
 Used for casting actual type, but in debugging mode.
 """
 from rpi2caster import casting, monotype
-monotype.ui.DEBUG_MODE = True
+monotype.UI.DEBUG_MODE = True
 # C - caster, J - job (casting)
 C = monotype.Monotype()
 J = casting.Casting()
