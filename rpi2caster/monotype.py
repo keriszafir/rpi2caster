@@ -39,6 +39,8 @@ class Monotype(object):
         self.lock = None
         self.sensor_gpio_edge_file = None
         self.sensor_gpio_value_file = None
+        self.emerg_gpio_edge_file = None
+        self.emerg_gpio_value_file = None
         # Configure the caster
         self.interface_pin_number = self.caster_setup()
 
@@ -61,6 +63,36 @@ class Monotype(object):
         unit-adding disabled,
         diecase format 15x17.
         """
+        def sysfs_interface_setup(gpio):
+            """sysfs_interface_setup(gpio):
+
+            Sets up the sysfs interface for reading events from GPIO
+            (general purpose input/output). Checks if path/file is readable.
+            Returns the value and edge filenames for this GPIO.
+            """
+            # Set up an input polling file for machine cycle sensor:
+            gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % gpio
+            gpio_value_file = gpio_sysfs_path + 'value'
+            gpio_edge_file = gpio_sysfs_path + 'edge'
+            # Check if the GPIO has been configured - file is readable:
+            try:
+                with io.open(gpio_value_file, 'r'):
+                    pass
+                # Ensure that the interrupts are generated for sensor GPIO
+                # for both rising and falling edge:
+                with io.open(gpio_edge_file, 'r') as edge_file:
+                    if 'both' not in edge_file.read():
+                        UI.display('%s: file does not exist, cannot be read, '
+                                   'or the interrupt on GPIO %i is not set '
+                                   'to "both". Check the system configuration.'
+                                   % (gpio_edge_file, gpio))
+            except (IOError, FileNotFoundError):
+                UI.display('%s : file does not exist or cannot be read. '
+                           'You must export the GPIO no %s as input first!'
+                           % (gpio_value_file, gpio))
+            else:
+                return (gpio_value_file, gpio_edge_file)
+
         # Configure the caster settings
         try:
             caster_settings = cfg_parser.get_caster_settings(self.name)
@@ -70,6 +102,7 @@ class Monotype(object):
             UI.display('Using hardcoded defaults for caster settings...')
             self.is_perforator = False
             interface_id = 0
+
         # Now configure interface outputs
         try:
             out_settings = cfg_parser.get_output_settings(interface_id)
@@ -83,6 +116,14 @@ class Monotype(object):
             pin_base = 65
             signals_arrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
                                    '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
+        # Setup the wiringPi MCP23017 chips for valve outputs
+        wiringpi.mcp23017Setup(pin_base, mcp0_address)
+        wiringpi.mcp23017Setup(pin_base + 16, mcp1_address)
+        pins = [pin for pin in range(pin_base, pin_base + 32)]
+        # Set all I/O lines on MCP23017s as outputs - mode=1
+        for pin in pins:
+            wiringpi.pinMode(pin, 1)
+
         # When debugging, display all caster info:
         output = ['Using caster name: ' + self.name,
                   'Is a perforator? ' + str(self.is_perforator),
@@ -91,7 +132,7 @@ class Monotype(object):
                   '2nd MCP23017 I2C address: ' + hex(mcp1_address),
                   'MCP23017 pin base for GPIO numbering: ' + str(pin_base),
                   'Signals arrangement: ' + signals_arrangement]
-        # Configure inputs
+        # Configure inputs for casters - perforators don't need them
         if not self.is_perforator:
             try:
                 in_settings = cfg_parser.get_input_settings(interface_id)
@@ -101,40 +142,19 @@ class Monotype(object):
                 UI.display('Using hardcoded defaults for interface inputs...')
                 emergency_stop_gpio = 24
                 sensor_gpio = 17
+            # Set up a sysfs interface for machine cycle sensor:
+            sensor = sysfs_interface_setup(sensor_gpio)
+            (self.sensor_gpio_value_file, self.sensor_gpio_edge_file) = sensor
+            # Now the same for the emergency stop button input:
+            emerg = sysfs_interface_setup(emergency_stop_gpio)
+            (self.emerg_gpio_value_file, self.emerg_gpio_edge_file) = emerg
             # Display this info only for casters and not perforators:
             output.append('Emergency stop GPIO: ' + str(emergency_stop_gpio))
             output.append('Sensor GPIO: ' + str(sensor_gpio))
-            # Set up an input polling file for machine cycle sensor:
-            gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % sensor_gpio
-            self.sensor_gpio_value_file = gpio_sysfs_path + 'value'
-            self.sensor_gpio_edge_file = gpio_sysfs_path + 'edge'
-            # Check if the sensor GPIO has been configured - file is readable:
-            try:
-                with io.open(self.sensor_gpio_value_file, 'r'):
-                    pass
-                # Ensure that the interrupts are generated for sensor GPIO
-                # for both rising and falling edge:
-                with io.open(self.sensor_gpio_edge_file, 'r') as edge_file:
-                    if 'both' not in edge_file.read():
-                        UI.display('%s: file does not exist, cannot be read, '
-                                   'or the interrupt on GPIO %i is not set '
-                                   'to "both". Check the system configuration.'
-                                   % (self.sensor_gpio_edge_file, sensor_gpio))
-            except (IOError, FileNotFoundError):
-                UI.display('%s : file does not exist or cannot be read. '
-                           'You must export the GPIO no %s as input first!'
-                           % (self.sensor_gpio_value_file, sensor_gpio))
 
         # Iterate over the collected data and print the output
         for parameter in output:
             UI.debug_info(parameter)
-        # Setup the wiringPi MCP23017 chips for valve outputs
-        wiringpi.mcp23017Setup(pin_base, mcp0_address)
-        wiringpi.mcp23017Setup(pin_base + 16, mcp1_address)
-        pins = [pin for pin in range(pin_base, pin_base + 32)]
-        # Set all I/O lines on MCP23017s as outputs - mode=1
-        for pin in pins:
-            wiringpi.pinMode(pin, 1)
         # Wait for user confirmation if in debug mode
         UI.debug_enter_data('Caster configured. [Enter] to continue... ')
         # Assign wiringPi pin numbers on MCP23017s to the Monotype
