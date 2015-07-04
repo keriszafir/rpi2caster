@@ -30,7 +30,7 @@ class Monotype(object):
         # Display some info
         ui.display('Using caster name:', self.name)
         ui.display('This is not an actual caster or interface. ')
-        ui.enter_data('Press [ENTER] to continue...')
+        ui.confirm('Press [ENTER] to continue...')
         return self
 
     def process_signals(self, signals, cycle_timeout=5):

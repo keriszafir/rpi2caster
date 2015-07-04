@@ -81,15 +81,35 @@ def debug_info(*args, **kwargs):
         print(*args, **kwargs)  # TODO: add newline
 
 
-def debug_enter_data(message):
+def debug_enter_data(prompt):
     """For debug-specific data or confirmations"""
     if DEBUG_MODE:
-        return input(message)
+        return input(prompt)
 
 
-def enter_data(message):
-    """Let user enter the data"""
-    return input(message)
+def confirm(prompt):
+    """Waits until user presses return"""
+    input(prompt)
+
+
+def enter_data(prompt):
+    """Let the user enter the data"""
+    value = ''
+    while not value:
+        value = input(prompt)
+    return value
+
+
+def enter_data_spec_type(prompt, datatype):
+    """Enter a value and forces the specific datatype"""
+    value = ''
+    while not value:
+        value = input(prompt)
+        try:
+            value = datatype(value)
+        except ValueError:
+            value = ''
+    return value
 
 
 def tab_complete(text, state):

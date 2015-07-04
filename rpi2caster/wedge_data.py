@@ -131,8 +131,8 @@ def add_wedge():
                 wedge_name = int(wedge_name)
             except ValueError:
                 # Start the procedure all over again (pause)
-                ui.enter_data('Incorrect wedge name! Enter it again. '
-                              'Press [Enter] to continue...')
+                ui.confirm('Incorrect wedge name! Enter it again. '
+                           'Press [Enter] to continue...')
                 continue
         # We now have determined the wedge name.
         # Convert the set width to float or enter it manually.
@@ -146,7 +146,7 @@ def add_wedge():
                 try:
                     # Enter width manually
                     prompt = 'Enter the set width as a decimal fraction: '
-                    set_width = float(ui.enter_data(prompt))
+                    set_width = ui.enter_data_spec_type(prompt, float)
                 except ValueError:
                     # In case of incorrect value...
                     set_width = ''
@@ -206,9 +206,9 @@ def add_wedge():
         # Display the info
         ui.display('\n'.join(user_info))
         # Ask for confirmation
-        ans = ui.simple_menu('Commit? [Y / N]', {'Y': 'Y', 'N': 'N'})
-        if (ans in ['y', 'Y'] and DB.add_wedge(wedge_name, set_width,
-                                               brit_pica, unit_arrangement)):
+        ans = ui.simple_menu('Commit? [Y / N]', {'Y': True, 'N': False})
+        if ans and DB.add_wedge(wedge_name, set_width,
+                                brit_pica, unit_arrangement):
             ui.display('Wedge added successfully.')
 
 
@@ -228,8 +228,8 @@ def delete_wedge():
             # Not number? Skip wedge deletion, start over.
             continue
         # Ask for confirmation
-        ans = ui.simple_menu('Are you sure? [Y / N]', {'Y': 'Y', 'N': 'N'})
-        if ans in ['y', 'Y'] and DB.delete_wedge(w_id):
+        ans = ui.simple_menu('Are you sure? [Y / N]', {'Y': True, 'N': False})
+        if ans and DB.delete_wedge(w_id):
             ui.display('Wedge deleted successfully.')
 
 

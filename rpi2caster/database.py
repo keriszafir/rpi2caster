@@ -137,6 +137,9 @@ class Database(object):
                                [wedge_name, set_width])
                 wedge = cursor.fetchone()
                 wedge = list(wedge)
+                # wedge[0] - ID
+                # wedge[1] - name
+                # wedge[2] - set width
                 # Change return value of brit_pica to boolean:
                 wedge[3] = bool(wedge[3])
                 # Change return value of steps to list:
@@ -225,6 +228,96 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
+    def get_all_diecases(self):
+        """get_all_diecadses(self):
+
+        Gets all diecases stored in database, with their metadata.
+
+        Returns a list of all diecases found or raises an exception.
+        """
+        with self.db_connection:
+            try:
+                cursor = self.db_connection.cursor()
+                cursor.execute('SELECT * FROM matrix_cases')
+                # Check if we got any:
+                results = cursor.fetchall()
+                if not results:
+                    raise exceptions.NoMatchingData
+                return results
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Database failed
+                raise exceptions.DatabaseQueryError
+
+    def add_diecase(self, diecase_id, type_series, type_size, set_width,
+                    typeface_name, wedge_series, layout):
+        """add_diecase:
+
+        Registers a diecase in our database.
+        Returns True if successful, False otherwise.
+
+        Arguments:
+        diecase_id - user-defined inventory diecase number
+        type_series - fount No (e.g. 327 for Times New Roman)
+        type_size - size with an optional sizing system indication
+                    (D for Didot, F for Fournier)
+        set_width - set width of a type
+        typeface_name - typeface's name
+        wedge_series - wedge series number, e.g. 5 (for stopbar S5 / wedge 5)
+        layout - a dictionary of dictionaries, constructed as following:
+
+        layout = { Roman : { char1 : ['column', row_number, unit_width],
+                             char2 : ['column', row_number, unit_width],
+                             ...},
+                   Bold : { char1 : ['column', row_number, unit_width],
+                            char2 : ['column', row_number, unit_width],
+                            ...},
+                   Italic : { char1 : ['column', row_number, unit_width],
+                              char2 : ['column', row_number, unit_width],
+                              ...},
+                   SmallCaps : { char1 : ['column', row_number, unit_width],
+                                 char2 : ['column', row_number, unit_width],
+                                 ...},
+                   Subscript : { char1 : ['column', row_number, unit_width],
+                                 char2 : ['column', row_number, unit_width],
+                                ...},
+                   Superscript : { char1 : ['column', row_number, unit_width],
+                                   char2 : ['column', row_number, unit_width],
+                                   ...},
+                   spaces : [['G', 1, True], ['G', 2, True], ['G', 5, True],
+                             ['O', 15, True], ['O', 16, False]]
+                }
+        True in a space definition means that the space is a low space,
+        False means that it's a high space.
+        """
+
+        # data - a list with wedge parameters to be written,
+        # layout is a JSON-encoded dictionary
+        layout = json.dumps(layout)
+        data = [diecase_id, type_series, type_size, set_width,
+                wedge_series, typeface_name, layout]
+        with self.db_connection:
+            try:
+                cursor = self.db_connection.cursor()
+                # Create the table first:
+                cursor.execute('CREATE TABLE IF NOT EXISTS matrix_cases ('
+                               'diecase_id TEXT PRIMARY KEY, '
+                               'type_series INTEGER NOT NULL, '
+                               'type_size TEXT NOT NULL, '
+                               'set_width REAL NOT NULL, '
+                               'wedge_series TEXT NOT NULL, '
+                               'typeface_name TEXT NOT NULL, '
+                               'layout BLOB NOT NULL)')
+                # Then add an entry:
+                cursor.execute('INSERT INTO matrix_cases ('
+                               'diecase_id,type_series,type_size,set_width,'
+                               'typeface_name,wedge_series,layout'
+                               ') VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
+                self.db_connection.commit()
+                return True
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Database failed
+                raise exceptions.DatabaseQueryError
+
     def diecase_by_series_and_size(self, type_series, type_size):
         """diecase_by_series_and_size(type_series, type_size):
 
@@ -236,9 +329,9 @@ class Database(object):
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM diecases '
-                               'WHERE type_series = "%s" AND size = %i',
-                               (type_series, type_size))
+                cursor.execute('SELECT * FROM matrix_cases '
+                               'WHERE type_series = ? AND type_size = ?',
+                               [type_series, type_size])
                 # Check if we got any:
                 results = cursor.fetchall()
                 if not results:
@@ -255,14 +348,38 @@ class Database(object):
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM diecases WHERE id = "%s"'
-                               % diecase_id)
+                cursor.execute('SELECT * FROM matrix_cases '
+                               'WHERE diecase_id = ?', [diecase_id])
                 # Return diecase if found:
                 diecase = cursor.fetchone()
                 return list(diecase)
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise exceptions.NoMatchingData
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Database failed
+                raise exceptions.DatabaseQueryError
+
+    def delete_diecase(self, diecase_id):
+        """delete_diecase:
+
+        Deletes a diecase with given unique ID from the database
+        (useful in case we no longer have the diecase).
+
+        Returns True if successful, False otherwise.
+
+        First, the function checks if the diecase is in the database at all.
+        """
+        # Check if wedge is there (will raise an exception if not)
+        # We don't care about the retval which is a list.
+        self.diecase_by_id(diecase_id)
+        # Okay, proceed:
+        with self.db_connection:
+            try:
+                cursor = self.db_connection.cursor()
+                cursor.execute('DELETE FROM matrix_cases '
+                               'WHERE diecase_id = ?', [diecase_id])
+                return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError

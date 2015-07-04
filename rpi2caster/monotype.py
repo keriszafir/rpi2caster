@@ -63,8 +63,8 @@ class Monotype(object):
         unit-adding disabled,
         diecase format 15x17.
         """
-        def sysfs_interface_setup(gpio):
-            """sysfs_interface_setup(gpio):
+        def configure_sysfs_interface(gpio):
+            """configure_sysfs_interface(gpio):
 
             Sets up the sysfs interface for reading events from GPIO
             (general purpose input/output). Checks if path/file is readable.
@@ -125,35 +125,35 @@ class Monotype(object):
             wiringpi.pinMode(pin, 1)
 
         # When debugging, display all caster info:
-        output = ['Using caster name: ' + self.name,
-                  'Is a perforator? ' + str(self.is_perforator),
-                  'Interface ID: ' + str(interface_id),
-                  '1st MCP23017 I2C address: ' + hex(mcp0_address),
-                  '2nd MCP23017 I2C address: ' + hex(mcp1_address),
-                  'MCP23017 pin base for GPIO numbering: ' + str(pin_base),
-                  'Signals arrangement: ' + signals_arrangement]
+        info = ['Using caster name: ' + self.name,
+                'Is a perforator? ' + str(self.is_perforator),
+                'Interface ID: ' + str(interface_id),
+                '1st MCP23017 I2C address: ' + hex(mcp0_address),
+                '2nd MCP23017 I2C address: ' + hex(mcp1_address),
+                'MCP23017 pin base for GPIO numbering: ' + str(pin_base),
+                'Signals arrangement: ' + signals_arrangement]
         # Configure inputs for casters - perforators don't need them
         if not self.is_perforator:
             try:
-                in_settings = cfg_parser.get_input_settings(interface_id)
-                (emergency_stop_gpio, sensor_gpio) = in_settings
+                (emergency_stop_gpio,
+                 sensor_gpio) = cfg_parser.get_input_settings(interface_id)
             except exceptions.NotConfigured:
                 # Cannot read config? Use defaults:
                 UI.display('Using hardcoded defaults for interface inputs...')
                 emergency_stop_gpio = 24
                 sensor_gpio = 17
             # Set up a sysfs interface for machine cycle sensor:
-            sensor = sysfs_interface_setup(sensor_gpio)
+            sensor = configure_sysfs_interface(sensor_gpio)
             (self.sensor_gpio_value_file, self.sensor_gpio_edge_file) = sensor
             # Now the same for the emergency stop button input:
-            emerg = sysfs_interface_setup(emergency_stop_gpio)
+            emerg = configure_sysfs_interface(emergency_stop_gpio)
             (self.emerg_gpio_value_file, self.emerg_gpio_edge_file) = emerg
             # Display this info only for casters and not perforators:
-            output.append('Emergency stop GPIO: ' + str(emergency_stop_gpio))
-            output.append('Sensor GPIO: ' + str(sensor_gpio))
+            info.append('Emergency stop GPIO: ' + str(emergency_stop_gpio))
+            info.append('Sensor GPIO: ' + str(sensor_gpio))
 
         # Iterate over the collected data and print the output
-        for parameter in output:
+        for parameter in info:
             UI.debug_info(parameter)
         # Wait for user confirmation if in debug mode
         UI.debug_enter_data('Caster configured. [Enter] to continue... ')
@@ -211,6 +211,40 @@ class Monotype(object):
                 return True
 
     def detect_rotation(self):
+        """detect_rotation():
+
+        Checks if the machine is running by counting pulses on a sensor
+        input. One pass of a while loop is a single cycle. If cycles_max
+        value is exceeded in a time <= time_max, the program assumes that
+        the caster is rotating and it can start controlling the machine.
+        """
+        # Let's count up to 3 cycles, max 30s before stop menu is called
+        cycles_max = 3
+        time_max = 30
+        # Reset the cycle counter and input state on each iteration
+        cycles = 0
+        prev_state = False
+        while cycles <= cycles_max:
+            # Keep checking until timeout or max cycles reached
+            with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
+                sensor_signals = select.epoll()
+                sensor_signals.register(gpiostate, select.POLLPRI)
+                events = sensor_signals.poll(time_max)
+                # Check if the sensor changes state at all
+                if events:
+                    gpiostate.seek(0)
+                    sensor_state = int(gpiostate.read())
+                    # Increment the number of passed machine cycles
+                    if sensor_state and not prev_state:
+                        cycles += 1
+                    prev_state = sensor_state
+                else:
+                    # Timeout with no signals = go to stop menu
+                    self._stop_menu(casting=False)
+        # Max cycles exceeded = machine is running
+        return True
+
+    def old_detect_rotation(self):
         """detect_rotation():
 
         Checks if the machine is running by counting pulses on a sensor

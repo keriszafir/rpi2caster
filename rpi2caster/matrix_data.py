@@ -36,8 +36,21 @@ def lookup_diecase(type_series, type_size):
 
 # Placeholders for functionality not implemented yet:
 def list_diecases():
-    """Not implemented yet"""
-    pass
+    """Lists all matrix cases we have."""
+    results = DB.get_all_diecases()
+    ui.display('\n' + 'Diecase ID'.ljust(15) +
+               'Type series'.ljust(15) +
+               'Type size'.ljust(15) +
+               'Set width'.ljust(15) +
+               'Wedge series'.ljust(15) +
+               'Typeface name' + '\n')
+    for diecase in results:
+        # Collect diecase parameters
+        row = [str(field).ljust(15) for field in diecase[:-2]]
+        # Add typeface name - no justification!
+        row.append(diecase[-2])
+        ui.display(''.join(row))
+    return True
 
 
 def show_diecase_layout():
@@ -45,9 +58,33 @@ def show_diecase_layout():
     pass
 
 
-def add_diecase():
-    """Not implemented yet"""
-    pass
+def add_diecase(diecase_id, type_series, type_size, set_width,
+                typeface_name, wedge_series, layout):
+    """add_diecase:
+
+    Wrapper function - adds a matrix case to the database.
+    Displays info and asks for confirmation.
+    """
+    styles = [i for i in layout.keys() if i is not 'spaces']
+    styles = ', '.join(styles)
+    info = []
+    info.append('Diecase ID: %s' % diecase_id)
+    info.append('Type series: %s' % type_series)
+    info.append('Type size: %s' % type_size)
+    info.append('Set width: %s' % set_width)
+    info.append('Typeface name: %s' % typeface_name)
+    info.append('Wedge series: %s' % wedge_series)
+    info.append('Styles present: %s' % styles)
+    # Display metadata
+    for line in info:
+        ui.display(line)
+    # Ask for confirmation
+    options = {'Y': True, 'N': False}
+    message = ('Commit? [Y]es, [N]o: ')
+    if ui.simple_menu(message, options):
+        DB.add_diecase(diecase_id, type_series, type_size, float(set_width),
+                       typeface_name, wedge_series, layout)
+        ui.display('Data added successfully.')
 
 
 def edit_diecase():
@@ -61,5 +98,20 @@ def clear_diecase():
 
 
 def delete_diecase():
-    """Not implemented yet"""
-    pass
+    """Used for deleting a diecase from database.
+
+    Lists diecases, then allows user to choose ID.
+    """
+    ui.clear()
+    # Do it only if we have wedges (depends on list_wedges retval)
+    while list_diecases():
+        try:
+            prompt = 'Enter the diecase ID to delete (leave blank to exit): '
+            diecase_id = ui.enter_data(prompt) or exceptions.return_to_menu()
+        except (ValueError, TypeError):
+            # Not number? Skip wedge deletion, start over.
+            continue
+        # Ask for confirmation
+        ans = ui.simple_menu('Are you sure? [Y / N]', {'Y': True, 'N': False})
+        if ans and DB.delete_diecase(diecase_id):
+            ui.display('Matrix case deleted successfully.')

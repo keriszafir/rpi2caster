@@ -20,6 +20,12 @@ from rpi2caster import parsing
 from rpi2caster.global_settings import USER_INTERFACE as ui
 # Custom exceptions
 from rpi2caster import exceptions
+# Typesetting functions module
+from rpi2caster import typesetting_functions
+# Diecase manipulation functions
+from rpi2caster import matrix_data
+# Wedge manipulation functions
+from rpi2caster import wedge_data
 
 
 def use_caster(func):
@@ -56,12 +62,24 @@ class Casting(object):
     -casting spaces to heat up the mould."""
 
     def __init__(self, ribbon_file=''):
+        # Caster - this will be set up later
         self.caster = None
+        # You can initialize the casting job with a ribbon
         self.ribbon_file = ribbon_file
+        # Ribbon contenrs
         self.ribbon = []
+        # Indicates which line the last casting was aborted on
         self.line_aborted = None
+        # Metadata read from file
         self.metadata = {}
+        # Diecase parameters
+        self.diecase_id = None
         self.diecase = None
+        self.diecase_layout = None
+        # Fount data
+        self.type_series = None
+        self.type_size = None
+        self.set_width = None
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
@@ -188,7 +206,7 @@ class Casting(object):
         ui.display(intro)
         prompt = ('\nInput file found. Turn on the air, fit the tape '
                   'on your paper tower and press return to start punching.')
-        ui.enter_data(prompt)
+        ui.confirm(prompt)
         for line in self.ribbon:
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
@@ -232,7 +250,7 @@ class Casting(object):
         """
         intro = ('This will check if the valves, pin blocks and 0075, S, '
                  '0005 mechanisms are working. Press return to continue... ')
-        ui.enter_data(intro)
+        ui.confirm(intro)
         combinations = (['0075', 'S', '0005'] +
                         [str(n) for n in range(1, 15)] +
                         [s for s in 'ABCDEFGHIJKLMNO'])
@@ -443,15 +461,95 @@ class Casting(object):
             # Cast 10 spaces without correction.
             # End here if casting unsuccessful.
             ui.display('Now casting with a normal wedge only.')
-            if not self.cast_from_matrix(space_position, 10):
+            if not self.cast_from_matrix(space_position, 5):
                 continue
             # Cast 10 spaces with the S-needle.
             # End here if casting unsuccessful.
             ui.display('Now casting with justification wedges...')
-            if not self.cast_from_matrix(space_position + 'S', 10):
+            if not self.cast_from_matrix(space_position + 'S', 5):
                 continue
             # At the end of successful sequence, some info for the user:
             ui.display('Done. Compare the lengths and adjust if needed.')
+
+    def linotype_mode(self):
+        """linotype_mode:
+
+        Allows us to use caster in a "linotype mode".
+        This means that the user enters a text to be cast,
+        gives the line length, chooses alignment and diecase.
+        Then, the program composes the line, justifies it, translates it
+        to Monotype code combinations, and starts casting.
+
+        This is a transitional function to be used before the real
+        typesetting program is ready.
+
+        It can be used for casting one-liners, names etc.
+        """
+        # Enter text
+        text = ui.enter_data("Enter text to compose: ")
+        # Enter line length
+        line_length = ui.enter_data_spec_type('Line length? : ', int)
+        # Choose alignment mode
+        options = {'L': typesetting_functions.align_left,
+                   'C': typesetting_functions.align_center,
+                   'R': typesetting_functions.align_right,
+                   'B': typesetting_functions.align_both}
+        message = ('Alignment: [L]eft, [C]enter, [R]ight, [B]oth? ')
+        alignment = ui.simple_menu(message, options)
+        # Choose unit shift: yes or no?
+        options = {'Y': True, 'N': False}
+        message = ('Do you use unit-shift: [Y]es, [N]o? ')
+        unit_shift = ui.simple_menu(message, options)
+        # Choose type series
+        type_series = ui.enter_data('Typeface series? : ')
+        # Choose type size
+        type_size = ui.enter_data_spec_type('Type size? : ', int)
+        # Find the diecase
+        self.diecase = matrix_data.lookup_diecase(type_series, type_size)
+        # Read the parameters
+        self.diecase_id = self.diecase[0]
+        self.type_series = self.diecase[1]
+        type_size = self.diecase[2]
+        self.set_width = self.diecase[3]
+        # European Didot diecase or not? Type size has the answer
+        didot = type_size.endswith('D')
+        self.type_size = int(type_size.strip('D'))
+        #  Typeface name - optional
+        if isinstance(self.diecase[4], str):
+            typeface_name = self.diecase[4]
+            ui.display('Using typeface: %s' % typeface_name)
+        # Determine the layout
+        self.diecase_layout = self.diecase[-1]
+        # Determine the wedge unit arrangement
+        wedge_name = self.diecase[-2]
+        wedge = wedge_data.wedge_by_name_and_width(wedge_name, self.set_width)
+        wedge_unit_arrangement = wedge[4]
+        wedge_brit_pica = wedge[3]
+        if didot == wedge_brit_pica:
+            ui.display('The wedge and diecase use British pica')
+        # Translate the text to Monotype signals
+        self.ribbon = typesetting_functions.translate(text, line_length,
+                                                      self.diecase_layout,
+                                                      alignment,
+                                                      wedge_unit_arrangement,
+                                                      unit_shift)
+        # Ask whether to display buffer contents
+        options = {'Y': True, 'N': False}
+        message = ('Display the codes? [Y]es, [N]o ')
+        if ui.simple_menu(message, options):
+            self.preview_ribbon()
+
+    def preview_ribbon(self):
+        """preview_ribbon:
+
+        Determines if we have a ribbon file that can be previewed,
+        and displays its contents line by line, or displays
+        an error message.
+        """
+        ui.clear()
+        ui.display('Ribbon preview:\n')
+        ui.display('\n'.join([line for line in self.ribbon]))
+        ui.hold_on_exit()
 
     def __exit__(self, *args):
         ui.debug_info('Exiting casting job context.')
@@ -545,23 +643,13 @@ def main_menu(work=Casting()):
         else:
             return ('Cast composition', work.cast_composition)
 
-    def preview_ribbon():
-        """preview_ribbon:
-
-        Determines if we have a ribbon file that can be previewed,
-        and displays its contents line by line, or displays
-        an error message.
-        """
-        ui.clear()
-        ui.display('Ribbon preview:\n')
-        ui.display('\n'.join([line for line in work.ribbon]))
-        ui.hold_on_exit()
     # End of menu subroutines
     # Now construct the menu, starting with available options
     options = [('Exit program', exceptions.exit_program),
                ('Load a ribbon file', choose_ribbon_filename),
-               ('Preview ribbon', preview_ribbon),
+               ('Preview ribbon', work.preview_ribbon),
                cast_or_punch(),
+               ('Linotype mode', work.linotype_mode),
                ('Cast sorts', work.cast_sorts),
                ('Test the valves and pinblocks', work.line_test),
                ('Send specified signals to caster', work.send_combination),
