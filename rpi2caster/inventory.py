@@ -21,7 +21,8 @@ def main_menu():
                ('Add wedge', wedge_data.add_wedge),
                ('Delete wedge', wedge_data.delete_wedge)]
     while True:
-        header = 'Setup utility for rpi2caster CAT.\nMain menu:'
+        header = ('Matrix case  and wedge management utility for rpi2caster.'
+                  '\n\nMain menu:\n')
         try:
             ui.menu(options, header=header, footer='')()
             ui.hold_on_exit()

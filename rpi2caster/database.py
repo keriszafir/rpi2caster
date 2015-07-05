@@ -248,8 +248,8 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def add_diecase(self, diecase_id, type_series, type_size, set_width,
-                    typeface_name, wedge_series, layout):
+    def add_diecase(self, diecase_id, type_series, type_size,
+                    wedge_series, set_width, typeface_name, layout):
         """add_diecase:
 
         Registers a diecase in our database.
@@ -265,27 +265,30 @@ class Database(object):
         wedge_series - wedge series number, e.g. 5 (for stopbar S5 / wedge 5)
         layout - a dictionary of dictionaries, constructed as following:
 
-        layout = { Roman : { char1 : ['column', row_number, unit_width],
-                             char2 : ['column', row_number, unit_width],
-                             ...},
-                   Bold : { char1 : ['column', row_number, unit_width],
-                            char2 : ['column', row_number, unit_width],
-                            ...},
-                   Italic : { char1 : ['column', row_number, unit_width],
+        layout = { 'roman': { char1 : ['column', row_number, unit_width],
                               char2 : ['column', row_number, unit_width],
                               ...},
-                   SmallCaps : { char1 : ['column', row_number, unit_width],
-                                 char2 : ['column', row_number, unit_width],
-                                 ...},
-                   Subscript : { char1 : ['column', row_number, unit_width],
-                                 char2 : ['column', row_number, unit_width],
-                                ...},
-                   Superscript : { char1 : ['column', row_number, unit_width],
-                                   char2 : ['column', row_number, unit_width],
-                                   ...},
-                   spaces : [['G', 1, True], ['G', 2, True], ['G', 5, True],
-                             ['O', 15, True], ['O', 16, False]]
+                   'bold': { char1 : ['column', row_number, unit_width],
+                             char2 : ['column', row_number, unit_width],
+                             ...},
+                   'italic': { char1 : ['column', row_number, unit_width],
+                               char2 : ['column', row_number, unit_width],
+                               ...},
+                   'smallcaps': { char1 : ['column', row_number, unit_width],
+                                  char2 : ['column', row_number, unit_width],
+                                  ...},
+                   'subscript': { char1 : ['column', row_number, unit_width],
+                                  char2 : ['column', row_number, unit_width],
+                                  ...},
+                   'superscript': { char1 : ['column', row_number, unit_width],
+                                    char2 : ['column', row_number, unit_width],
+                                    ...},
+                   'spaces': [['G', 1, True], ['G', 2, True], ['G', 5, True],
+                              ['O', 15, True], ['O', 16, False]]
                 }
+        column - string (NI, NL, A...O)
+        row_number - int (1...15 or 16)
+        unit_width - int (unit width of a character)
         True in a space definition means that the space is a low space,
         False means that it's a high space.
         """
@@ -293,15 +296,15 @@ class Database(object):
         # data - a list with wedge parameters to be written,
         # layout is a JSON-encoded dictionary
         layout = json.dumps(layout)
-        data = [diecase_id, type_series, type_size, set_width,
-                wedge_series, typeface_name, layout]
+        data = [diecase_id, type_series, type_size, wedge_series, set_width,
+                typeface_name, layout]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS matrix_cases ('
                                'diecase_id TEXT PRIMARY KEY, '
-                               'type_series INTEGER NOT NULL, '
+                               'type_series TEXT NOT NULL, '
                                'type_size TEXT NOT NULL, '
                                'wedge_series TEXT NOT NULL, '
                                'set_width REAL NOT NULL, '
@@ -335,7 +338,7 @@ class Database(object):
                 # Check if we got any:
                 results = cursor.fetchall()
                 if not results:
-                    raise  # exceptions.NoMatchingData
+                    raise exceptions.NoMatchingData
                 return results
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 raise exceptions.DatabaseQueryError
@@ -357,7 +360,7 @@ class Database(object):
                 return diecase
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
-                raise  # exceptions.NoMatchingData
+                raise exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError

@@ -149,12 +149,8 @@ class Typesetter(object):
 
         Sets the line length and allows to specify measurement units.
         """
-        if self.line_length:
-            self.line_length = ''
-        while not self.line_length.isdigit():
-            self.line_length = ui.enter_data('Enter the desired line length: ')
-        else:
-            self.line_length = int(self.line_length)
+        prompt = 'Enter the desired line length: '
+        self.line_length = ui.enter_data_spec_type(prompt, float)
         # The line length is set.
         # Now choose the measurement units from a menu.
         options = {'c': 'cicero',

@@ -92,8 +92,13 @@ def confirm(prompt):
     input(prompt)
 
 
+def enter_data_or_blank(prompt):
+    """Enter data or leave blank"""
+    return input(prompt)
+
+
 def enter_data(prompt):
-    """Let the user enter the data"""
+    """Let the user enter the data - blank not allowed"""
     value = ''
     while not value:
         value = input(prompt)

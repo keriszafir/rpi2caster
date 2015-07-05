@@ -281,17 +281,17 @@ class Casting(object):
             ui.display('Calibration and Sort Casting:\n\n')
             prompt = 'Enter column and row symbols (default: G 5): '
             # Got no signals? Use G5.
-            signals = ui.enter_data(prompt) or 'G 5'
+            signals = ui.enter_data_or_blank(prompt) or 'G 5'
             # Ask for number of sorts and lines
             try:
                 prompt = '\nHow many sorts? (default: 10): '
-                sorts = ui.enter_data(prompt)
+                sorts = ui.enter_data_or_blank(prompt)
                 sorts = abs(int(sorts))
             except ValueError:
                 sorts = 10
             try:
                 prompt = '\nHow many lines? (default: 1): '
-                lines = ui.enter_data(prompt)
+                lines = ui.enter_data_or_blank(prompt)
                 lines = abs(int(lines))
             except ValueError:
                 lines = 1
@@ -408,7 +408,7 @@ class Casting(object):
             # You can enter new signals or exit
             prompt = ('Enter the signals to send to the caster, '
                       'or leave empty to return to menu: ')
-            signals = ui.enter_data(prompt)
+            signals = ui.enter_data_or_blank(prompt)
             # Turn off any valves that were on (from previous combination)
             self.caster.deactivate_valves()
             if not signals:
@@ -488,7 +488,7 @@ class Casting(object):
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
         # Enter line length
-        line_length = ui.enter_data_spec_type('Line length? : ', int)
+        line_length = ui.enter_data_spec_type('Line length? : ', float)
         # Choose alignment mode
         options = {'L': typesetting_functions.align_left,
                    'C': typesetting_functions.align_center,
@@ -503,7 +503,7 @@ class Casting(object):
         # Choose type series
         type_series = ui.enter_data('Typeface series? : ')
         # Choose type size
-        type_size = ui.enter_data_spec_type('Type size? : ', int)
+        type_size = ui.enter_data('Type size? : ')
         # Find the diecase
         self.diecase = matrix_data.lookup_diecase(type_series, type_size)
         # Read the parameters

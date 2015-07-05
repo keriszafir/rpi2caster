@@ -8,19 +8,17 @@ the typesetting program.
 """
 # matrix manipulation functions:
 from rpi2caster import matrix_data
-# classes of type variants (styles):
-from rpi2caster.typesetting_functions import Roman, Bold, Italic
 
 # Diecase metadata: diecase ID, typeface name, font series,
 # type size (+ "D" for Didot or "F" for Fournier),
 # set width of a wedge, and wedge series.
 
 diecase_id = '327-12-KS01'
-typeface_name = 'Times New Roman'
-type_series = 327
+typeface_name = 'Times New Roman + Times New Roman Bold'
+type_series = '327 + 334'
 type_size = '12D'
 set_width = 12
-wedge_series = 5
+wedge_series = '5'
 
 # Layout consists of separate dictionaries, for each style
 # (roman, bold, italic, small caps, subscript, superscript).
@@ -116,31 +114,31 @@ layout = {'roman': {'a': ('H', 9, 9),
                     '8': ('D', 8, 9),
                     '9': ('E', 8, 9),
                     '0': ('F', 8, 9),
-                    '+': ('A', 16),
-                    '×': ('NL', 16),
-                    '[': ('NI', 1),
-                    ']': ('NL', 1),
-                    '(': ('A', 2),
-                    ')': ('B', 2),
-                    ':': ('C', 3),
-                    ';': ('D', 3),
-                    '?': ('L', 5),
-                    '/': ('NL', 4),
+                    '+': ('A', 16, 18),
+                    '×': ('NL', 16, 18),
+                    '[': ('NI', 1, 6),
+                    ']': ('NL', 1, 6),
+                    '(': ('A', 2, 6),
+                    ')': ('B', 2, 6),
+                    ':': ('C', 3, 6),
+                    ';': ('D', 3, 6),
+                    '?': ('L', 5, 9),
+                    '/': ('NL', 4, 8),
                     # '°': ('NI', 5),
-                    '-': ('E', 2),
-                    '–': ('NI', 5),
-                    '—': ('D', 16),
-                    '=': ('H', 16),
-                    '.': ('M', 1),
-                    '!': ('B', 3),
-                    '%': ('E', 16),
-                    '•': ('O', 1),
-                    '*': ('G', 10),
+                    '-': ('E', 2, 6),  # hyphen 6 units
+                    '–': ('NI', 5, 9),  # en dash 9 units
+                    '—': ('D', 16, 18),  # em dash 18 units
+                    '=': ('H', 16, 18),
+                    '.': ('M', 1, 5),
+                    '!': ('B', 3, 6),
+                    '%': ('E', 16, 18),
+                    '•': ('O', 1, 7),
+                    '*': ('G', 10, 11),
                     # '„': (),
                     # '”': (),
-                    ',': ('L', 1),
-                    "'": ('F', 1),
-                    '’': ('E', 1)},
+                    ',': ('L', 1, 5),
+                    "'": ('F', 1, 5),
+                    '’': ('E', 1, 5)},
           'bold': {'a': ('G', 8, 9),
                    'ą': ('K', 6, 9),
                    'b': ('I', 6, 9),
@@ -225,27 +223,27 @@ layout = {'roman': {'a': ('H', 9, 9),
                    # '×': (),
                    # '[': (),
                    # ']': (),
-                   '(': ('N', 2),
-                   ')': ('O', 2),
-                   ':': ('M', 3),
-                   ';': ('D', 5),
-                   '?': ('L', 6),
+                   '(': ('N', 2, 6),
+                   ')': ('O', 2, 6),
+                   ':': ('M', 3, 7),
+                   ';': ('D', 5, 7),
+                   '?': ('L', 6, 9),
                    # '/': (),
                    # '°': (),
-                   '-': ('M', 2),
+                   '-': ('M', 2, 7),
                    # '–': (),
                    # '—': (),
                    # '=': (),
-                   '.': ('NI', 2),
-                   '!': ('O', 3),
-                   '%': ('F', 16),
+                   '.': ('NI', 2, 6),
+                   '!': ('O', 3, 6),
+                   '%': ('F', 16, 18),
                    # '•': (),
                    # '*': (),
                    # '„': (),
                    # '”': (),
-                   ',': ('NL', 2),
-                   "'": ('N', 1),
-                   '’': ('NL', 2)},
+                   ',': ('NL', 2, 6),
+                   "'": ('N', 1, 5),
+                   '’': ('NL', 2, 6)},
           'italic': {'a': ('B', 8, 9),
                      'ą': ('NI', 7, 9),
                      'b': ('NL', 6, 9),
@@ -332,9 +330,9 @@ layout = {'roman': {'a': ('H', 9, 9),
                      # ']': (),
                      # '(': (),
                      # ')': (),
-                     ':': ('NI', 4),
-                     ';': ('N', 3),
-                     '?': ('NI', 6),
+                     ':': ('NI', 4, 6),
+                     ';': ('N', 3, 6),
+                     '?': ('NI', 6, 9),
                      # '/': (),
                      # '°': (),
                      # '-': (),
@@ -342,7 +340,7 @@ layout = {'roman': {'a': ('H', 9, 9),
                      # '—': (),
                      # '=': (),
                      # '.': (),
-                     '!': ('NI', 3),
+                     '!': ('NI', 3, 6),
                      # '%': (),
                      # '•': (),
                      # '*': (),
@@ -352,13 +350,13 @@ layout = {'roman': {'a': ('H', 9, 9),
                      # "'" : (),
                      # '’': ()
                      },
-          'spaces': {0: ('G', 1, True),
-                     1: ('G', 2, True),
-                     2: ('G', 5, True),
-                     3: ('O', 15, True),
-                     4: ('O', 16, False)}}
+          'spaces': [('G', 1, True),
+                     # ('G', 2, True),
+                     ('G', 5, True),
+                     ('O', 15, True),
+                     ('O', 16, False)]}
 
 # Now add the metadata and layout to the database, using the matrix
 # manipulation functions module:
-matrix_data.add_diecase(diecase_id, type_series, type_size, set_width,
-                        typeface_name, wedge_series, layout)
+matrix_data.add_diecase(diecase_id, type_series, type_size, wedge_series, set_width,
+                        typeface_name, layout)

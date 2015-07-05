@@ -49,27 +49,27 @@ def add_wedge():
     very common and most casting workshops have a few of them.
     """
     # Thanks to John Cornelisse for those unit arrangements!
-    wedges = {5: [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18],
-              96: [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18, 18],
-              111: [5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15, 15],
-              334: [5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 13, 14, 15, 16, 18, 18],
-              344: [5, 6, 7, 9, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 16],
-              377: [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18],
-              409: [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 16],
-              467: [5, 6, 7, 8, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18, 18],
-              486: [5, 7, 6, 8, 9, 11, 10, 10, 13, 12, 14, 15, 15, 18, 16, 16],
-              526: [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18, 18],
-              536: [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18, 18],
-              562: [5, 6, 7, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 17, 18, 18],
-              607: [5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18, 18],
-              611: [6, 6, 7, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 18, 18],
-              674: [5, 6, 7, 8, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
-              724: [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 13, 14, 15, 16, 18, 18],
-              990: [5, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 11, 13, 14, 18, 18],
-              1063: [5, 6, 8, 9, 9, 9, 9, 10, 12, 12, 13, 14, 15, 15, 18, 18],
-              1329: [4, 5, 7, 8, 9, 9, 9, 9, 10, 10, 11, 12, 12, 13, 15, 15],
-              1331: [4, 5, 7, 8, 8, 9, 9, 9, 9, 10, 11, 12, 12, 13, 15, 15],
-              1406: [4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 10, 10, 11, 12, 13, 15],
+    wedges = {'5': [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
+              '96': [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18],
+              '111': [5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15],
+              '334': [5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 13, 14, 15, 16, 18],
+              '344': [5, 6, 7, 9, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16],
+              '377': [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
+              '409': [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16],
+              '467': [5, 6, 7, 8, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18],
+              '486': [5, 7, 6, 8, 9, 11, 10, 10, 13, 12, 14, 15, 15, 18, 16],
+              '526': [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18],
+              '536': [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18],
+              '562': [5, 6, 7, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 17, 18],
+              '607': [5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18],
+              '611': [6, 6, 7, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 18],
+              '674': [5, 6, 7, 8, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
+              '724': [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 13, 14, 15, 16, 18],
+              '990': [5, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 11, 13, 14, 18],
+              '1063': [5, 6, 8, 9, 9, 9, 9, 10, 12, 12, 13, 14, 15, 15, 18],
+              '1329': [4, 5, 7, 8, 9, 9, 9, 9, 10, 10, 11, 12, 12, 13, 15],
+              '1331': [4, 5, 7, 8, 8, 9, 9, 9, 9, 10, 11, 12, 12, 13, 15],
+              '1406': [4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 10, 10, 11, 12, 13, 15],
               'TPWR': [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]}
     # Start with a clear screen
     ui.clear()
@@ -99,7 +99,8 @@ def add_wedge():
         while not wedge_name:
             # Ask for wedge name and set width as it is written on the wedge
             prompt = ('Wedge name (leave blank to return to menu): ')
-            wedge_name = ui.enter_data(prompt) or exceptions.return_to_menu()
+            wedge_name = (ui.enter_data_or_blank(prompt) or
+                          exceptions.return_to_menu())
         # For countries that use comma as decimal delimiter, convert to point:
             wedge_name = wedge_name.replace(',', '.').upper()
         if 'AK' in wedge_name:
@@ -124,18 +125,8 @@ def add_wedge():
             # For wedges marked as "5-6.5" etc.
             (wedge_name, set_width) = wedge_name.split('-')
         # We now should have a wedge series and set width, as strings.
-        # We operate on integers or floats though.
-        # Convert the wedge name to integer:
-        if wedge_name not in ['TPWR']:
-            try:
-                wedge_name = int(wedge_name)
-            except ValueError:
-                # Start the procedure all over again (pause)
-                ui.confirm('Incorrect wedge name! Enter it again. '
-                           'Press [Enter] to continue...')
-                continue
-        # We now have determined the wedge name.
         # Convert the set width to float or enter it manually.
+        wedge_series = wedge_name.strip('sS')
         try:
             # Should work...
             set_width = float(set_width)
@@ -164,16 +155,14 @@ def add_wedge():
         # (no need to enter the unit arrangement manually)
         try:
             # Look up the unit arrangement
-            unit_arrangement = wedges[wedge_name]
+            unit_arrangement = wedges[wedge_series]
         except KeyError:
             # Unknown wedge
             unit_arrangement = None
             # Check if we have the values hardcoded already:
             prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
                       'separated by commas.\n')
-            while not unit_arrangement:
-                # Make it a list at once
-                unit_arrangement = ui.enter_data(prompt).split(',')
+            unit_arrangement = ui.enter_data(prompt).split(',')
         # Now we need to be sure that all whitespace is stripped,
         # and the value written to database is a list of integers
             unit_arrangement = [int(i.strip()) for i in unit_arrangement]
@@ -194,7 +183,7 @@ def add_wedge():
                 ui.display(ua_ok)
         # Display a summary with wedge's values:
         user_info = []
-        user_info.append('Wedge: ' + str(wedge_name))
+        user_info.append('Wedge: ' + str(wedge_series))
         user_info.append('Set width: ' + str(set_width))
         user_info.append('British pica wedge?: ' + str(brit_pica))
         user_info.append('Unit arrangement for that wedge:')
@@ -207,7 +196,7 @@ def add_wedge():
         ui.display('\n'.join(user_info))
         # Ask for confirmation
         ans = ui.simple_menu('Commit? [Y / N]', {'Y': True, 'N': False})
-        if ans and DB.add_wedge(wedge_name, set_width,
+        if ans and DB.add_wedge(wedge_series, set_width,
                                 brit_pica, unit_arrangement):
             ui.display('Wedge added successfully.')
 
@@ -219,33 +208,45 @@ def delete_wedge():
     """
     ui.clear()
     # Do it only if we have wedges (depends on list_wedges retval)
-    while list_wedges():
+    while True:
+        # Loop over or throw an exception if there are no diecases
+        available_wedges = list_wedges()
+        # Enter the diecase name
+        prompt = 'Number of a wedge to delete? (leave blank to exit): '
+        choice = (ui.enter_data_or_blank(prompt) or
+                  exceptions.return_to_menu())
+        # Safeguards against entering a wrong number or non-numeric string
         try:
-            prompt = 'Enter the wedge ID to delete (leave blank to exit): '
-            w_id = ui.enter_data(prompt) or exceptions.return_to_menu()
-            w_id = int(w_id)
-        except (ValueError, TypeError):
-            # Not number? Skip wedge deletion, start over.
+            wedge_id = available_wedges[choice]
+        except KeyError:
+            ui.display('Wedge number is incorrect!')
             continue
         # Ask for confirmation
         ans = ui.simple_menu('Are you sure? [Y / N]', {'Y': True, 'N': False})
-        if ans and DB.delete_wedge(w_id):
+        if ans and DB.delete_wedge(wedge_id):
             ui.display('Wedge deleted successfully.')
 
 
 def list_wedges():
     """Lists all wedges we have."""
-    results = DB.get_all_wedges()
-    ui.display('\n' + 'wedge id'.ljust(15) +
-               'wedge No'.ljust(15) +
+    data = DB.get_all_wedges()
+    results = {}
+    ui.display('\n' +
+               'Number'.ljust(10) +
+               'wedge series'.ljust(15) +
                'set width'.ljust(15) +
                'Brit. pica?'.ljust(15) +
-               'Unit arrangement' +
+               'unit arrangement' +
                '\n')
-    for wedge in results:
-        ui.display(''.join([str(field).ljust(15) for field in wedge]))
-        # TODO: convert the brit_pica value from int to bool
-    return True
+    for index, wedge in enumerate(data, start=1):
+        index = str(index)
+        # Save the wedge ID associated with the index
+        results[index] = wedge[0]
+        # Display only wedge parameters and not ID
+        number = [index.ljust(10)]
+        displayed_data = [str(field).ljust(15) for field in wedge[1:]]
+        ui.display(''.join(number + displayed_data))
+    return results
 
 
 def wedge_by_name_and_width(wedge_name, set_width):

@@ -65,7 +65,7 @@ class Monotype(object):
         """
         cycle_timeout = cycle_timeout
         prompt = '[Enter] to cast or [S] to stop? '
-        if ui.enter_data(prompt) in ['s', 'S']:
+        if ui.enter_data_or_blank(prompt) in ['s', 'S']:
             ui.display('Simulating machine stop...')
             raise exceptions.MachineStopped
         ui.display('Turning the valves on...')
@@ -169,7 +169,7 @@ class Monotype(object):
         """
         while True:
             prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
-            if ui.enter_data(prompt) not in ['n', 'N']:
+            if ui.enter_data_or_blank(prompt) not in ['n', 'N']:
                 # The machine is turning
                 return True
             # Simulate machine stop
