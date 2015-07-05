@@ -303,14 +303,14 @@ class Database(object):
                                'diecase_id TEXT PRIMARY KEY, '
                                'type_series INTEGER NOT NULL, '
                                'type_size TEXT NOT NULL, '
-                               'set_width REAL NOT NULL, '
                                'wedge_series TEXT NOT NULL, '
+                               'set_width REAL NOT NULL, '
                                'typeface_name TEXT NOT NULL, '
-                               'layout BLOB NOT NULL)')
+                               'layout TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT INTO matrix_cases ('
-                               'diecase_id,type_series,type_size,set_width,'
-                               'typeface_name,wedge_series,layout'
+                               'diecase_id,type_series,type_size,'
+                               'wedge_series,set_width,typeface_name,layout'
                                ') VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
@@ -335,7 +335,7 @@ class Database(object):
                 # Check if we got any:
                 results = cursor.fetchall()
                 if not results:
-                    raise exceptions.NoMatchingData
+                    raise  # exceptions.NoMatchingData
                 return results
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 raise exceptions.DatabaseQueryError
@@ -351,11 +351,13 @@ class Database(object):
                 cursor.execute('SELECT * FROM matrix_cases '
                                'WHERE diecase_id = ?', [diecase_id])
                 # Return diecase if found:
-                diecase = cursor.fetchone()
-                return list(diecase)
+                diecase = list(cursor.fetchone())
+                layout = json.loads(diecase.pop())
+                diecase.append(layout)
+                return diecase
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
-                raise exceptions.NoMatchingData
+                raise  # exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError

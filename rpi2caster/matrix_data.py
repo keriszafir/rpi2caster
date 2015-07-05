@@ -41,8 +41,8 @@ def list_diecases():
     ui.display('\n' + 'Diecase ID'.ljust(15) +
                'Type series'.ljust(15) +
                'Type size'.ljust(15) +
-               'Set width'.ljust(15) +
                'Wedge series'.ljust(15) +
+               'Set width'.ljust(15) +
                'Typeface name' + '\n')
     for diecase in results:
         # Collect diecase parameters
@@ -54,8 +54,95 @@ def list_diecases():
 
 
 def show_diecase_layout():
-    """Not implemented yet"""
-    pass
+    """Used for showing a diecase layout.
+
+    Lists diecases, then allows user to choose ID.
+    """
+    ui.clear()
+    # Do it only if we have wedges (depends on list_wedges retval)
+    while list_diecases():
+        # Enter the diecase name
+        prompt = 'Enter the diecase ID to show (leave blank to exit): '
+        diecase_id = ui.enter_data(prompt) or exceptions.return_to_menu()
+        # Build a list of all characters
+        # First, get diecase data
+        (diecase_id, type_series, type_size, set_width, wedge_series,
+         typeface_name, layout) = DB.diecase_by_id(diecase_id)
+        # Process metadata
+        styles = ', '.join([i for i in layout.keys() if i is not 'spaces'])
+        info = []
+        info.append('Diecase ID: %s' % diecase_id)
+        info.append('Type series: %s' % type_series)
+        info.append('Type size: %s' % type_size)
+        info.append('Wedge series: %s' % wedge_series)
+        info.append('Set width: %s' % set_width)
+        info.append('Typeface name: %s' % typeface_name)
+        info.append('Styles present: %s' % styles)
+        # Get wedge unit arrangement
+        wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
+        unit_values = wedge[4]
+        unit_arrangement = {}
+        shift_unit_arrangement = {}
+        for i, step in enumerate(unit_values, 1):
+            unit_arrangement[i] = step
+            shift_unit_arrangement[i+1] = step
+        # Display metadata
+        for line in info:
+            ui.display(line)
+        ui.display(' ')
+        # Process the layout
+        all_mats = []
+        # Iterate over type styles - roman, bold, italic etc. and spaces
+        for style in layout:
+            # Iterate over matrices in a particular style
+            for item in layout[style].items():
+                # Character is first
+                character = item[0]
+                char_properties = item[1]
+                # Coordinates
+                column = char_properties[0]
+                row = char_properties[1]
+                # Build a matrix starting with row, then column, and char
+                matrix = (row, column, style, character)
+                # Add it to matrices list
+                all_mats.append(matrix)
+        # Build rows and columns to iterate over
+        column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
+        row_numbers = range(1, 16)
+        # Arrange matrices
+        diecase_arrangement = []
+        for row_number in row_numbers:
+            # Add only characters and styles, center chars to 5
+            row = [(mat[4].center(5), mat[3]) for mat in all_mats
+                   for column_number in column_numbers
+                   if matrix[0] == row_number and matrix[1] == column_number]
+            diecase_arrangement.append(row)
+        # We can display it
+        header = ['Row: '.ljust(6)]
+        header += [col.center(5) for col in column_numbers]
+        header.append('Units'.center(8))
+        header.append('Shifted'.center(8))
+        # Print a header with column numbers
+        ui.display(''.join(header))
+        for i, row in enumerate(diecase_arrangement, 1):
+            try:
+                units = str(unit_arrangement[i]).center(8)
+            except KeyError:
+                units = ''.center(8)
+            try:
+                shift_units = str(shift_unit_arrangement[i]).center(8)
+            except KeyError:
+                shift_units = ''.center(8)
+            # First, row number
+            data = [int(i).ljust(6)]
+            # Then, all chars
+            row = [i[0] for i in row]
+            data.extend(row)
+            data.append(units)
+            data.append(shift_units)
+            data = ''.join(data)
+            # Finally, display the row...
+            ui.display(data)
 
 
 def add_diecase(diecase_id, type_series, type_size, set_width,
@@ -65,15 +152,14 @@ def add_diecase(diecase_id, type_series, type_size, set_width,
     Wrapper function - adds a matrix case to the database.
     Displays info and asks for confirmation.
     """
-    styles = [i for i in layout.keys() if i is not 'spaces']
-    styles = ', '.join(styles)
+    styles = ', '.join([i for i in layout.keys() if i is not 'spaces'])
     info = []
     info.append('Diecase ID: %s' % diecase_id)
     info.append('Type series: %s' % type_series)
     info.append('Type size: %s' % type_size)
+    info.append('Wedge series: %s' % wedge_series)
     info.append('Set width: %s' % set_width)
     info.append('Typeface name: %s' % typeface_name)
-    info.append('Wedge series: %s' % wedge_series)
     info.append('Styles present: %s' % styles)
     # Display metadata
     for line in info:
@@ -109,7 +195,7 @@ def delete_diecase():
             prompt = 'Enter the diecase ID to delete (leave blank to exit): '
             diecase_id = ui.enter_data(prompt) or exceptions.return_to_menu()
         except (ValueError, TypeError):
-            # Not number? Skip wedge deletion, start over.
+            # Not number? Skip diecase deletion, start over.
             continue
         # Ask for confirmation
         ans = ui.simple_menu('Are you sure? [Y / N]', {'Y': True, 'N': False})

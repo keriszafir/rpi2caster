@@ -71,6 +71,8 @@ class MatrixNotFound(Exception):
     """Raised when the typesetting program could not find a desired
     character in the diecase layout."""
 
+# Little helper functions that raise the exceptions
+
 
 def return_to_menu():
     """Wrapper for raising ReturnToMenu where a function is needed"""
