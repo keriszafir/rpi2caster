@@ -11,6 +11,34 @@ from rpi2caster import exceptions
 from rpi2caster import database
 DB = database.Database()
 
+# Wedge unit arrangement definitions
+# Thanks to John Cornelisse for those unit arrangements!
+WEDGES = {'5': (5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
+          '96': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18),
+          '111': (5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15),
+          '334': (5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 13, 14, 15, 16, 18),
+          '344': (5, 6, 7, 9, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16),
+          '377': (5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
+          '409': (5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16),
+          '467': (5, 6, 7, 8, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18),
+          '486': (5, 7, 6, 8, 9, 11, 10, 10, 13, 12, 14, 15, 15, 18, 16),
+          '526': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18),
+          '536': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18),
+          '562': (5, 6, 7, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 17, 18),
+          '607': (5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18),
+          '611': (6, 6, 7, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 18),
+          '674': (5, 6, 7, 8, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
+          '724': (5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 13, 14, 15, 16, 18),
+          '990': (5, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 11, 13, 14, 18),
+          '1063': (5, 6, 8, 9, 9, 9, 9, 10, 12, 12, 13, 14, 15, 15, 18),
+          '1329': (4, 5, 7, 8, 9, 9, 9, 9, 10, 10, 11, 12, 12, 13, 15),
+          '1331': (4, 5, 7, 8, 8, 9, 9, 9, 9, 10, 11, 12, 12, 13, 15),
+          '1406': (4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 10, 10, 11, 12, 13, 15),
+          '1676': (5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 14, 15, 18, 13),
+          '1881': (5, 6, 7, 8, 9, 9, 9, 12, 13, 10, 10, 14, 15, 11, 18),
+          '2006': (5, 6, 7, 8, 8, 9, 9, 10, 10, 13, 11, 16, 18, 14, 15),
+          'TPWR': (9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9)}
+
 
 def add_wedge():
     """add_wedge()
@@ -48,29 +76,6 @@ def add_wedge():
     If no name is given, assume that the user means the S5 wedge, which is
     very common and most casting workshops have a few of them.
     """
-    # Thanks to John Cornelisse for those unit arrangements!
-    wedges = {'5': [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
-              '96': [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18],
-              '111': [5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15],
-              '334': [5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 13, 14, 15, 16, 18],
-              '344': [5, 6, 7, 9, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16],
-              '377': [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
-              '409': [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16],
-              '467': [5, 6, 7, 8, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18],
-              '486': [5, 7, 6, 8, 9, 11, 10, 10, 13, 12, 14, 15, 15, 18, 16],
-              '526': [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18],
-              '536': [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18],
-              '562': [5, 6, 7, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 17, 18],
-              '607': [5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18],
-              '611': [6, 6, 7, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 18],
-              '674': [5, 6, 7, 8, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
-              '724': [5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 13, 14, 15, 16, 18],
-              '990': [5, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 11, 13, 14, 18],
-              '1063': [5, 6, 8, 9, 9, 9, 9, 10, 12, 12, 13, 14, 15, 15, 18],
-              '1329': [4, 5, 7, 8, 9, 9, 9, 9, 10, 10, 11, 12, 12, 13, 15],
-              '1331': [4, 5, 7, 8, 8, 9, 9, 9, 9, 10, 11, 12, 12, 13, 15],
-              '1406': [4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 10, 10, 11, 12, 13, 15],
-              'TPWR': [9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]}
     # Start with a clear screen
     ui.clear()
     # Display an explanation once
@@ -155,7 +160,7 @@ def add_wedge():
         # (no need to enter the unit arrangement manually)
         try:
             # Look up the unit arrangement
-            unit_arrangement = wedges[wedge_series]
+            unit_arrangement = WEDGES[wedge_series]
         except KeyError:
             # Unknown wedge
             unit_arrangement = None
@@ -252,3 +257,32 @@ def list_wedges():
 def wedge_by_name_and_width(wedge_name, set_width):
     """Wrapper for database function of the same name"""
     return DB.wedge_by_name_and_width(wedge_name, set_width)
+
+
+def get_unit_arrangement(wedge_series, set_width):
+    """get_unit_arrangement:
+
+    Returns the unit arrangements without and with unit-shift.
+    The values returned are dictionaries.
+    """
+    try:
+        wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
+        unit_values = wedge[4]
+    except exceptions.NoMatchingData:
+        ui.display('Wedge %s - %s not found in database! '
+                   'Displaying the unit arrangement for wedge 5 instead.'
+                   % (wedge_series, set_width))
+        unit_values = (5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18)
+    unit_arrangement = {}
+    shift_unit_arrangement = {}
+    for i, step in enumerate(unit_values, start=1):
+        unit_arrangement[i] = step
+        shift_unit_arrangement[i+1] = step
+    # Shifted unit arrangement for 1st step is empty
+    # (you cannot address row 1 with unit-shift!)
+    shift_unit_arrangement[1] = ''
+    # Non-shifted unit arrangement for the 16th step is empty for most wedges
+    # (but some HMN, KMN wedges were 16-stepped and they had a value there)
+    if len(unit_values) < 16:
+        unit_arrangement[16] = ''
+    return (unit_arrangement, shift_unit_arrangement)

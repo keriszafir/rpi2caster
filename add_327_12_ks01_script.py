@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 """add_327_12_ks01:
-
 This program is a test/demonstration script, which adds a hardcoded
 matrix case layout to the database. It is written because the matrix
 manipulation utility is not ready yet, and we need to develop

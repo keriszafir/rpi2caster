@@ -10,7 +10,14 @@ import os
 import readline
 import glob
 
+# Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
+# Style modifiers for displaying bold, italic, smallcaps, inferior, superior
+STYLE_MODIFIERS = {'bold': '*',
+                   'italic': '/',
+                   'smallcaps': '#',
+                   'subscript': '_',
+                   'superscript': '^'}
 
 
 def menu(options, header='', footer=''):
@@ -32,7 +39,7 @@ def menu(options, header='', footer=''):
     # Clear the screen, display header and add two empty lines
     clear()
     if header:
-        print(header)  # TODO add newline
+        print(header, end='\n\n')
     # Display all the options; we'll take care of 0 later
     options = dict([(i, option) for i, option in enumerate(options)])
     # Menu body
@@ -47,7 +54,7 @@ def menu(options, header='', footer=''):
         pass
     # Print footer, if defined
     if footer:
-        print(footer)  # TODO: add newline
+        print(footer, end='\n\n')
     # Add an empty line to separate prompt
     print('\n')
     # Ask for user input
@@ -72,13 +79,13 @@ def clear():
 
 def display(*args, **kwargs):
     """Displays info for the user - print all in one line"""
-    print(*args, **kwargs)  # TODO: add newline
+    print(*args, **kwargs)
 
 
 def debug_info(*args, **kwargs):
     """Prints debug messages to screen if in debug mode"""
     if DEBUG_MODE:
-        print(*args, **kwargs)  # TODO: add newline
+        print(*args, **kwargs)
 
 
 def debug_enter_data(prompt):
@@ -115,6 +122,38 @@ def enter_data_spec_type(prompt, datatype):
         except ValueError:
             value = ''
     return value
+
+
+def _format_display(character, style):
+    """format_display:
+
+    Uses ANSI escape sequences to alter the appearance of the character
+    displayed in the matrix case layout.
+
+    Temporarily unused - until bugfix for 24574.
+    """
+    style_codes = {'roman': 0,
+                   'bold': 1,
+                   'italic': 33,
+                   'smallcaps': 34,
+                   'subscript': 35,
+                   'superscript': 36}
+    closing_sequence = '\033[0m'
+    try:
+        starting_sequence = '\033[' + str(style_codes[style]) + 'm'
+    except KeyError:
+        starting_sequence = closing_sequence
+    character = starting_sequence + character + closing_sequence
+    print(character)
+    return character
+
+
+def format_display(character, style):
+    """This is a placeholder to be used until Python bug 24574 is fixed"""
+    try:
+        return STYLE_MODIFIERS[style] + character
+    except KeyError:
+        return character
 
 
 def tab_complete(text, state):
@@ -170,9 +209,16 @@ def simple_menu(message, options):
     options: a list or tuple of strings - options.
     """
     ans = ''
-    while ans.upper() not in options and ans.lower() not in options:
+    while True:
         ans = input(message)
-    return ans
+        if ans in options:
+            return options[ans]
+        elif ans.lower() in options:
+            return options[ans.lower()]
+        elif ans.upper() in options:
+            return options[ans.upper()]
+        else:
+            pass
 
 
 def exit_program():

@@ -365,6 +365,24 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
+    def update_diecase_layout(self, diecase_id, layout={}):
+        """update_diecase_layout:
+
+        Changes the matrix case layout on an existing diecase.
+        If called with the diecase_id only - then clears the whole layout.
+        """
+        with self.db_connection:
+            try:
+                layout = json.dumps(layout)
+                cursor = self.db_connection.cursor()
+                cursor.execute('UPDATE matrix_cases '
+                               'SET layout = ? WHERE diecase_id = ?',
+                               [layout, diecase_id])
+                return True
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Database failed
+                raise exceptions.DatabaseQueryError
+
     def delete_diecase(self, diecase_id):
         """delete_diecase:
 
