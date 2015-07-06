@@ -166,8 +166,7 @@ class Typesetter(object):
                    'cm - centimeters,\n'
                    'mm - millimeters,\n'
                    'in - inches\n')
-        choice = ui.simple_menu(message, options)
-        self.measurement = options[choice]
+        self.measurement = ui.simple_menu(message, options)
 
     def choose_diecase(self):
         """Choose diecase:

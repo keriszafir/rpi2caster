@@ -320,9 +320,7 @@ class Casting(object):
                                '[C]ast it, [D]ifferent code/quantity, '
                                '[M]enu or [E]xit? '
                                % (signals, lines, sorts))
-                    choice = ui.simple_menu(message, options).upper()
-                    # Execute choice
-                    options[choice]()
+                    ui.simple_menu(message, options)()
             except exceptions.ChangeParameters:
                 # Skip the menu and casting altogether, repeat the outer loop
                 pass
@@ -455,9 +453,7 @@ class Casting(object):
                        'M': exceptions.return_to_menu,
                        'E': exceptions.exit_program}
             message = '\n[C]ontinue, [M]enu or [E]xit? '
-            choice = ui.simple_menu(message, options).upper()
-            # Execute choice
-            options[choice]()
+            ui.simple_menu(message, options)()
             # Cast 10 spaces without correction.
             # End here if casting unsuccessful.
             ui.display('Now casting with a normal wedge only.')
@@ -471,19 +467,16 @@ class Casting(object):
             # At the end of successful sequence, some info for the user:
             ui.display('Done. Compare the lengths and adjust if needed.')
 
-    def linotype_mode(self):
-        """linotype_mode:
+    def line_casting(self):
+        """line_casting:
 
-        Allows us to use caster in a "linotype mode".
+        Allows us to use caster for casting single lines.
         This means that the user enters a text to be cast,
         gives the line length, chooses alignment and diecase.
         Then, the program composes the line, justifies it, translates it
-        to Monotype code combinations, and starts casting.
+        to Monotype code combinations.
 
-        This is a transitional function to be used before the real
-        typesetting program is ready.
-
-        It can be used for casting one-liners, names etc.
+        This allows for quick typesetting of short texts, like names etc.
         """
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
@@ -649,7 +642,7 @@ def main_menu(work=Casting()):
                ('Load a ribbon file', choose_ribbon_filename),
                ('Preview ribbon', work.preview_ribbon),
                cast_or_punch(),
-               ('Linotype mode', work.linotype_mode),
+               ('Line casting', work.line_casting),
                ('Cast sorts', work.cast_sorts),
                ('Test the valves and pinblocks', work.line_test),
                ('Send specified signals to caster', work.send_combination),

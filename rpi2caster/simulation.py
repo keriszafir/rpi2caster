@@ -120,8 +120,7 @@ class Monotype(object):
                        'E': exceptions.exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
-        choice = ui.simple_menu(message, options).upper()
-        return options[choice]()
+        ui.simple_menu(message, options)()
 
     def _emergency_cleanup(self):
         """_emergency_cleanup:

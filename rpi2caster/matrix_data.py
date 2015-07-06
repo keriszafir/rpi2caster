@@ -149,7 +149,7 @@ def show_diecase_layout():
         ui.display(separator, header, separator, sep='\n', end='\n\n')
         # Explanation of symbols
         styles = '\n'.join([ui.format_display(style, style)
-                           for style in ui.STYLE_MODIFIERS])
+                            for style in ui.STYLE_MODIFIERS])
         ui.display('Explanation:', '⦻ - low space', '⨷ - high space', styles,
                    sep='\n', end='\n')
         ui.confirm('[Enter] to continue...')
@@ -220,8 +220,6 @@ def edit_diecase():
     while True:
         diecase_id = choose_diecase()
         layout = get_layout(diecase_id)
-        # Try to determine
-        # TODO layout =
         # Ask for confirmation
         ans = ui.simple_menu('Are you sure? [Y / N] ', {'Y': True, 'N': False})
         if ans and DB.update_diecase_layout(diecase_id, layout):
