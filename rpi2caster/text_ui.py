@@ -114,15 +114,28 @@ def enter_data(prompt):
 
 
 def enter_data_spec_type(prompt, datatype):
-    """Enter a value and forces the specific datatype"""
+    """Enter a value and convert it to the specific datatype"""
     value = ''
     while not value:
         value = input(prompt)
         try:
             value = datatype(value)
         except ValueError:
+            print('Incorrect value or data type!')
             value = ''
     return value
+
+
+def enter_data_spec_type_or_blank(prompt, datatype):
+    """enter_data_spec_type_or_blank:
+
+    Enter a value or leave blank, try to convert to the specified datatype
+    """
+    value = input(prompt)
+    try:
+        return datatype(value)
+    except ValueError:
+        return value
 
 
 def _format_display(character, style):

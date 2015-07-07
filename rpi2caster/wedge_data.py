@@ -16,6 +16,7 @@ DB = database.Database()
 WEDGES = {'5': (5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
           '96': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18),
           '111': (5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15),
+          '221': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 19),
           '334': (5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 13, 14, 15, 16, 18),
           '344': (5, 6, 7, 9, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16),
           '377': (5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
@@ -113,6 +114,11 @@ def add_wedge():
             set_width = float(wedge_name.replace('AK', '').strip())
             ui.display('This is a 5-series wedge, designated as "AK"')
             wedge_name = '5'
+        elif 'BO' in wedge_name:
+            # For the old designation of 5-series wedges
+            set_width = float(wedge_name.replace('AK', '').strip())
+            ui.display('This is a 221-series wedge, designated as "BO"')
+            wedge_name = '221'
         elif 'TPWR' in wedge_name:
             ui.display('This is a typewriter wedge.')
             set_width = float(wedge_name.replace('TPWR', '').strip())

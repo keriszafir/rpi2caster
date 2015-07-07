@@ -5,10 +5,11 @@ A module for everything related to working on a Monotype composition caster:
 -casting composed type,
 -punching paper tape (ribbon) for casters without interfaces,
 -casting l lines of m sorts from matrix with x, y coordinates,
+-composing and casting a line of text
 -testing all valves, lines and pinblock,
 -calibrating the space transfer wedge,
 -heating the mould up,
--sending any codes/combinations to the caster.
+-sending any codes/combinations to the caster and keeping them on.
 """
 
 # IMPORTS:
@@ -235,8 +236,8 @@ class Casting(object):
         return True
 
     @use_caster
-    def line_test(self):
-        """line_test():
+    def test_air(self):
+        """test_air():
 
         Tests all valves and composition caster's inputs to check
         if everything works and is properly connected. Signals will be tested
@@ -473,14 +474,15 @@ class Casting(object):
         """
         # Choose diecase
         diecase_id = matrix_data.choose_diecase()
-        # Ask whether to show it
-        if ui.yes_or_no('Show the layout?'):
-            matrix_data.display_diecase_layout(diecase_id)
-            ui.display('\n\n')
+        ui.display('\n\n')
         # Get parameters and determine the layout, set width, wedge etc.
         # (the function will display that as well)
         (type_series, type_size, wedge_series, set_width, typeface_name,
          diecase_layout) = matrix_data.get_diecase_parameters(diecase_id)
+        # Ask whether to show the layout
+        if ui.yes_or_no('Show the layout?'):
+            matrix_data.display_diecase_layout(diecase_id)
+            ui.display('\n\n')
         # European Didot or Fournier diecase or not?
         # Type size has the answer...
         didot = type_size.endswith('D')
@@ -490,25 +492,12 @@ class Casting(object):
         if (didot or fournier) and not brit_pica:
             ui.display('Warning: your wedge is not based on pica=0.1667"!'
                        '\nIt may lead to wrong type width.')
-        # Enter line length
-        line_length = ui.enter_data_spec_type('Line length? : ', float)
-        # Choose the measurement units and set the line length in inches
-        options = {'A': 0.1660,
-                   'B': 0.1667,
-                   'C': 0.3937,
-                   'D': 0.1776,
-                   'F': 0.1629}
-        message = ('Measurement? [A]merican pica = Johnson, '
-                   '[B]ritish pica = DTP, '
-                   '[C]entimeter, [D]idot cicero, [F]ournier cicero: ')
-        inch_line_length = ui.simple_menu(message, options) * line_length
+        # Enter the line length, specify measurement unit
+        inch_line_length = typesetting_functions.enter_line_length()
+        # Enter the minimum space width
+        min_space = typesetting_functions.enter_min_space()
         # Choose alignment mode
-        options = {'L': typesetting_functions.align_left,
-                   'C': typesetting_functions.align_center,
-                   'R': typesetting_functions.align_right,
-                   'B': typesetting_functions.align_both}
-        message = ('Alignment? [L]eft, [C]enter, [R]ight, [B]oth: ')
-        alignment = ui.simple_menu(message, options)
+        alignment = typesetting_functions.choose_alignment()
         # Choose unit shift: yes or no?
         unit_shift = ui.yes_or_no('Do you use unit-shift?')
         # Enter text
@@ -517,7 +506,8 @@ class Casting(object):
         self.ribbon = typesetting_functions.translate(text, inch_line_length,
                                                       diecase_layout,
                                                       alignment, wedge_series,
-                                                      set_width, unit_shift)
+                                                      set_width, unit_shift,
+                                                      min_space)
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()
@@ -641,7 +631,7 @@ def main_menu(work=Casting()):
                cast_or_punch(),
                ('Compose and cast a line of text', work.line_casting),
                ('Cast sorts', work.cast_sorts),
-               ('Test the valves and pinblocks', work.line_test),
+               ('Test the pneumatics, signal after signal', work.test_air),
                ('Send specified signals to caster', work.send_combination),
                ('Calibrate the space transfer wedge', work.align_wedges),
                ('Cast some quads to heat up the mould', heatup)]

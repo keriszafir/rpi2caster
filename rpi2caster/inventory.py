@@ -12,7 +12,7 @@ def main_menu():
     """Display the main menu for inventory management"""
     options = [('Exit program', exceptions.exit_program),
                ('List matrix cases', matrix_data.list_diecases),
-               ('Show matrix case layout', matrix_data.show_diecase_layout),
+               ('Show matrix case layout', matrix_data.show_diecase),
                ('Add a new, empty matrix case', matrix_data.add_diecase),
                ('Edit matrix case layout', matrix_data.edit_diecase),
                ('Clear matrix case layout', matrix_data.clear_diecase),

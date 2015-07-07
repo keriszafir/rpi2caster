@@ -5,36 +5,7 @@ Contains functions used for calculating line length, justification,
 setting wedge positions, breaking the line etc.
 """
 from rpi2caster import exceptions
-
-
-class Roman(str):
-    """Roman type variant."""
-    pass
-
-
-class Bold(str):
-    """Bold type variant."""
-    pass
-
-
-class Italic(str):
-    """Italic type variant."""
-    pass
-
-
-class SmallCaps(str):
-    """Small caps type variant."""
-    pass
-
-
-class Subscript(str):
-    """Subscript type variant."""
-    pass
-
-
-class Superscript(str):
-    """Superscript type variant."""
-    pass
+from rpi2caster.global_settings import USER_INTERFACE as ui
 
 
 def align_left(buffer, line_length, characters_unit_length):
@@ -57,8 +28,18 @@ def align_both(text, line_length):
     pass
 
 
-def translate(text, line_length, diecase_layout, alignment,
-              wedge_ua, unit_shift=False, min_space=4):
+def choose_alignment():
+    """Lets the user choose the text alignment in line or column."""
+    options = {'L': align_left,
+               'C': align_center,
+               'R': align_right,
+               'B': align_both}
+    message = ('Alignment? [L]eft, [C]enter, [R]ight, [B]oth: ')
+    return ui.simple_menu(message, options)
+
+
+def translate(text, inch_line_length, diecase_layout, alignment,
+              wedge_series, set_width, unit_shift=False, min_space=4):
     """translate:
 
     Translates the characters to matrix coordinates.
@@ -105,6 +86,32 @@ def translate(text, line_length, diecase_layout, alignment,
         alignment(buffer, line_length, chars_unit_length)
     # The code sequence is ready
     return buffer
+
+
+def enter_line_length():
+    """enter_line_length:
+
+    Asks user to enter line length and specify measurement units.
+    Returns line length in inches for further calculations.
+    """
+    line_length = ui.enter_data_spec_type('Line length? : ', float)
+    # Choose the measurement unit - and its equivalent in inches
+    options = {'A': 0.1660,
+               'B': 0.1667,
+               'C': 0.3937,
+               'D': 0.1776,
+               'F': 0.1629}
+    message = ('Measurement? [A]merican pica = Johnson, '
+               '[B]ritish pica = DTP, '
+               '[C]entimeter, [D]idot cicero, [F]ournier cicero: ')
+    # Return line length in inches
+    return ui.simple_menu(message, options) * line_length
+
+
+def enter_min_space():
+    """Allows to enter minimum space length or leave blank for default."""
+    prompt = 'Minimum space length? [default: 4 units]: '
+    return ui.enter_data_spec_type_or_blank(prompt, float) or 4
 
 
 def get_matrix_position(character, layout):

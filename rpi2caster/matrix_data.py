@@ -94,8 +94,8 @@ def choose_diecase():
             continue
 
 
-def show_diecase_layout():
-    """show_diecase_layout:
+def show_diecase():
+    """show_diecase:
 
     Wrapper function for menu: used for choosing and showing a diecase layout.
     """
