@@ -38,7 +38,7 @@ def choose_alignment():
     return ui.simple_menu(message, options)
 
 
-def translate(text, inch_line_length, diecase_layout, alignment,
+def translate(text, unit_line_length, diecase_layout, alignment,
               wedge_series, set_width, unit_shift=False, min_space=4):
     """translate:
 
@@ -59,6 +59,7 @@ def translate(text, inch_line_length, diecase_layout, alignment,
     # Allow to choose space if more than one blank matrix is in the diecase
     if len(spaces_available) > 1:
         pass
+    line_length = calculate_unit_line_length(inch_line_length, set_width)
     while chars_unit_length + spaces * min_space < line_length - 100:
         # Loop over all characters and find their coords, calculate values
         for character in text:
@@ -108,10 +109,28 @@ def enter_line_length():
     return ui.simple_menu(message, options) * line_length
 
 
-def enter_min_space():
+def calculate_unit_line_length(inch_length, set_width, brit_pica):
+    """Calculates the line length in units of a given set."""
+    # How many picas?
+    if brit_pica:
+        pica_length = inch_length / 0.1667
+    else:
+        pica_length = inch_length / 0.166
+    # 1 pica em is equal to 18 units 12-set
+    # Units of a given set = pica_length * set_width * (12*18 = 1296)
+    # Return the result
+    return pica_length * set_width / 1296
+
+
+def enter_min_variable_space():
     """Allows to enter minimum space length or leave blank for default."""
     prompt = 'Minimum space length? [default: 4 units]: '
-    return ui.enter_data_spec_type_or_blank(prompt, float) or 4
+    return abs(ui.enter_data_spec_type_or_blank(prompt, float)) or 4
+
+
+def chose_spaces(layout):
+    """Chooses the spaces that will be used in typesetting."""
+    fixed_space = ui.enter
 
 
 def get_matrix_position(character, layout):

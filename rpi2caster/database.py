@@ -355,7 +355,13 @@ class Database(object):
                                'WHERE diecase_id = ?', [diecase_id])
                 # Return diecase if found:
                 diecase = list(cursor.fetchone())
-                layout = json.loads(diecase.pop())
+                # Build a dictionary from a list of lists
+                layout = {}
+                for record in json.loads(diecase.pop()):
+                    (character, styles) = record[0]
+                    styles = tuple(styles)
+                    (column, row, unit_value) = record[1]
+                    layout[(character, styles)] = (column, row, unit_value)
                 diecase.append(layout)
                 return diecase
             except (TypeError, ValueError, IndexError):

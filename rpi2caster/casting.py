@@ -277,19 +277,11 @@ class Casting(object):
             prompt = 'Enter column and row symbols (default: G 5): '
             # Got no signals? Use G5.
             signals = ui.enter_data_or_blank(prompt) or 'G 5'
-            # Ask for number of sorts and lines
-            try:
-                prompt = '\nHow many sorts? (default: 10): '
-                sorts = ui.enter_data_or_blank(prompt)
-                sorts = abs(int(sorts))
-            except ValueError:
-                sorts = 10
-            try:
-                prompt = '\nHow many lines? (default: 1): '
-                lines = ui.enter_data_or_blank(prompt)
-                lines = abs(int(lines))
-            except ValueError:
-                lines = 1
+            # Ask for number of sorts and lines, no negative numbers here
+            prompt = '\nHow many sorts? (default: 10): '
+            sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int)) or 10
+            prompt = '\nHow many lines? (default: 1): '
+            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int)) or 1
             # Warn if we want to cast too many sorts from a single matrix
             warning = ('Warning: you want to cast a single character more than'
                        ' 10 times. This may lead to matrix overheating!\n')
@@ -494,8 +486,10 @@ class Casting(object):
                        '\nIt may lead to wrong type width.')
         # Enter the line length, specify measurement unit
         inch_line_length = typesetting_functions.enter_line_length()
+        unit_line_length = typesetting_functions.calculate_unit_line_length(
+            inch_line_length, set_width, brit_pica)
         # Enter the minimum space width
-        min_space = typesetting_functions.enter_min_space()
+        min_space = typesetting_functions.enter_min_variable_space()
         # Choose alignment mode
         alignment = typesetting_functions.choose_alignment()
         # Choose unit shift: yes or no?
@@ -503,7 +497,7 @@ class Casting(object):
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
         # Translate the text to Monotype signals
-        self.ribbon = typesetting_functions.translate(text, inch_line_length,
+        self.ribbon = typesetting_functions.translate(text, unit_line_length,
                                                       diecase_layout,
                                                       alignment, wedge_series,
                                                       set_width, unit_shift,

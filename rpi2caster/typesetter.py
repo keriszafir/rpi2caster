@@ -361,40 +361,6 @@ class Typesetter(object):
             steps0005 = 1
         return [steps0075, steps0005]
 
-    def calculate_line_length(self):
-        """calculate_line_length():
-
-        Calculates the line length in Monotype fundamental (1-set) units.
-
-        We must know the line length and measurement unit first.
-        If not, throw an error.
-        """
-        inchWidth = {'britPica': 0.1667,
-                     'amerPica': 0.1660,
-                     'cicero': 0.1776,
-                     'mm': 0.03937,
-                     'cm': 0.3937,
-                     'in': 1}
-        if self.measurement not in inchWidth:
-            return False
-        # Base em width is a width (in inches) of a single em -
-        # which, by the Monotype convention, is defined as 18 units 12 set.
-        # Use American pica (0.166") value only if specified; other systems
-        # use British pica (0.1667").
-        if self.measurement == 'amerPica':
-            baseEmWidth = inchWidth['amerPica']
-        else:
-            baseEmWidth = inchWidth['britPica']
-        # To calculate the inch width of a fundamental unit (1-unit 1-set),
-        # we need to divide the British or American pica length in inches
-        # by 12*18 = 216:
-        fundamentalUnitWidth = baseEmWidth / 216
-        # Convert the line length in picas/ciceros to inches:
-        inch_line_length = self.line_length * inchWidth[self.measurement]
-        # Now, we need to calculate how many units of a given set
-        # the row will contain. Round that to an integer and return the result.
-        self.fu_line_length = round(inch_line_length / fundamentalUnitWidth)
-
     def calculate_units(self):
         """calculate_units:
 

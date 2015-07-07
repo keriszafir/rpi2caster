@@ -4,8 +4,10 @@
 Module containing functions for diecase retrieval and parsing,
 diecase storing, parameter searches.
 """
+import io
 # We need user interface
 from rpi2caster.global_settings import USER_INTERFACE as ui
+from rpi2caster.global_settings import COMMENT_SYMBOLS
 # Some functions raise custom exceptions
 from rpi2caster import exceptions
 # We need to operate on a database
@@ -165,11 +167,11 @@ def display_diecase_layout(diecase_id):
     # Display header again
     ui.display(separator, header, separator, sep='\n', end='\n\n')
     # Names of styles found in the diecase with formatting applied to them
-    styles = '\n'.join([ui.format_display(style, style)
-                        for style in ui.STYLE_MODIFIERS if style in layout])
+    displayed_styles = '\n'.join([ui.format_display(style, style)
+                                 for style in get_styles(layout)])
     # Explanation of symbols
-    ui.display('Explanation:', '□ - low space', '▣ - high space', styles,
-               sep='\n', end='\n')
+    ui.display('Explanation:', '□ - low space', '▣ - high space',
+               displayed_styles, sep='\n', end='\n')
 
 
 def add_diecase(diecase_id=None, type_series=None, type_size=None,
@@ -196,10 +198,6 @@ def add_diecase(diecase_id=None, type_series=None, type_size=None,
         set_width = ui.enter_data_spec_type('Set width (decimal): ', float)
     if not typeface_name:
         typeface_name = ui.enter_data('Typeface name: ')
-    if layout:
-        styles = ', '.join([i for i in layout.keys() if i is not 'spaces'])
-    else:
-        styles = None
     # Display parameters before asking to commit
     info = []
     info.append('Diecase ID: %s' % diecase_id)
@@ -208,9 +206,11 @@ def add_diecase(diecase_id=None, type_series=None, type_size=None,
     info.append('Wedge series: %s' % wedge_series)
     info.append('Set width: %s' % set_width)
     info.append('Typeface name: %s' % typeface_name)
-    info.append('Styles present: %s' % styles)
+    info.append('Styles present: %s' % ', '.join(get_styles(layout)))
     for line in info:
         ui.display(line)
+    # Load the layout from file? Ask only if no layout at input
+    layout = layout or submit_layout_file() or None
     # Ask for confirmation
     if ui.yes_or_no('Commit?'):
         DB.add_diecase(diecase_id, type_series, type_size, wedge_series,
@@ -235,6 +235,8 @@ def edit_diecase():
     while True:
         diecase_id = choose_diecase()
         layout = get_layout(diecase_id)
+        # Load the layout from file? Ask only if no layout at input
+        layout = submit_layout_file() or layout
         # Ask for confirmation
         ans = ui.yes_or_no('Are you sure?')
         if ans and DB.update_diecase_layout(diecase_id, layout):
@@ -291,38 +293,39 @@ def get_all_matrices(layout):
 
     Parses a diecase layout dictionary to get all matrices into a single list.
     """
-    # Process the layout
+    # Begin with an empty matrix list - mats will be added one by one
     all_mats = []
-    # Iterate over type styles - roman, bold, italic etc. and spaces
-    for style in layout:
-        # We look for spaces and characters
-        if style == 'spaces':
-            for space in layout[style]:
-                column = space[0]
-                row = space[1]
-                low_space = space[2]
-                if low_space:
-                    space_symbol = '□'
-                else:
-                    space_symbol = '▣'
-                matrix = (row, column, space_symbol)
-                all_mats.append(matrix)
+    # Iterate over all the matrices in layout dictionary
+    for matrix in layout:
+        # Each matrix is described as an association of tuples
+        # (character, (style1, style2...)) : (column, row, unit_width)
+        # We can have multiple 'A', 'B' etc. - provided the style is different
+        #
+        # A single character can belong to multiple styles
+        # (for example, punctuation marks used by bold and small caps)
+        # The first style will be dominant and used for formatting display.
+        #
+        # Low spaces and high spaces are indicated as styles too.
+        # Their 'character' is a number.
+        # This will make the matrices easier to address when typesetting.
+        #
+        # Translated matrix data stands as follows:
+        # (row, column, character)
+        style = matrix[1][0]
+        column = layout[matrix][0]
+        row = layout[matrix][1]
+        # If we have a space - we don't want to see a number
+        # Use a predefined space symbol instead
+        if style == ('low_space',):
+            character = '□'
+        elif style == ('high_space',):
+            character = '▣'
         else:
-            # Iterate over matrices in a particular style
-            for item in layout[style].items():
-                # Character is first
-                character = item[0]
-                char_properties = item[1]
-                # Coordinates
-                column = char_properties[0]
-                row = char_properties[1]
-                # Alter the style of character
-                character = ui.format_display(character, style)
-                # Build a matrix starting with row, then column, and char
-                matrix = (row, column, character)
-                # Add it to matrices list
-                all_mats.append(matrix)
-    # All done, time to return the mats
+            # Format the character accordingly for display
+            character = ui.format_display(matrix[0], style)
+        # Add it to the list of matrices
+        all_mats.append((row, column, character))
+    # After we're done, return the list of mats
     return all_mats
 
 
@@ -333,11 +336,6 @@ def get_diecase_parameters(diecase_id):
     """
     (diecase_id, type_series, type_size, wedge_series, set_width,
      typeface_name, layout) = DB.diecase_by_id(diecase_id)
-    if layout:
-        styles = ', '.join([i for i in layout.keys()
-                            if i not in ('spaces', 'shared')])
-    else:
-        styles = None
     # Display parameters before editing
     info = []
     info.append('Diecase ID: %s' % diecase_id)
@@ -346,7 +344,7 @@ def get_diecase_parameters(diecase_id):
     info.append('Wedge series: %s' % wedge_series)
     info.append('Set width: %s' % set_width)
     info.append('Typeface name: %s' % typeface_name)
-    info.append('Styles present: %s' % styles)
+    info.append('Styles present: %s' % ', '.join(get_styles(layout)))
     for line in info:
         ui.display(line)
     ui.display('\n\n')
@@ -361,10 +359,70 @@ def get_layout(diecase_id):
     Displays parameters for a chosen matrix case and returns them.
     """
     layout = DB.diecase_by_id(diecase_id)[-1]
-    if layout:
-        styles = ', '.join([i for i in layout.keys()
-                            if i not in ('spaces', 'shared')])
-    else:
-        styles = None
-    ui.display('Styles present: %s' % styles)
+    ui.display('Styles present: %s' % ', '.join(get_styles(layout)))
+    return layout
+
+
+def get_styles(layout):
+    """Parses the diecase layout and gets available typeface styles.
+    Returns a list of them."""
+    return list({style for mat in layout for style in mat[1]
+                if style not in ('high_space', 'low_space')}) or []
+
+
+def submit_layout_file():
+    """submit_layout_file:
+
+    Reads a matrix case arrangement from a text or csv file.
+    The format should be:
+    "character";"style1,style2...";"column";"row";"unit_width"
+    """
+    # Ask, and stop here if answered no
+    if not ui.yes_or_no('Add layout from file?'):
+        return False
+    filename = ui.enter_input_filename()
+    if not filename:
+        return False
+    with io.open(filename, 'r') as layout_file:
+        layout = []
+        low_space_count = 0
+        high_space_count = 0
+        for line in layout_file:
+            # A record is a list with all diecase data:
+            # [character, (style1, style2...), column, row, units]
+            # Empty line is discarded, # denotes comment - don't parse
+            if not line.strip() or line.startswith('# '):
+                continue
+            # Parse it and strip the components of whitespace
+            record = line.split('";"')
+            for item in record:
+                item.strip()
+            # Get character (and strip the left quote)
+            if record[0] == '""':
+                character = '"'
+            elif record[0] == '\;':
+                character = ';'
+            else:
+                character = record[0].lstrip('"')
+            # Strip the right quote from the last item in the record
+            record[-1] = record[-1].strip('"\n')
+            # Split the styles
+            styles = tuple(record[1].split(','))
+            # No character? Then it is a space...
+            if not character and 'low_space' in styles:
+                character = low_space_count
+                low_space_count += 1
+            elif not character and 'high_space' in styles:
+                character = high_space_count
+                high_space_count += 1
+            # We want to use uppercase column numbers
+            column = record[2]
+            # Add the remaining data
+            row = int(record[3])
+            try:
+                unit_width = int(record[4])
+            except (IndexError, ValueError):
+                unit_width = None
+            layout.append([(character, styles), (column, row, unit_width)])
+    # We now have completed uploading a layout
     return layout
