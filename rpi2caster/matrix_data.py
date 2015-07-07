@@ -72,12 +72,13 @@ def choose_diecase():
     Lists diecases and gets the diecase ID, then gives the control to the
     internal function that does operations on this diecase.
     """
-    ui.clear()
-    # Do it only if we have wedges (depends on list_wedges retval)
+    # Do it only if we have diecases (depends on list_diecases retval)
     while True:
+        ui.clear()
+        ui.display('Choose a matrix case:', end='\n\n')
         available_diecases = list_diecases()
         # Enter the diecase name
-        prompt = 'Number of a diecase to show? (leave blank to exit): '
+        prompt = 'Number of a diecase? (leave blank to exit): '
         choice = (ui.enter_data_or_blank(prompt) or
                   exceptions.return_to_menu())
         # Safeguards against entering a wrong number or non-numeric string
@@ -85,74 +86,85 @@ def choose_diecase():
             diecase_id = available_diecases[choice]
             return diecase_id
         except KeyError:
-            ui.display('Diecase number is incorrect!')
+            ui.confirm('Diecase number is incorrect! [Enter] to continue...')
             continue
 
 
 def show_diecase_layout():
-    """Used for showing a diecase layout."""
+    """show_diecase_layout:
+
+    Wrapper function for menu: used for choosing and showing a diecase layout.
+    """
     while True:
         # Choose diecase
         diecase_id = choose_diecase()
-        # Build a list of all characters
-        # First, get diecase data
-        (diecase_id, type_series, type_size, wedge_series, set_width,
-         typeface_name, layout) = DB.diecase_by_id(diecase_id)
-        # Process metadata
-        # Get wedge unit arrangement
-        arrangements = wedge_data.get_unit_arrangement(wedge_series, set_width)
-        (unit_arrangement, shift_unit_arrangement) = arrangements
-        all_mats = get_all_matrices(layout)
-        # Mark empty matrices or unaddressable parts of multi-cell mats
-        # as unusable
-        all_mats.extend(flag_unused_matrices(all_mats))
-        # Determine which rows have matrices
-        # This will skip unfilled rows (with blanks) at the end
-        row_numbers = sorted({mat[0] for mat in all_mats})
-        # Build rows and columns to iterate over
-        column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
-        # Arrange matrices for displaying
-        diecase_arrangement = []
-        for row_number in row_numbers:
-            # Add only characters and styles, center chars to 5
-            row = [mat[2].center(5)
-                   for column_number in column_numbers for mat in all_mats
-                   if mat[0] == row_number and mat[1] == column_number]
-            diecase_arrangement.append(row)
-        # We can display it now
-        header = ['|' + 'Row'.center(5) + '|']
-        header.extend([col.center(5) for col in column_numbers])
-        header.append('|' + 'Units'.center(8) + '|')
-        header.append('Shifted'.center(8) + '|')
-        header = (''.join(header))
-        # Print a header with column numbers
-        title = typeface_name + ' : ' + type_series + ' – ' + type_size
-        title = '|' + title.center(len(header) - 2) + '|'
-        separator = '—' * len(header)
-        empty_row = ('|' + ' ' * 5 + '|' +
-                     ' ' * 5 * len(column_numbers) + '|' +
-                     ' ' * 8 + '|' + ' ' * 8 + '|')
-        ui.display(separator, title, separator, header, separator, empty_row,
-                   sep='\n')
-        # Get a unit-width for each row to display it at the end
-        for i, row in enumerate(diecase_arrangement, start=1):
-            # Now we are going to show the matrices
-            # First, display row number (and borders), then characters in row
-            data = ['|' + str(i).center(5) + '|'] + row
-            # At the end, unit-width and unit-width when using unit-shift
-            data.append('|' + str(unit_arrangement[i]).center(8) + '|')
-            data.append(str(shift_unit_arrangement[i]).center(8) + '|')
-            data = ''.join(data)
-            # Finally, display the row and a newline
-            ui.display(data, empty_row, sep='\n')
-        # Display header again
-        ui.display(separator, header, separator, sep='\n', end='\n\n')
-        # Explanation of symbols
-        styles = '\n'.join([ui.format_display(style, style)
-                            for style in ui.STYLE_MODIFIERS])
-        ui.display('Explanation:', '⦻ - low space', '⨷ - high space', styles,
-                   sep='\n', end='\n')
+        display_diecase_layout(diecase_id)
         ui.confirm('[Enter] to continue...')
+
+
+def display_diecase_layout(diecase_id):
+    """display_diecase_layout:
+
+    Shows a layout for a given diecase ID.
+    """
+    # Build a list of all characters
+    # First, get diecase data
+    (diecase_id, type_series, type_size, wedge_series, set_width,
+     typeface_name, layout) = DB.diecase_by_id(diecase_id)
+    # Process metadata
+    # Get wedge unit arrangement
+    arrangements = wedge_data.get_unit_arrangement(wedge_series, set_width)
+    (unit_arrangement, shift_unit_arrangement) = arrangements
+    all_mats = get_all_matrices(layout)
+    # Mark empty matrices or unaddressable parts of multi-cell mats
+    # as unused
+    all_mats.extend(flag_unused_matrices(all_mats))
+    # Determine which rows have matrices
+    # This will skip unfilled rows (with blanks) at the end
+    row_numbers = sorted({mat[0] for mat in all_mats})
+    # Build rows and columns to iterate over
+    column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
+    # Arrange matrices for displaying
+    diecase_arrangement = []
+    for row_number in row_numbers:
+        # Add only characters and styles, center chars to 5
+        row = [mat[2].center(5)
+               for column_number in column_numbers for mat in all_mats
+               if mat[0] == row_number and mat[1] == column_number]
+        diecase_arrangement.append(row)
+    # We can display it now
+    header = ['|' + 'Row'.center(5) + '|']
+    header.extend([col.center(5) for col in column_numbers])
+    header.append('|' + 'Units'.center(8) + '|')
+    header.append('Shifted'.center(8) + '|')
+    header = (''.join(header))
+    # Print a header with column numbers
+    title = typeface_name + ' : ' + type_series + ' – ' + type_size
+    title = '|' + title.center(len(header) - 2) + '|'
+    separator = '—' * len(header)
+    empty_row = ('|' + ' ' * 5 + '|' +
+                 ' ' * 5 * len(column_numbers) + '|' +
+                 ' ' * 8 + '|' + ' ' * 8 + '|')
+    ui.display(separator, title, separator, header, separator, empty_row,
+               sep='\n')
+    # Get a unit-width for each row to display it at the end
+    for i, row in enumerate(diecase_arrangement, start=1):
+        # Now we are going to show the matrices
+        # First, display row number (and borders), then characters in row
+        data = ['|' + str(i).center(5) + '|'] + row
+        # At the end, unit-width and unit-width when using unit-shift
+        data.append('|' + str(unit_arrangement[i]).center(8) + '|')
+        data.append(str(shift_unit_arrangement[i]).center(8) + '|')
+        data = ''.join(data)
+        # Finally, display the row and a newline
+        ui.display(data, empty_row, sep='\n')
+    # Display header again
+    ui.display(separator, header, separator, sep='\n', end='\n\n')
+    # Explanation of symbols
+    styles = '\n'.join([ui.format_display(style, style)
+                        for style in ui.STYLE_MODIFIERS])
+    ui.display('Explanation:', '□ - low space', '▣ - high space', styles,
+               sep='\n', end='\n')
 
 
 def add_diecase(diecase_id=None, type_series=None, type_size=None,
@@ -195,9 +207,7 @@ def add_diecase(diecase_id=None, type_series=None, type_size=None,
     for line in info:
         ui.display(line)
     # Ask for confirmation
-    options = {'Y': True, 'N': False}
-    message = ('Commit? [Y]es, [N]o: ')
-    if ui.simple_menu(message, options):
+    if ui.simple_menu('Commit? [Y/N]: ', {'Y': True, 'N': False}):
         DB.add_diecase(diecase_id, type_series, type_size, wedge_series,
                        float(set_width), typeface_name, layout)
         ui.display('Data added successfully.')
@@ -221,7 +231,7 @@ def edit_diecase():
         diecase_id = choose_diecase()
         layout = get_layout(diecase_id)
         # Ask for confirmation
-        ans = ui.simple_menu('Are you sure? [Y / N] ', {'Y': True, 'N': False})
+        ans = ui.simple_menu('Are you sure? [Y/N]: ', {'Y': True, 'N': False})
         if ans and DB.update_diecase_layout(diecase_id, layout):
             ui.display('Matrix case layout updated successfully.')
 
@@ -234,7 +244,7 @@ def clear_diecase():
     """
     while True:
         diecase_id = choose_diecase()
-        ans = ui.simple_menu('Are you sure? [Y / N] ', {'Y': True, 'N': False})
+        ans = ui.simple_menu('Are you sure? [Y/N]: ', {'Y': True, 'N': False})
         if ans and DB.update_diecase_layout(diecase_id):
             ui.display('Matrix case purged successfully - now empty.')
 
@@ -246,7 +256,7 @@ def delete_diecase():
     """
     while True:
         diecase_id = choose_diecase()
-        ans = ui.simple_menu('Are you sure? [Y / N] ', {'Y': True, 'N': False})
+        ans = ui.simple_menu('Are you sure? [Y/N]: ', {'Y': True, 'N': False})
         if ans and DB.delete_diecase(diecase_id):
             ui.display('Matrix case deleted successfully.')
 
@@ -287,9 +297,9 @@ def get_all_matrices(layout):
                 row = space[1]
                 low_space = space[2]
                 if low_space:
-                    space_symbol = '⦻'
+                    space_symbol = '□'
                 else:
-                    space_symbol = '⨷'
+                    space_symbol = '▣'
                 matrix = (row, column, space_symbol)
                 all_mats.append(matrix)
         else:
@@ -319,7 +329,8 @@ def get_diecase_parameters(diecase_id):
     (diecase_id, type_series, type_size, wedge_series, set_width,
      typeface_name, layout) = DB.diecase_by_id(diecase_id)
     if layout:
-        styles = ', '.join([i for i in layout.keys() if i is not 'spaces'])
+        styles = ', '.join([i for i in layout.keys()
+                            if i not in ('spaces', 'shared')])
     else:
         styles = None
     # Display parameters before editing
@@ -346,7 +357,8 @@ def get_layout(diecase_id):
     """
     layout = DB.diecase_by_id(diecase_id)[-1]
     if layout:
-        styles = ', '.join([i for i in layout.keys() if i is not 'spaces'])
+        styles = ', '.join([i for i in layout.keys()
+                            if i not in ('spaces', 'shared')])
     else:
         styles = None
     ui.display('Styles present: %s' % styles)

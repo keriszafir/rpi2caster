@@ -269,10 +269,12 @@ def get_unit_arrangement(wedge_series, set_width):
         wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
         unit_values = wedge[4]
     except exceptions.NoMatchingData:
-        ui.display('Wedge %s - %s not found in database! '
-                   'Displaying the unit arrangement for wedge 5 instead.'
-                   % (wedge_series, set_width))
-        unit_values = (5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18)
+        try:
+            unit_values = WEDGES[wedge_series]
+        except KeyError:
+            prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
+                      'separated by commas.\n')
+            unit_values = ui.enter_data(prompt).split(',')
     unit_arrangement = {}
     shift_unit_arrangement = {}
     for i, step in enumerate(unit_values, start=1):
@@ -286,3 +288,17 @@ def get_unit_arrangement(wedge_series, set_width):
     if len(unit_values) < 16:
         unit_arrangement[16] = ''
     return (unit_arrangement, shift_unit_arrangement)
+
+
+def is_old_pica(wedge_series, set_width):
+    """is_old_pica:
+
+    Checks whether this wedge is based on old British pica (.1667") or not.
+    """
+    try:
+        wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
+        # British pica (1 or 0) is the fourth column
+        return bool(wedge[3])
+    except exceptions.NoMatchingData:
+        prompt = 'Using an old British pica (.1667") wedge? [Y]es / [N]o: '
+        return ui.simple_menu(prompt, {'Y': True, 'N': False})

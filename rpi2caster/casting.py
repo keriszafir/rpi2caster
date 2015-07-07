@@ -73,13 +73,7 @@ class Casting(object):
         # Metadata read from file
         self.metadata = {}
         # Diecase parameters
-        self.diecase_id = None
         self.diecase = None
-        self.diecase_layout = None
-        # Fount data
-        self.type_series = None
-        self.type_size = None
-        self.set_width = None
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
@@ -478,59 +472,61 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        # Enter text
-        text = ui.enter_data("Enter text to compose: ")
+        # Choose diecase
+        diecase_id = matrix_data.choose_diecase()
+        # Ask whether to show it
+        if ui.simple_menu('Show the layout? [Y/N]: ', {'Y': True, 'N': False}):
+            matrix_data.display_diecase_layout(diecase_id)
+            ui.display('\n\n')
+        # Get parameters and determine the layout, set width, wedge etc.
+        # (the function will display that as well)
+        (type_series, type_size, wedge_series, set_width, typeface_name,
+         diecase_layout) = matrix_data.get_diecase_parameters(diecase_id)
+        # European Didot or Fournier diecase or not?
+        # Type size has the answer...
+        didot = type_size.endswith('D')
+        fournier = type_size.endswith('F')
+        # Check if we're using an old-pica wedge
+        brit_pica = wedge_data.is_old_pica(wedge_series, set_width)
+        if (didot or fournier) and not brit_pica:
+            ui.display('Warning: your wedge is not based on pica=0.1667"!'
+                       '\nIt may lead to wrong type width.')
         # Enter line length
         line_length = ui.enter_data_spec_type('Line length? : ', float)
+        # Choose the measurement units and set the line length in inches
+        options = {'A': 0.1660,
+                   'B': 0.1667,
+                   'C': 0.3937,
+                   'D': 0.1776,
+                   'F': 0.1629}
+        message = ('Measurement? [A]merican pica = Johnson, '
+                   '[B]ritish pica = DTP, '
+                   '[C]entimeter, [D]idot cicero, [F]ournier cicero: ')
+        inch_line_length = ui.simple_menu(message, options) * line_length
         # Choose alignment mode
         options = {'L': typesetting_functions.align_left,
                    'C': typesetting_functions.align_center,
                    'R': typesetting_functions.align_right,
                    'B': typesetting_functions.align_both}
-        message = ('Alignment: [L]eft, [C]enter, [R]ight, [B]oth? ')
+        message = ('Alignment? [L]eft, [C]enter, [R]ight, [B]oth: ')
         alignment = ui.simple_menu(message, options)
         # Choose unit shift: yes or no?
-        options = {'Y': True, 'N': False}
-        message = ('Do you use unit-shift: [Y]es, [N]o? ')
-        unit_shift = ui.simple_menu(message, options)
-        # Choose type series
-        type_series = ui.enter_data('Typeface series? : ')
-        # Choose type size
-        type_size = ui.enter_data('Type size? : ')
-        # Find the diecase
-        self.diecase = matrix_data.lookup_diecase(type_series, type_size)
-        # Read the parameters
-        self.diecase_id = self.diecase[0]
-        self.type_series = self.diecase[1]
-        type_size = self.diecase[2]
-        self.set_width = self.diecase[3]
-        # European Didot diecase or not? Type size has the answer
-        didot = type_size.endswith('D')
-        self.type_size = int(type_size.strip('D'))
-        #  Typeface name - optional
-        if isinstance(self.diecase[4], str):
-            typeface_name = self.diecase[4]
-            ui.display('Using typeface: %s' % typeface_name)
-        # Determine the layout
-        self.diecase_layout = self.diecase[-1]
-        # Determine the wedge unit arrangement
-        wedge_name = self.diecase[-2]
-        wedge = wedge_data.wedge_by_name_and_width(wedge_name, self.set_width)
-        wedge_unit_arrangement = wedge[4]
-        wedge_brit_pica = wedge[3]
-        if didot == wedge_brit_pica:
-            ui.display('The wedge and diecase use British pica')
+        message = ('Do you use unit-shift? [Y/N]: ')
+        unit_shift = ui.simple_menu(message, {'Y': True, 'N': False})
+        # Enter text
+        text = ui.enter_data("Enter text to compose: ")
         # Translate the text to Monotype signals
-        self.ribbon = typesetting_functions.translate(text, line_length,
-                                                      self.diecase_layout,
-                                                      alignment,
-                                                      wedge_unit_arrangement,
-                                                      unit_shift)
+        self.ribbon = typesetting_functions.translate(text, inch_line_length,
+                                                      diecase_layout,
+                                                      alignment, wedge_series,
+                                                      set_width, unit_shift)
         # Ask whether to display buffer contents
-        options = {'Y': True, 'N': False}
-        message = ('Display the codes? [Y]es, [N]o ')
-        if ui.simple_menu(message, options):
+        message = ('Display the codes? [Y/N]: ')
+        if ui.simple_menu(message, {'Y': True, 'N': False}):
             self.preview_ribbon()
+        message = ('Cast it? [Y/N]: ')
+        if ui.simple_menu(message, options):
+            self.cast_composition()
 
     def preview_ribbon(self):
         """preview_ribbon:
@@ -642,7 +638,7 @@ def main_menu(work=Casting()):
                ('Load a ribbon file', choose_ribbon_filename),
                ('Preview ribbon', work.preview_ribbon),
                cast_or_punch(),
-               ('Line casting', work.line_casting),
+               ('Compose and cast a line of text', work.line_casting),
                ('Cast sorts', work.cast_sorts),
                ('Test the valves and pinblocks', work.line_test),
                ('Send specified signals to caster', work.send_combination),
