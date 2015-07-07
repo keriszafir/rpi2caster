@@ -137,25 +137,10 @@ def add_wedge():
             set_width = float(set_width)
         except ValueError:
             # if not - enter the width manually
-            set_width = ''
-            while not set_width:
-                try:
-                    # Enter width manually
-                    prompt = 'Enter the set width as a decimal fraction: '
-                    set_width = ui.enter_data_spec_type(prompt, float)
-                except ValueError:
-                    # In case of incorrect value...
-                    set_width = ''
-                    # Start over
-        # We should determine if it's a British or American wedge
-        # (18 units 12 set = 1pica = .1667" - British, or .1660" - US )
-        if brit_pica is None:
-            # Do it only if undefined
-            # Let user choose if it's American or British pica-based wedge:
-            options = {'A': False, 'B': True}
-            message = '[A]merican (0.1660"), or [B]ritish (0.1667") pica? '
-            choice = ui.simple_menu(message, options).upper()
-            brit_pica = options[choice]
+            prompt = 'Enter the set width as a decimal fraction: '
+            set_width = ui.enter_data_spec_type(prompt, float)
+        prompt = 'Old British pica (0.1667") based wedge?'
+        brit_pica = brit_pica or ui.yes_or_no(prompt)
         # We have the wedge name, so we can look the wedge up in known wedges
         # (no need to enter the unit arrangement manually)
         try:
@@ -200,9 +185,9 @@ def add_wedge():
         # Display the info
         ui.display('\n'.join(user_info))
         # Ask for confirmation
-        ans = ui.simple_menu('Commit? [Y / N]', {'Y': True, 'N': False})
-        if ans and DB.add_wedge(wedge_series, set_width,
-                                brit_pica, unit_arrangement):
+        if ui.yes_or_no('Commit?') and DB.add_wedge(wedge_series, set_width,
+                                                    brit_pica,
+                                                    unit_arrangement):
             ui.display('Wedge added successfully.')
 
 
@@ -227,8 +212,7 @@ def delete_wedge():
             ui.display('Wedge number is incorrect!')
             continue
         # Ask for confirmation
-        ans = ui.simple_menu('Are you sure? [Y / N]', {'Y': True, 'N': False})
-        if ans and DB.delete_wedge(wedge_id):
+        if ui.yes_or_no('Are you sure?') and DB.delete_wedge(wedge_id):
             ui.display('Wedge deleted successfully.')
 
 
@@ -300,5 +284,4 @@ def is_old_pica(wedge_series, set_width):
         # British pica (1 or 0) is the fourth column
         return bool(wedge[3])
     except exceptions.NoMatchingData:
-        prompt = 'Using an old British pica (.1667") wedge? [Y]es / [N]o: '
-        return ui.simple_menu(prompt, {'Y': True, 'N': False})
+        return ui.yes_or_no('Using an old British pica (.1667") wedge?')

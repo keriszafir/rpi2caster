@@ -446,8 +446,7 @@ class Casting(object):
             options = {'C': continue_aligning,
                        'M': exceptions.return_to_menu,
                        'E': exceptions.exit_program}
-            message = '\n[C]ontinue, [M]enu or [E]xit? '
-            ui.simple_menu(message, options)()
+            ui.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
             # Cast 10 spaces without correction.
             # End here if casting unsuccessful.
             ui.display('Now casting with a normal wedge only.')
@@ -475,7 +474,7 @@ class Casting(object):
         # Choose diecase
         diecase_id = matrix_data.choose_diecase()
         # Ask whether to show it
-        if ui.simple_menu('Show the layout? [Y/N]: ', {'Y': True, 'N': False}):
+        if ui.yes_or_no('Show the layout?'):
             matrix_data.display_diecase_layout(diecase_id)
             ui.display('\n\n')
         # Get parameters and determine the layout, set width, wedge etc.
@@ -511,8 +510,7 @@ class Casting(object):
         message = ('Alignment? [L]eft, [C]enter, [R]ight, [B]oth: ')
         alignment = ui.simple_menu(message, options)
         # Choose unit shift: yes or no?
-        message = ('Do you use unit-shift? [Y/N]: ')
-        unit_shift = ui.simple_menu(message, {'Y': True, 'N': False})
+        unit_shift = ui.yes_or_no('Do you use unit-shift?')
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
         # Translate the text to Monotype signals
@@ -521,12 +519,15 @@ class Casting(object):
                                                       alignment, wedge_series,
                                                       set_width, unit_shift)
         # Ask whether to display buffer contents
-        message = ('Display the codes? [Y/N]: ')
-        if ui.simple_menu(message, {'Y': True, 'N': False}):
+        if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()
-        message = ('Cast it? [Y/N]: ')
-        if ui.simple_menu(message, options):
-            self.cast_composition()
+        # We're casting
+        if ui.yes_or_no('Cast it?'):
+            try:
+                self.cast_composition()
+            except exceptions.ReturnToMenu:
+                # If casting aborted - don't go back to menu
+                pass
 
     def preview_ribbon(self):
         """preview_ribbon:

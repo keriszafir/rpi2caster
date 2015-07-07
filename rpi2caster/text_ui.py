@@ -13,7 +13,8 @@ import glob
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
 # Style modifiers for displaying bold, italic, smallcaps, inferior, superior
-STYLE_MODIFIERS = {'bold': '*',
+STYLE_MODIFIERS = {'roman': '',
+                   'bold': '*',
                    'italic': '/',
                    'smallcaps': '#',
                    'subscript': '_',
@@ -219,6 +220,15 @@ def simple_menu(message, options):
             return options[ans.upper()]
         else:
             pass
+
+
+def yes_or_no(question):
+    """yes_or_no
+
+    Asks a simple question with yes or no answers.
+    Returns True for yes and False for no.
+    """
+    return simple_menu('%s [Y / N]: ' % question, {'Y': True, 'N': False})
 
 
 def exit_program():

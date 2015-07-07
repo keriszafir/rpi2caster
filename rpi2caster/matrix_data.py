@@ -4,11 +4,15 @@
 Module containing functions for diecase retrieval and parsing,
 diecase storing, parameter searches.
 """
+# We need user interface
 from rpi2caster.global_settings import USER_INTERFACE as ui
+# Some functions raise custom exceptions
 from rpi2caster import exceptions
+# We need to operate on a database
 from rpi2caster import database
 # Wedge operations for several matrix-case management functions
 from rpi2caster import wedge_data
+# Create an instance of Database class with default parameters
 DB = database.Database()
 
 
@@ -160,9 +164,10 @@ def display_diecase_layout(diecase_id):
         ui.display(data, empty_row, sep='\n')
     # Display header again
     ui.display(separator, header, separator, sep='\n', end='\n\n')
-    # Explanation of symbols
+    # Names of styles found in the diecase with formatting applied to them
     styles = '\n'.join([ui.format_display(style, style)
-                        for style in ui.STYLE_MODIFIERS])
+                        for style in ui.STYLE_MODIFIERS if style in layout])
+    # Explanation of symbols
     ui.display('Explanation:', '□ - low space', '▣ - high space', styles,
                sep='\n', end='\n')
 
@@ -207,7 +212,7 @@ def add_diecase(diecase_id=None, type_series=None, type_size=None,
     for line in info:
         ui.display(line)
     # Ask for confirmation
-    if ui.simple_menu('Commit? [Y/N]: ', {'Y': True, 'N': False}):
+    if ui.yes_or_no('Commit?'):
         DB.add_diecase(diecase_id, type_series, type_size, wedge_series,
                        float(set_width), typeface_name, layout)
         ui.display('Data added successfully.')
@@ -231,7 +236,7 @@ def edit_diecase():
         diecase_id = choose_diecase()
         layout = get_layout(diecase_id)
         # Ask for confirmation
-        ans = ui.simple_menu('Are you sure? [Y/N]: ', {'Y': True, 'N': False})
+        ans = ui.yes_or_no('Are you sure?')
         if ans and DB.update_diecase_layout(diecase_id, layout):
             ui.display('Matrix case layout updated successfully.')
 
@@ -244,7 +249,7 @@ def clear_diecase():
     """
     while True:
         diecase_id = choose_diecase()
-        ans = ui.simple_menu('Are you sure? [Y/N]: ', {'Y': True, 'N': False})
+        ans = ui.yes_or_no('Are you sure?')
         if ans and DB.update_diecase_layout(diecase_id):
             ui.display('Matrix case purged successfully - now empty.')
 
@@ -256,7 +261,7 @@ def delete_diecase():
     """
     while True:
         diecase_id = choose_diecase()
-        ans = ui.simple_menu('Are you sure? [Y/N]: ', {'Y': True, 'N': False})
+        ans = ui.yes_or_no('Are you sure?')
         if ans and DB.delete_diecase(diecase_id):
             ui.display('Matrix case deleted successfully.')
 
