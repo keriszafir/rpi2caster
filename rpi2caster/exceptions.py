@@ -70,6 +70,16 @@ class DatabaseQueryError(Exception):
 class MatrixNotFound(Exception):
     """Raised when the typesetting program could not find a desired
     character in the diecase layout."""
+    pass
+
+
+class DuplicateError(Exception):
+    """DuplicateError
+
+    Raised when trying to add a duplicate item:
+    matrix (with identical coordinates), diecase (with identical ID).
+    """
+    pass
 
 # Little helper functions that raise the exceptions
 

@@ -263,34 +263,16 @@ class Database(object):
         set_width - set width of a type
         typeface_name - typeface's name
         wedge_series - wedge series number, e.g. 5 (for stopbar S5 / wedge 5)
-        layout - a dictionary of dictionaries, constructed as following:
+        layout - a list, constructed as following:
 
-        layout = { 'roman': { char1 : ['column', row_number, unit_width],
-                              char2 : ['column', row_number, unit_width],
-                              ...},
-                   'bold': { char1 : ['column', row_number, unit_width],
-                             char2 : ['column', row_number, unit_width],
-                             ...},
-                   'italic': { char1 : ['column', row_number, unit_width],
-                               char2 : ['column', row_number, unit_width],
-                               ...},
-                   'smallcaps': { char1 : ['column', row_number, unit_width],
-                                  char2 : ['column', row_number, unit_width],
-                                  ...},
-                   'subscript': { char1 : ['column', row_number, unit_width],
-                                  char2 : ['column', row_number, unit_width],
-                                  ...},
-                   'superscript': { char1 : ['column', row_number, unit_width],
-                                    char2 : ['column', row_number, unit_width],
-                                    ...},
-                   'spaces': [['G', 1, True], ['G', 2, True], ['G', 5, True],
-                              ['O', 15, True], ['O', 16, False]]
-                }
+        layout = [[character, [style1, style2...], column, row, units], [...]]
+        character = single character, double/triple character (for ligatures),
+        ' ' for low space and '_' for high space
+        style1, style2... - one or more styles a matrix belongs to,
+        this will enable a matrix to be used with specified text styles only
         column - string (NI, NL, A...O)
         row_number - int (1...15 or 16)
-        unit_width - int (unit width of a character)
-        True in a space definition means that the space is a low space,
-        False means that it's a high space.
+        unit_width - int (unit width of a character) or None if not specified
         """
 
         # data - a list with wedge parameters to be written,
@@ -321,28 +303,6 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def diecase_by_series_and_size(self, type_series, type_size):
-        """diecase_by_series_and_size(type_series, type_size):
-
-        Searches for diecase metadata, based on the desired type series
-        and size. Allows to choose one of the diecases found.
-
-        Returns a list of results or raises an exception.
-        """
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM matrix_cases '
-                               'WHERE type_series = ? AND type_size = ?',
-                               [type_series, type_size])
-                # Check if we got any:
-                results = cursor.fetchall()
-                if not results:
-                    raise exceptions.NoMatchingData
-                return results
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                raise exceptions.DatabaseQueryError
-
     def diecase_by_id(self, diecase_id):
         """diecase_by_id(diecase_id):
 
@@ -355,13 +315,28 @@ class Database(object):
                                'WHERE diecase_id = ?', [diecase_id])
                 # Return diecase if found:
                 diecase = list(cursor.fetchone())
-                # Build a dictionary from a list of lists
-                layout = {}
-                for record in json.loads(diecase.pop()):
-                    (character, styles) = record[0]
-                    styles = tuple(styles)
-                    (column, row, unit_value) = record[1]
-                    layout[(character, styles)] = (column, row, unit_value)
+                # De-serialize the diecase layout, convert it back to a list
+                raw_layout = json.loads(diecase.pop())
+                # Convert the layout
+                # Record is now 'character style1,style2... column row units'
+                # Make it a list
+                layout = []
+                for record in raw_layout:
+                    # Make a tuple of styles
+                    record[1] = tuple(record[1].split(','))
+                    # Convert the row number to int
+                    record[3] = int(record[3])
+                    # Last field - unit width - was not mandatory
+                    # Try to convert it to int
+                    # If no unit width is specified, use None instead
+                    try:
+                        record[4] = int(record[4])
+                    except (IndexError, ValueError):
+                        record.append(None)
+                    layout.append(record)
+                    # Record is now:
+                    # [character, (style1, style2...), column, row, units]
+                # Add the layout back to diecase and return the data
                 diecase.append(layout)
                 return diecase
             except (TypeError, ValueError, IndexError):

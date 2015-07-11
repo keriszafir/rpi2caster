@@ -488,20 +488,40 @@ class Casting(object):
         inch_line_length = typesetting_functions.enter_line_length()
         unit_line_length = typesetting_functions.calculate_unit_line_length(
             inch_line_length, set_width, brit_pica)
-        # Enter the minimum space width
-        min_space = typesetting_functions.enter_min_variable_space()
-        # Choose alignment mode
-        alignment = typesetting_functions.choose_alignment()
-        # Choose unit shift: yes or no?
-        unit_shift = ui.yes_or_no('Do you use unit-shift?')
+        # Manual control allows for tweaking more parameters during typesetting
+        manual_control = ui.yes_or_no('Use manual mode? (more control)')
+        if manual_control:
+            # Enter the minimum space width
+            space_settings = typesetting_functions.space_settings()
+            # Choose unit shift: yes or no?
+            unit_shift = ui.yes_or_no('Do you use unit-shift?')
+            # Choose alignment mode
+            alignment = typesetting_functions.choose_alignment()
+            # Choose if you want to use ligatures
+            prompt = 'Ligatures: [1] - off, [2] characters, [3] characters?'
+            options = {'1': False, '2': 2, '3': 3}
+            ligatures = ui.simple_menu(prompt, options)
+        else:
+            # Use low spaces for variable spaces 4 units minimum,
+            # high spaces for fixed spaces at 9 units,
+            # low spaces for non-breaking spaces at 9 units
+            space_settings = ('low_space', 4, 'high_space', 9, 'low_space', 9)
+            unit_shift = False
+            # Align to the left
+            alignment = typesetting_functions.align_left
+            # 3-character ligatures
+            ligatures = 3
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
+        # Choose style
+        style = typesetting_functions.choose_style(diecase_layout)
         # Translate the text to Monotype signals
-        self.ribbon = typesetting_functions.translate(text, unit_line_length,
-                                                      diecase_layout,
-                                                      alignment, wedge_series,
-                                                      set_width, unit_shift,
-                                                      min_space)
+        cmp = typesetting_functions.compose_line
+        # Compose the text
+        self.ribbon = []
+        cmp(self.ribbon, (text, style), unit_line_length, space_settings,
+            diecase_layout, wedge_series, set_width, alignment, unit_shift,
+            manual_control, ligatures)
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()

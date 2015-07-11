@@ -250,11 +250,7 @@ def wedge_by_name_and_width(wedge_name, set_width):
 
 
 def get_unit_arrangement(wedge_series, set_width):
-    """get_unit_arrangement:
-
-    Returns the unit arrangements without and with unit-shift.
-    The values returned are dictionaries.
-    """
+    """Returns an unit arrangement for a given wedge."""
     try:
         wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
         unit_values = wedge[4]
@@ -265,19 +261,10 @@ def get_unit_arrangement(wedge_series, set_width):
             prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
                       'separated by commas.\n')
             unit_values = ui.enter_data(prompt).split(',')
-    unit_arrangement = {}
-    shift_unit_arrangement = {}
-    for i, step in enumerate(unit_values, start=1):
-        unit_arrangement[i] = step
-        shift_unit_arrangement[i+1] = step
-    # Shifted unit arrangement for 1st step is empty
-    # (you cannot address row 1 with unit-shift!)
-    shift_unit_arrangement[1] = ''
-    # Non-shifted unit arrangement for the 16th step is empty for most wedges
-    # (but some HMN, KMN wedges were 16-stepped and they had a value there)
-    if len(unit_values) < 16:
-        unit_arrangement[16] = ''
-    return (unit_arrangement, shift_unit_arrangement)
+    unit_arrangement = [int(step) for step in unit_values]
+    # If we have a HMN or KMN special wedge, it has 16 steps
+    # 16th step is not defined for any typical 15-row wedges
+    return unit_arrangement
 
 
 def is_old_pica(wedge_series, set_width):
