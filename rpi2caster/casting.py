@@ -464,64 +464,13 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        # Choose diecase
-        diecase_id = matrix_data.choose_diecase()
-        ui.display('\n\n')
-        # Get parameters and determine the layout, set width, wedge etc.
-        # (the function will display that as well)
-        (type_series, type_size, wedge_series, set_width, typeface_name,
-         diecase_layout) = matrix_data.get_diecase_parameters(diecase_id)
-        # Ask whether to show the layout
-        if ui.yes_or_no('Show the layout?'):
-            matrix_data.display_diecase_layout(diecase_id)
-            ui.display('\n\n')
-        # European Didot or Fournier diecase or not?
-        # Type size has the answer...
-        didot = type_size.endswith('D')
-        fournier = type_size.endswith('F')
-        # Check if we're using an old-pica wedge
-        brit_pica = wedge_data.is_old_pica(wedge_series, set_width)
-        if (didot or fournier) and not brit_pica:
-            ui.display('Warning: your wedge is not based on pica=0.1667"!'
-                       '\nIt may lead to wrong type width.')
-        # Enter the line length, specify measurement unit
-        inch_line_length = typesetting_functions.enter_line_length()
-        unit_line_length = typesetting_functions.calculate_unit_line_length(
-            inch_line_length, set_width, brit_pica)
-        # Manual control allows for tweaking more parameters during typesetting
-        manual_control = ui.yes_or_no('Use manual mode? (more control)')
-        if manual_control:
-            # Enter the minimum space width
-            space_settings = typesetting_functions.space_settings()
-            # Choose unit shift: yes or no?
-            unit_shift = ui.yes_or_no('Do you use unit-shift?')
-            # Choose alignment mode
-            alignment = typesetting_functions.choose_alignment()
-            # Choose if you want to use ligatures
-            prompt = 'Ligatures: [1] - off, [2] characters, [3] characters?'
-            options = {'1': False, '2': 2, '3': 3}
-            ligatures = ui.simple_menu(prompt, options)
-        else:
-            # Use low spaces for variable spaces 4 units minimum,
-            # high spaces for fixed spaces at 9 units,
-            # low spaces for non-breaking spaces at 9 units
-            space_settings = ('low_space', 4, 'high_space', 9, 'low_space', 9)
-            unit_shift = False
-            # Align to the left
-            alignment = typesetting_functions.align_left
-            # 3-character ligatures
-            ligatures = 3
+        # Initialize the typesetter
+        ts = typesetting_functions.Typesetter()
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
-        # Choose style
-        style = typesetting_functions.choose_style(diecase_layout)
         # Translate the text to Monotype signals
-        cmp = typesetting_functions.compose_line
         # Compose the text
-        self.ribbon = []
-        cmp(self.ribbon, (text, style), unit_line_length, space_settings,
-            diecase_layout, wedge_series, set_width, alignment, unit_shift,
-            manual_control, ligatures)
+        self.ribbon = ts.compose((text, ts.main_style))
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()

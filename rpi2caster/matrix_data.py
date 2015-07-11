@@ -348,7 +348,7 @@ def get_layout(diecase_id):
 def get_styles(layout):
     """Parses the diecase layout and gets available typeface styles.
     Returns a list of them."""
-    return list({style for mat in layout for style in mat[1]})
+    return list({style for mat in layout for style in mat[1] if style})
 
 
 def submit_layout_file():
