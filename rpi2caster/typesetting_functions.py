@@ -138,30 +138,6 @@ class Typesetter(object):
         else:
             matches = []
 
-    def text_generator(self, text_fragments):
-        """Parses the text to smaller chunk, then generates
-        a sequence of chars"""
-        for (text, style) in text_fragments:
-            for i, character in enumerate(text):
-                try:
-                    if character == '^':
-                        # ^ denotes control commands
-                        try:
-                            command_code = text[i:i+2]
-                            yield eval(COMMANDS[command_code])
-                        except (IndexError, KeyError):
-                            pass
-                    elif character == ' ':
-                        yield ' '
-                    elif character in ('~', '_'):
-                        yield '_'
-                    else:
-                        # Not a control sequence or space? Then character
-                        # Try a ligature first...
-                        yield self.lookup(text[i:i+self.ligatures-1], style)
-                except IndexError:
-                    pass
-
     def manual_compose(self, text_fragments):
         """manual_compose:
 
@@ -178,42 +154,44 @@ class Typesetter(object):
         # Choose if you want to use ligatures
         prompt = 'Ligatures: [1] - off, [2] characters, [3] characters? '
         options = {'1': False, '2': 2, '3': 3}
-        ligatures = ui.simple_menu(prompt, options)
+        self.ligatures = ui.simple_menu(prompt, options)
+        # Generator that returns characters with their style
+        text_generator = ((char, style) for (text, style) in text_fragments
+                          for char in text)
         # Inintialize with no chars and spaces count at 0
         chars_length = 0
         spaces_count = 0
-        for (text, style) in text_fragments:
-            while (chars_length + spaces_count * var_min_units <
-                   self.unit_line_length - 100):
-                for i, char in enumerate(text):
-                    # Determine if it's a control command
+        while (chars_length + spaces_count * var_min_units <
+               self.unit_line_length - 100):
+            try:
+                (char, style) = next(text_generator)
+                # Determine if it's a control command
+                if char == '^':
+                    # ^ denotes control commands
                     try:
-                        if char == '^':
-                            # ^ denotes control commands
-                            try:
-                                command_code = text[i:i+2]
-                                eval(COMMANDS[command_code])
-                            except (IndexError, KeyError):
-                                pass
-                        elif char == ' ':
-                            # This is a typical variable space
-                            spaces_count += 1
-                            self.buffer.append('var_space')
-                        elif char == '~':
-                            # This is a fixed space
-                            self.buffer.extend(fix_space_code)
-                            chars_length += fixed_units
-                        elif char == '_':
-                            # This is a non-breaking space
-                            self.buffer.extend(nb_space_code)
-                            chars_length += nb_sp_units
-                        elif ligatures:
-                            # Not a control sequence or space? Then character
-                            # Try a ligature first...
-                            self.translate_character(text[i:i+ligatures-1],
-                                                     style)
-                    except IndexError:
+                        command_code = text[i:i+2]
+                        eval(COMMANDS[command_code])
+                    except (IndexError, KeyError):
                         pass
+                elif char == ' ':
+                    # This is a typical variable space
+                    spaces_count += 1
+                    self.buffer.append('var_space')
+                elif char == '~':
+                    # This is a fixed space
+                    self.buffer.extend(fix_space_code)
+                    chars_length += fixed_units
+                elif char == '_':
+                    # This is a non-breaking space
+                    self.buffer.extend(nb_space_code)
+                    chars_length += nb_sp_units
+                elif self.ligatures:
+                    # Not a control sequence or space? Then character
+                    # Try a ligature first...
+                    self.translate_character(text[i:i+self.ligatures-1],
+                                             style)
+            except IndexError:
+                pass
 
     def auto_compose(self, text_fragments):
         """Composes text automatically, deciding when to end the lines."""
