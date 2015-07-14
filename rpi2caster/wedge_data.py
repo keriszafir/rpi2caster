@@ -213,7 +213,7 @@ def delete_wedge():
                   exceptions.return_to_menu())
         # Safeguards against entering a wrong number or non-numeric string
         try:
-            wedge_id = available_wedges[choice]
+            wedge_id = available_wedges[choice][0]
         except KeyError:
             ui.display('Wedge number is incorrect!')
             continue
@@ -235,13 +235,38 @@ def list_wedges():
                '\n')
     for index, wedge in enumerate(data, start=1):
         index = str(index)
-        # Save the wedge ID associated with the index
-        results[index] = wedge[0]
+        # Save the wedge associated with the index
+        results[index] = wedge
         # Display only wedge parameters and not ID
         number = [index.ljust(10)]
         displayed_data = [str(field).ljust(15) for field in wedge[1:]]
         ui.display(''.join(number + displayed_data))
     return results
+
+
+def choose_wedge():
+    """choose_wedge:
+
+    Lists wedges and lets the user choose one; returns the wedge ID.
+    """
+    # Do it only if we have diecases (depends on list_diecases retval)
+    while True:
+        ui.clear()
+        ui.display('Choose a wedge:', end='\n\n')
+        available_wedges = list_wedges()
+        # Enter the diecase name
+        prompt = 'Number of a wedge? (leave blank to exit): '
+        choice = (ui.enter_data_or_blank(prompt) or
+                  exceptions.return_to_menu())
+        # Safeguards against entering a wrong number or non-numeric string
+        try:
+            # Return [series_number, set_width, brit_pica, unit_arrangement]
+            wedge = list(available_wedges[choice])
+            wedge[3] = bool(wedge[3])
+            return tuple(wedge)
+        except KeyError:
+            ui.confirm('Wedge number is incorrect! [Enter] to continue...')
+            continue
 
 
 def wedge_by_name_and_width(wedge_name, set_width):

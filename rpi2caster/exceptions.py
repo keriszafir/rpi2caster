@@ -30,6 +30,11 @@ class ReturnToMenu(Exception):
     pass
 
 
+class MenuLevelUp(Exception):
+    """Raised in submenus, to go up to a higher level"""
+    pass
+
+
 class ExitProgram(Exception):
     """Raised when user decides to exit program."""
     pass
@@ -87,6 +92,11 @@ class DuplicateError(Exception):
 def return_to_menu():
     """Wrapper for raising ReturnToMenu where a function is needed"""
     raise ReturnToMenu
+
+
+def menu_level_up():
+    """Wrapper for raising MenuLevelUp where a function is needed"""
+    raise MenuLevelUp
 
 
 def exit_program():

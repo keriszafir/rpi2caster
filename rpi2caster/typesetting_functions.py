@@ -10,17 +10,6 @@ from rpi2caster import matrix_data
 from rpi2caster import wedge_data
 
 
-# Define control commands for the typesetting routines
-COMMANDS = {'^00': 'style=roman',
-            '^01': 'style=bold',
-            '^02': 'style=ititalic',
-            '^03': 'style=smallcaps',
-            '^04': 'style=subscript',
-            '^05': 'style=superscript',
-            '^CR': 'align_left()',
-            '^CL': 'align_right()'}
-
-
 class Typesetter(object):
     """Typesetting class"""
     def __init__(self, diecase_id=None):
@@ -73,6 +62,10 @@ class Typesetter(object):
             ui.display('\n\n')
 
     def manual_or_automatic(self):
+        """manual_or_automatic:
+
+        Allows to choose if typesetting will be done with more user control.
+        """
         # Manual control allows for tweaking more parameters during typesetting
         self.manual_control = ui.yes_or_no('Use manual mode? (more control) ')
         if self.manual_control:
@@ -135,10 +128,130 @@ class Typesetter(object):
                 wedge_positions = (None, None)
                 return (code, wedge_positions)
         # Fell off the end of the loop with no match
-        else:
-            matches = []
 
-    def manual_compose(self, text_fragments):
+    def parse_and_compose(self, input_text):
+        """Parses a text and generates a sequence of (character, style) pairs
+        that can be translated into matrix coordinates.
+        """
+        # Start with setting the main style chosen during setup
+        self.current_style = self.main_style
+        # Work contains pages
+        work = []
+        # Page contains lines (with justification mode)
+        page = []
+        # Line contains text chunks (with style)
+        line = []
+        # The smallest chunk of text
+        text_chunk = []
+
+        # Define some parsing functions
+        def set_roman():
+            """Sets roman for the following text."""
+            line.append((text_chunk, self.current_style))
+            self.current_style = 'roman'
+
+        def set_bold():
+            """Sets bold for the following text."""
+            line.append((text_chunk, self.current_style))
+            self.current_style = 'bold'
+
+        def set_italic():
+            """Sets italic for the following text."""
+            line.append((text_chunk, self.current_style))
+            self.current_style = 'italic'
+
+        def set_smallcaps():
+            """Sets small caps for the following text."""
+            line.append((text_chunk, self.current_style))
+            self.current_style = 'smallcaps'
+
+        def set_subscript():
+            """Sets subscript for the following text."""
+            line.append((text_chunk, self.current_style))
+            self.current_style = 'subscript'
+
+        def set_superscript():
+            """Sets superscript for the following text."""
+            line.append((text_chunk, self.current_style))
+            self.current_style = 'superscript'
+
+        def align_left():
+            """Aligns the previous chunk to the left and ends the line."""
+            char_units = self.get_unit_width(text_chunk)
+            space_count = len([n for n in text_chunk if n == ' '])
+            page.append(line)
+
+        def align_right():
+            """Aligns the previous chunk to the right and ends the line."""
+            char_units = self.get_unit_width(text_chunk)
+            space_count = len([n for n in text_chunk if n == ' '])
+            page.append(line)
+
+        def align_center():
+            """Aligns the previous chunk to the center and ends the line."""
+            char_units = self.get_unit_width(text_chunk)
+            space_count = len([n for n in text_chunk if n == ' '])
+            page.append(line)
+
+        def align_both():
+            """Aligns the previous chunk to both edges and ends the line."""
+            char_units = self.get_unit_width(text_chunk)
+            space_count = len([n for n in text_chunk if n == ' '])
+            page.append(line)
+
+        def page_break():
+            """Ends a previous page, starts a new one."""
+            work.append(page)
+
+        # Commands for activating these functions
+        commands = {'^00': 'set_roman',
+                    '^01': 'set_bold',
+                    '^02': 'set_italic',
+                    '^03': 'set_smallcaps',
+                    '^04': 'set_subscript',
+                    '^05': 'set_superscript',
+                    '^CR': 'align_left',
+                    '^CL': 'align_right',
+                    '^CC': 'align_center',
+                    '^CF': 'align_both',
+                    '^PG': 'page_break'}
+        # Iterate over the input text
+        for index, character in enumerate(input_text):
+            try:
+                triple = input_text[index:index+2]
+            except IndexError:
+                triple = None
+            try:
+                double = input_text[index:index+1]
+            except IndexError:
+                double = None
+            # Now we have a char + two next, char + next, char
+            # Try to use a command
+            try:
+                commands[triple]()
+                # Command succeeded, skip the loop
+                continue
+            except KeyError:
+                # Command failed
+                pass
+            # Search for ligatures
+            if (self.ligatures == 3 and
+                    triple in (matrix[0] for matrix in self.diecase_layout
+                               if self.current_style in matrix[1])):
+                text_chunk.append(triple)
+            elif (self.ligatures >= 2 and
+                  double in (matrix[0] for matrix in self.diecase_layout
+                             if self.current_style in matrix[1])):
+                text_chunk.append(double)
+        work = []
+        text_generator = ((char, style)
+                          for page in work
+                          for line in page
+                          for (text_chunk, style) in line
+                          for char in text_chunk)
+        return text_generator
+
+    def manual_compose(self, text):
         """manual_compose:
 
         Reads text fragments from input, then composes them, and justifies to a
@@ -155,72 +268,12 @@ class Typesetter(object):
         prompt = 'Ligatures: [1] - off, [2] characters, [3] characters? '
         options = {'1': False, '2': 2, '3': 3}
         self.ligatures = ui.simple_menu(prompt, options)
-        # Generator that returns characters with their style
-        text_generator = ((char, style) for (text, style) in text_fragments
-                          for char in text)
         # Inintialize with no chars and spaces count at 0
-        chars_length = 0
-        spaces_count = 0
-        while (chars_length + spaces_count * var_min_units <
-               self.unit_line_length - 100):
-            try:
-                (char, style) = next(text_generator)
-                # Determine if it's a control command
-                if char == '^':
-                    # ^ denotes control commands
-                    try:
-                        command_code = text[i:i+2]
-                        eval(COMMANDS[command_code])
-                    except (IndexError, KeyError):
-                        pass
-                elif char == ' ':
-                    # This is a typical variable space
-                    spaces_count += 1
-                    self.buffer.append('var_space')
-                elif char == '~':
-                    # This is a fixed space
-                    self.buffer.extend(fix_space_code)
-                    chars_length += fixed_units
-                elif char == '_':
-                    # This is a non-breaking space
-                    self.buffer.extend(nb_space_code)
-                    chars_length += nb_sp_units
-                elif self.ligatures:
-                    # Not a control sequence or space? Then character
-                    # Try a ligature first...
-                    self.translate_character(text[i:i+self.ligatures-1],
-                                             style)
-            except IndexError:
-                pass
+        text_generator = self.parse_and_compose(text)
 
-    def auto_compose(self, text_fragments):
+    def auto_compose(self, text):
         """Composes text automatically, deciding when to end the lines."""
-        min_space_width = 4
-        composed_text = []
-        for (text, style) in text_fragments:
-            words = text.split(' ')
-            word_unit_widths = []
-            for word in words:
-                word_units = 0
-                for character in word:
-                    unit_width = self.get_unit_width(character, style)
-                    word_units += unit_width
-                word_unit_widths.append(word_units)
-            word_unit_widths = dict(zip(words, word_units))
-            # We parsed the text into words, counted the unit lengths
-            # Now, we want to compose the line
-            while words:
-                unit_count = 0
-                spaces = 0
-                raw_line = []
-                while (unit_count + spaces * min_space_width <
-                       self.unit_line_length):
-                    word = words.pop[0]
-                    unit_count += word_unit_widths[word]
-                    spaces += 1
-                    raw_line.append(word, self.get_space_codes(' '))
-                composed_text.append((raw_line, unit_count))
-        self.translate(composed_text)
+        text_generator = self.parse_and_compose(text)
 
     def get_unit_width(self, row):
         """Gets a unit width of a character"""

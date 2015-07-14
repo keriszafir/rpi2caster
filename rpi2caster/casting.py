@@ -27,6 +27,8 @@ from rpi2caster import typesetting_functions
 from rpi2caster import matrix_data
 # Wedge manipulation functions
 from rpi2caster import wedge_data
+# Read ribbon files
+from rpi2caster import typesetting_data
 
 
 def use_caster(func):
@@ -66,15 +68,20 @@ class Casting(object):
         # Caster - this will be set up later
         self.caster = None
         # You can initialize the casting job with a ribbon
+        # Filename will be displayed
         self.ribbon_file = ribbon_file
-        # Ribbon contenrs
-        self.ribbon = []
+        # Ribbon contents and metadata
+        self.ribbon_contents = None
+        self.ribbon_metadata = None
         # Indicates which line the last casting was aborted on
         self.line_aborted = None
-        # Metadata read from file
-        self.metadata = {}
         # Diecase parameters
         self.diecase = None
+        self.diecase_id = None
+        self.diecase_layout = None
+        # Unit arrangement: default is the S5 wedge
+        self.wedge = None
+        self.unit_arrangement = wedge_data.WEDGES['5']
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
@@ -87,8 +94,12 @@ class Casting(object):
         Composition casting routine. The input file is read backwards -
         last characters are cast first, after setting the justification.
         """
+        if not self.ribbon_contents:
+            ui.confirm('You must select a ribbon! [Enter] to continue...')
+            return False
         # Count all characters and lines in the ribbon
-        [all_lines, all_chars] = parsing.count_lines_and_chars(self.ribbon)
+        [all_lines, all_chars] = parsing.count_lines_and_chars(
+            self.ribbon_contents)
         # Characters already cast - start with zero
         current_char = 0
         chars_left = all_chars
@@ -104,7 +115,7 @@ class Casting(object):
         ui.display('Lines found in ribbon: %i' % all_lines)
         ui.display('Characters: %i' % all_chars)
         # For casting, we need to read the contents in reversed order
-        content = reversed(self.ribbon)
+        content = reversed(self.ribbon_contents)
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
@@ -192,8 +203,11 @@ class Casting(object):
         signals can outweigh constant air pressure on the other side.
         Basically: less than two signals - no ribbon advance...
         """
+        if not self.ribbon_contents:
+            ui.confirm('You must select a ribbon! [Enter] to continue...')
+            return False
         # Count a number of combinations punched in ribbon
-        all_combinations = parsing.count_combinations(self.ribbon)
+        all_combinations = parsing.count_combinations(self.ribbon_contents)
         ui.display('Combinations in ribbon: %i', all_combinations)
         # Wait until the operator confirms.
         intro = ('\nThe combinations of Monotype signals will be displayed '
@@ -202,7 +216,7 @@ class Casting(object):
         prompt = ('\nInput file found. Turn on the air, fit the tape '
                   'on your paper tower and press return to start punching.')
         ui.confirm(prompt)
-        for line in self.ribbon:
+        for line in self.ribbon_contents:
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
             [raw_signals, comment] = parsing.comments_parser(line)
@@ -453,6 +467,100 @@ class Casting(object):
             # At the end of successful sequence, some info for the user:
             ui.display('Done. Compare the lengths and adjust if needed.')
 
+    def align_mould(self):
+        """align_mould:
+
+        Calculates the width, displays it and casts some 9-unit characters.
+        Then, the user measures the width and adjusts the mould opening width.
+        """
+        intro = ('Mould blade opening calibration:\n'
+                 'Cast some 9-unit characters, then measure the width.\n'
+                 'Adjust if needed.')
+        ui.display(intro)
+        # Check if wedge is selected
+        if self.wedge:
+            set_width = self.wedge[2]
+            brit_pica = self.wedge[3]
+        else:
+            set_width = ui.enter_data_spec_type('Set width? : ', float)
+            brit_pica = ui.yes_or_no('British old pica wedge - .1667"? : ')
+        # Selected
+        if brit_pica:
+            pica = 0.1667
+        else:
+            pica = 0.166
+        # We calculate the width of double 9 units = 18 units, i.e. 1 pica em
+        em_width = pica * set_width / 12
+        ui.display('Type 9 units (1en) width: %s' % round(em_width / 2, 4))
+        ui.display('Type 18 units (1em) width: %s' % round(em_width, 4))
+        while True:
+            # Subroutines for menu options
+            def continue_aligning():
+                """Do nothing"""
+                pass
+            # Finished. Return to menu.
+            options = {'C': continue_aligning,
+                       'M': exceptions.return_to_menu,
+                       'E': exceptions.exit_program}
+            ui.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
+            # Cast 5 nine-unit quads
+            # End here if casting unsuccessful.
+            ui.display('Now casting 9-units spaces')
+            if not self.cast_from_matrix('G5', 5):
+                continue
+            # At the end of successful sequence, some info for the user:
+            ui.display('Done. Compare the lengths and adjust if needed.')
+
+    def align_diecase(self):
+        """align_diecase:
+
+        Casts the "en dash" characters for calibrating the character X-Y
+        relative to type body.
+        """
+        intro = ('X-Y character calibration:\n'
+                 'Cast some en-dashes and/or lowercase "n" letters, '
+                 'then check the position of the character relative to the '
+                 'type body.\nAdjust if needed.')
+        ui.display(intro)
+        try:
+            # Find the en-dash automatically
+            dash_position = [mat[2] + str(mat[3])
+                             for mat in self.diecase_layout
+                             if mat[0] == '–'][0]
+        except (exceptions.MatrixNotFound, TypeError, IndexError):
+            # Choose it manually
+            dash_position = ui.enter_data_or_blank('En dash (–) at: ').upper()
+        try:
+            # Find the "n" letter automatically
+            lowercase_n_position = [mat[2] + str(mat[3])
+                                    for mat in self.diecase_layout
+                                    if mat[0] == 'n'][0]
+        except (exceptions.MatrixNotFound, TypeError, IndexError):
+            # Choose itmanually
+            lowercase_n_position = ui.enter_data_or_blank('"n" at: ').upper()
+        while True:
+            # Subroutines for menu options
+            def continue_aligning():
+                """Do nothing"""
+                pass
+            # Finished. Return to menu.
+            options = {'C': continue_aligning,
+                       'M': exceptions.return_to_menu,
+                       'E': exceptions.exit_program}
+            ui.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
+            # Cast 5 nine-unit quads
+            # End here if casting unsuccessful.
+            if dash_position:
+                ui.display('Now casting en dash')
+                if not self.cast_from_matrix(dash_position, 5):
+                    continue
+            if lowercase_n_position:
+                ui.display('Now casting lowercase "n"')
+                if not self.cast_from_matrix(lowercase_n_position, 5):
+                    continue
+            # At the end of successful sequence, some info for the user:
+            ui.display('Done. Compare the lengths and adjust if needed.')
+
     def line_casting(self):
         """line_casting:
 
@@ -464,13 +572,13 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        # Initialize the typesetter
-        ts = typesetting_functions.Typesetter()
+        # Initialize the typesetter for a chosen diecase
+        typesetter = typesetting_functions.Typesetter(self.diecase_id)
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
         # Translate the text to Monotype signals
         # Compose the text
-        self.ribbon = ts.compose((text, ts.main_style))
+        self.ribbon_contents = typesetter.compose(text)
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()
@@ -491,8 +599,196 @@ class Casting(object):
         """
         ui.clear()
         ui.display('Ribbon preview:\n')
-        ui.display('\n'.join([line for line in self.ribbon]))
+        ui.display('\n'.join([line for line in self.ribbon_contents]))
         ui.hold_on_exit()
+
+    def heatup(self):
+        """heatup
+
+        Allows to heat up the mould before casting, in order to
+        stabilize the mould temperature (affects the type quality).
+        Casts two lines of em-quads, which can be thrown back to the pot.
+        """
+        ui.clear()
+        self.cast_from_matrix('O15', num=20, lines=2)
+
+    def service_menu(self):
+        """Settings and alignment menu for servicing the caster"""
+        # Subroutines end here
+        options = [('Return to main menu', exceptions.menu_level_up),
+                   ('Test the pneumatics, signal after signal', self.test_air),
+                   ('Send specified signals to caster', self.send_combination),
+                   ('Calibrate the space transfer wedge', self.align_wedges),
+                   ('Calibrate mould opening', self.align_mould),
+                   ('Calibrate diecase X-Y', self.align_diecase),
+                   ('Cast some quads to heat up the mould', self.heatup)]
+        header = ('Diagnostics and machine calibration menu:\n\n')
+        # Keep displaying the menu and go back here after any method ends
+        while True:
+            try:
+                # Catch "return to menu" and "exit program" exceptions here
+                ui.menu(options, header=header)()
+            except exceptions.ReturnToMenu:
+                # Stay in the menu
+                pass
+
+    def display_additional_info(self):
+        """Collect ribbon, diecase and wedge data here"""
+        displayed_info = []
+        if self.ribbon_metadata:
+            displayed_info.append('Ribbon title: %s' % self.ribbon_metadata[0])
+            displayed_info.append('Author: %s' % self.ribbon_metadata[1])
+        if self.diecase:
+            displayed_info.append('Diecase: %s' % self.diecase_id)
+            displayed_info.append('Typeface: %s' % self.diecase[4])
+            displayed_info.append('Type series: %s' % self.diecase[0])
+            displayed_info.append('Type size: %s' % self.diecase[1])
+        if self.wedge:
+            displayed_info.append('Wedge series: %s' % self.wedge[1])
+            displayed_info.append('Set width: %s' % self.wedge[2])
+            displayed_info.append('British pica wedge?: %s' % self.wedge[3])
+            displayed_info.append('Unit values: %s' % self.wedge[4])
+        return '\n'.join(displayed_info)
+
+    def data_menu(self):
+        """Choose the ribbon and diecase, if needed"""
+        # Define subroutines used only here
+        def ribbon_from_file():
+            """ribbon_from_file
+
+            Asks the user for the ribbon filename.
+            Checks if the file is readable, and pre-processes it.
+            """
+            ribbon_file = ui.enter_input_filename()
+            ribbon_contents = parsing.read_file(ribbon_file)
+            # If file read failed, end here
+            if not ribbon_contents:
+                ui.confirm('Error reading file! [Enter] to continue...')
+                return False
+            # We got the contents.
+            # Read the metadata at the beginning of the ribbon file
+            self.ribbon_file = ribbon_file
+            self.ribbon_contents = ribbon_contents
+            # Get the ribbon metadata from file
+            metadata = parsing.get_metadata(self.ribbon_contents)
+            author, title, unit_shift, diecase = None, None, False, None
+            if 'diecase' in metadata:
+                diecase = metadata['diecase']
+            if 'author' in metadata:
+                author = metadata['author']
+            if ('unit-shift' in metadata and
+                    metadata['unit-shift'].lower() in ['true', 'on']):
+                unit_shift = True
+            if ('unit-shift' in metadata and
+                    metadata['unit-shift'].lower() in ['false', 'off']):
+                unit_shift = False
+            if 'title' in metadata:
+                title = metadata['title']
+            # Get it into an attribute
+            self.ribbon_metadata = [title, author, diecase, unit_shift]
+            # Try to choose the diecase
+            try:
+                self.diecase_id = self.ribbon_metadata[2]
+                choose_diecase(self.diecase_id)
+            except KeyError:
+                pass
+            # Reset the "line aborted" on a new casting job
+            self.line_aborted = None
+            return True
+
+        def ribbon_from_db():
+            """Get the ribbon stored in database"""
+            ribbon_id = typesetting_data.choose_ribbon()
+            self.ribbon_metadata = typesetting_data.get_ribbon_metadata(
+                ribbon_id)
+            self.ribbon_contents = typesetting_data.get_ribbon_contents(
+                ribbon_id)
+            choose_diecase(self.diecase_id)
+
+        def choose_diecase(diecase_id=None):
+            """choose_diecase
+
+            Allows the user to choose the diecase manually.
+            Deletes any ribbon choice (to prevent casting the ribbon with a
+            wrong diecase).
+            """
+            # Display a warning if function called without argument
+            # and diecase and ribbon are chosen
+            if self.ribbon_metadata and self.diecase and not diecase_id:
+                ui.display('WARNING: you have already chosen a ribbon!\n'
+                           'A diecase has been selected automatically.'
+                           '\nChoosing a different diecase will unselect '
+                           'the ribbon.')
+                if not ui.yes_or_no('Proceed?'):
+                    return False
+                # Clear any ribbon and wedge choice
+                self.ribbon_metadata = None
+                self.ribbon_contents = None
+            # Wedge will be automatically or manually selected soon
+            # Temporarily, no wedge
+            self.wedge = None
+            # Choose a diecase automatically (if fed to function)
+            # or manually
+            self.diecase_id = diecase_id or matrix_data.choose_diecase()
+            # Get diecase parameters
+            self.diecase = matrix_data.get_diecase_parameters(self.diecase_id)
+            # Often used parameters deserve their own object attributes
+            self.diecase_layout = self.diecase[5]
+            # Ask whether to show diecase layout:
+            if ui.yes_or_no('Show matrix case layout?'):
+                show_diecase_layout()
+            # Get wedge parameters
+            try:
+                # Look up the wedge in database automatically
+                self.wedge = wedge_data.wedge_by_name_and_width(
+                    self.diecase[2], self.diecase[3])
+            except exceptions.NoMatchingData:
+                # Select it manually
+                choose_wedge()
+            # Read the UA for the wedge
+            self.unit_arrangement = self.wedge[-1]
+
+        def show_diecase_layout():
+            """Shows the diecase layout"""
+            if self.diecase_layout:
+                matrix_data.display_diecase_layout(self.diecase_layout,
+                                                   self.unit_arrangement)
+                ui.confirm('[Enter] to continue...')
+            else:
+                ui.confirm('You must select the matrix case first!')
+
+        def choose_wedge():
+            """Sets or changes a wedge to user-selected one"""
+            if self.diecase and self.wedge:
+                ui.display('WARNING: A proper wedge has been selected '
+                           'automatically when selecting a diecase.\n'
+                           'Changing this may led to casting type either '
+                           'too narrow or to wide!')
+                if not ui.yes_or_no('Proceed?'):
+                    return False
+            self.wedge = wedge_data.choose_wedge()
+            self.unit_arrangement = self.wedge[-1]
+
+        # Subroutines end here
+        options = [('Return to main menu', exceptions.menu_level_up),
+                   ('View ribbons in database', typesetting_data.show_ribbon),
+                   ('Choose the ribbon from database', ribbon_from_db),
+                   ('Choose the ribbon from file', ribbon_from_file),
+                   ('Preview ribbon', self.preview_ribbon),
+                   ('Choose the matrix case', choose_diecase),
+                   ('View the matrix case layout', show_diecase_layout),
+                   ('Choose the wedge', choose_wedge)]
+        header = ('Input data choice menu:\n\n')
+
+        # Keep displaying the menu and go back here after any method ends
+        while True:
+            try:
+                # Catch "return to menu" and "exit program" exceptions here
+                ui.menu(options, header=header,
+                        footer=self.display_additional_info())()
+            except exceptions.ReturnToMenu:
+                # Stay in the menu
+                pass
 
     def __exit__(self, *args):
         ui.debug_info('Exiting casting job context.')
@@ -506,35 +802,9 @@ def main_menu(work=Casting()):
     Header: string displayed over menu
     Footer: string displayed under menu (all info will be added here).
     """
-    # Declare subroutines for menu options
-    def choose_ribbon_filename():
-        """choose_ribbon_filename
-
-        Asks the user for the ribbon filename.
-        Checks if the file is readable, and pre-processes it.
-        """
-        work.ribbon_file = ui.enter_input_filename()
-        work.ribbon = parsing.read_file(work.ribbon_file)
-        # If file read failed, end here
-        if not work.ribbon:
-            ui.display('Error reading file!')
-            time.sleep(1)
-            return False
-        # Read the metadata at the beginning of the ribbon file
-        work.metadata = parsing.get_metadata(work.ribbon)
-        try:
-            work.diecase = work.metadata['diecase']
-        except KeyError:
-            pass
-        # Reset the "line aborted" on a new casting job
-        work.line_aborted = None
-        return True
-
+    # Declare subroutines
     def debug_notice():
-        """debug_notice
-
-        Prints a notice if the program is in debug mode.
-        """
+        """Prints a notice if the program is in debug mode."""
         if ui.DEBUG_MODE:
             return '\n\nThe program is now in debugging mode!'
         else:
@@ -553,26 +823,12 @@ def main_menu(work=Casting()):
             info.append('Input file name: ' + work.ribbon_file)
         # Add a caster name
         info.append('Using caster: ' + work.caster.name)
-        # Add metadata for ribbon
-        for parameter in work.metadata:
-            value = str(work.metadata[parameter])
-            info.append(str(parameter).capitalize() + ': ' + value)
         # Display the line last casting was aborted on, if applicable:
         if work.line_aborted:
             info.append('Last casting was aborted on line ' +
                         str(work.line_aborted))
         # Convert it all to a multiline string
         return '\n'.join(info)
-
-    def heatup():
-        """heatup
-
-        Allows to heat up the mould before casting, in order to
-        stabilize the mould temperature (affects the type quality).
-        Casts two lines of em-quads, which can be thrown back to the pot.
-        """
-        ui.clear()
-        work.cast_from_matrix('O15', num=20, lines=2)
 
     def cast_or_punch():
         """cast_or_punch:
@@ -589,15 +845,11 @@ def main_menu(work=Casting()):
     # End of menu subroutines
     # Now construct the menu, starting with available options
     options = [('Exit program', exceptions.exit_program),
-               ('Load a ribbon file', choose_ribbon_filename),
-               ('Preview ribbon', work.preview_ribbon),
+               ('Select ribbon or diecase...', work.data_menu),
                cast_or_punch(),
                ('Compose and cast a line of text', work.line_casting),
                ('Cast sorts', work.cast_sorts),
-               ('Test the pneumatics, signal after signal', work.test_air),
-               ('Send specified signals to caster', work.send_combination),
-               ('Calibrate the space transfer wedge', work.align_wedges),
-               ('Cast some quads to heat up the mould', heatup)]
+               ('Caster diagnostics and calibration...', work.service_menu)]
 
     header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
               'for Monotype Composition or Type and Rule casters.'
@@ -609,8 +861,9 @@ def main_menu(work=Casting()):
     while True:
         try:
             # Catch "return to menu" and "exit program" exceptions here
-            ui.menu(options, header=header, footer=additional_info())()
-        except exceptions.ReturnToMenu:
+            footer = additional_info() + '\n' + work.display_additional_info()
+            ui.menu(options, header=header, footer=footer)()
+        except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
             # Will skip to the end of the loop, and start all over
             pass
         except (KeyboardInterrupt, exceptions.ExitProgram):

@@ -73,11 +73,9 @@ def list_diecases():
 
 
 def choose_diecase():
-    """with_diecase_choice:
+    """choose_diecase:
 
-    Decorator function for choosing the diecase to operate on.
-    Lists diecases and gets the diecase ID, then gives the control to the
-    internal function that does operations on this diecase.
+    Lists diecases and lets the user choose one; returns the diecase name.
     """
     # Do it only if we have diecases (depends on list_diecases retval)
     while True:
@@ -115,9 +113,7 @@ def show_diecase():
         ui.confirm('[Enter] to continue...')
 
 
-def display_diecase_layout(layout,
-                           unit_arrangement=[5, 6, 7, 8, 9, 9, 9, 10, 10,
-                                             11, 12, 13, 14, 15, 18]):
+def display_diecase_layout(layout, unit_arrangement=wedge_data.WEDGES['5']):
     """display_diecase_layout:
 
     Shows a layout for a given diecase ID.
