@@ -98,7 +98,7 @@ class Casting(object):
             ui.confirm('You must select a ribbon! [Enter] to continue...')
             return False
         # Count all characters and lines in the ribbon
-        [all_lines, all_chars] = parsing.count_lines_and_chars(
+        (all_lines, all_chars) = parsing.count_lines_and_chars(
             self.ribbon_contents)
         # Characters already cast - start with zero
         current_char = 0
@@ -106,6 +106,9 @@ class Casting(object):
         # Line currently cast: since the caster casts backwards
         # (from the last to the first line), this will decrease.
         current_line = all_lines
+        # Lines done: this will increase
+        # We start with a galley trip
+        lines_done = 0
         # The program counts galley trip sequences and determines line count.
         # The first code to send to machine is galley trip (which also sets the
         # justification wedges and turns the pump on). So, subtract this one
@@ -137,27 +140,34 @@ class Casting(object):
             if parsing.check_newline(signals):
                 # Decrease the counter for each started new line
                 current_line -= 1
+                lines_done += 1
                 # Percent of all lines done:
                 line_percent_done = (100 * (all_lines - current_line) /
                                      all_lines)
                 # Display number of the working line,
                 # number of all remaining lines, percent done
-                info_for_user.append('Starting line: %i of %i, %i%% done...\n'
-                                     % (current_line, all_lines,
-                                        line_percent_done))
+                if not current_line:
+                    info_for_user.append('All lines successfully cast.\n')
+                else:
+                    info_for_user.append('Starting line no. %i (%i of %i '
+                                         '[%i%% done]), %i remaining...\n'
+                                         % (current_line, lines_done,
+                                            all_lines, line_percent_done,
+                                            all_lines - lines_done))
             elif parsing.check_character(signals):
                 # Increase the current character and decrease characters left,
                 # then do some calculations
                 current_char += 1
                 chars_left -= 1
                 # % of chars to cast in the line
-                char_percent_done = 100 * current_char / all_chars
+                char_percent_done = 100 * (current_char - 1) / all_chars
                 # Display number of chars done,
                 # number of all and remaining chars, % done
-                info_for_user.append('Casting character: %i / %i, '
-                                     '%i remaining, %i%% done...\n'
-                                     % (current_char, all_chars,
-                                        chars_left, char_percent_done))
+                info = ('Casting line no. %i (%i of %i), character: %i of %i '
+                        '[%i%% done], %i remaining...\n'
+                        % (current_line, lines_done, all_lines, current_char,
+                           all_chars, char_percent_done, chars_left))
+                info_for_user.append(info)
             # Append signals to be cast
             info_for_user.append(' '.join(signals).ljust(15))
         # Add comment
@@ -578,7 +588,8 @@ class Casting(object):
         text = ui.enter_data("Enter text to compose: ")
         # Translate the text to Monotype signals
         # Compose the text
-        self.ribbon_contents = typesetter.compose(text)
+        composition = typesetter.parse_and_compose(text)
+        self.ribbon_contents = typesetter.compose(composition)
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()
@@ -665,12 +676,17 @@ class Casting(object):
             if not ribbon_contents:
                 ui.confirm('Error reading file! [Enter] to continue...')
                 return False
-            # We got the contents.
+            # Clear the previous ribbon, diecase, wedge selections
+            self.ribbon_contents = None
+            self.ribbon_file = None
+            self.ribbon_metadata = None
+            self.diecase = None
+            self.diecase_id = None
+            self.diecase_layout = None
+            self.unit_arrangement = None
+            self.wedge = None
             # Read the metadata at the beginning of the ribbon file
-            self.ribbon_file = ribbon_file
-            self.ribbon_contents = ribbon_contents
-            # Get the ribbon metadata from file
-            metadata = parsing.get_metadata(self.ribbon_contents)
+            metadata = parsing.get_metadata(ribbon_contents)
             author, title, unit_shift, diecase = None, None, False, None
             if 'diecase' in metadata:
                 diecase = metadata['diecase']
@@ -684,26 +700,50 @@ class Casting(object):
                 unit_shift = False
             if 'title' in metadata:
                 title = metadata['title']
-            # Get it into an attribute
-            self.ribbon_metadata = [title, author, diecase, unit_shift]
             # Try to choose the diecase
             try:
-                self.diecase_id = self.ribbon_metadata[2]
-                choose_diecase(self.diecase_id)
+                choose_diecase(diecase)
             except KeyError:
                 pass
             # Reset the "line aborted" on a new casting job
             self.line_aborted = None
-            return True
+            # Set up casting session attributes
+            self.ribbon_file = ribbon_file
+            self.ribbon_contents = ribbon_contents
+            self.ribbon_metadata = [title, author, diecase, unit_shift]
+            self.diecase_id = diecase
+            # Get back to menu
+            exceptions.menu_level_up()
 
         def ribbon_from_db():
             """Get the ribbon stored in database"""
+            # Choose the ribbon
             ribbon_id = typesetting_data.choose_ribbon()
-            self.ribbon_metadata = typesetting_data.get_ribbon_metadata(
+            # Clear the previous ribbon, diecase, wedge selections
+            self.ribbon_contents = None
+            self.ribbon_file = None
+            self.ribbon_metadata = None
+            self.diecase = None
+            self.diecase_id = None
+            self.diecase_layout = None
+            self.unit_arrangement = None
+            self.wedge = None
+            ribbon_metadata = typesetting_data.get_ribbon_metadata(
                 ribbon_id)
-            self.ribbon_contents = typesetting_data.get_ribbon_contents(
+            ribbon_contents = typesetting_data.get_ribbon_contents(
                 ribbon_id)
-            choose_diecase(self.diecase_id)
+            # Get the metadata
+            diecase_id = ribbon_metadata[2]
+            # Select the matrix case automatically
+            choose_diecase(diecase_id)
+            # Reset the "line aborted" on a new casting job
+            self.line_aborted = None
+            # Set up casting session attributes
+            self.ribbon_contents = ribbon_contents
+            self.ribbon_metadata = ribbon_metadata
+            self.diecase_id = diecase_id
+            # Get back to menu
+            exceptions.menu_level_up()
 
         def choose_diecase(diecase_id=None):
             """choose_diecase
@@ -734,9 +774,6 @@ class Casting(object):
             self.diecase = matrix_data.get_diecase_parameters(self.diecase_id)
             # Often used parameters deserve their own object attributes
             self.diecase_layout = self.diecase[5]
-            # Ask whether to show diecase layout:
-            if ui.yes_or_no('Show matrix case layout?'):
-                show_diecase_layout()
             # Get wedge parameters
             try:
                 # Look up the wedge in database automatically
@@ -747,6 +784,9 @@ class Casting(object):
                 choose_wedge()
             # Read the UA for the wedge
             self.unit_arrangement = self.wedge[-1]
+            # Ask whether to show diecase layout:
+            if ui.yes_or_no('Show matrix case layout?'):
+                show_diecase_layout()
 
         def show_diecase_layout():
             """Shows the diecase layout"""

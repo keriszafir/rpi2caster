@@ -77,14 +77,14 @@ class Typesetter(object):
             self.compose = self.manual_compose
         else:
             # Align to the left
-            self.alignment = align_left
+            self.alignment = self.align_left
 
     def choose_alignment(self):
         """Lets the user choose the text alignment in line or column."""
-        options = {'L': align_left,
-                   'C': align_center,
-                   'R': align_right,
-                   'B': align_both}
+        options = {'L': self.align_left,
+                   'C': self.align_center,
+                   'R': self.align_right,
+                   'B': self.align_both}
         message = ('Alignment? [L]eft, [C]enter, [R]ight, [B]oth: ')
         return ui.simple_menu(message, options)
 
@@ -136,96 +136,41 @@ class Typesetter(object):
         # Start with setting the main style chosen during setup
         self.current_style = self.main_style
         # Work contains pages
-        work = []
+        self.work = []
         # Page contains lines (with justification mode)
-        page = []
+        self.page = []
         # Line contains text chunks (with style)
-        line = []
+        self.line = []
         # The smallest chunk of text
-        text_chunk = []
-
-        # Define some parsing functions
-        def set_roman():
-            """Sets roman for the following text."""
-            line.append((text_chunk, self.current_style))
-            self.current_style = 'roman'
-
-        def set_bold():
-            """Sets bold for the following text."""
-            line.append((text_chunk, self.current_style))
-            self.current_style = 'bold'
-
-        def set_italic():
-            """Sets italic for the following text."""
-            line.append((text_chunk, self.current_style))
-            self.current_style = 'italic'
-
-        def set_smallcaps():
-            """Sets small caps for the following text."""
-            line.append((text_chunk, self.current_style))
-            self.current_style = 'smallcaps'
-
-        def set_subscript():
-            """Sets subscript for the following text."""
-            line.append((text_chunk, self.current_style))
-            self.current_style = 'subscript'
-
-        def set_superscript():
-            """Sets superscript for the following text."""
-            line.append((text_chunk, self.current_style))
-            self.current_style = 'superscript'
-
-        def align_left():
-            """Aligns the previous chunk to the left and ends the line."""
-            char_units = self.get_unit_width(text_chunk)
-            space_count = len([n for n in text_chunk if n == ' '])
-            page.append(line)
-
-        def align_right():
-            """Aligns the previous chunk to the right and ends the line."""
-            char_units = self.get_unit_width(text_chunk)
-            space_count = len([n for n in text_chunk if n == ' '])
-            page.append(line)
-
-        def align_center():
-            """Aligns the previous chunk to the center and ends the line."""
-            char_units = self.get_unit_width(text_chunk)
-            space_count = len([n for n in text_chunk if n == ' '])
-            page.append(line)
-
-        def align_both():
-            """Aligns the previous chunk to both edges and ends the line."""
-            char_units = self.get_unit_width(text_chunk)
-            space_count = len([n for n in text_chunk if n == ' '])
-            page.append(line)
-
-        def page_break():
-            """Ends a previous page, starts a new one."""
-            work.append(page)
+        self.text_chunk = []
 
         # Commands for activating these functions
-        commands = {'^00': 'set_roman',
-                    '^01': 'set_bold',
-                    '^02': 'set_italic',
-                    '^03': 'set_smallcaps',
-                    '^04': 'set_subscript',
-                    '^05': 'set_superscript',
-                    '^CR': 'align_left',
-                    '^CL': 'align_right',
-                    '^CC': 'align_center',
-                    '^CF': 'align_both',
-                    '^PG': 'page_break'}
+        commands = {'^00': self.set_roman,
+                    '^01': self.set_bold,
+                    '^02': self.set_italic,
+                    '^03': self.set_smallcaps,
+                    '^04': self.set_subscript,
+                    '^05': self.set_superscript,
+                    '^CR': self.align_left,
+                    '^CL': self.align_right,
+                    '^CC': self.align_center,
+                    '^CF': self.align_both,
+                    '^PG': self.page_break}
         # Iterate over the input text
         for index, character in enumerate(input_text):
             try:
+                # Get two following characters if we can
+                # Can cause problems at the end, so catch an exception
                 triple = input_text[index:index+2]
             except IndexError:
                 triple = None
             try:
+                # Try the above with one additional character
                 double = input_text[index:index+1]
             except IndexError:
                 double = None
-            # Now we have a char + two next, char + next, char
+            # Now we have a character + two next, character + one next,
+            # and a character
             # Try to use a command
             try:
                 commands[triple]()
@@ -234,15 +179,19 @@ class Typesetter(object):
             except KeyError:
                 # Command failed
                 pass
-            # Search for ligatures
+            # Search for ligatures - 3-character first, if using
+            # 3-character ligatures was specified in setup...
             if (self.ligatures == 3 and
                     triple in (matrix[0] for matrix in self.diecase_layout
                                if self.current_style in matrix[1])):
-                text_chunk.append(triple)
+                self.text_chunk.append(triple)
+            # ...then look for 2-character ligatures...
             elif (self.ligatures >= 2 and
                   double in (matrix[0] for matrix in self.diecase_layout
                              if self.current_style in matrix[1])):
-                text_chunk.append(double)
+                self.text_chunk.append(double)
+            else:
+                self.text_chunk.append(character)
         work = []
         text_generator = ((char, style)
                           for page in work
@@ -354,6 +303,105 @@ class Typesetter(object):
                 fixed_space, fixed_units,
                 nb_space, nb_units)
 
+    # Define some parsing functions
+    def set_roman(self):
+        """Sets roman for the following text."""
+        self.line.append((self.text_chunk, self.current_style))
+        self.text_chunk = []
+        self.current_style = 'roman'
+
+    def set_bold(self):
+        """Sets bold for the following text."""
+        self.line.append((self.text_chunk, self.current_style))
+        self.text_chunk = []
+        self.current_style = 'bold'
+
+    def set_italic(self):
+        """Sets italic for the following text."""
+        self.line.append((self.text_chunk, self.current_style))
+        self.text_chunk = []
+        self.current_style = 'italic'
+
+    def set_smallcaps(self):
+        """Sets small caps for the following text."""
+        self.line.append((self.text_chunk, self.current_style))
+        self.text_chunk = []
+        self.current_style = 'smallcaps'
+
+    def set_subscript(self):
+        """Sets subscript for the following text."""
+        self.line.append((self.text_chunk, self.current_style))
+        self.text_chunk = []
+        self.current_style = 'subscript'
+
+    def set_superscript(self):
+        """Sets superscript for the following text."""
+        self.line.append((self.text_chunk, self.current_style))
+        self.text_chunk = []
+        self.current_style = 'superscript'
+
+    def align_left(self):
+        """Aligns the previous chunk to the left and ends the line."""
+        char_units = self.get_unit_width(self.text_chunk)
+        fill_spaces_number = 0
+        current_units = char_units
+        while current_units < self.unit_line_length - self.space_unit_width:
+            # Add a specified number of units
+            fill_spaces_number += 1
+            # Add units
+            current_units += self.fill_space_unit_width
+        # Done?
+        spaces_chunk = ['[ ]' for i in range(fill_spaces_number)]
+        self.line = [(spaces_chunk, 'roman')] + self.line
+        self.page.append(self.line)
+        self.line = []
+
+    def align_right(self):
+        """Aligns the previous chunk to the right and ends the line."""
+        char_units = self.get_unit_width(self.text_chunk)
+        fill_spaces_number = 0
+        current_units = char_units
+        while current_units < self.unit_line_length - self.space_unit_width:
+            # Add a specified number of units
+            fill_spaces_number += 1
+            # Add units
+            current_units += self.fill_space_unit_width
+        # Done?
+        spaces_chunk = ['[ ]' for i in range(fill_spaces_number)]
+        self.line.append((spaces_chunk, 'roman'))
+        self.page.append(self.line)
+        self.line = []
+
+    def align_center(self):
+        """Aligns the previous chunk to the center and ends the line."""
+        char_units = self.get_unit_width(self.text_chunk)
+        fill_spaces_number = 0
+        current_units = char_units
+        while current_units < self.unit_line_length - self.space_unit_width:
+            # Add a specified number of units
+            fill_spaces_number += 2
+            # Add units
+            current_units += 2 * self.fill_space_unit_width
+        # Done?
+        spaces_chunk = ['[ ]' for i in range(fill_spaces_number)]
+        fill = [(spaces_chunk, 'roman')]
+        self.line = fill + self.line + fill
+        self.page.append(self.line)
+        self.line = []
+
+    def align_both(self):
+        """Aligns the previous chunk to both edges and ends the line."""
+        char_units = self.get_unit_width(self.text_chunk)
+        space_count = len([n for n in self.text_chunk if n == ' '])
+        units_left = self.unit_line_length - char_units
+        space_unit_width = units_left / space_count
+        self.page.append((self.line, char_units, space_unit_width))
+        self.line = []
+
+    def page_break(self):
+        """Ends a previous page, starts a new one."""
+        self.work.append(self.page)
+
 
 # Functions
 
@@ -388,23 +436,3 @@ def double_justification(wedge_positions, buffer):
     # Add 0005-N-J-pos0005 next:
     buffer.append(str(pos0005) + 'NKJ 0005 0075')
     return True
-
-
-def align_left(buffer, line_length, characters_unit_length):
-    """Aligns the text to the left."""
-    pass
-
-
-def align_center(text, line_length):
-    """Centers the text."""
-    pass
-
-
-def align_right(text, line_length):
-    """Aligns the text to the right."""
-    pass
-
-
-def align_both(text, line_length):
-    """Aligns the text to both margins."""
-    pass

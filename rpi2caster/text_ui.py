@@ -9,6 +9,7 @@ import io
 import os
 import readline
 import glob
+from rpi2caster import exceptions
 
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
@@ -186,7 +187,9 @@ def enter_input_filename():
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the input filename; check if the file is readable
-    filename = input('\n Enter the input file name: ')
+    filename = (enter_data_or_blank('\n Enter the input file name '
+                                    '(leave blank to return to menu): ') or
+                exceptions.return_to_menu())
     filename = os.path.realpath(filename)
     try:
         with io.open(filename, 'r'):
@@ -203,7 +206,9 @@ def enter_output_filename():
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the output filename; no check here
-    filename = input('\n Enter the output file name: ')
+    filename = (enter_data_or_blank('\n Enter the input file name '
+                                    '(leave blank to return to menu): ') or
+                exceptions.return_to_menu())
     filename = os.path.realpath(filename)
     return filename
 
