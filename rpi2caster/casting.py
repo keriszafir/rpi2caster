@@ -586,10 +586,12 @@ class Casting(object):
         typesetter = typesetting_functions.Typesetter(self.diecase_id)
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
+        typesetter.text_source = typesetter.parse_and_generate(text)
         # Translate the text to Monotype signals
         # Compose the text
-        composition = typesetter.parse_and_compose(text)
-        self.ribbon_contents = typesetter.compose(composition)
+        typesetter.compose()
+        typesetter.apply_justification()
+        self.ribbon_contents = typesetter.write_output()
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()

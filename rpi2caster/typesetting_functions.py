@@ -17,6 +17,18 @@ class Typesetter(object):
         self.ligatures = 3
         self.unit_shift = False
         self.compose = self.auto_compose
+        self.main_alignment = self.align_left
+        # Set up the spaces
+        self.spaces = {'var_space_char': ' ',
+                       'var_space_min_units': 4,
+                       'var_space_code': 'GS2',
+                       'fixed_space_char': '_',
+                       'fixed_space_units': 9,
+                       'fixed_space_code': 'G5',
+                       'nb_space_char': '~',
+                       'nb_space_units': 9,
+                       'nb_space_code': 'G5',
+                       'em_quad_code': 'O15'}
         # Choose a matrix case if ID not supplied
         diecase_id = diecase_id or matrix_data.choose_diecase()
         # Get matrix case parameters
@@ -39,6 +51,94 @@ class Typesetter(object):
         self.manual_or_automatic()
         # Choose dominant stype
         self.choose_style()
+        # Set it as the current style
+        self.current_style = self.main_style
+        # Current units in the line - start with 0
+        self.current_units = 0
+        # Unit correction: -2 ... +10 applied to a character or a fragment
+        self.unit_correction = 0
+        # Commands for activating the typesetting functions
+        self.typesetting_commands = {'^00': self.style_roman,
+                                     '^01': self.style_bold,
+                                     '^02': self.style_italic,
+                                     '^03': self.style_smallcaps,
+                                     '^04': self.style_subscript,
+                                     '^05': self.style_superscript,
+                                     '^CR': self.align_left,
+                                     '^CL': self.align_right,
+                                     '^CC': self.align_center,
+                                     '^CF': self.align_both}
+        # Source text generator - at the start, sets none
+        self.text_source = None
+        # Combination buffer - empty now
+        self.buffer = []
+        self.output_buffer = []
+        # Display info for the user
+        ui.display('Composing for %s %s - %s' % (typeface_name, self.type_size,
+                                                 type_series))
+        ui.display('Wedge used: %s - %s set' % (self.wedge_series,
+                                                self.set_width))
+
+    def parse_and_generate(self, input_text):
+        """parse_and_generate:
+
+        Generates a sequence of characters from the input text.
+        For each character, this function predicts what two next characters
+        and one next character are."""
+        # This variable will prevent yielding a number of subsequent chars
+        # after a ligature or command has been found and yielded.
+        skip_steps = 0
+        for index, character in enumerate(input_text):
+            if skip_steps:
+                # Skip it, decrease counter, yield nothing
+                skip_steps -= 1
+                continue
+            if character in (' ', '_', '~'):
+                # This is a space: variable, fixed, non-breaking
+                yield character
+                continue
+            elif character in ('\n', '\t'):
+                # Don't care about line breaks and tabulation
+                continue
+            # Not space? Get the character and two next chars (triple),
+            # a character and one next char (double)
+            try:
+                # Get two following characters if we can
+                # Can cause problems at the end, so catch an exception
+                triple = input_text[index:index+3]
+            except IndexError:
+                triple = None
+            try:
+                # Try the above with one additional character
+                double = input_text[index:index+2]
+            except IndexError:
+                double = None
+            # Now we have a character + two next, character + one next,
+            # and a character
+            # If it is a command, yield it and move on
+            if triple in self.typesetting_commands:
+                skip_steps = 2
+                yield triple
+                continue
+            # Search for ligatures - 3-character first, if using
+            # 3-character ligatures was specified in setup...
+            if (self.ligatures == 3 and
+                    triple in (matrix[0] for matrix in self.diecase_layout
+                               if self.current_style in matrix[1])):
+                skip_steps = 2
+                yield triple
+                continue
+            # ...then look for 2-character ligatures...
+            elif (self.ligatures >= 2 and
+                  double in (matrix[0] for matrix in self.diecase_layout
+                             if self.current_style in matrix[1])):
+                skip_steps = 1
+                yield double
+                continue
+            # No ligatures found? Just yield a single character.
+            else:
+                yield character
+                continue
 
     def check_if_wedge_is_ok(self):
         """Checks if the wedge matches the chosen matrix case."""
@@ -72,12 +172,23 @@ class Typesetter(object):
             # Choose unit shift: yes or no?
             self.unit_shift = ui.yes_or_no('Do you use unit-shift? ')
             # Choose alignment mode
-            self.alignment = self.choose_alignment()
+            self.choose_alignment()
             # Select the composition mode
             self.compose = self.manual_compose
-        else:
-            # Align to the left
-            self.alignment = self.align_left
+            # Set custom spaces
+            self.space_setup()
+            # Set ligatures for the job
+            self.set_ligatures()
+
+    def set_ligatures(self):
+        """set_ligatures:
+
+        Choose if you want to use no ligatures, 2-character
+        or 3-character ligatures.
+        """
+        prompt = 'Ligatures: [1] - off, [2] characters, [3] characters? '
+        options = {'1': False, '2': 2, '3': 3}
+        self.ligatures = ui.simple_menu(prompt, options)
 
     def choose_alignment(self):
         """Lets the user choose the text alignment in line or column."""
@@ -85,8 +196,8 @@ class Typesetter(object):
                    'C': self.align_center,
                    'R': self.align_right,
                    'B': self.align_both}
-        message = ('Alignment? [L]eft, [C]enter, [R]ight, [B]oth: ')
-        return ui.simple_menu(message, options)
+        message = ('Default alignment: [L]eft, [C]enter, [R]ight, [B]oth? ')
+        self.main_alignment = ui.simple_menu(message, options)
 
     def choose_style(self):
         """Parses the diecase for available styles and lets user choose one."""
@@ -102,143 +213,107 @@ class Typesetter(object):
         prompt = 'Choose a style: %s ' % styles_list
         self.main_style = ui.simple_menu(prompt, options)
 
-    def get_space_codes(self, space_symbol, unit_width):
+    def get_space_code(self, space_symbol, unit_width):
         """Gets coordinates for the space closest to the desired unit width"""
         # Space style: " " for low space and "_" for fixed space
         available_spaces = [sp for sp in self.diecase_layout if
                             sp[0] == space_symbol]
-        # Check if space has specified unit value
+        spaces = []
+        shifted_spaces = []
+        # Gather non-shifted spaces
         for space in available_spaces:
-            if space[4] is None:
-                # Get it from the wedge unit arrangement
-                space_row = space[3]
-                # We have to use unit-shift to get to 16th row anyway...
-                if space_row == 16:
-                    space_row = 15
-                space[4] = self.unit_arrangement[space_row - 1]
-        # Search for a best match, starting with some arbitrary difference
-        differences = {}
-        for space in available_spaces:
-            difference = unit_width - space[-1]
-            differences[tuple(space)] = difference
-        for space in differences:
-            # Found an exact match
-            if differences[space] == 0:
-                code = str(space[2]) + str(space[3])
-                wedge_positions = (None, None)
-                return (code, wedge_positions)
-        # Fell off the end of the loop with no match
+            # Get the unit value for this space
+            column = space[2]
+            row = space[3]
+            if row < 16:
+                space_unit_width = self.unit_arrangement[row]
+                space_code = column + str(row)
+                spaces.append((space_code, space_unit_width))
+            if self.unit_shift:
+                # Convert non-shifted to shifted signals
+                shifted_column = column.replace('D', 'EF') + 'D'
+                shifted_row = row - 1
+                shifted_space_unit_width = self.unit_arrangement[shifted_row]
+                shifted_space_code = shifted_column + str(row)
+                shifted_spaces.append((shifted_space_code,
+                                       shifted_space_unit_width))
+        # Try matching a space
+        for (space_code, space_unit_width) in spaces:
+            if space_unit_width == unit_width:
+                return space_code
 
-    def parse_and_compose(self, input_text):
-        """Parses a text and generates a sequence of (character, style) pairs
-        that can be translated into matrix coordinates.
+
+
+    def translate(self, char):
+        """translate:
+
+        Translates the character to a combination of Monotype signals,
+        applying single or double justification whenever necessary.
         """
-        # Start with setting the main style chosen during setup
-        self.current_style = self.main_style
-        # Work contains pages
-        self.work = []
-        # Page contains lines (with justification mode)
-        self.page = []
-        # Line contains text chunks (with style)
-        self.line = []
-        # The smallest chunk of text
-        self.text_chunk = []
+        # Get the matrix data: [char, style, column, row, units]
+        matrix = ([mat for mat in self.diecase_layout if mat[0] == char and
+                   self.current_style in mat[1]])
+        # If char units is the same as the row units, no correction is needed
+        # Wedge positions for such character are null
+        wedge_positions = (None, None)
+        # Get coordinates
+        column = matrix[2]
+        row = matrix[3]
+        unit_width = matrix[4]
+        row_units = self.unit_arrangement[row]
+        # Add or subtract current unit correction
+        char_units = unit_width + self.unit_correction
+        # Trying to access the 16th row with no unit shift activated
+        if row == 16 and not self.unit_shift:
+            self.convert_to_unit_shift()
+        # Detect any spaces
+        if char == ' ':
+            combination = 'var_space'
+        elif char == '_':
+            combination = 'fixed_space'
+        elif char == '~':
+            combination = 'nb_space'
+        # Shifted values apply only to unit-shift, start with empty
+        shifted_row, shifted_column, shifted_row_units = 0, '', 0
+        # If we use unit shift, we can move the diecase one row further
+        # This would mean e.g. that when using the 5-series wedge, with UA:
+        # 5, 6, 7, 8, 9... - we can put the 8-unit character at A5
+        # (i.e. 9-unit position, normally), cast it with unit shift (add D
+        # to the column sequence) and have 8 units.
+        # Casting from column D will need us to replace the "D" signal,
+        # that we use normally, with combined "EF".
+        if self.unit_shift:
+            shifted_row = row - 1
+            column.replace('D', 'EF')
+            shifted_column = column + 'D'
+            shifted_row_units = self.unit_arrangement[shifted_row]
+        # Check if the character needs unit correction at all
+        # Add it if not
+        if char_units == row_units:
+            combination = column + str(row)
+        # Try unit-shift next
+        elif char_units == shifted_row_units:
+            combination = shifted_column + str(shifted_row)
+        # Then try using the justification wedges
+        else:
+            # Calculate the difference between desired width and row width
+            difference = char_units - row_units
+            # Cast it with the S-needle
+            combination = column + str(row) + 'S'
+            wedge_positions = self.calculate_wedges(difference)
+        # Finally, add combination and wedge positions to the buffer
+        self.buffer.append([combination, wedge_positions, char])
 
-        # Commands for activating these functions
-        commands = {'^00': self.set_roman,
-                    '^01': self.set_bold,
-                    '^02': self.set_italic,
-                    '^03': self.set_smallcaps,
-                    '^04': self.set_subscript,
-                    '^05': self.set_superscript,
-                    '^CR': self.align_left,
-                    '^CL': self.align_right,
-                    '^CC': self.align_center,
-                    '^CF': self.align_both,
-                    '^PG': self.page_break}
-        # Iterate over the input text
-        for index, character in enumerate(input_text):
-            try:
-                # Get two following characters if we can
-                # Can cause problems at the end, so catch an exception
-                triple = input_text[index:index+2]
-            except IndexError:
-                triple = None
-            try:
-                # Try the above with one additional character
-                double = input_text[index:index+1]
-            except IndexError:
-                double = None
-            # Now we have a character + two next, character + one next,
-            # and a character
-            # Try to use a command
-            try:
-                commands[triple]()
-                # Command succeeded, skip the loop
-                continue
-            except KeyError:
-                # Command failed
-                pass
-            # Search for ligatures - 3-character first, if using
-            # 3-character ligatures was specified in setup...
-            if (self.ligatures == 3 and
-                    triple in (matrix[0] for matrix in self.diecase_layout
-                               if self.current_style in matrix[1])):
-                self.text_chunk.append(triple)
-            # ...then look for 2-character ligatures...
-            elif (self.ligatures >= 2 and
-                  double in (matrix[0] for matrix in self.diecase_layout
-                             if self.current_style in matrix[1])):
-                self.text_chunk.append(double)
-            else:
-                self.text_chunk.append(character)
-        work = []
-        text_generator = ((char, style)
-                          for page in work
-                          for line in page
-                          for (text_chunk, style) in line
-                          for char in text_chunk)
-        return text_generator
-
-    def manual_compose(self, text):
+    def manual_compose(self):
         """manual_compose:
 
         Reads text fragments from input, then composes them, and justifies to a
         specified line length. Adds codes to the buffer.
         Text fragments is a list of tuples: ((text1, style1), ...)
         """
-        # Enter the space settings
-        (var_style, var_min_units, fixed_style, fixed_units,
-         nb_sp_style, nb_sp_units) = self.space_settings()
-        # Get the Monotype signals for the spaces
-        fix_space_code = self.get_space_codes(fixed_style, fixed_units)
-        nb_space_code = self.get_space_codes(nb_sp_style, nb_sp_units)
-        # Choose if you want to use ligatures
-        prompt = 'Ligatures: [1] - off, [2] characters, [3] characters? '
-        options = {'1': False, '2': 2, '3': 3}
-        self.ligatures = ui.simple_menu(prompt, options)
-        # Inintialize with no chars and spaces count at 0
-        text_generator = self.parse_and_compose(text)
 
-    def auto_compose(self, text):
+    def auto_compose(self):
         """Composes text automatically, deciding when to end the lines."""
-        text_generator = self.parse_and_compose(text)
-
-    def get_unit_width(self, row):
-        """Gets a unit width of a character"""
-        unit_width = (self.unit_arrangement[row-1])
-        return unit_width
-
-    def translate_text(self, composed_text):
-        """Translates a composed text to Monotype codes"""
-
-    def translate_character(self, char, style):
-        """translate_character:
-
-        Gets character's coordinates in the diecase, determines and applies
-        unit width correction (with unit shift or single justification).
-        Returns coordinates (as a string) and unit width of a character.
-        """
         pass
 
     def enter_line_length(self):
@@ -274,7 +349,7 @@ class Typesetter(object):
         ui.display('Line length in %s-set units: %s' % (self.set_width,
                                                         self.unit_line_length))
 
-    def space_settings(self):
+    def space_setup(self):
         """Chooses the spaces that will be used in typesetting."""
         # List available spaces
         # Matrix in layout is defined as follows:
@@ -286,153 +361,207 @@ class Typesetter(object):
         nbsp_prompt = 'Non-breaking space: [L]ow or [H]igh? '
         nbsp_units_prompt = 'How many units (default: 9)? '
         # Choose spaces
+        spaces = {}
         # Variable space (justified) - minimum units
-        variable_space = ui.simple_menu(var_prompt, {'L': ' ', 'H': '_'})
-        min_units = ui.enter_data_spec_type_or_blank(
+        variable_space = ui.simple_menu(var_prompt, {'Low': ' ', 'High': '_'})
+        spaces['var_space_char'] = variable_space
+        var_space_min_units = ui.enter_data_spec_type_or_blank(
             var_units_prompt, int) or 4
+        spaces['var_space_min_units'] = var_space_min_units
+        spaces['var_space_code'] = self.get_space_code(variable_space,
+                                                       var_space_min_units)
         # Fixed space (allows line-breaking)
         fixed_space = ui.simple_menu(fixed_prompt, {'L': ' ', 'H': '_'})
-        fixed_units = ui.enter_data_spec_type_or_blank(
+        spaces['fixed_space_char'] = fixed_space
+        fixed_space_units = ui.enter_data_spec_type_or_blank(
             fix_units_prompt, int) or 9
+        spaces['fixed_space_units'] = fixed_space_units
+        spaces['fixed_space_code'] = self.get_space_code(fixed_space,
+                                                         fixed_space_units)
         # Non-breaking space
         nb_space = ui.simple_menu(nbsp_prompt, {'L': ' ', 'H': '_'})
-        nb_units = ui.enter_data_spec_type_or_blank(
+        spaces['nb_space_char'] = nb_space
+        nb_space_units = ui.enter_data_spec_type_or_blank(
             nbsp_units_prompt, int) or 9
-        # Return decision
-        return (variable_space, min_units,
-                fixed_space, fixed_units,
-                nb_space, nb_units)
+        spaces['nb_space_units'] = nb_space_units
+        spaces['nb_space_code'] = self.get_space_code(nb_space, nb_space_units)
+        # Finalize setup
+        self.spaces = spaces
 
     # Define some parsing functions
-    def set_roman(self):
+    def style_roman(self):
         """Sets roman for the following text."""
-        self.line.append((self.text_chunk, self.current_style))
-        self.text_chunk = []
         self.current_style = 'roman'
 
-    def set_bold(self):
+    def style_bold(self):
         """Sets bold for the following text."""
-        self.line.append((self.text_chunk, self.current_style))
-        self.text_chunk = []
         self.current_style = 'bold'
 
-    def set_italic(self):
+    def style_italic(self):
         """Sets italic for the following text."""
-        self.line.append((self.text_chunk, self.current_style))
-        self.text_chunk = []
         self.current_style = 'italic'
 
-    def set_smallcaps(self):
+    def style_smallcaps(self):
         """Sets small caps for the following text."""
-        self.line.append((self.text_chunk, self.current_style))
-        self.text_chunk = []
         self.current_style = 'smallcaps'
 
-    def set_subscript(self):
+    def style_subscript(self):
         """Sets subscript for the following text."""
-        self.line.append((self.text_chunk, self.current_style))
-        self.text_chunk = []
         self.current_style = 'subscript'
 
-    def set_superscript(self):
+    def style_superscript(self):
         """Sets superscript for the following text."""
-        self.line.append((self.text_chunk, self.current_style))
-        self.text_chunk = []
         self.current_style = 'superscript'
 
-    def align_left(self):
-        """Aligns the previous chunk to the left and ends the line."""
-        char_units = self.get_unit_width(self.text_chunk)
+    def fill_line(self):
+        """Justify the row; applies to all alignment routines"""
+        # Do the alignment and justification
+        # Fill spaces number: all spaces in line will be fixed
         fill_spaces_number = 0
-        current_units = char_units
-        while current_units < self.unit_line_length - self.space_unit_width:
+        while self.current_units < self.unit_line_length:
             # Add a specified number of units
             fill_spaces_number += 1
             # Add units
-            current_units += self.fill_space_unit_width
-        # Done?
-        spaces_chunk = ['[ ]' for i in range(fill_spaces_number)]
-        self.line = [(spaces_chunk, 'roman')] + self.line
-        self.page.append(self.line)
-        self.line = []
+            self.current_units += self.spaces['fixed_space_units']
+        # Return the spaces number
+        return fill_spaces_number
+
+    def align_left(self):
+        """Aligns the previous chunk to the left."""
+        fill_spaces_number = self.fill_line()
+        spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
+        # Prepare the line: (content, wedge_positions)
+        self.line[0] = spaces + self.line[0]
 
     def align_right(self):
-        """Aligns the previous chunk to the right and ends the line."""
-        char_units = self.get_unit_width(self.text_chunk)
-        fill_spaces_number = 0
-        current_units = char_units
-        while current_units < self.unit_line_length - self.space_unit_width:
-            # Add a specified number of units
-            fill_spaces_number += 1
-            # Add units
-            current_units += self.fill_space_unit_width
-        # Done?
-        spaces_chunk = ['[ ]' for i in range(fill_spaces_number)]
-        self.line.append((spaces_chunk, 'roman'))
-        self.page.append(self.line)
-        self.line = []
+        """Aligns the previous chunk to the right."""
+        fill_spaces_number = self.fill_line()
+        spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
+        # Prepare the line: (content, wedge_positions)
+        self.line[0] = self.line[0] + spaces
 
     def align_center(self):
-        """Aligns the previous chunk to the center and ends the line."""
-        char_units = self.get_unit_width(self.text_chunk)
-        fill_spaces_number = 0
-        current_units = char_units
-        while current_units < self.unit_line_length - self.space_unit_width:
-            # Add a specified number of units
-            fill_spaces_number += 2
-            # Add units
-            current_units += 2 * self.fill_space_unit_width
-        # Done?
-        spaces_chunk = ['[ ]' for i in range(fill_spaces_number)]
-        fill = [(spaces_chunk, 'roman')]
-        self.line = fill + self.line + fill
-        self.page.append(self.line)
-        self.line = []
+        """Aligns the previous chunk to the center."""
+        fill_spaces_number = self.fill_line()
+        spaces = ([' ' for i in range(fill_spaces_number / 2)], 'roman')
+        # Prepare the line: (content, wedge_positions)
+        self.line[0] = spaces + self.line[0] + spaces
 
     def align_both(self):
         """Aligns the previous chunk to both edges and ends the line."""
-        char_units = self.get_unit_width(self.text_chunk)
-        space_count = len([n for n in self.text_chunk if n == ' '])
-        units_left = self.unit_line_length - char_units
-        space_unit_width = units_left / space_count
-        self.page.append((self.line, char_units, space_unit_width))
-        self.line = []
-
-    def page_break(self):
-        """Ends a previous page, starts a new one."""
-        self.work.append(self.page)
+        space_count = 0
 
 
-# Functions
+    def calculate_wedges(self, difference):
+        """calculate_wedges:
 
-def single_justification(wedge_positions, buffer):
-    """single_justification:
+        Calculates and returns wedge positions for character.
+        Uses pre-calculated unit width difference between row's unit width
+        and character's width (with optional corrections).
+        """
+        # Check if corrections are needed at all
+        # (delta = 0 - no corrections, wedges at neutral position i.e. 3/8)
+        if not difference:
+            return (None, None)
+        # Delta is in units of a given set
+        # To get wedge steps, calculate delta to inches
+        # First, we must know whether pica = .1667" or .166"
+        if self.brit_pica:
+            pica = 0.1667
+        else:
+            pica = 0.166
+        # Calculate the inch width of delta
+        # pica = 18 units * set_width / 12
+        # unit_width = 12 * pica / (set width * 18)
+        difference_inches = difference * 12 * pica / (18 * self.set_width)
+        # We can calculate the steps of 0005 and 0075 wedges
+        # Each step is calculated with 0075:3 and 0005:8 as base
+        steps_0075 = difference_inches // 0.0075
+        steps_0005 = difference_inches % 0.0075 // 0.0005
+        # We now can calculate the wedge positions and return them
+        return (3 + steps_0075, 8 + steps_0005)
 
-    Single justification: the caster sets 0005, then 0075 + pump resumes.
-    Function adds a 0075-b, then 0005-a combination to buffer.
-    Supports both normal (0075, 0005, 0005+0075) and alternate (NK, NJ, NKJ)
-    justification modes.
-    """
-    (pos0075, pos0005) = wedge_positions
-    # Add 0075-N-K-pos0075 first:
-    buffer.append(str(pos0075) + 'NK 0075')
-    # Add 0005-N-J-pos0005 next:
-    buffer.append(str(pos0005) + 'NJ 0005')
-    return True
+    def convert_to_unit_shift(self):
+        """convert_to_unit_shift:
 
+        Sometimes using unit-shift is necessary to cast - i.e. we have to
+        access 16th row on a 16x17 matrix case. This function will activate
+        unit shift for the current typesetting session, but also convert
+        all codes in a buffer so that they use EF instead of D signals
+        in column number.
+        """
+        prompt = ('\nWARNING: You must use the unit-shift attachment. '
+                  'Do you wish to compose for unit-shift? \n')
+        self.unit_shift = ui.yes_or_no(prompt)
+        if self.unit_shift():
+            for (combination, _, _) in self.buffer:
+                combination.replace('D', 'EF')
 
-def double_justification(wedge_positions, buffer):
-    """double_justification:
+    def apply_justification(self):
+        """apply_justification:
 
-    Double justification: the caster sets 0005+0075 and puts the line
-    to the galley, then sets 0075 and pump resumes.
-    Function adds a 0075-b, then 0005-a combination to buffer.
-    Supports both normal (0075, 0005, 0005+0075)
-    and alternate (NK, NJ, NKJ) justification modes.
-    """
-    (pos0075, pos0005) = wedge_positions
-    # Add 0075-N-K-pos0075 first:
-    buffer.append(str(pos0075) + 'NK 0075')
-    # Add 0005-N-J-pos0005 next:
-    buffer.append(str(pos0005) + 'NKJ 0005 0075')
-    return True
+        Reads the buffer backwards and decides when to apply single
+        or double justification (for row). Outputs the ready sequence.
+        """
+        line_wedge_positions = (3, 8)
+        current_wedge_positions = (3, 8)
+        while self.buffer:
+            # Take the last combination off
+            (combination, wedge_positions, character) = self.buffer.pop()
+            # New line - use double justification
+            if combination == 'newline':
+                line_wedge_positions = wedge_positions
+                self.double_justification(wedge_positions)
+            # Justifying space - if wedges were set to different positions,
+            # reset them to line justification positions
+            elif combination == 'space':
+                if current_wedge_positions != line_wedge_positions:
+                    self.single_justification(line_wedge_positions)
+                self.output_buffer.append(self.spaces['var_space_code'])
+            # No corrections needed
+            elif wedge_positions == (None, None):
+                self.output_buffer.append(combination + ' // ' + character)
+            # Correction needed - determine if wedges are already set
+            elif wedge_positions != current_wedge_positions:
+                self.single_justification(wedge_positions)
+                current_wedge_positions = wedge_positions
+                self.output_buffer.append(combination + ' // ' + character)
+
+    def write_output(self):
+        """Returns an output buffer - from first character codes to last/"""
+        return reversed(self.output_buffer)
+
+    def single_justification(self, wedge_positions):
+        """single_justification:
+
+        Single justification: the caster sets 0005, then 0075 + pump resumes.
+        Function adds a 0075-b, then 0005-a combination to buffer.
+        Supports both normal (0075, 0005, 0005+0075) and alternate
+        (NK, NJ, NKJ) justification modes.
+        """
+        # This function is used during backwards-parsing and converting
+        # the combinations sequence after typesetting
+        # Codes are placed in the sequence that will be read by the caster
+        # So, we get 0005 first, then 0075
+        (pos0075, pos0005) = wedge_positions
+        # Add 0005-N-J-pos0005 first:
+        self.output_buffer.append(str(pos0005) + 'NJ 0005')
+        # Add 0075-N-K-pos0075 next:
+        self.output_buffer.append(str(pos0075) + 'NK 0075')
+        return True
+
+    def double_justification(self, wedge_positions):
+        """double_justification:
+
+        Double justification: the caster sets 0005+0075 and puts the line
+        to the galley, then sets 0075 and pump resumes.
+        Function adds a 0075-b, then 0005-a combination to buffer.
+        Supports both normal (0075, 0005, 0005+0075)
+        and alternate (NK, NJ, NKJ) justification modes.
+        """
+        (pos0075, pos0005) = wedge_positions
+        # Add 0075-N-K-pos0075 first:
+        self.output_buffer.append(str(pos0075) + 'NK 0075')
+        # Add 0005-N-J-pos0005 next:
+        self.output_buffer.append(str(pos0005) + 'NKJ 0005 0075')
+        return True
