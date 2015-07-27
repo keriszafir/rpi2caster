@@ -223,6 +223,8 @@ class Typesetter(object):
         and if this fails too, applies justification with the S-needle.
 
         Returns (space_code, wedge_positions).
+        Adds 'S' to the space code if justification is applied. In this case,
+        wedge_positions are (pos0075, pos0005) - min. (1, 1), max (15, 15).
         Wedge positions are (None, None) if justification is not applied.
         """
         # Space style: " " for low space and "_" for fixed space
@@ -268,11 +270,11 @@ class Typesetter(object):
         try:
             # Get the smallest positive difference
             difference = min([x for x in corrected_spaces if x > 0])
-            space_code = corrected_spaces(difference) + 'S'
+            space_code = corrected_spaces[difference] + 'S'
         except ValueError:
             # Get the negative difference closest to zero
             difference = max([x for x in corrected_spaces if x < 0])
-            space_code = corrected_spaces(difference) + 'S'
+            space_code = corrected_spaces[difference] + 'S'
         wedge_positions = self.calculate_wedges(difference)
         return (space_code, wedge_positions)
 
