@@ -128,10 +128,10 @@ def display_diecase_layout(layout, unit_arrangement=wedge_data.WEDGES['5']):
     for mat in all_mats:
         # Low space
         if mat[0] == '_':
-            mat[0] = '□'
+            mat[0] = '▣'
         # High space
         elif mat[0] == ' ':
-            mat[0] = '▣'
+            mat[0] = '□'
         # Empty
         elif not mat[0]:
             mat[0] = ' '
@@ -191,7 +191,7 @@ def display_diecase_layout(layout, unit_arrangement=wedge_data.WEDGES['5']):
     displayed_styles = '\n'.join([ui.format_display(style, style)
                                   for style in get_styles(layout)])
     # Explanation of symbols
-    ui.display('Explanation:', '▣ - low space', '□ - high space',
+    ui.display('Explanation:', '□ - low space', '▣ - high space',
                displayed_styles, sep='\n', end='\n')
 
 

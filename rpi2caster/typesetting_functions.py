@@ -72,6 +72,7 @@ class Typesetter(object):
         self.text_source = None
         # Combination buffer - empty now
         self.buffer = []
+        self.line_buffer = []
         self.output_buffer = []
         # Display info for the user
         ui.display('Composing for %s %s - %s' % (typeface_name, self.type_size,
@@ -176,7 +177,7 @@ class Typesetter(object):
             # Select the composition mode
             self.compose = self.manual_compose
             # Set custom spaces
-            self.space_setup()
+            self.configure_spaces()
             # Set ligatures for the job
             self.set_ligatures()
 
@@ -214,7 +215,16 @@ class Typesetter(object):
         self.main_style = ui.simple_menu(prompt, options)
 
     def get_space_code(self, space_symbol, unit_width):
-        """Gets coordinates for the space closest to the desired unit width"""
+        """get_space_code:
+
+        Gets coordinates for the space of a desired unit width.
+        First, looks for spaces of matching width. If it fails,
+        uses unit-shift (if available) for a broader choice of spaces,
+        and if this fails too, applies justification with the S-needle.
+
+        Returns (space_code, wedge_positions).
+        Wedge positions are (None, None) if justification is not applied.
+        """
         # Space style: " " for low space and "_" for fixed space
         available_spaces = [sp for sp in self.diecase_layout if
                             sp[0] == space_symbol]
@@ -228,21 +238,82 @@ class Typesetter(object):
             if row < 16:
                 space_unit_width = self.unit_arrangement[row]
                 space_code = column + str(row)
-                spaces.append((space_code, space_unit_width))
-            if self.unit_shift:
+                spaces.append((space_unit_width, space_code))
+            # Now check if unit-shift is available and gather shifted spaces
+            if self.unit_shift and row > 1:
                 # Convert non-shifted to shifted signals
                 shifted_column = column.replace('D', 'EF') + 'D'
                 shifted_row = row - 1
                 shifted_space_unit_width = self.unit_arrangement[shifted_row]
-                shifted_space_code = shifted_column + str(row)
-                shifted_spaces.append((shifted_space_code,
-                                       shifted_space_unit_width))
+                shifted_space_code = shifted_column + str(shifted_row)
+                shifted_spaces.append((shifted_space_unit_width,
+                                       shifted_space_code))
         # Try matching a space
-        for (space_code, space_unit_width) in spaces:
+        for (space_unit_width, space_code) in spaces:
             if space_unit_width == unit_width:
-                return space_code
+                return (space_code, (None, None))
+        # Fell off the end of the loop - no match
+        # Try with unit-shift
+        for (space_unit_width, space_code) in shifted_spaces:
+            if space_unit_width == unit_width:
+                return (space_code, (None, None))
+        # This also failed? Need to use justification wedges...
+        # First try to use the spaces narrower than desired unit width,
+        # and add units to them
+        corrected_spaces = ({unit_width - space_unit_width: space_code
+                             for (space_unit_width, space_code) in spaces
+                             if space_unit_width in range(-2, 10)})
+        corrected_spaces = dict(spaces)
+        # Find a matching space code
+        try:
+            # Get the smallest positive difference
+            difference = min([x for x in corrected_spaces if x > 0])
+            space_code = corrected_spaces(difference) + 'S'
+        except ValueError:
+            # Get the negative difference closest to zero
+            difference = max([x for x in corrected_spaces if x < 0])
+            space_code = corrected_spaces(difference) + 'S'
+        wedge_positions = self.calculate_wedges(difference)
+        return (space_code, wedge_positions)
 
-
+    def configure_spaces(self):
+        """Chooses the spaces that will be used in typesetting."""
+        # List available spaces
+        # Matrix in layout is defined as follows:
+        # (character, (style1, style2...)) : (column, row, unit_width)
+        var_prompt = 'Variable space: [L]ow or [H]igh? '
+        var_units_prompt = 'How many units min. (default: 4)? '
+        fixed_prompt = 'Fixed space: [L]ow or [H]igh? '
+        fix_units_prompt = 'How many units (default: 9)? '
+        nbsp_prompt = 'Non-breaking space: [L]ow or [H]igh? '
+        nbsp_units_prompt = 'How many units (default: 9)? '
+        # Choose spaces
+        spaces = {}
+        # Variable space (justified) - minimum units
+        variable_space = ui.simple_menu(var_prompt, {'Low': ' ', 'High': '_'})
+        spaces['var_space_char'] = variable_space
+        var_space_min_units = ui.enter_data_spec_type_or_blank(
+            var_units_prompt, int) or 4
+        spaces['var_space_min_units'] = var_space_min_units
+        spaces['var_space_code'] = self.get_space_code(variable_space,
+                                                       var_space_min_units)
+        # Fixed space (allows line-breaking)
+        fixed_space = ui.simple_menu(fixed_prompt, {'L': ' ', 'H': '_'})
+        spaces['fixed_space_char'] = fixed_space
+        fixed_space_units = ui.enter_data_spec_type_or_blank(
+            fix_units_prompt, int) or 9
+        spaces['fixed_space_units'] = fixed_space_units
+        spaces['fixed_space_code'] = self.get_space_code(fixed_space,
+                                                         fixed_space_units)
+        # Non-breaking space
+        nb_space = ui.simple_menu(nbsp_prompt, {'L': ' ', 'H': '_'})
+        spaces['nb_space_char'] = nb_space
+        nb_space_units = ui.enter_data_spec_type_or_blank(
+            nbsp_units_prompt, int) or 9
+        spaces['nb_space_units'] = nb_space_units
+        spaces['nb_space_code'] = self.get_space_code(nb_space, nb_space_units)
+        # Finalize setup
+        self.spaces = spaces
 
     def translate(self, char):
         """translate:
@@ -299,7 +370,7 @@ class Typesetter(object):
             # Calculate the difference between desired width and row width
             difference = char_units - row_units
             # Cast it with the S-needle
-            combination = column + str(row) + 'S'
+            combination = column + 'S' + str(row)
             wedge_positions = self.calculate_wedges(difference)
         # Finally, add combination and wedge positions to the buffer
         self.buffer.append([combination, wedge_positions, char])
@@ -349,45 +420,6 @@ class Typesetter(object):
         ui.display('Line length in %s-set units: %s' % (self.set_width,
                                                         self.unit_line_length))
 
-    def space_setup(self):
-        """Chooses the spaces that will be used in typesetting."""
-        # List available spaces
-        # Matrix in layout is defined as follows:
-        # (character, (style1, style2...)) : (column, row, unit_width)
-        var_prompt = 'Variable space: [L]ow or [H]igh? '
-        var_units_prompt = 'How many units min. (default: 4)? '
-        fixed_prompt = 'Fixed space: [L]ow or [H]igh? '
-        fix_units_prompt = 'How many units (default: 9)? '
-        nbsp_prompt = 'Non-breaking space: [L]ow or [H]igh? '
-        nbsp_units_prompt = 'How many units (default: 9)? '
-        # Choose spaces
-        spaces = {}
-        # Variable space (justified) - minimum units
-        variable_space = ui.simple_menu(var_prompt, {'Low': ' ', 'High': '_'})
-        spaces['var_space_char'] = variable_space
-        var_space_min_units = ui.enter_data_spec_type_or_blank(
-            var_units_prompt, int) or 4
-        spaces['var_space_min_units'] = var_space_min_units
-        spaces['var_space_code'] = self.get_space_code(variable_space,
-                                                       var_space_min_units)
-        # Fixed space (allows line-breaking)
-        fixed_space = ui.simple_menu(fixed_prompt, {'L': ' ', 'H': '_'})
-        spaces['fixed_space_char'] = fixed_space
-        fixed_space_units = ui.enter_data_spec_type_or_blank(
-            fix_units_prompt, int) or 9
-        spaces['fixed_space_units'] = fixed_space_units
-        spaces['fixed_space_code'] = self.get_space_code(fixed_space,
-                                                         fixed_space_units)
-        # Non-breaking space
-        nb_space = ui.simple_menu(nbsp_prompt, {'L': ' ', 'H': '_'})
-        spaces['nb_space_char'] = nb_space
-        nb_space_units = ui.enter_data_spec_type_or_blank(
-            nbsp_units_prompt, int) or 9
-        spaces['nb_space_units'] = nb_space_units
-        spaces['nb_space_code'] = self.get_space_code(nb_space, nb_space_units)
-        # Finalize setup
-        self.spaces = spaces
-
     # Define some parsing functions
     def style_roman(self):
         """Sets roman for the following text."""
@@ -431,26 +463,25 @@ class Typesetter(object):
         fill_spaces_number = self.fill_line()
         spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
         # Prepare the line: (content, wedge_positions)
-        self.line[0] = spaces + self.line[0]
+        self.line_buffer = spaces + self.line_buffer
 
     def align_right(self):
         """Aligns the previous chunk to the right."""
         fill_spaces_number = self.fill_line()
         spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
         # Prepare the line: (content, wedge_positions)
-        self.line[0] = self.line[0] + spaces
+        self.line_buffer = self.line_buffer + spaces
 
     def align_center(self):
         """Aligns the previous chunk to the center."""
         fill_spaces_number = self.fill_line()
         spaces = ([' ' for i in range(fill_spaces_number / 2)], 'roman')
         # Prepare the line: (content, wedge_positions)
-        self.line[0] = spaces + self.line[0] + spaces
+        self.line_buffer = spaces + self.line_buffer + spaces
 
     def align_both(self):
         """Aligns the previous chunk to both edges and ends the line."""
         space_count = 0
-
 
     def calculate_wedges(self, difference):
         """calculate_wedges:
