@@ -1,113 +1,113 @@
 #!/usr/bin/python
 import RPi.GPIO as gpio
-import ConfigParser
 import os
 import sys
 import time
 import signal
-global photocellGPIO, shutdownbuttonGPIO, rebootbuttonGPIO, ledGPIO
-ledGPIO = 0
-shutdownbuttonGPIO = 22
-rebootbuttonGPIO = 0
-photocellGPIO = 17
-emergencyGPIO = 24
+import ConfigParser
 
-"""
-# initial config, use BCM GPIO numbers
-# the colours are for my prototype; "production"  interfaces will
-# have a PCB directly on top of RPi
-photocellGPIO      = 17    # black, don't confuse with GND!
-shutdownbuttonGPIO = 22    # brown
-rebootbuttonGPIO   = 23    # yellow
-emergencyGPIO      = 24    # not used yet
-ledGPIO            = 18    # blue
-"""
+ready_led_gpio = 18
+shutdown_button_gpio = 24
+reboot_button_gpio = 23
+sensor_gpio = 17
+emergency_stop_gpio = 5
 
 
 def get_control_settings():
     """Read the GPIO settings from conffile, or revert to defaults
     if they're not found:
-        """
+    """
     config = ConfigParser.SafeConfigParser()
     config.read('/etc/rpi2caster.conf')
     try:
-        ledGPIO = config.get('Control', 'led_gpio')
-        shutdownbuttonGPIO = config.get('Control', 'shutdown_gpio')
-        rebootbuttonGPIO = config.get('Control', 'reboot_gpio')
-        ledGPIO = int(ledGPIO)
-        shutdownbuttonGPIO = int(shutdownbuttonGPIO)
-        rebootbuttonGPIO = int(rebootbuttonGPIO)
-        return [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO]
+        ready_led_gpio = config.get('Control', 'led_gpio')
+        shutdown_button_gpio = config.get('Control', 'shutdown_gpio')
+        reboot_button_gpio = config.get('Control', 'reboot_gpio')
+        ready_led_gpio = int(ready_led_gpio)
+        shutdown_button_gpio = int(shutdown_button_gpio)
+        reboot_button_gpio = int(reboot_button_gpio)
+        return (ready_led_gpio, shutdown_button_gpio, reboot_button_gpio)
     except (ConfigParser.NoSectionError, TypeError, ValueError):
         # Return default parameters in case they can't be read from file
-        return [18, 22, 23]
+        return [18, 24, 23]
 
 
 def blink(n, speed):
+    """Blinks a LED."""
     for i in range(0, n):
-        gpio.output(ledGPIO, 0)
+        gpio.output(ready_led_gpio, 0)
         time.sleep(speed)
-        gpio.output(ledGPIO, 1)
+        gpio.output(ready_led_gpio, 1)
         time.sleep(speed)
 
 
 def signal_handler(signal, frame):
+    """Handles the SIGTERM or SIGINT (ctrl-C) received from OS."""
     print("Terminated by OS")
     if(signal == 'SIGINT'):
         blink(3, 0.1)
         # turn the green LED off if you stop the program with ctrl-C
-        gpio.output(ledGPIO, 0)
+        gpio.output(ready_led_gpio, 0)
     gpio.cleanup()
-    os.system('echo "%i" > /sys/class/gpio/unexport' % photocellGPIO)
+    os.system('echo "%i" > /sys/class/gpio/unexport' % sensor_gpio)
     sys.exit()
 
 
 def poweroff(channel):
     """Calls shutdown with shutdown mode"""
-    shutdown(shutdownbuttonGPIO, 0)
+    shutdown(shutdown_button_gpio, 0)
 
 
 def reboot(channel):
     """Calls shutdown with reboot mode"""
-    shutdown(rebootbuttonGPIO, 1)
+    shutdown(reboot_button_gpio, 1)
 
 
-def shutdown(buttonGPIO, mode):
+def shutdown(button_gpio, mode):
+    """Sends a command to OS to shutdown or reboot the Raspberry."""
     command = {0: 'poweroff', 1: 'reboot', 2: 'echo "debug info"'}
     time.sleep(1)
     # Check if you're still pressing the button after 1sec
-    if (gpio.input(buttonGPIO) == 1):
+    if gpio.input(button_gpio) == 1:
         blink(5, 0.1)
         os.system(command[mode])
         # Keep the green LED lit up until system shuts down completely
-        gpio.output(ledGPIO, 1)
+        gpio.output(ready_led_gpio, 1)
         gpio.cleanup()
-        os.system('echo "%i" > /sys/class/gpio/unexport' % photocellGPIO)
+        os.system('echo "%i" > /sys/class/gpio/unexport' % sensor_gpio)
+        os.system('echo "%i" > /sys/class/gpio/unexport' % emergency_stop_gpio)
         sys.exit()
 
 try:
-    [ledGPIO, shutdownbuttonGPIO, rebootbuttonGPIO] = get_control_settings()
+    (ready_led_gpio, shutdown_button_gpio,
+     reboot_button_gpio) = get_control_settings()
     # Set up the GPIO for button and green LED:
     gpio.setmode(gpio.BCM)
     gpio.setwarnings(False)
-    gpio.setup(shutdownbuttonGPIO, gpio.IN, pull_up_down=gpio.PUD_DOWN)
-    gpio.setup(rebootbuttonGPIO, gpio.IN, pull_up_down=gpio.PUD_DOWN)
-    gpio.setup(ledGPIO, gpio.OUT)  # green LED
-    gpio.output(ledGPIO, 1)
+    gpio.setup(shutdown_button_gpio, gpio.IN, pull_up_down=gpio.PUD_DOWN)
+    gpio.setup(reboot_button_gpio, gpio.IN, pull_up_down=gpio.PUD_DOWN)
+    gpio.setup(ready_led_gpio, gpio.OUT)  # green LED
+    gpio.output(ready_led_gpio, 1)
     # Set up the machine cycle sensor GPIO to be used with rpi2caster:
     # Define BCM pin no for photocell input
-    os.system('echo "%i" > /sys/class/gpio/export' % photocellGPIO)
+    os.system('echo "%i" > /sys/class/gpio/export'
+              % sensor_gpio)
     # Set up the GPIO as input:
-    os.system('echo "in" > /sys/class/gpio/gpio%i/direction' % photocellGPIO)
+    os.system('echo "in" > /sys/class/gpio/gpio%i/direction'
+              % sensor_gpio)
     # Enable generating interrupts when the photocell goes on and off
-    os.system('echo "both" > /sys/class/gpio/gpio%i/edge' % photocellGPIO)
+    os.system('echo "both" > /sys/class/gpio/gpio%i/edge
+              % sensor_gpio)
     # Set up the emergency stop button GPIO to be used with rpi2caster:
     # Define BCM pin no for emergency stop button input
-    os.system('echo "%i" > /sys/class/gpio/export' % emergencyGPIO)
+    os.system('echo "%i" > /sys/class/gpio/export'
+              % emergency_stop_gpio)
     # Set up the GPIO as input
-    os.system('echo "in" > /sys/class/gpio/gpio%i/direction' % emergencyGPIO)
+    os.system('echo "in" > /sys/class/gpio/gpio%i/direction'
+              % emergency_stop_gpio)
     # Enable generating interrupts when the button becomes on off
-    os.system('echo "both" > /sys/class/gpio/gpio%i/edge' % emergencyGPIO)
+    os.system('echo "both" > /sys/class/gpio/gpio%i/edge'
+              % emergency_stop_gpio)
 
 except RuntimeError:
     print("You must run this program as root!")
@@ -119,9 +119,9 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     # If user presses shutdown or reboot button,
     # do a threaded callback to shutdown function:
-    gpio.add_event_detect(shutdownbuttonGPIO, gpio.RISING,
+    gpio.add_event_detect(shutdown_button_gpio, gpio.RISING,
                           callback=poweroff, bouncetime=1000)
-    gpio.add_event_detect(rebootbuttonGPIO, gpio.RISING,
+    gpio.add_event_detect(reboot_button_gpio, gpio.RISING,
                           callback=reboot, bouncetime=1000)
     # Do nothing and wait for interrupt from the reboot/shutdown buttons:
     while True:
