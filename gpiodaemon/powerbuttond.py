@@ -32,13 +32,13 @@ def get_control_settings():
         return [18, 24, 23]
 
 
-def blink(n, speed):
+def blink(n, duration):
     """Blinks a LED."""
     for i in range(0, n):
         gpio.output(ready_led_gpio, 0)
-        time.sleep(speed)
+        time.sleep(duration)
         gpio.output(ready_led_gpio, 1)
-        time.sleep(speed)
+        time.sleep(duration)
 
 
 def signal_handler(signal, frame):
@@ -69,7 +69,7 @@ def shutdown(button_gpio, mode):
     time.sleep(1)
     # Check if you're still pressing the button after 1sec
     if gpio.input(button_gpio) == 1:
-        blink(5, 0.1)
+        blink(5, 0.25)
         os.system(command[mode])
         # Keep the green LED lit up until system shuts down completely
         gpio.output(ready_led_gpio, 1)
@@ -84,8 +84,8 @@ try:
     # Set up the GPIO for button and green LED:
     gpio.setmode(gpio.BCM)
     gpio.setwarnings(False)
-    gpio.setup(shutdown_button_gpio, gpio.IN, pull_up_down=gpio.PUD_DOWN)
-    gpio.setup(reboot_button_gpio, gpio.IN, pull_up_down=gpio.PUD_DOWN)
+    gpio.setup(shutdown_button_gpio, gpio.IN)
+    gpio.setup(reboot_button_gpio, gpio.IN)
     gpio.setup(ready_led_gpio, gpio.OUT)  # green LED
     gpio.output(ready_led_gpio, 1)
     # Set up the machine cycle sensor GPIO to be used with rpi2caster:
@@ -119,9 +119,9 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     # If user presses shutdown or reboot button,
     # do a threaded callback to shutdown function:
-    gpio.add_event_detect(shutdown_button_gpio, gpio.RISING,
+    gpio.add_event_detect(shutdown_button_gpio, gpio.FALLING,
                           callback=poweroff, bouncetime=1000)
-    gpio.add_event_detect(reboot_button_gpio, gpio.RISING,
+    gpio.add_event_detect(reboot_button_gpio, gpio.FALLING,
                           callback=reboot, bouncetime=1000)
     # Do nothing and wait for interrupt from the reboot/shutdown buttons:
     while True:
