@@ -96,7 +96,7 @@ try:
     os.system('echo "in" > /sys/class/gpio/gpio%i/direction'
               % sensor_gpio)
     # Enable generating interrupts when the photocell goes on and off
-    os.system('echo "both" > /sys/class/gpio/gpio%i/edge
+    os.system('echo "both" > /sys/class/gpio/gpio%i/edge'
               % sensor_gpio)
     # Set up the emergency stop button GPIO to be used with rpi2caster:
     # Define BCM pin no for emergency stop button input
