@@ -380,8 +380,30 @@ class Typesetter(object):
             # If not, then continue
             pass
         # Get the matrix data: [char, style, column, row, units]
-        matrix = ([mat for mat in self.diecase_layout if mat[0] == char and
-                   self.current_style in mat[1]])[0]
+        # First try custom-defined characters (overrides)
+        try:
+            matches = [mat for mat in self.custom_characters
+                       if mat[0] == char and self.current_style in mat[1]]
+        except IndexError:
+            # Search in matrix case then
+            matches = [mat for mat in self.diecase_layout if mat[0] == char and
+                       self.current_style in mat[1]]
+        while not matches:
+            # Nothing found in the diecase for this character?
+            # Define it then yourself!
+            matrix = []
+            row = ui.enter_data('Column? ').upper
+            column = ui.enter_data_spec_type('Row? ', int)
+            matrix = [mat for mat in self.diecase_layout
+                      if mat[2] == column and mat[3] == row]
+        if len[matches] == 1:
+            matrix = matches[0]
+        elif len(matches) > 1:
+            options = dict(zip(enumerate(matches), start=1))
+            matrix = ui.simple_menu('Choose a matrix for the character %s, '
+                                    'style: %s' % (char, self.current_style),
+                                    options)
+            self.custom_characters.append(matrix)
         # If char units is the same as the row units, no correction is needed
         # Wedge positions for such character are null
         wedge_positions = (None, None)
