@@ -14,6 +14,7 @@ def main_menu():
                ('List matrix cases', matrix_data.list_diecases),
                ('Show matrix case layout', matrix_data.show_diecase),
                ('Add a new, empty matrix case', matrix_data.add_diecase),
+               ('Upload matrix case layout', matrix_data.upload_layout),
                ('Edit matrix case layout', matrix_data.edit_diecase),
                ('Clear matrix case layout', matrix_data.clear_diecase),
                ('Delete matrix case', matrix_data.delete_diecase),

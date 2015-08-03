@@ -207,7 +207,7 @@ def add_diecase():
     diecase_id = ui.enter_data_or_blank(prompt) or exceptions.return_to_menu()
     type_series = ui.enter_data('Fount series: ')
     type_size = ui.enter_data('Type size (end with D for Didot): ')
-    wedge_series = ui.enter_data('Wedge/stopbar for this typeface: ')
+    wedge_series = ui.enter_data('Wedge/stopbar series for this typeface: ')
     # If we enter S5 etc. - save it as 5
     wedge_series = wedge_series.strip('sS')
     set_width = ui.enter_data_spec_type('Set width (decimal): ', float)
@@ -255,6 +255,21 @@ def edit_diecase():
         ans = ui.yes_or_no('Commit to the database?')
         if ans and DB.update_diecase_layout(diecase_id, layout):
             ui.display('Matrix case layout updated successfully.')
+
+
+def upload_layout():
+    """upload_layout:
+
+    Allows user to upload a matrix case layout from a CSV file.
+    At the end, confirm and commit."""
+    while True:
+        diecase_id = choose_diecase()
+        # Load the layout from file? Ask only if no layout at input
+        layout = submit_layout_file()
+        # Ask for confirmation
+        ans = ui.yes_or_no('Commit to the database?')
+        if ans and DB.update_diecase_layout(diecase_id, layout):
+            ui.display('Matrix case layout uploaded successfully.')
 
 
 def clear_diecase():
@@ -344,7 +359,10 @@ def get_layout(diecase_id):
 def get_styles(layout):
     """Parses the diecase layout and gets available typeface styles.
     Returns a list of them."""
-    return list({style for mat in layout for style in mat[1] if style})
+    try:
+        return list({style for mat in layout for style in mat[1] if style})
+    except TypeError:
+        return []
 
 
 def submit_layout_file():
@@ -391,10 +409,7 @@ def submit_layout_file():
             processed_record.append(item)
         # Get a string containing styles with no whitespace
         styles = processed_record[1].split(',')
-        processed_styles = []
-        for style in styles:
-            processed_styles.append(style.strip())
-        processed_styles = ','.join(processed_styles)
+        processed_styles = ','.join([style.strip() for style in styles])
         processed_record[1] = processed_styles
         # For code clarity
         row = processed_record[2]

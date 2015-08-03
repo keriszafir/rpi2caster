@@ -1,0 +1,36 @@
+diecase 262-12-KS01
+title Hello World in Gill Sans
+author Christophe Slychan
+unit-shift OFF
+justification normal
+0005       // Pump off
+0075 0005  // Line to the galley
+O 15
+O 15
+O 15
+O 15
+O 15       
+// Some spaces at the end
+C 13       // H
+H 6        // e
+O 7        // l
+O 7        // l
+G 8        // o
+G S 2      // Justifying space
+A 15       // W
+G 8        // o
+H 4        // r
+O 7        // l
+L 9        // d
+I 2        // !
+O 15       // em quad with comment
+O 15
+O 15
+O 15
+O 15          
+// Some spaces at the beginning
+0075 6
+0075 0005 10  // Pump on, line to the galley
+//
+//
+// "Hello World!" typecasting sequence

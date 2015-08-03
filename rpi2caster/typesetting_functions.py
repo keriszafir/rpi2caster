@@ -354,9 +354,16 @@ class Typesetter(object):
         Translates the character to a combination of Monotype signals,
         applying single or double justification whenever necessary.
         """
+        try:
+            # Is that a command?
+            self.typesetting_commands[char]
+            return 0
+        except KeyError:
+            # If not, then continue
+            pass
         # Get the matrix data: [char, style, column, row, units]
         matrix = ([mat for mat in self.diecase_layout if mat[0] == char and
-                   self.current_style in mat[1]])
+                   self.current_style in mat[1]])[0]
         # If char units is the same as the row units, no correction is needed
         # Wedge positions for such character are null
         wedge_positions = (None, None)
@@ -426,6 +433,8 @@ class Typesetter(object):
             wedge_positions = self.calculate_wedges(difference)
         # Finally, add combination and wedge positions to the buffer
         self.buffer.append([combination, wedge_positions, char])
+        # Return the character's unit width
+        return char_units
 
     def manual_compose(self):
         """manual_compose:
@@ -437,7 +446,23 @@ class Typesetter(object):
 
     def auto_compose(self):
         """Composes text automatically, deciding when to end the lines."""
-        pass
+        # Start with the empty buffer
+        self.buffer = []
+        try:
+            while True:
+                # Keep looping over all characters and lines
+                line_length = 0
+                # Try to fill the line and not hyphenate
+                while line_length < self.unit_line_length - 50:
+                    # Get the character from input
+                    character = next(self.text_source)
+                    # Translate the character (add it to buffer),
+                    # get unit width for the character from function's retval
+                    line_length += self.translate(character)
+        except StopIteration:
+            # Text source exhausted
+            ui.confirm('Typesetting finished! [Enter] to continue...')
+            return True
 
     def _enter_line_length(self):
         """enter_line_length:
