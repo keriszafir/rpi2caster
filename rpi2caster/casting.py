@@ -583,7 +583,7 @@ class Casting(object):
         This allows for quick typesetting of short texts, like names etc.
         """
         # Initialize the typesetter for a chosen diecase
-        typesetter = typesetting_functions.Typesetter(self.diecase_id)
+        typesetter = typesetting_functions.Typesetter()
         typesetter.session_setup()
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
