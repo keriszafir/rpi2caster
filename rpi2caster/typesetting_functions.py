@@ -57,6 +57,9 @@ class Typesetter(object):
                                      '^CF': self._align_both}
         # Source text generator - at the start, sets none
         self.text_source = None
+        # Custom character definitions - e.g. if multiple alternatives
+        # are found
+        self.custom_characters = []
         # Combination buffer - empty now
         self.line_buffer = []
         self.buffer = []
