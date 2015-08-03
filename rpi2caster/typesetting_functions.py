@@ -12,7 +12,15 @@ from rpi2caster import wedge_data
 
 class Typesetter(object):
     """Typesetting class"""
-    def __init__(self, diecase_id=None):
+    def __init__(self):
+        # No input data yet
+        self.type_size = None
+        self.wedge_series = None
+        self.diecase_layout = None
+        self.set_width = None
+        self.unit_arrangement = None
+        self.unit_line_length = None
+        self.brit_pica = None
         # Begin with setting up default parameters
         self.ligatures = 3
         self.unit_shift = False
@@ -32,30 +40,6 @@ class Typesetter(object):
                        'quad_units': 18,
                        'quad_code': ('O15', (None, None)),
                        'quad_symbol': '\t'}
-        # Choose a matrix case if ID not supplied
-        diecase_id = diecase_id or matrix_data.choose_diecase()
-        # Get matrix case parameters
-        diecase_parameters = matrix_data.get_diecase_parameters(diecase_id)
-        # Parse the matrix case parameters
-        (type_series, self.type_size, self.wedge_series, self.set_width,
-         typeface_name, self.diecase_layout) = diecase_parameters
-        # Get unit arrangement for the wedge
-        self.unit_arrangement = wedge_data.get_unit_arrangement(
-            self.wedge_series, self.set_width)
-        # Ask whether to show the matrix case layout
-        # (often useful if we have to alter it)
-        self._show_layout()
-        # Warn if the wedge could be incompatible with the matrix case
-        self._check_if_wedge_is_ok()
-        # Enter the line length for typesetting, and calculate it
-        # into units of self.set_width
-        self._enter_line_length()
-        # Ask if the composing mode is manual or automatic
-        self._manual_or_automatic()
-        # Choose dominant stype
-        self._choose_style()
-        # Set it as the current style
-        self.current_style = self.main_style
         # Current units in the line - start with 0
         self.current_units = 0
         # Unit correction: -2 ... +10 applied to a character or a fragment
@@ -77,6 +61,40 @@ class Typesetter(object):
         self.line_buffer = []
         self.buffer = []
         self.output_buffer = []
+
+    def session_setup(self):
+        """Sets up initial typesetting session parameters:
+
+        -diecase
+        -line length and measurement units
+        -default alignment
+        -spaces
+        -manual mode (more control) or automatic mode (less control, faster)
+        """
+        # Choose a matrix case if ID not supplied
+        diecase_id = matrix_data.choose_diecase()
+        # Get matrix case parameters
+        diecase_parameters = matrix_data.get_diecase_parameters(diecase_id)
+        # Parse the matrix case parameters
+        (type_series, self.type_size, self.wedge_series, self.set_width,
+         typeface_name, self.diecase_layout) = diecase_parameters
+        # Get unit arrangement for the wedge
+        self.unit_arrangement = wedge_data.get_unit_arrangement(
+            self.wedge_series, self.set_width)
+        # Ask whether to show the matrix case layout
+        # (often useful if we have to alter it)
+        self.show_layout()
+        # Warn if the wedge could be incompatible with the matrix case
+        self._check_if_wedge_is_ok()
+        # Enter the line length for typesetting, and calculate it
+        # into units of self.set_width
+        self._enter_line_length()
+        # Ask if the composing mode is manual or automatic
+        self._manual_or_automatic()
+        # Choose dominant stype
+        self._choose_style()
+        # Set it as the current style
+        self.current_style = self.main_style
         # Display info for the user
         ui.display('Composing for %s %s - %s' % (typeface_name, self.type_size,
                                                  type_series))
@@ -157,7 +175,7 @@ class Typesetter(object):
             ui.display('Warning: your wedge is not based on pica=0.1667"!'
                        '\nIt may lead to wrong type width.')
 
-    def _show_layout(self):
+    def show_layout(self):
         """Asks whether to show the diecase layout. If so, prints it."""
         if ui.yes_or_no('Show the layout?'):
             ui.display('\n\n')
@@ -522,12 +540,10 @@ class Typesetter(object):
         """Sets superscript for the following text."""
         self.current_style = 'superscript'
 
-    def _fill_line(self):
+    def _fill_line(self, units):
         """Justify the row; applies to all alignment routines"""
-        # Do the alignment and justification
-        # Fill spaces number: all spaces in line will be fixed
-        fill_spaces_number = 0
-        while self.current_units < self.unit_line_length:
+        # Add as many fixed spaces as we can
+        while self.current_units > spaces['fixed_space_units']:
             # Add a specified number of units
             fill_spaces_number += 1
             # Add units

@@ -584,6 +584,7 @@ class Casting(object):
         """
         # Initialize the typesetter for a chosen diecase
         typesetter = typesetting_functions.Typesetter(self.diecase_id)
+        typesetter.session_setup()
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
         typesetter.text_source = typesetter.parse_and_generate(text)

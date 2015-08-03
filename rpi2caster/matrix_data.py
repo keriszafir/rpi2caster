@@ -113,7 +113,8 @@ def show_diecase():
         ui.confirm('[Enter] to continue...')
 
 
-def display_diecase_layout(layout, unit_arrangement=wedge_data.WEDGES['5']):
+def display_diecase_layout(diecase_layout,
+                           unit_arrangement=wedge_data.WEDGES['5']):
     """display_diecase_layout:
 
     Shows a layout for a given diecase ID.
@@ -123,8 +124,9 @@ def display_diecase_layout(layout, unit_arrangement=wedge_data.WEDGES['5']):
     # Build a list of all characters
     # Mark empty matrices or unaddressable parts of multi-cell mats
     # as unused
-    all_mats = layout + find_unused_matrices(layout)
+    layout = diecase_layout[:]
     # Format the characters for display
+    all_mats = layout + find_unused_matrices(layout)
     for mat in all_mats:
         # Low space
         if mat[0] == '_':
