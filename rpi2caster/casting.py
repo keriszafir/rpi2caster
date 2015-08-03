@@ -795,7 +795,7 @@ class Casting(object):
             self.unit_arrangement = self.wedge[-1]
             # Ask whether to show diecase layout:
             if ui.yes_or_no('Show matrix case layout?'):
-                show_diecase_layout()
+                self.show_diecase_layout()
 
         def choose_wedge():
             """Sets or changes a wedge to user-selected one"""
