@@ -79,6 +79,9 @@ def show_ribbon():
     while True:
         # Choose the ribbon
         ribbon_id = choose_ribbon()
+        # If we cannot retrieve it, then abort
+        if not ribbon_id:
+            return False
         # First, get the ribbon data
         (ribbon_id, title, author,
          diecase, unit_shift, contents) = DB.ribbon_by_id(ribbon_id)
