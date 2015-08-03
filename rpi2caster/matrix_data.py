@@ -124,9 +124,11 @@ def display_diecase_layout(diecase_layout,
     # Build a list of all characters
     # Mark empty matrices or unaddressable parts of multi-cell mats
     # as unused
-    layout = diecase_layout[:]
+    if not diecase_layout:
+        ui.display('No layout to display!')
+        return False
     # Format the characters for display
-    all_mats = layout + find_unused_matrices(layout)
+    all_mats = diecase_layout + find_unused_matrices(diecase_layout)
     for mat in all_mats:
         # Low space
         if mat[0] == '_':

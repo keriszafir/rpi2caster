@@ -793,12 +793,9 @@ class Casting(object):
 
         def show_diecase_layout():
             """Shows the diecase layout"""
-            if self.diecase_layout:
-                matrix_data.display_diecase_layout(self.diecase_layout,
-                                                   self.unit_arrangement)
-                ui.confirm('[Enter] to continue...')
-            else:
-                ui.confirm('You must select the matrix case first!')
+            layout = self.diecase_layout
+            matrix_data.display_diecase_layout(layout, self.unit_arrangement)
+            ui.confirm('[Enter] to continue...')
 
         def choose_wedge():
             """Sets or changes a wedge to user-selected one"""
