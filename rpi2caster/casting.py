@@ -664,6 +664,12 @@ class Casting(object):
             displayed_info.append('Unit values: %s' % self.wedge[4])
         return '\n'.join(displayed_info)
 
+    def show_diecase_layout(self):
+        """Shows the diecase layout"""
+        layout = self.diecase_layout
+        matrix_data.display_diecase_layout(layout, self.unit_arrangement)
+        ui.confirm('[Enter] to continue...')
+
     def data_menu(self):
         """Choose the ribbon and diecase, if needed"""
         # Define subroutines used only here
@@ -791,12 +797,6 @@ class Casting(object):
             if ui.yes_or_no('Show matrix case layout?'):
                 show_diecase_layout()
 
-        def show_diecase_layout():
-            """Shows the diecase layout"""
-            layout = self.diecase_layout
-            matrix_data.display_diecase_layout(layout, self.unit_arrangement)
-            ui.confirm('[Enter] to continue...')
-
         def choose_wedge():
             """Sets or changes a wedge to user-selected one"""
             if self.diecase and self.wedge:
@@ -816,7 +816,6 @@ class Casting(object):
                    ('Choose the ribbon from file', ribbon_from_file),
                    ('Preview ribbon', self.preview_ribbon),
                    ('Choose the matrix case', choose_diecase),
-                   ('View the matrix case layout', show_diecase_layout),
                    ('Choose the wedge', choose_wedge)]
         header = ('Input data choice menu:\n\n')
 
@@ -889,6 +888,7 @@ def main_menu(work=Casting()):
                cast_or_punch(),
                ('Compose and cast a line of text', work.line_casting),
                ('Cast sorts', work.cast_sorts),
+               ('View the matrix case layout', work.show_diecase_layout),
                ('Caster diagnostics and calibration...', work.service_menu)]
 
     header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
