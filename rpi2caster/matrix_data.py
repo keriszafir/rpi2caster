@@ -193,7 +193,7 @@ def display_diecase_layout(diecase_layout,
     ui.display(separator, header, separator, sep='\n', end='\n\n')
     # Names of styles found in the diecase with formatting applied to them
     displayed_styles = '\n'.join([ui.format_display(style, style)
-                                  for style in get_styles(layout)])
+                                  for style in get_styles(diecase_layout)])
     # Explanation of symbols
     ui.display('Explanation:', '□ - low space', '▣ - high space',
                displayed_styles, sep='\n', end='\n')
