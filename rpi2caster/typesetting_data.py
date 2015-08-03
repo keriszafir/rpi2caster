@@ -21,7 +21,11 @@ DB = database.Database()
 
 def list_ribbons():
     """Lists all ribbons in the database."""
-    data = DB.get_all_ribbons()
+    try:
+        data = DB.get_all_ribbons()
+    except exceptions.DatabaseQueryError:
+        ui.display('Cannot access ribbon database!')
+        return None
     results = {}
     ui.display('\n' +
                'Index'.ljust(7) +
@@ -54,6 +58,9 @@ def choose_ribbon():
         ui.clear()
         ui.display('Choose a ribbon:', end='\n\n')
         available_ribbons = list_ribbons()
+        if not available_ribbons:
+            ui.confirm('[Enter] to exit...')
+            return False
         # Enter the diecase name
         prompt = 'Number of a ribbon? (leave blank to exit): '
         choice = (ui.enter_data_or_blank(prompt) or

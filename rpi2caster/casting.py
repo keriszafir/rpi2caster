@@ -728,6 +728,9 @@ class Casting(object):
             """Get the ribbon stored in database"""
             # Choose the ribbon
             ribbon_id = typesetting_data.choose_ribbon()
+            # If canot choose the ribbon, go back to main menu
+            if not ribbon_id:
+                exceptions.menu_level_up()
             # Clear the previous ribbon, diecase, wedge selections
             self.ribbon_contents = None
             self.ribbon_file = None
