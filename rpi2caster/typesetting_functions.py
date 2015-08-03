@@ -74,8 +74,8 @@ class Typesetter(object):
         # Source text generator - at the start, sets none
         self.text_source = None
         # Combination buffer - empty now
-        self.buffer = []
         self.line_buffer = []
+        self.buffer = []
         self.output_buffer = []
         # Display info for the user
         ui.display('Composing for %s %s - %s' % (typeface_name, self.type_size,
@@ -381,26 +381,26 @@ class Typesetter(object):
         # Variable space (typically GS2, width adjusted, but minimum 4 units):
         if char == self.spaces['var_space_symbol']:
             (combination, wedge_positions) = ('var_space', (3, 8))
-            self.buffer.append([combination, wedge_positions,
-                                'Variable space'])
+            self.line_buffer.append([combination, wedge_positions,
+                                     'Variable space'])
             return self.spaces['var_space_min_units']
         # Fixed space (typically G5, 9 units wide)
         elif char == self.spaces['fixed_space_symbol']:
             (combination, wedge_positions) = self.spaces['fixed_space_code']
-            self.buffer.append([combination, wedge_positions,
-                                'Fixed space'])
+            self.line_buffer.append([combination, wedge_positions,
+                                     'Fixed space'])
             return self.spaces['fixed_space_units']
         # Non-breaking space (typically G5, 9 units wide)
         elif char == self.spaces['nb_space_symbol']:
             (combination, wedge_positions) = self.spaces['nb_space_code']
-            self.buffer.append([combination, wedge_positions,
-                                'Non-breaking space'])
+            self.line_buffer.append([combination, wedge_positions,
+                                     'Non-breaking space'])
             return self.spaces['nb_space_units']
         # Em quad (typically O15, 18 units wide)
         elif char == self.spaces['quad_symbol']:
             (combination, wedge_positions) = self.spaces['quad_code']
-            self.buffer.append([combination, wedge_positions,
-                                'Em quad - 18 units wide'])
+            self.line_buffer.append([combination, wedge_positions,
+                                     'Em quad - 18 units wide'])
             return self.spaces['quad_units']
         # Space not recognized - so this is a character.
         # Shifted values apply only to unit-shift, start with empty
@@ -432,7 +432,7 @@ class Typesetter(object):
             combination = column + 'S' + str(row)
             wedge_positions = self.calculate_wedges(difference)
         # Finally, add combination and wedge positions to the buffer
-        self.buffer.append([combination, wedge_positions, char])
+        self.line_buffer.append([combination, wedge_positions, char])
         # Return the character's unit width
         return char_units
 
@@ -636,7 +636,7 @@ class Typesetter(object):
                 self.output_buffer.append(combination + ' // ' + character)
 
     def write_output(self):
-        """Returns an output buffer - from first character codes to last/"""
+        """Returns an output buffer - from first to last characters"""
         return reversed(self.output_buffer)
 
     def single_justification(self, wedge_positions):

@@ -170,13 +170,11 @@ class Database(object):
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges WHERE id = ? ', [w_id])
-                wedge = cursor.fetchone()
-                wedge = list(wedge)
-                # Change return value of brit_pica to boolean:
-                wedge[3] = bool(wedge[3])
-                # Change return value of steps to list:
-                wedge[4] = json.loads(wedge[4])
-                # Return wedge
+                ([w_id, wedge_series, set_width, raw_brit_pica,
+                 raw_unit_arrangement]) = cursor.fetchone()
+                # Transform the data on the fly
+                wedge = [w_id, wedge_series, set_width, bool(raw_brit_pica),
+                         json.loads(raw_unit_arrangement)]
                 return wedge
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
