@@ -127,25 +127,33 @@ def display_diecase_layout(diecase_layout,
     if not diecase_layout:
         ui.display('No layout to display!')
         return False
-    # Format the characters for display
-    all_mats = diecase_layout + find_unused_matrices(diecase_layout)
-    for mat in all_mats:
+    # Build a list of all matrices, starting with blank positions
+    # (not registered as spaces)
+    all_mats = find_unused_matrices(diecase_layout)
+    for mat in diecase_layout:
+        character = mat[0]
+        styles = mat[1]
+        column = mat[2]
+        row = mat[3]
+        units = mat[4]
         # Low space
-        if mat[0] == '_':
-            mat[0] = '▣'
+        if character == '_':
+            processed_character = '▣'
         # High space
-        elif mat[0] == ' ':
-            mat[0] = '□'
+        elif character == ' ':
+            processed_character = '□'
         # Empty
-        elif not mat[0]:
-            mat[0] = ' '
+        elif not character:
+            processed_character = ' '
         # Character - format it
         else:
             try:
-                for style in mat[1]:
-                    mat[0] = ui.format_display(mat[0], style)
+                for style in styles:
+                    processed_character = ui.format_display(character, style)
             except (IndexError, KeyError):
                 pass
+        # Add a record to processed matrices
+        all_mats.append((processed_character, styles, column, row, units))
     # Determine which rows have matrices
     # This will skip unfilled rows (with blanks) at the end
     row_numbers = sorted({mat[3] for mat in all_mats})
