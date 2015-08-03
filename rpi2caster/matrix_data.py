@@ -104,8 +104,8 @@ def show_diecase():
         # Choose diecase
         diecase_id = choose_diecase()
         # First, get diecase data
-        (diecase_id, type_series, type_size, wedge_series, set_width,
-         typeface_name, layout) = DB.diecase_by_id(diecase_id)
+        (diecase_id, _, _, wedge_series, set_width,
+         _, layout) = DB.diecase_by_id(diecase_id)
         # Process metadata
         # Get wedge unit arrangement
         unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
@@ -113,8 +113,8 @@ def show_diecase():
         ui.confirm('[Enter] to continue...')
 
 
-def display_diecase_layout(diecase_layout,
-                           unit_arrangement=wedge_data.WEDGES['5']):
+def display_diecase_layout(diecase_layout, unit_arrangement=zip
+                           (enumerate(wedge_data.WEDGES['5'], start=1))):
     """display_diecase_layout:
 
     Shows a layout for a given diecase ID.
@@ -181,13 +181,13 @@ def display_diecase_layout(diecase_layout,
     # Get a unit-width for each row to display it at the end
     for i, row in enumerate(diecase_arrangement, start=1):
         try:
-            units = str(unit_arrangement[i-1])
+            units = str(unit_arrangement[i])
         except IndexError:
             units = ' '
         if i-2 < 0:
             shifted_units = ' '
         else:
-            shifted_units = str(unit_arrangement[i-2])
+            shifted_units = str(unit_arrangement[i-1])
         # Now we are going to show the matrices
         # First, display row number (and borders), then characters in row
         data = ['|' + str(i).center(5) + '|'] + row

@@ -10,4 +10,5 @@ C = simulation.Monotype()
 J = casting.Casting()
 # set up a caster for this job
 J.caster = C
+casting.ui.DEBUG_MODE = True
 casting.main_menu(J)

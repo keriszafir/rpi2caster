@@ -278,7 +278,7 @@ def get_unit_arrangement(wedge_series, set_width):
     """Returns an unit arrangement for a given wedge."""
     try:
         wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
-        unit_values = wedge[4]
+        unit_values = [int(i) for i in wedge[4]]
     except exceptions.NoMatchingData:
         try:
             unit_values = WEDGES[wedge_series]
@@ -286,7 +286,13 @@ def get_unit_arrangement(wedge_series, set_width):
             prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
                       'separated by commas.\n')
             unit_values = ui.enter_data(prompt).split(',')
-    unit_arrangement = [int(step) for step in unit_values]
+    unit_arrangement = dict(enumerate(unit_values, start=1))
+    unit_arrangement[0] = None
+    # Check if wedge is 16-step (special HMN or KMN)
+    try:
+        unit_arrangement[16]
+    except KeyError:
+        unit_arrangement[16] = ''
     # If we have a HMN or KMN special wedge, it has 16 steps
     # 16th step is not defined for any typical 15-row wedges
     return unit_arrangement

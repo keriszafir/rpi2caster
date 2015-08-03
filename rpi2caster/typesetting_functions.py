@@ -25,7 +25,7 @@ class Typesetter(object):
         self.ligatures = 3
         self.unit_shift = False
         self.compose = self.auto_compose
-        self.main_alignment = self._align_left
+        self.current_alignment = self._align_left
         # Set up the spaces
         self.spaces = {'var_space_char': ' ',
                        'var_space_min_units': 4,
@@ -222,7 +222,7 @@ class Typesetter(object):
                    'R': self._align_right,
                    'B': self._align_both}
         message = ('Default alignment: [L]eft, [C]enter, [R]ight, [B]oth? ')
-        self.main_alignment = ui.simple_menu(message, options)
+        self.current_alignment = ui.simple_menu(message, options)
 
     def _choose_style(self):
         """Parses the diecase for available styles and lets user choose one."""
@@ -378,48 +378,11 @@ class Typesetter(object):
         try:
             # Is that a command?
             self.typesetting_commands[char]
+            # Return 0 unit increment
             return 0
         except KeyError:
             # If not, then continue
             pass
-        # Get the matrix data: [char, style, column, row, units]
-        # First try custom-defined characters (overrides)
-        try:
-            matches = [mat for mat in self.custom_characters
-                       if mat[0] == char and self.current_style in mat[1]]
-        except IndexError:
-            # Search in matrix case then
-            matches = [mat for mat in self.diecase_layout if mat[0] == char and
-                       self.current_style in mat[1]]
-        while not matches:
-            # Nothing found in the diecase for this character?
-            # Define it then yourself!
-            matrix = []
-            row = ui.enter_data('Column? ').upper
-            column = ui.enter_data_spec_type('Row? ', int)
-            matrix = [mat for mat in self.diecase_layout
-                      if mat[2] == column and mat[3] == row]
-        if len[matches] == 1:
-            matrix = matches[0]
-        elif len(matches) > 1:
-            options = dict(zip(enumerate(matches), start=1))
-            matrix = ui.simple_menu('Choose a matrix for the character %s, '
-                                    'style: %s' % (char, self.current_style),
-                                    options)
-            self.custom_characters.append(matrix)
-        # If char units is the same as the row units, no correction is needed
-        # Wedge positions for such character are null
-        wedge_positions = (None, None)
-        # Get coordinates
-        column = matrix[2]
-        row = matrix[3]
-        unit_width = matrix[4]
-        row_units = self.unit_arrangement[row]
-        # Add or subtract current unit correction
-        char_units = unit_width + self.unit_correction
-        # Trying to access the 16th row with no unit shift activated
-        if row == 16 and not self.unit_shift:
-            self.convert_to_unit_shift()
         # Detect any spaces and quads
         # Variable space (typically GS2, width adjusted, but minimum 4 units):
         if char == self.spaces['var_space_symbol']:
@@ -446,6 +409,44 @@ class Typesetter(object):
                                      'Em quad - 18 units wide'])
             return self.spaces['quad_units']
         # Space not recognized - so this is a character.
+        # Get the matrix data: [char, style, column, row, units]
+        # First try custom-defined characters (overrides)
+        # If empty - try diecase layout
+        matches = ([mat for mat in self.custom_characters
+                    if mat[0] == char and self.current_style in mat[1]] or
+                   [mat for mat in self.diecase_layout if mat[0] == char and
+                    self.current_style in mat[1]])
+        while not matches:
+            # Nothing found in the diecase for this character?
+            # Define it then yourself!
+            matrix = []
+            ui.display('Enter the position for character %s, style: %s'
+                       % (char, self.current_style))
+            row = ui.enter_data('Column? ').upper
+            column = ui.enter_data_spec_type('Row? ', int)
+            matrix = [mat for mat in self.diecase_layout
+                      if mat[2] == column and mat[3] == row]
+        if len(matches) == 1:
+            matrix = matches[0]
+        elif len(matches) > 1:
+            options = dict(zip(enumerate(matches), start=1))
+            matrix = ui.simple_menu('Choose a matrix for the character %s, '
+                                    'style: %s' % (char, self.current_style),
+                                    options)
+            self.custom_characters.append(matrix)
+        # If char units is the same as the row units, no correction is needed
+        # Wedge positions for such character are null
+        wedge_positions = (None, None)
+        # Get coordinates
+        column = matrix[2]
+        row = matrix[3]
+        normal_unit_width = matrix[4]
+        row_units = self.unit_arrangement[row]
+        # Add or subtract current unit correction
+        char_units = normal_unit_width + self.unit_correction
+        # Trying to access the 16th row with no unit shift activated
+        if row == 16 and not self.unit_shift:
+            self.convert_to_unit_shift()
         # Shifted values apply only to unit-shift, start with empty
         shifted_row, shifted_column, shifted_row_units = 0, '', 0
         # If we use unit shift, we can move the diecase one row further
@@ -475,6 +476,11 @@ class Typesetter(object):
             combination = column + 'S' + str(row)
             wedge_positions = self.calculate_wedges(difference)
         # Finally, add combination and wedge positions to the buffer
+        ui.debug_info('Character: ', char, ' style: ', self.current_style)
+        ui.debug_info('Char. units: ', char_units, ' row: ', str(row),
+                      ' row units: ', str(row_units))
+        ui.debug_info('Combination: ', combination,
+                      ' wedges: ', wedge_positions)
         self.line_buffer.append([combination, wedge_positions, char])
         # Return the character's unit width
         return char_units
@@ -489,11 +495,12 @@ class Typesetter(object):
 
     def auto_compose(self):
         """Composes text automatically, deciding when to end the lines."""
-        # Start with the empty buffer
+        # Start with the empty work buffer
         self.buffer = []
         try:
             while True:
                 # Keep looping over all characters and lines
+                self.line_buffer = []
                 line_length = 0
                 # Try to fill the line and not hyphenate
                 while line_length < self.unit_line_length - 50:
@@ -502,6 +509,8 @@ class Typesetter(object):
                     # Translate the character (add it to buffer),
                     # get unit width for the character from function's retval
                     line_length += self.translate(character)
+                self.current_alignment()
+                print(self.buffer)
         except StopIteration:
             # Text source exhausted
             ui.confirm('Typesetting finished! [Enter] to continue...')
@@ -565,37 +574,37 @@ class Typesetter(object):
         """Sets superscript for the following text."""
         self.current_style = 'superscript'
 
-    def _fill_line(self, units):
+    def _fill_line(self):
         """Justify the row; applies to all alignment routines"""
         # Add as many fixed spaces as we can
-        while self.current_units > spaces['fixed_space_units']:
-            # Add a specified number of units
-            fill_spaces_number += 1
+        while self.current_units > self.spaces['fixed_space_units']:
             # Add units
             self.current_units += self.spaces['fixed_space_units']
-        # Return the spaces number
-        return fill_spaces_number
 
     def _align_left(self):
         """Aligns the previous chunk to the left."""
         fill_spaces_number = self._fill_line()
         spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
         # Prepare the line: (content, wedge_positions)
-        self.line_buffer = spaces + self.line_buffer
+        self.buffer.extend(self.line_buffer)
+        self.buffer.extend(spaces)
 
     def _align_right(self):
         """Aligns the previous chunk to the right."""
         fill_spaces_number = self._fill_line()
         spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
         # Prepare the line: (content, wedge_positions)
-        self.line_buffer = self.line_buffer + spaces
+        self.buffer.extend(spaces)
+        self.buffer.extend(self.line_buffer)
 
     def _align_center(self):
         """Aligns the previous chunk to the center."""
         fill_spaces_number = self._fill_line()
         spaces = ([' ' for i in range(fill_spaces_number / 2)], 'roman')
         # Prepare the line: (content, wedge_positions)
-        self.line_buffer = spaces + self.line_buffer + spaces
+        self.buffer.extend(spaces)
+        self.buffer.extend(self.line_buffer)
+        self.buffer.extend(spaces)
 
     def _align_both(self):
         """Aligns the previous chunk to both edges and ends the line."""
