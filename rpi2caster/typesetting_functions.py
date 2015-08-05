@@ -42,6 +42,8 @@ class Typesetter(object):
                        'quad_symbol': '\t'}
         # Current units in the line - start with 0
         self.current_units = 0
+        # Justifying spaces number
+        self.current_line_var_spaces = 0
         # Unit correction: -2 ... +10 applied to a character or a fragment
         self.unit_correction = 0
         # Commands for activating the typesetting functions
@@ -377,7 +379,7 @@ class Typesetter(object):
         """
         try:
             # Is that a command?
-            self.typesetting_commands[char]
+            self.typesetting_commands[char]()
             # Return 0 unit increment
             return 0
         except KeyError:
@@ -389,6 +391,7 @@ class Typesetter(object):
             (combination, wedge_positions) = ('var_space', (3, 8))
             self.line_buffer.append([combination, wedge_positions,
                                      'Variable space'])
+            self.current_line_var_spaces += 1
             return self.spaces['var_space_min_units']
         # Fixed space (typically G5, 9 units wide)
         elif char == self.spaces['fixed_space_symbol']:
@@ -501,14 +504,14 @@ class Typesetter(object):
             while True:
                 # Keep looping over all characters and lines
                 self.line_buffer = []
-                line_length = 0
+                self.current_units = 0
                 # Try to fill the line and not hyphenate
-                while line_length < self.unit_line_length - 50:
+                while self.current_units < self.unit_line_length - 50:
                     # Get the character from input
                     character = next(self.text_source)
                     # Translate the character (add it to buffer),
                     # get unit width for the character from function's retval
-                    line_length += self.translate(character)
+                    self.current_units += self.translate(character)
                 self.current_alignment()
                 print(self.buffer)
         except StopIteration:
@@ -574,41 +577,75 @@ class Typesetter(object):
         """Sets superscript for the following text."""
         self.current_style = 'superscript'
 
-    def _fill_line(self):
+    def _start_new_line(self, wedge_positions):
+        """Starts a new line during typesetting"""
+        self.buffer.extend(self.line_buffer)
+        self.buffer.append(('newline', wedge_positions))
+        self.line_buffer = []
+
+    def _justify_line(self, mode=1):
         """Justify the row; applies to all alignment routines"""
         # Add as many fixed spaces as we can
-        while self.current_units > self.spaces['fixed_space_units']:
+        # Don't exceed the line length (in units) specified in setup!
+        # Predict if the increment will exceed it or not
+        fill_spaces_number = 0
+        space_units = self.spaces['fixed_space_units']
+        result_length = self.current_units + mode * space_units
+        # This function supports various modes:
+        # 0: justification only by variable spaces
+        # 1: filling the line with one block of fixed spaces, then dividing
+        #    the remaining units among variable spaces
+        # 2: as above but with two blocks of fixed spaces
+        # 3, 4... - as above but with 3, 4... blocks of fixed spaces
+        # Add fixed spaces only if mode is greater than 0
+        spaces = []
+        while mode and result_length < self.unit_line_length:
             # Add units
-            self.current_units += self.spaces['fixed_space_units']
+            self.current_units += mode * self.spaces['fixed_space_units']
+            # Add a mode-dictated number of fill spaces
+            fill_spaces_number += mode
+            # Determine and add the space code to the line
+            space = (self.spaces['fixed_space_code'], (None, None),
+                     'Fixed space %i units wide'
+                     % self.spaces['fixed_space_units'])
+            # Add as many spaces as needed
+            spaces = ([space for i in range(fill_spaces_number)], 'roman')
+        # The remaining units must be divided among the justifying spaces
+        # Determine the 0075 and 0005 justification wedge positions (1...15)
+        remaining_units = self.unit_line_length - self.current_units
+        space_increment = remaining_units / self.current_line_var_spaces
+        # Calculate the (0075 position, 0005 position) for variable spaces
+        wedge_positions = self.calculate_wedges(space_increment)
+        # Reset the counters
+        self.current_line_var_spaces = 0
+        self.current_units = 0
+        # Return the space chunk (that will be appended at the beginning
+        # or the end of the line, or both) and justification wedge positions
+        return (spaces, wedge_positions)
 
     def _align_left(self):
         """Aligns the previous chunk to the left."""
-        fill_spaces_number = self._fill_line()
-        spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
-        # Prepare the line: (content, wedge_positions)
-        self.buffer.extend(self.line_buffer)
-        self.buffer.extend(spaces)
+        (spaces, wedge_positions) = self._justify_line()
+        self.line_buffer.extend(spaces)
+        self._start_new_line(wedge_positions)
 
     def _align_right(self):
         """Aligns the previous chunk to the right."""
-        fill_spaces_number = self._fill_line()
-        spaces = ([' ' for i in range(fill_spaces_number)], 'roman')
-        # Prepare the line: (content, wedge_positions)
-        self.buffer.extend(spaces)
-        self.buffer.extend(self.line_buffer)
+        (spaces, wedge_positions) = self._justify_line()
+        self.line_buffer = spaces + self.line_buffer
+        self._start_new_line(wedge_positions)
 
     def _align_center(self):
         """Aligns the previous chunk to the center."""
-        fill_spaces_number = self._fill_line()
-        spaces = ([' ' for i in range(fill_spaces_number / 2)], 'roman')
+        (spaces, wedge_positions) = self._justify_line(2)
         # Prepare the line: (content, wedge_positions)
-        self.buffer.extend(spaces)
-        self.buffer.extend(self.line_buffer)
-        self.buffer.extend(spaces)
+        self.line_buffer = spaces + self.line_buffer + spaces
+        self._start_new_line(wedge_positions)
 
     def _align_both(self):
         """Aligns the previous chunk to both edges and ends the line."""
-        space_count = 0
+        (spaces, wedge_positions) = self._justify_line(0)
+        self._start_new_line(wedge_positions)
 
     def calculate_wedges(self, difference):
         """calculate_wedges:
@@ -619,6 +656,7 @@ class Typesetter(object):
         """
         # Check if corrections are needed at all
         # (delta = 0 - no corrections, wedges at neutral position i.e. 3/8)
+        print(difference)
         if not difference:
             return (None, None)
         # Delta is in units of a given set
@@ -672,7 +710,7 @@ class Typesetter(object):
                 self.double_justification(wedge_positions)
             # Justifying space - if wedges were set to different positions,
             # reset them to line justification positions
-            elif combination == 'space':
+            elif combination == 'var_space':
                 if current_wedge_positions != line_wedge_positions:
                     self.single_justification(line_wedge_positions)
                 self.output_buffer.append(self.spaces['var_space_code'])

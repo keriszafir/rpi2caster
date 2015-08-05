@@ -516,7 +516,7 @@ class Casting(object):
             # Cast 5 nine-unit quads
             # End here if casting unsuccessful.
             ui.display('Now casting 9-units spaces')
-            if not self.cast_from_matrix('G5', 5):
+            if not self.cast_from_matrix('G5', 7):
                 continue
             # At the end of successful sequence, some info for the user:
             ui.display('Done. Compare the lengths and adjust if needed.')
@@ -562,11 +562,11 @@ class Casting(object):
             # End here if casting unsuccessful.
             if dash_position:
                 ui.display('Now casting en dash')
-                if not self.cast_from_matrix(dash_position, 5):
+                if not self.cast_from_matrix(dash_position, 7):
                     continue
             if lowercase_n_position:
                 ui.display('Now casting lowercase "n"')
-                if not self.cast_from_matrix(lowercase_n_position, 5):
+                if not self.cast_from_matrix(lowercase_n_position, 7):
                     continue
             # At the end of successful sequence, some info for the user:
             ui.display('Done. Compare the lengths and adjust if needed.')
