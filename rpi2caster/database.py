@@ -54,7 +54,8 @@ class Database(object):
         Sets up config path (specified or default),
         sets up database path (specified, set up in config, then default),
         """
-        database_path = global_settings.DATABASE_PATH or '/var/rpi2caster/db'
+        database_path = (global_settings.DATABASE_PATH or
+                         '/var/rpi2caster/monotype.db')
         # Connect to the database
         try:
             self.db_connection = sqlite3.connect(database_path)
