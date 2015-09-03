@@ -104,7 +104,7 @@ def comments_parser(input_data):
 def count_lines_and_chars(contents):
     """Count newlines and characters+spaces in ribbon file.
 
-    This is usually called when pre-processing the file.
+    This is usually called when pre-processing the file for casting.
     """
     all_lines = 0
     all_chars = 0
@@ -123,7 +123,7 @@ def count_lines_and_chars(contents):
 def count_combinations(contents):
     """Count all combinations in ribbon file.
 
-    This is usually called when pre-processing the file."""
+    This is usually called when pre-processing the file for punching."""
     all_combinations = 0
     for line in contents:
         # Strip comments
@@ -133,6 +133,30 @@ def count_combinations(contents):
             all_combinations += 1
     # Return the number
     return all_combinations
+
+
+def rewind_ribbon(contents):
+    """rewind_ribbon:
+
+    Detects ribbon direction so that we can use the ribbons generated
+    with different software and still cast them in correct order.
+    This function checks if the casting sequence starts with 0005 / NJ only
+    (which is found at the end of the job, to stop the pump) - it indicates
+    that the ribbon should be reversed.
+    """
+    newline_found = False
+    for line in contents:
+        signals = comments_parser(line)[0]
+        # Toggle this to True if newline combinations are found
+        newline_found = newline_found or check_newline(signals)
+        # Determine the result the first time pump stop combination is found
+        if check_pump_stop(signals) and not newline_found:
+            # Starts with pump stop i.e. the last combination
+            # - cast it backwards
+            return reversed(contents)
+        elif newline_found:
+            # Starts with newline - cast it forwards
+            return contents
 
 
 def signals_parser(raw_signals):
@@ -199,6 +223,16 @@ def check_newline(signals):
     """
     return (set(['0005', '0075']).issubset(signals) or
             set(['N', 'K', 'J']).issubset(signals))
+
+
+def check_pump_stop(signals):
+    """check_pump_stop(signals):
+
+    Checks if the pump stop signal (0005 or NJ and not 0075 or NK) is present.
+    This is called to determine the ribbon direction.
+    """
+    return ('0005' in signals or set(['N', 'J']).issubset(signals) and
+            '0075' not in signals and not set(['N', 'K']).issubset(signals))
 
 
 def check_character(signals):

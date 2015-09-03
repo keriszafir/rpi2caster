@@ -117,8 +117,9 @@ class Casting(object):
         # Show the numbers to the operator
         ui.display('Lines found in ribbon: %i' % all_lines)
         ui.display('Characters: %i' % all_chars)
-        # For casting, we need to read the contents in reversed order
-        content = reversed(self.ribbon_contents)
+        # For casting, we need to check if the ribbon has to be read
+        # forwards or backwards
+        content = parsing.rewind_ribbon(self.ribbon_contents)
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
