@@ -686,7 +686,8 @@ class Typesetter(object):
         all codes in a buffer so that they use EF instead of D signals
         in column number.
         """
-        prompt = ('\nWARNING: You must use the unit-shift attachment. '
+        prompt = ('\nWARNING: You are trying to use 16th row on a matrix case.'
+                  '\nFor that you must use the unit-shift attachment. '
                   'Do you wish to compose for unit-shift? \n')
         self.unit_shift = ui.yes_or_no(prompt)
         if self.unit_shift():
@@ -703,29 +704,28 @@ class Typesetter(object):
         current_wedge_positions = (3, 8)
         while self.buffer:
             # Take the last combination off
-            (combination, wedge_positions, character) = self.buffer.pop()
+            (combination, wedge_positions, comment) = self.buffer.pop()
             # New line - use double justification
             if combination == 'newline':
                 line_wedge_positions = wedge_positions
+                current_wedge_positions = line_wedge_positions
                 self.double_justification(wedge_positions)
             # Justifying space - if wedges were set to different positions,
             # reset them to line justification positions
             elif combination == 'var_space':
                 if current_wedge_positions != line_wedge_positions:
+                    # Set the line justification
                     self.single_justification(line_wedge_positions)
-                self.output_buffer.append(self.spaces['var_space_code'])
-            # No corrections needed
+                self.output_buffer.append(self.spaces['var_space_code'] +
+                                          ' // ' + comment)
             elif wedge_positions == (None, None):
-                self.output_buffer.append(combination + ' // ' + character)
-            # Correction needed - determine if wedges are already set
+                # No corrections needed
+                self.output_buffer.append(combination + ' // ' + comment)
             elif wedge_positions != current_wedge_positions:
+                # Correction needed - determine if wedges are already set
                 self.single_justification(wedge_positions)
                 current_wedge_positions = wedge_positions
-                self.output_buffer.append(combination + ' // ' + character)
-
-    def write_output(self):
-        """Returns an output buffer - from first to last characters"""
-        return reversed(self.output_buffer)
+                self.output_buffer.append(combination + ' // ' + comment)
 
     def single_justification(self, wedge_positions):
         """single_justification:
@@ -733,17 +733,22 @@ class Typesetter(object):
         Single justification: the caster sets 0005, then 0075 + pump resumes.
         Function adds a 0075-b, then 0005-a combination to buffer.
         Supports both normal (0075, 0005, 0005+0075) and alternate
-        (NK, NJ, NKJ) justification modes.
+        (NK, NJ, NKJ) justification modes. Adds an extra "S" signal
+        to assist setting the 0005 and 0075 levers in place (some machines
+        have a problem with that).
         """
         # This function is used during backwards-parsing and converting
         # the combinations sequence after typesetting
         # Codes are placed in the sequence that will be read by the caster
         # So, we get 0005 first, then 0075
         (pos0075, pos0005) = wedge_positions
-        # Add 0005-N-J-pos0005 first:
-        self.output_buffer.append(str(pos0005) + 'NJ 0005')
-        # Add 0075-N-K-pos0075 next:
-        self.output_buffer.append(str(pos0075) + 'NK 0075')
+        # Inform the user about wedge positions
+        comment1 = ' // Pump off; setting 0005 to ' + str(pos0005)
+        comment2 = ' // Setting 0075 wedge to ' + str(pos0075) + ', pump on...'
+        # Add 0005-N-J-S-pos0005 first:
+        self.output_buffer.append(str(pos0005) + 'NJS 0005' + comment1)
+        # Add 0075-N-K-S-pos0075 next:
+        self.output_buffer.append(str(pos0075) + 'NKS 0075' + comment2)
         return True
 
     def double_justification(self, wedge_positions):
@@ -754,10 +759,15 @@ class Typesetter(object):
         Function adds a 0075-b, then 0005-a combination to buffer.
         Supports both normal (0075, 0005, 0005+0075)
         and alternate (NK, NJ, NKJ) justification modes.
+        Adds an "S" signal also - to help delivering the suitable force
+        to the 0005 and 0075 levers (some machines have a problem with that).
         """
         (pos0075, pos0005) = wedge_positions
-        # Add 0075-N-K-pos0075 first:
-        self.output_buffer.append(str(pos0075) + 'NK 0075')
-        # Add 0005-N-J-pos0005 next:
-        self.output_buffer.append(str(pos0005) + 'NKJ 0005 0075')
+        # Inform the user about the wedge positions
+        comment1 = ' // Line to the galley, setting 0005 to ' + str(pos0005)
+        comment2 = ' // Setting 0075 to ' + str(pos0075) + ', pump on...'
+        # Add 0005-N-J-S-pos0005 first:
+        self.output_buffer.append(str(pos0005) + 'NKJS 0005 0075' + comment1)
+        # Add 0075-N-K-S-pos0075 next:
+        self.output_buffer.append(str(pos0075) + 'NKS 0075' + comment2)
         return True
