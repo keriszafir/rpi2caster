@@ -376,6 +376,8 @@ class Typesetter(object):
 
         Translates the character to a combination of Monotype signals,
         applying single or double justification whenever necessary.
+        Returns an unit value of the character, so that it can be added
+        to current line's unit length.
         """
         try:
             # Is that a command?
@@ -409,7 +411,7 @@ class Typesetter(object):
         elif char == self.spaces['quad_symbol']:
             (combination, wedge_positions) = self.spaces['quad_code']
             self.line_buffer.append([combination, wedge_positions,
-                                     'Em quad - 18 units wide'])
+                                     'Em quad'])
             return self.spaces['quad_units']
         # Space not recognized - so this is a character.
         # Get the matrix data: [char, style, column, row, units]
@@ -432,7 +434,7 @@ class Typesetter(object):
         if len(matches) == 1:
             matrix = matches[0]
         elif len(matches) > 1:
-            options = dict(zip(enumerate(matches), start=1))
+            options = dict(enumerate(matches, start=1))
             matrix = ui.simple_menu('Choose a matrix for the character %s, '
                                     'style: %s' % (char, self.current_style),
                                     options)
@@ -670,10 +672,11 @@ class Typesetter(object):
         # pica = 18 units * set_width / 12
         # unit_width = 12 * pica / (set width * 18)
         difference_inches = difference * 12 * pica / (18 * self.set_width)
+        print(difference_inches)
         # We can calculate the steps of 0005 and 0075 wedges
         # Each step is calculated with 0075:3 and 0005:8 as base
         steps_0075 = difference_inches // 0.0075
-        steps_0005 = difference_inches % 0.0075 // 0.0005
+        steps_0005 = difference_inches // 0.0075 // 0.0005
         # We now can calculate the wedge positions and return them
         return (3 + steps_0075, 8 + steps_0005)
 
