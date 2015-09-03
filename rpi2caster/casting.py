@@ -124,6 +124,7 @@ class Casting(object):
             queue = reversed(self.ribbon_contents)
         else:
             ui.display('Ribbon starts with galley trip - not rewinding...')
+            queue = self.ribbon_contents
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
