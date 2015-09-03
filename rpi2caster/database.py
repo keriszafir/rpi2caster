@@ -345,6 +345,50 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
+    def diecase_by_series_and_size(self, type_series, type_size):
+        """diecase_by_series_and_size:
+
+        Looks up a diecase of a given type series (string e.g. 327) and size
+        (string e.g. 12D).
+        """
+        with self.db_connection:
+            try:
+                cursor = self.db_connection.cursor()
+                cursor.execute('SELECT * FROM matrix_cases '
+                               'WHERE type_series = ? AND type_size = ?',
+                               [str(type_series), str(type_size)])
+                diecase = list(cursor.fetchone())
+                # De-serialize the diecase layout, convert it back to a list
+                raw_layout = json.loads(diecase.pop())
+                # Convert the layout
+                # Record is now 'character style1,style2... column row units'
+                # Make it a list
+                layout = []
+                for record in raw_layout:
+                    # Make a tuple of styles
+                    record[1] = tuple(record[1].split(','))
+                    # Convert the row number to int
+                    record[3] = int(record[3])
+                    # Last field - unit width - was not mandatory
+                    # Try to convert it to int
+                    # If no unit width is specified, use None instead
+                    try:
+                        record[4] = int(record[4])
+                    except (IndexError, ValueError):
+                        record.append(None)
+                    layout.append(record)
+                    # Record is now:
+                    # [character, (style1, style2...), column, row, units]
+                # Add the layout back to diecase and return the data
+                diecase.append(layout)
+                return diecase
+            except (TypeError, ValueError, IndexError):
+                # No data or cannot process it
+                raise exceptions.NoMatchingData
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Database failed
+                raise exceptions.DatabaseQueryError
+
     def update_diecase_layout(self, diecase_id, layout={}):
         """update_diecase_layout:
 

@@ -121,6 +121,9 @@ def display_diecase_layout(diecase_layout, unit_arrangement=zip
     Allows to specify a stopbar/wedge unit arrangement for this diecase,
     or uses the typical S5 if not specified.
     """
+    # Safeguard against an empty unit arrangement: use S5 unit arrangement
+    s5_arrangement = zip(enumerate(wedge_data.WEDGES['5'], start=1))
+    unit_arrangement = unit_arrangement or s5_arrangement
     # Build a list of all characters
     # Mark empty matrices or unaddressable parts of multi-cell mats
     # as unused

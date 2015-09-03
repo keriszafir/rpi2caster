@@ -668,7 +668,8 @@ class Casting(object):
     def show_diecase_layout(self):
         """Shows the diecase layout"""
         layout = self.diecase_layout
-        matrix_data.display_diecase_layout(layout, self.unit_arrangement)
+        unit_arrangement = self.unit_arrangement or None
+        matrix_data.display_diecase_layout(layout, unit_arrangement)
         ui.confirm('[Enter] to continue...')
 
     def data_menu(self):
@@ -798,7 +799,7 @@ class Casting(object):
             # Read the UA for the wedge
             self.unit_arrangement = self.wedge[-1]
             # Ask whether to show diecase layout:
-            if ui.yes_or_no('Show matrix case layout?'):
+            if self.diecase_layout and ui.yes_or_no('Show diecase layout?'):
                 self.show_diecase_layout()
 
         def choose_wedge():
