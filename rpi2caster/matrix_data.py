@@ -113,8 +113,7 @@ def show_diecase():
         ui.confirm('[Enter] to continue...')
 
 
-def display_diecase_layout(diecase_layout, unit_arrangement=zip
-                           (enumerate(wedge_data.WEDGES['5'], start=1))):
+def display_diecase_layout(diecase_layout, unit_arrangement=None):
     """display_diecase_layout:
 
     Shows a layout for a given diecase ID.
@@ -122,8 +121,15 @@ def display_diecase_layout(diecase_layout, unit_arrangement=zip
     or uses the typical S5 if not specified.
     """
     # Safeguard against an empty unit arrangement: use S5 unit arrangement
-    s5_arrangement = zip(enumerate(wedge_data.WEDGES['5'], start=1))
+    s5_arrangement = wedge_data.WEDGES['5']
     unit_arrangement = unit_arrangement or s5_arrangement
+    unit_arrangement = dict(enumerate(unit_arrangement, start=1))
+    unit_arrangement[0] = ''
+    try:
+        unit_arrangement[16] = unit_arrangement[16]
+    except KeyError:
+        unit_arrangement[16] = ''
+    print(unit_arrangement)
     # Build a list of all characters
     # Mark empty matrices or unaddressable parts of multi-cell mats
     # as unused
@@ -159,6 +165,7 @@ def display_diecase_layout(diecase_layout, unit_arrangement=zip
         all_mats.append((processed_character, styles, column, row, units))
     # Determine which rows have matrices
     # This will skip unfilled rows (with blanks) at the end
+    # A list of integers
     row_numbers = sorted({mat[3] for mat in all_mats})
     # Build rows and columns to iterate over
     column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
@@ -190,7 +197,10 @@ def display_diecase_layout(diecase_layout, unit_arrangement=zip
         if i-2 < 0:
             shifted_units = ' '
         else:
-            shifted_units = str(unit_arrangement[i-1])
+            try:
+                shifted_units = str(unit_arrangement[i-1])
+            except IndexError:
+                shifted_units = ''
         # Now we are going to show the matrices
         # First, display row number (and borders), then characters in row
         data = ['|' + str(i).center(5) + '|'] + row
