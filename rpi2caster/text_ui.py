@@ -14,7 +14,7 @@ from rpi2caster import exceptions
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
 # Style modifiers for displaying bold, italic, smallcaps, inferior, superior
-STYLE_MODIFIERS = {'roman': '',
+STYLE_MODIFIERS = {'roman': ' ',
                    'bold': '*',
                    'italic': '/',
                    'smallcaps': '#',

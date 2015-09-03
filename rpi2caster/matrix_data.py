@@ -172,19 +172,19 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     diecase_arrangement = []
     for row_number in row_numbers:
         # Add only characters and styles, center chars to 5
-        row = [mat[0].center(5)
+        row = [mat[0].center(4)
                for column_number in column_numbers for mat in all_mats
                if mat[2] == column_number and mat[3] == row_number]
         diecase_arrangement.append(row)
     # We can display it now
     header = ['|' + 'Row' + '|']
-    header.extend([col.center(5) for col in column_numbers])
+    header.extend([col.center(4) for col in column_numbers])
     header.append('|' + 'Units' + '|')
     header.append('Shift' + '|')
     header = (''.join(header))
     separator = '—' * len(header)
     empty_row = ('|' + ' ' * 3 + '|' +
-                 ' ' * 5 * len(column_numbers) + '|' +
+                 ' ' * 4 * len(column_numbers) + '|' +
                  ' ' * 5 + '|' + ' ' * 5 + '|')
     ui.display(separator, header, separator, empty_row, sep='\n')
     # Get a unit-width for each row to display it at the end
