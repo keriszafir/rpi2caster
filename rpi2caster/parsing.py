@@ -146,6 +146,7 @@ def rewind_ribbon(contents):
     """
     newline_found = False
     for line in contents:
+        # Get the signals part of a line
         signals = comments_parser(line)[0]
         # Toggle this to True if newline combinations are found
         newline_found = newline_found or check_newline(signals)
@@ -153,10 +154,10 @@ def rewind_ribbon(contents):
         if check_pump_stop(signals) and not newline_found:
             # Starts with pump stop i.e. the last combination
             # - cast it backwards
-            return reversed(contents)
+            return True
         elif newline_found:
             # Starts with newline - cast it forwards
-            return contents
+            return False
 
 
 def signals_parser(raw_signals):
@@ -231,7 +232,7 @@ def check_pump_stop(signals):
     Checks if the pump stop signal (0005 or NJ and not 0075 or NK) is present.
     This is called to determine the ribbon direction.
     """
-    return ('0005' in signals or set(['N', 'J']).issubset(signals) and
+    return (('0005' in signals or set(['N', 'J']).issubset(signals)) and
             '0075' not in signals and not set(['N', 'K']).issubset(signals))
 
 

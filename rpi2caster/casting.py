@@ -119,7 +119,11 @@ class Casting(object):
         ui.display('Characters: %i' % all_chars)
         # For casting, we need to check if the ribbon has to be read
         # forwards or backwards
-        content = parsing.rewind_ribbon(self.ribbon_contents)
+        if parsing.rewind_ribbon(self.ribbon_contents):
+            ui.display('Ribbon starts with pump stop sequence - rewinding...')
+            queue = reversed(self.ribbon_contents)
+        else:
+            ui.display('Ribbon starts with galley trip - not rewinding...')
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
@@ -130,7 +134,7 @@ class Casting(object):
         # Read the reversed file contents, line by line, then parse
         # the lines, display comments & code combinations, and feed the
         # combinations to the caster
-        for line in content:
+        for line in queue:
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
             [raw_signals, comment] = parsing.comments_parser(line)
