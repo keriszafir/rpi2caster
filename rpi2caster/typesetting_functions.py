@@ -264,7 +264,7 @@ class Typesetter(object):
             column = space[2]
             row = space[3]
             if row < 16:
-                space_unit_width = self.unit_arrangement[row]
+                space_unit_width = self.unit_arrangement[row - 1]
                 space_code = column + str(row)
                 spaces.append((space_unit_width, space_code))
             # Now check if unit-shift is available and gather shifted spaces
@@ -272,9 +272,9 @@ class Typesetter(object):
                 # Convert non-shifted to shifted signals
                 shifted_column = column.replace('D', 'EF') + 'D'
                 shifted_row = row - 1
-                shifted_space_unit_width = self.unit_arrangement[shifted_row]
+                shifted_space_width = self.unit_arrangement[shifted_row - 1]
                 shifted_space_code = shifted_column + str(shifted_row)
-                shifted_spaces.append((shifted_space_unit_width,
+                shifted_spaces.append((shifted_space_width,
                                        shifted_space_code))
         # Try matching a space
         for (space_unit_width, space_code) in spaces:
@@ -444,7 +444,7 @@ class Typesetter(object):
         column = matrix[2]
         row = matrix[3]
         normal_unit_width = matrix[4]
-        row_units = self.unit_arrangement[row]
+        row_units = self.unit_arrangement[row - 1]
         # Add or subtract current unit correction
         char_units = normal_unit_width + self.unit_correction
         # Trying to access the 16th row with no unit shift activated
@@ -463,7 +463,7 @@ class Typesetter(object):
             shifted_row = row - 1
             column.replace('D', 'EF')
             shifted_column = column + 'D'
-            shifted_row_units = self.unit_arrangement[shifted_row]
+            shifted_row_units = self.unit_arrangement[shifted_row - 1]
         # Check if the character needs unit correction at all
         # Add it if not
         if char_units == row_units:
