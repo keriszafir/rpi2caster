@@ -177,15 +177,15 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
                if mat[2] == column_number and mat[3] == row_number]
         diecase_arrangement.append(row)
     # We can display it now
-    header = ['|' + 'Row'.center(5) + '|']
+    header = ['|' + 'Row' + '|']
     header.extend([col.center(5) for col in column_numbers])
-    header.append('|' + 'Units'.center(8) + '|')
-    header.append('Shifted'.center(8) + '|')
+    header.append('|' + 'Units' + '|')
+    header.append('Shift' + '|')
     header = (''.join(header))
     separator = '—' * len(header)
-    empty_row = ('|' + ' ' * 5 + '|' +
+    empty_row = ('|' + ' ' * 3 + '|' +
                  ' ' * 5 * len(column_numbers) + '|' +
-                 ' ' * 8 + '|' + ' ' * 8 + '|')
+                 ' ' * 5 + '|' + ' ' * 5 + '|')
     ui.display(separator, header, separator, empty_row, sep='\n')
     # Get a unit-width for each row to display it at the end
     for i, row in enumerate(diecase_arrangement, start=1):
@@ -202,10 +202,10 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
                 shifted_units = ''
         # Now we are going to show the matrices
         # First, display row number (and borders), then characters in row
-        data = ['|' + str(i).center(5) + '|'] + row
+        data = ['|' + str(i).center(3) + '|'] + row
         # At the end, unit-width and unit-width when using unit-shift
-        data.append('|' + units.center(8) + '|')
-        data.append(shifted_units.center(8) + '|')
+        data.append('|' + units.center(5) + '|')
+        data.append(shifted_units.center(5) + '|')
         data = ''.join(data)
         # Finally, display the row and a newline
         ui.display(data, empty_row, sep='\n')
