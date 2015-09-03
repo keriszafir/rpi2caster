@@ -129,7 +129,6 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         unit_arrangement[16] = unit_arrangement[16]
     except KeyError:
         unit_arrangement[16] = ''
-    print(unit_arrangement)
     # Build a list of all characters
     # Mark empty matrices or unaddressable parts of multi-cell mats
     # as unused
