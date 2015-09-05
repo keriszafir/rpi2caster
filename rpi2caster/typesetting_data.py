@@ -19,6 +19,15 @@ from rpi2caster import database
 DB = database.Database()
 
 
+def check_if_ribbons():
+    """Checks if any ribbons are available in the database"""
+    try:
+        DB.get_all_ribbons()
+        return True
+    except exceptions.DatabaseQueryError:
+        return False
+
+
 def list_ribbons():
     """Lists all ribbons in the database."""
     try:

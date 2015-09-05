@@ -659,6 +659,7 @@ class Typesetter(object):
         # Check if corrections are needed at all
         # (delta = 0 - no corrections, wedges at neutral position i.e. 3/8)
         print(difference)
+
         if not difference:
             return (None, None)
         # Delta is in units of a given set

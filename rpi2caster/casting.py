@@ -319,7 +319,7 @@ class Casting(object):
         while True:
             # Outer loop
             ui.clear()
-            ui.display('Calibration and Sort Casting:\n\n')
+            ui.display('Sorts casting by matrix coordinates\n\n')
             prompt = 'Enter column and row symbols (default: G 5): '
             # Got no signals? Use G5.
             signals = ui.enter_data_or_blank(prompt) or 'G 5'
@@ -694,6 +694,9 @@ class Casting(object):
 
     def data_menu(self):
         """Choose the ribbon and diecase, if needed"""
+        # Start with an empty options list
+        options = []
+
         # Define subroutines used only here
         def ribbon_from_file():
             """ribbon_from_file
@@ -834,18 +837,25 @@ class Casting(object):
             self.wedge = wedge_data.choose_wedge()
             self.unit_arrangement = self.wedge[-1]
 
-        # Subroutines end here
-        options = [('Return to main menu', exceptions.menu_level_up),
-                   ('View ribbons in database', typesetting_data.show_ribbon),
-                   ('Choose the ribbon from database', ribbon_from_db),
-                   ('Choose the ribbon from file', ribbon_from_file),
-                   ('Preview ribbon', self.preview_ribbon),
-                   ('Choose the matrix case', choose_diecase),
-                   ('Choose the wedge', choose_wedge)]
-        header = ('Input data choice menu:\n\n')
+        def check_database():
+            """Displays database-related options"""
+            opts = (('View ribbons in database', typesetting_data.show_ribbon),
+                    ('Choose the ribbon from database', ribbon_from_db))
+            if typesetting_data.check_if_ribbons():
+                for option in opts:
+                    options.append(option)
 
+        # Subroutines end here
+        # Header is static
+        header = 'Input data choice menu:\n\n'
         # Keep displaying the menu and go back here after any method ends
         while True:
+            # Options list is dynamic
+            options = [('Return to main menu', exceptions.menu_level_up)]
+            check_database()
+            options.extend([('Choose the ribbon from file', ribbon_from_file),
+                            ('Choose the matrix case', choose_diecase),
+                            ('Choose the wedge', choose_wedge)])
             try:
                 # Catch "return to menu" and "exit program" exceptions here
                 ui.menu(options, header=header,
@@ -866,6 +876,9 @@ def main_menu(work=Casting()):
     Header: string displayed over menu
     Footer: string displayed under menu (all info will be added here).
     """
+    # Empty options list
+    options = []
+
     # Declare subroutines
     def debug_notice():
         """Prints a notice if the program is in debug mode."""
@@ -901,21 +914,26 @@ def main_menu(work=Casting()):
         a perforator - if so, a "punch ribbon" feature will be
         available instead of "cast composition".
         """
-        if work.caster.is_perforator:
-            return ('Punch composition', work.punch_composition)
-        else:
-            return ('Cast composition', work.cast_composition)
+        if work.caster.is_perforator and work.ribbon_contents:
+            options.append(('Punch composition', work.punch_composition))
+        elif work.ribbon_contents:
+            options.append(('Cast composition', work.cast_composition))
+
+    def check_diecase():
+        """Checks if diecase is set and enables certain options"""
+        opts = (('View the matrix case layout', work.show_diecase_layout),
+                ('Compose and cast a line of text', work.line_casting))
+        if work.diecase:
+            for option in opts:
+                options.append(option)
+
+    def check_ribbon():
+        """Checks if ribbon is selected and allows to display it"""
+        if work.ribbon_contents:
+            options.append(('Preview ribbon', work.preview_ribbon))
 
     # End of menu subroutines
-    # Now construct the menu, starting with available options
-    options = [('Exit program', exceptions.exit_program),
-               ('Select ribbon or diecase...', work.data_menu),
-               cast_or_punch(),
-               ('Compose and cast a line of text', work.line_casting),
-               ('Cast sorts', work.cast_sorts),
-               ('View the matrix case layout', work.show_diecase_layout),
-               ('Caster diagnostics and calibration...', work.service_menu)]
-
+    # Header is static, menu content is dynamic
     header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
               'for Monotype Composition or Type and Rule casters.'
               '\n\n'
@@ -925,6 +943,17 @@ def main_menu(work=Casting()):
     # Keep displaying the menu and go back here after any method ends
     while True:
         try:
+            # Menu content is dynamic and must be refreshed each time
+            # Now construct the menu, starting with available options
+            options = [('Exit program', exceptions.exit_program),
+                       ('Select ribbon or diecase...', work.data_menu)]
+            check_ribbon()
+            cast_or_punch()
+            check_diecase()
+            options.extend([('Cast sorts from matrix coordinates',
+                             work.cast_sorts),
+                            ('Caster diagnostics and calibration...',
+                             work.service_menu)])
             # Catch "return to menu" and "exit program" exceptions here
             footer = additional_info() + '\n' + work.display_additional_info()
             ui.menu(options, header=header, footer=footer)()
