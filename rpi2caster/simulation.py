@@ -24,6 +24,7 @@ class Monotype(object):
     def __init__(self, name='Monotype Simulator', is_perforator=False):
         self.name = name
         self.is_perforator = is_perforator
+        self.manual_mode = False
 
     def __enter__(self):
         ui.debug_info('Entering caster/keyboard simulation context...')
@@ -64,8 +65,9 @@ class Monotype(object):
         abort or exit program.
         """
         cycle_timeout = cycle_timeout
+        # Ask whether to cast or simulate machine stop
         prompt = '[Enter] to cast or [S] to stop? '
-        if ui.enter_data_or_blank(prompt) in ['s', 'S']:
+        if self.manual_mode and ui.enter_data_or_blank(prompt) in ['s', 'S']:
             ui.display('Simulating machine stop...')
             raise exceptions.MachineStopped
         ui.display('Turning the valves on...')
@@ -165,7 +167,10 @@ class Monotype(object):
 
         Ask if the machine is rotating or not (for testing
         the machine not running scenario).
+        Also ask whether user wants to confirm each sequence.
         """
+        question = 'Manual mode (you need to confirm each sequence)?'
+        self.manual_mode = ui.yes_or_no(question)
         while True:
             prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
             if ui.enter_data_or_blank(prompt) not in ['n', 'N']:
