@@ -188,7 +188,7 @@ class Casting(object):
                 info_for_user.append(info)
             # Skipping the unneeded lines:
             # Just don't cast anything until we get to the correct line
-            if lines_done < lines_skipped:
+            if lines_done <= lines_skipped:
                 continue
             # Append signals to be cast
             info_for_user.append(' '.join(signals).ljust(15))
