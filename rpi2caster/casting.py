@@ -125,6 +125,13 @@ class Casting(object):
         else:
             ui.display('Ribbon starts with galley trip - not rewinding...')
             queue = self.ribbon_contents
+        # Check the last casting aborted line
+        # If it's None, then set 0
+        self.line_aborted = self.line_aborted or 0
+        # Ask how many lines to skip
+        prompt = 'How many lines to skip? (default: %s) : ' % self.line_aborted
+        lines_skipped = (ui.enter_data_spec_type_or_blank(prompt, int) or
+                         self.line_aborted)
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
@@ -139,7 +146,7 @@ class Casting(object):
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
             [raw_signals, comment] = parsing.comments_parser(line)
-        # Parse the signals
+            # Parse the signals
             signals = parsing.signals_parser(raw_signals)
             # A list with information for user: signals, comments, etc.
             info_for_user = []
@@ -174,14 +181,19 @@ class Casting(object):
                         % (current_line, lines_done, all_lines, current_char,
                            all_chars, char_percent_done, chars_left))
                 info_for_user.append(info)
+            # Skipping the unneeded lines; start casting two lines earlier
+            # (so that the mould temperature stabilizes)
+            # Just don't cast it until we get to the correct line
+            if lines_done < lines_skipped - 2:
+                continue
             # Append signals to be cast
             info_for_user.append(' '.join(signals).ljust(15))
-        # Add comment
+            # Add comment
             info_for_user.append(comment)
             # Display the info
             ui.display(''.join(info_for_user))
-        # Proceed with casting only if code is explicitly stated
-        # (i.e. O15 = cast, empty list = don't cast)
+            # Proceed with casting only if code is explicitly stated
+            # (i.e. O15 = cast, empty list = don't cast)
             if signals:
                 signals = parsing.strip_o_and_15(signals)
                 # Cast the sequence
