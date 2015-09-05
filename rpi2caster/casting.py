@@ -74,7 +74,7 @@ class Casting(object):
         self.ribbon_contents = None
         self.ribbon_metadata = None
         # Indicates which line the last casting was aborted on
-        self.line_aborted = None
+        self.line_aborted = 0
         # Diecase parameters
         self.diecase = None
         self.diecase_id = None
@@ -117,6 +117,18 @@ class Casting(object):
         # Show the numbers to the operator
         ui.display('Lines found in ribbon: %i' % all_lines)
         ui.display('Characters: %i' % all_chars)
+        # Check the line previous job has been aborted on
+        # Ask how many lines to skip; add two previous lines if possible
+        # so that the mould temperature has a chance to stabilize
+        lines_skipped = self.line_aborted - 2
+        # This must be non-negative
+        if lines_skipped < 0:
+            lines_skipped = 0
+        ui.display('You can skip a number of lines so that you can e.g. start '
+                   'a casting job aborted earlier.')
+        prompt = 'How many lines to skip? (default: %s) : ' % lines_skipped
+        lines_skipped = (ui.enter_data_spec_type_or_blank(prompt, int) or
+                         lines_skipped)
         # For casting, we need to check if the ribbon has to be read
         # forwards or backwards
         if parsing.rewind_ribbon(self.ribbon_contents):
@@ -125,13 +137,6 @@ class Casting(object):
         else:
             ui.display('Ribbon starts with galley trip - not rewinding...')
             queue = self.ribbon_contents
-        # Check the last casting aborted line
-        # If it's None, then set 0
-        self.line_aborted = self.line_aborted or 0
-        # Ask how many lines to skip
-        prompt = 'How many lines to skip? (default: %s) : ' % self.line_aborted
-        lines_skipped = (ui.enter_data_spec_type_or_blank(prompt, int) or
-                         self.line_aborted)
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
@@ -181,10 +186,9 @@ class Casting(object):
                         % (current_line, lines_done, all_lines, current_char,
                            all_chars, char_percent_done, chars_left))
                 info_for_user.append(info)
-            # Skipping the unneeded lines; start casting two lines earlier
-            # (so that the mould temperature stabilizes)
-            # Just don't cast it until we get to the correct line
-            if lines_done < lines_skipped - 2:
+            # Skipping the unneeded lines:
+            # Just don't cast anything until we get to the correct line
+            if lines_done < lines_skipped:
                 continue
             # Append signals to be cast
             info_for_user.append(' '.join(signals).ljust(15))
@@ -374,7 +378,7 @@ class Casting(object):
         NKJ = 0005 + 0075
         """
         # Reset the aborted line counter
-        self.line_aborted = None
+        self.line_aborted = 0
         (pos_0075, pos_0005) = (str(x) for x in wedge_positions)
         # Signals for setting 0005 and 0075 justification wedges
         set_0005 = ('N', 'J', '0005', pos_0005)
@@ -734,7 +738,7 @@ class Casting(object):
             except KeyError:
                 pass
             # Reset the "line aborted" on a new casting job
-            self.line_aborted = None
+            self.line_aborted = 0
             # Set up casting session attributes
             self.ribbon_file = ribbon_file
             self.ribbon_contents = ribbon_contents
@@ -768,7 +772,7 @@ class Casting(object):
             # Select the matrix case automatically
             choose_diecase(diecase_id)
             # Reset the "line aborted" on a new casting job
-            self.line_aborted = None
+            self.line_aborted = 0
             # Set up casting session attributes
             self.ribbon_contents = ribbon_contents
             self.ribbon_metadata = ribbon_metadata
