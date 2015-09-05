@@ -824,6 +824,7 @@ class Casting(object):
             # Ask whether to show diecase layout:
             if self.diecase_layout and ui.yes_or_no('Show diecase layout?'):
                 self.show_diecase_layout()
+            exceptions.menu_level_up()
 
         def choose_wedge():
             """Sets or changes a wedge to user-selected one"""
@@ -836,6 +837,7 @@ class Casting(object):
                     return False
             self.wedge = wedge_data.choose_wedge()
             self.unit_arrangement = self.wedge[-1]
+            exceptions.menu_level_up()
 
         def check_database():
             """Displays database-related options"""
