@@ -729,6 +729,7 @@ class Typesetter(object):
                 self.single_justification(wedge_positions)
                 current_wedge_positions = wedge_positions
                 self.output_buffer.append(combination + ' // ' + comment)
+        return self.output_buffer
 
     def single_justification(self, wedge_positions):
         """single_justification:

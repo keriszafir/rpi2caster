@@ -613,8 +613,7 @@ class Casting(object):
         # Translate the text to Monotype signals
         # Compose the text
         typesetter.compose()
-        typesetter.apply_justification()
-        self.ribbon_contents = typesetter.write_output()
+        self.ribbon_contents = typesetter.apply_justification()
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()
@@ -722,6 +721,11 @@ class Casting(object):
             author, title, unit_shift, diecase = None, None, False, None
             if 'diecase' in metadata:
                 diecase = metadata['diecase']
+                # Try to choose the diecase
+                try:
+                    choose_diecase(diecase)
+                except KeyError:
+                    pass
             if 'author' in metadata:
                 author = metadata['author']
             if ('unit-shift' in metadata and
@@ -732,11 +736,6 @@ class Casting(object):
                 unit_shift = False
             if 'title' in metadata:
                 title = metadata['title']
-            # Try to choose the diecase
-            try:
-                choose_diecase(diecase)
-            except KeyError:
-                pass
             # Reset the "line aborted" on a new casting job
             self.line_aborted = 0
             # Set up casting session attributes
