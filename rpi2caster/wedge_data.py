@@ -238,8 +238,8 @@ def list_wedges():
         # Save the wedge associated with the index
         results[index] = wedge
         # Display only wedge parameters and not ID
-        number = [index.ljust(10)]
-        displayed_data = [str(field).ljust(15) for field in wedge[1:]]
+        number = [index.ljust(5)]
+        displayed_data = [str(field).ljust(10) for field in wedge[1:]]
         ui.display(''.join(number + displayed_data))
     return results
 
