@@ -325,9 +325,9 @@ class Casting(object):
             signals = ui.enter_data_or_blank(prompt) or 'G 5'
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts? (default: 10): '
-            sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int)) or 10
+            sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 10)
             prompt = '\nHow many lines? (default: 1): '
-            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int)) or 1
+            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
             # Warn if we want to cast too many sorts from a single matrix
             warning = ('Warning: you want to cast a single character more than'
                        ' 10 times. This may lead to matrix overheating!\n')
