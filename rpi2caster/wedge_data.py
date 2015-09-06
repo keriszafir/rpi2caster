@@ -227,11 +227,11 @@ def list_wedges():
     data = DB.get_all_wedges()
     results = {}
     ui.display('\n' +
-               'Number'.ljust(5) +
-               'wedge series'.ljust(10) +
-               'set width'.ljust(10) +
-               'Brit. pica?'.ljust(10) +
-               'unit arrangement' +
+               'ID'.ljust(5) +
+               'Series'.ljust(10) +
+               'Set'.ljust(10) +
+               'Br. pica?'.ljust(10) +
+               'Unit arrangement' +
                '\n')
     for index, wedge in enumerate(data, start=1):
         index = str(index)
