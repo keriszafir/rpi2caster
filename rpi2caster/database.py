@@ -226,6 +226,7 @@ class Database(object):
                 for result in results:
                     result = list(result)
                     result[-1] = json.loads(result[-1])
+                    result[-2] = bool(result[-2])
                     processed_results.append(result)
                 return processed_results
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
