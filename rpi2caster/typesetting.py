@@ -67,7 +67,7 @@ class Typesetter(object):
         self.buffer = []
         self.output_buffer = []
 
-    def session_setup(self):
+    def session_setup(self, diecase_id):
         """Sets up initial typesetting session parameters:
 
         -diecase
@@ -77,7 +77,7 @@ class Typesetter(object):
         -manual mode (more control) or automatic mode (less control, faster)
         """
         # Choose a matrix case if ID not supplied
-        diecase_id = matrix_data.choose_diecase()
+        diecase_id = diecase_id or matrix_data.choose_diecase()
         # Get matrix case parameters
         diecase_parameters = matrix_data.get_diecase_parameters(diecase_id)
         # Parse the matrix case parameters
@@ -301,7 +301,8 @@ class Typesetter(object):
             # As above - now, the negative difference closest to zero
             difference = max([x for x in corrected_spaces if x < 0])
             space_code = corrected_spaces[difference] + 'S'
-        wedge_positions = self.calculate_wedges(difference)
+        wedge_positions = calculate_wedges(difference, self.set_width,
+                                           self.brit_pica)
         return (space_code, wedge_positions)
 
     def _configure_spaces(self):
@@ -446,12 +447,14 @@ class Typesetter(object):
         column = matrix[2]
         row = matrix[3]
         normal_unit_width = matrix[4]
-        row_units = self.unit_arrangement[row - 1]
+        print(row)
+        print(self.unit_arrangement)
         # Add or subtract current unit correction
         char_units = normal_unit_width + self.unit_correction
         # Trying to access the 16th row with no unit shift activated
         if row == 16 and not self.unit_shift:
             self.convert_to_unit_shift()
+        row_units = self.unit_arrangement[row - 1]
         # Shifted values apply only to unit-shift, start with empty
         shifted_row, shifted_column, shifted_row_units = 0, '', 0
         # If we use unit shift, we can move the diecase one row further
@@ -479,7 +482,8 @@ class Typesetter(object):
             difference = char_units - row_units
             # Cast it with the S-needle
             combination = column + 'S' + str(row)
-            wedge_positions = self.calculate_wedges(difference)
+            wedge_positions = calculate_wedges(difference, self.set_width,
+                                               self.brit_pica)
         # Finally, add combination and wedge positions to the buffer
         ui.debug_info('Character: ', char, ' style: ', self.current_style)
         ui.debug_info('Char. units: ', char_units, ' row: ', str(row),
@@ -617,7 +621,8 @@ class Typesetter(object):
         remaining_units = self.unit_line_length - self.current_units
         space_increment = remaining_units / self.current_line_var_spaces
         # Calculate the (0075 position, 0005 position) for variable spaces
-        wedge_positions = self.calculate_wedges(space_increment)
+        wedge_positions = calculate_wedges(space_increment,
+                                           self.set_width, self.brit_pica)
         # Reset the counters
         self.current_line_var_spaces = 0
         self.current_units = 0
@@ -649,38 +654,6 @@ class Typesetter(object):
         (spaces, wedge_positions) = self._justify_line(0)
         self._start_new_line(wedge_positions)
 
-    def calculate_wedges(self, difference):
-        """calculate_wedges:
-
-        Calculates and returns wedge positions for character.
-        Uses pre-calculated unit width difference between row's unit width
-        and character's width (with optional corrections).
-        """
-        # Check if corrections are needed at all
-        # (delta = 0 - no corrections, wedges at neutral position i.e. 3/8)
-        print(difference)
-
-        if not difference:
-            return (None, None)
-        # Delta is in units of a given set
-        # To get wedge steps, calculate delta to inches
-        # First, we must know whether pica = .1667" or .166"
-        if self.brit_pica:
-            pica = 0.1667
-        else:
-            pica = 0.166
-        # Calculate the inch width of delta
-        # pica = 18 units * set_width / 12
-        # unit_width = 12 * pica / (set width * 18)
-        difference_inches = difference * 12 * pica / (18 * self.set_width)
-        print(difference_inches)
-        # We can calculate the steps of 0005 and 0075 wedges
-        # Each step is calculated with 0075:3 and 0005:8 as base
-        steps_0075 = difference_inches // 0.0075
-        steps_0005 = difference_inches // 0.0075 // 0.0005
-        # We now can calculate the wedge positions and return them
-        return (3 + steps_0075, 8 + steps_0005)
-
     def convert_to_unit_shift(self):
         """convert_to_unit_shift:
 
@@ -694,7 +667,7 @@ class Typesetter(object):
                   '\nFor that you must use the unit-shift attachment. '
                   'Do you wish to compose for unit-shift? \n')
         self.unit_shift = ui.yes_or_no(prompt)
-        if self.unit_shift():
+        if self.unit_shift:
             for (combination, _, _) in self.buffer:
                 combination.replace('D', 'EF')
 
@@ -776,3 +749,39 @@ class Typesetter(object):
         # Add 0075-N-K-S-pos0075 next:
         self.output_buffer.append(str(pos0075) + 'NKS 0075' + comment2)
         return True
+
+# Functions needed elsewhere
+
+
+def calculate_wedges(difference, set_width, brit_pica=False):
+    """calculate_wedges:
+
+    Calculates and returns wedge positions for character.
+    Uses pre-calculated unit width difference between row's unit width
+    and character's width (with optional corrections).
+    """
+    # Delta is in units of a given set
+    # First, we must know whether pica = .1667" or .166" and correct the width
+    # if needed.
+    if brit_pica:
+        coefficient = 1
+    else:
+        coefficient = 0.1660 / 0.1667
+    # Calculate the inch width of delta
+    # 1 pica = 18 units 12 set = 0.1667 (old British pica) or 0.1660 (Am. pica)
+    # unit_width = 12 * pica / (set width * 18)
+    steps = difference * set_width * coefficient * 2000 / 1296
+    # Adjust the wedges
+    # You do it in respect to the neutral position i.e. 3/8:
+    # 3 steps of 0075 and 8 steps of 0005 wedge.
+    # You can get from 1 to 15 steps of each wedge.
+    # Example: 16 steps of 0005 = 1 step of 0075 and 1 step of 0005
+    # 3 / 8 = 1 * 15 + 8 = 53 "raw" steps of 0005 wedge
+    pos_0075 = 0
+    steps += 53
+    while steps > 16:
+        steps -= 15
+        pos_0075 += 1
+    pos_0005 = round(steps)
+    # We now can return the wedge positions
+    return (pos_0075, pos_0005)

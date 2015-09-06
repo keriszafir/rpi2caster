@@ -13,7 +13,7 @@ from rpi2caster.global_settings import USER_INTERFACE as ui
 # Exceptions module
 from rpi2caster import exceptions
 # Wedge and database operations
-from rpi2caster import typesetting_functions as backend
+from rpi2caster import typesetting as backend
 # HTML/XML parser:
 try:
     from bs4 import BeautifulSoup

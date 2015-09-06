@@ -22,7 +22,7 @@ from rpi2caster.global_settings import USER_INTERFACE as ui
 # Custom exceptions
 from rpi2caster import exceptions
 # Typesetting functions module
-from rpi2caster import typesetting_functions
+from rpi2caster import typesetting
 # Diecase manipulation functions
 from rpi2caster import matrix_data
 # Wedge manipulation functions
@@ -320,11 +320,48 @@ class Casting(object):
             # Outer loop
             ui.clear()
             ui.display('Sorts casting by matrix coordinates\n\n')
-            prompt = 'Enter column and row symbols (default: G 5): '
+            # We need to choose a wedge unless we did it earlier
+            wedge = self.wedge or wedge_data.choose_wedge()
+            (_, _, set_width, brit_pica, unit_arrangement) = wedge
+            prompt = 'Column? (default: G): '
             # Got no signals? Use G5.
-            signals = ui.enter_data_or_blank(prompt) or 'G 5'
+            column = ui.enter_data_or_blank(prompt) or 'G'
+            prompt = 'Row? (default: 5): '
+            # Initially set this to zero to enable the while loop
+            row = 0
+            units = 0
+            # Not using unit shift by default
+            unit_shift = False
+            # Ask for row number
+            while row not in range(1, 17):
+                row = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 5)
+            if row == 16:
+                question = 'Trying to access 16th row. Use unit shift?'
+                unit_shift = ui.yes_or_no(question)
+            # Correct the column number if using unit shift
+            if unit_shift:
+                column.replace('D', 'EF')
+                column += 'D'
+                decrement = 2
+            else:
+                decrement = 1
+            # Determine the unit width for a row
+            try:
+                row_units = unit_arrangement[row - decrement]
+            except (IndexError, KeyError):
+                row_units = 5
+            prompt = 'Unit width value? (default: %s) : ' % row_units
+            while units not in range(3, 25):
+                units = (ui.enter_data_spec_type_or_blank(prompt, int) or
+                         row_units)
+            # Calculate the unit width difference and apply justification
+            difference = units - row_units
+            wedge_positions = typesetting.calculate_wedges(difference,
+                                                           set_width,
+                                                           brit_pica)
+            signals = row + str(column)
             # Ask for number of sorts and lines, no negative numbers here
-            prompt = '\nHow many sorts? (default: 10): '
+            prompt = '\nHow many sorts per line? (default: 10): '
             sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 10)
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
@@ -340,7 +377,8 @@ class Casting(object):
                     # Menu subroutines
                     def cast_it():
                         """Cast the combination or go back to menu"""
-                        if self.cast_from_matrix(signals, sorts, lines):
+                        if self.cast_from_matrix(signals, sorts, lines,
+                                                 wedge_positions):
                             ui.display('Casting finished successfully.')
                         else:
                             raise exceptions.ReturnToMenu
@@ -605,8 +643,8 @@ class Casting(object):
         This allows for quick typesetting of short texts, like names etc.
         """
         # Initialize the typesetter for a chosen diecase
-        typesetter = typesetting_functions.Typesetter()
-        typesetter.session_setup()
+        typesetter = typesetting.Typesetter()
+        typesetter.session_setup(self.diecase_id)
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
         typesetter.text_source = typesetter.parse_and_generate(text)
