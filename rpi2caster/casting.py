@@ -323,10 +323,13 @@ class Casting(object):
             # We need to choose a wedge unless we did it earlier
             wedge = self.wedge or wedge_data.choose_wedge()
             (_, _, set_width, brit_pica, unit_arrangement) = wedge
-            prompt = 'Column? (default: G): '
+            prompt = 'Column: NI, NL, A...O? (default: G): '
             # Got no signals? Use G5.
-            column = ui.enter_data_or_blank(prompt) or 'G'
-            prompt = 'Row? (default: 5): '
+            column = ''
+            column_symbols = ['NI', 'NL'] + [ltr for ltr in 'ABCDEFGHIJKLMNO']
+            while column not in column_symbols:
+                column = ui.enter_data_or_blank(prompt).upper() or 'G'
+            prompt = 'Row: 1...16? (default: 5): '
             # Initially set this to zero to enable the while loop
             row = 0
             units = 0
@@ -338,16 +341,17 @@ class Casting(object):
             if row == 16:
                 question = 'Trying to access 16th row. Use unit shift?'
                 unit_shift = ui.yes_or_no(question)
+                row = 15
+                if not unit_shift:
+                    ui.display('Cannot access the 16th row; using 15 instead')
+                    ui.yes_or_no('Is it okay?') or exceptions.return_to_menu()
             # Correct the column number if using unit shift
             if unit_shift:
-                column.replace('D', 'EF')
-                column += 'D'
-                decrement = 2
-            else:
-                decrement = 1
+                column = column.replace('D', 'E F')
+                column += ' D'
             # Determine the unit width for a row
             try:
-                row_units = unit_arrangement[row - decrement]
+                row_units = unit_arrangement[row - 1]
             except (IndexError, KeyError):
                 row_units = 5
             prompt = 'Unit width value? (default: %s) : ' % row_units
@@ -359,7 +363,12 @@ class Casting(object):
             wedge_positions = typesetting.calculate_wedges(difference,
                                                            set_width,
                                                            brit_pica)
-            signals = row + str(column)
+            if difference:
+                # If we need to correct the width -
+                # we must cast with the S needle
+                signals = column + ' S ' + str(row)
+            else:
+                signals = column + ' ' + str(row)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts per line? (default: 10): '
             sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 10)

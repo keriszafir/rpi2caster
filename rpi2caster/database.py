@@ -220,9 +220,14 @@ class Database(object):
                 cursor.execute('SELECT * FROM wedges')
                 # Check if we got any:
                 results = cursor.fetchall()
+                processed_results = []
                 if not results:
                     raise exceptions.NoMatchingData
-                return results
+                for result in results:
+                    result = list(result)
+                    result[-1] = json.loads(result[-1])
+                    processed_results.append(result)
+                return processed_results
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
