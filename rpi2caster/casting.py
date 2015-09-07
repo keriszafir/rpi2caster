@@ -681,7 +681,12 @@ class Casting(object):
         """
         ui.clear()
         ui.display('Ribbon preview:\n')
-        ui.display('\n'.join([line for line in self.ribbon_contents]))
+        try:
+            for line in self.ribbon_contents:
+                ui.display(line)
+        except KeyboardInterrupt:
+            # Press ctrl-C to abort displaying long ribbons
+            pass
         ui.hold_on_exit()
 
     def heatup(self):
