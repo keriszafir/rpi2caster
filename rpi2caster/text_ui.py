@@ -196,7 +196,7 @@ def enter_input_filename():
             with io.open(filename, 'r'):
                 return filename
         except (IOError, FileNotFoundError):
-            input('Wrong filename or file not readable!\n')
+            print('Wrong filename or file not readable!\n')
 
 
 def enter_output_filename():
