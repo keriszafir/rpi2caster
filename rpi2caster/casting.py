@@ -753,10 +753,6 @@ class Casting(object):
             """
             ribbon_file = ui.enter_input_filename()
             ribbon_contents = parsing.read_file(ribbon_file)
-            # If file read failed, end here
-            if not ribbon_contents:
-                ui.confirm('Error reading file! [Enter] to continue...')
-                return False
             # Clear the previous ribbon, diecase, wedge selections
             self.ribbon_contents = None
             self.ribbon_file = None
