@@ -316,13 +316,13 @@ class Casting(object):
         Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
         """
+        # We need to choose a wedge unless we did it earlier
+        wedge = self.wedge or wedge_data.choose_wedge()
+        (_, _, set_width, brit_pica, unit_arrangement) = wedge
         while True:
             # Outer loop
             ui.clear()
             ui.display('Sorts casting by matrix coordinates\n\n')
-            # We need to choose a wedge unless we did it earlier
-            wedge = self.wedge or wedge_data.choose_wedge()
-            (_, _, set_width, brit_pica, unit_arrangement) = wedge
             prompt = 'Column: NI, NL, A...O? (default: G): '
             # Got no signals? Use G5.
             column = ''
@@ -358,6 +358,127 @@ class Casting(object):
             while units not in range(3, 25):
                 units = (ui.enter_data_spec_type_or_blank(prompt, int) or
                          row_units)
+            # Calculate the unit width difference and apply justification
+            difference = units - row_units
+            wedge_positions = typesetting.calculate_wedges(difference,
+                                                           set_width,
+                                                           brit_pica)
+            if difference:
+                # If we need to correct the width -
+                # we must cast with the S needle
+                signals = column + ' S ' + str(row)
+            else:
+                signals = column + ' ' + str(row)
+            # Ask for number of sorts and lines, no negative numbers here
+            prompt = '\nHow many sorts per line? (default: 10): '
+            sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 10)
+            prompt = '\nHow many lines? (default: 1): '
+            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
+            # Warn if we want to cast too many sorts from a single matrix
+            warning = ('Warning: you want to cast a single character more than'
+                       ' 10 times. This may lead to matrix overheating!\n')
+            if sorts > 10:
+                ui.display(warning)
+            # After entering parameters, ask the operator if they're OK
+            try:
+                while True:
+                    # Inner loop
+                    # Menu subroutines
+                    def cast_it():
+                        """Cast the combination or go back to menu"""
+                        if self.cast_from_matrix(signals, sorts, lines,
+                                                 wedge_positions):
+                            ui.display('Casting finished successfully.')
+                        else:
+                            raise exceptions.ReturnToMenu
+                    # End of menu subroutines.
+                    options = {'C': cast_it,
+                               'D': exceptions.change_parameters,
+                               'M': exceptions.return_to_menu,
+                               'E': exceptions.exit_program}
+                    message = ('Casting %s, %i lines of %i sorts.\n'
+                               '[C]ast it, [D]ifferent code/quantity, '
+                               '[M]enu or [E]xit? '
+                               % (signals, lines, sorts))
+                    ui.simple_menu(message, options)()
+            except exceptions.ChangeParameters:
+                # Skip the menu and casting altogether, repeat the outer loop
+                pass
+
+    def cast_spaces(self):
+        """cast_spaces():
+
+        Spaces casting routine, based on the position in diecase.
+        Ask user about the space width and measurement unit.
+        """
+        while True:
+            # Outer loop
+            ui.clear()
+            ui.display('Spaces / quads casting\n\n')
+            # We need to choose a wedge unless we did it earlier
+            wedge = self.wedge or wedge_data.choose_wedge()
+            (_, _, set_width, brit_pica, unit_arrangement) = wedge
+            prompt = 'Column: NI, NL, A...O? (default: G): '
+            # Got no signals? Use G5.
+            column = ''
+            column_symbols = ['NI', 'NL'] + [ltr for ltr in 'ABCDEFGHIJKLMNO']
+            while column not in column_symbols:
+                column = ui.enter_data_or_blank(prompt).upper() or 'G'
+            prompt = 'Row: 1...16? (default: 2): '
+            # Initially set this to zero to enable the while loop
+            row = 0
+            width = 0
+            # Not using unit shift by default
+            unit_shift = False
+            # Ask for row number
+            while row not in range(1, 17):
+                row = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 2)
+            if row == 16:
+                question = 'Trying to access 16th row. Use unit shift?'
+                unit_shift = ui.yes_or_no(question)
+                row = 15
+                if not unit_shift:
+                    ui.display('Cannot access the 16th row; using 15 instead')
+                    ui.yes_or_no('Is it okay?') or exceptions.return_to_menu()
+            # Correct the column number if using unit shift
+            if unit_shift:
+                column = column.replace('D', 'E F')
+                column += ' D'
+            # Determine the unit width for a row
+            try:
+                row_units = unit_arrangement[row - 1]
+            except (IndexError, KeyError):
+                row_units = 5
+            # Space width in points
+            options = {'A': 1/6,
+                       'B': 1/4,
+                       'C': 1/3,
+                       'D': 1/2,
+                       'E': 1,
+                       'F': 0}
+            message = ('Width? [A] = 1/6em, [B] = 1/4em, [C] = 1/3em, '
+                       '[D] = 1/2em, [E] = 1em, [F] for custom: ')
+            # Width in picas / ciceros
+            width = ui.simple_menu(message, options) * 12
+            # Ask about custom value, then specify units
+            if not width:
+                while width not in range(1, 20):
+                    prompt = 'Custom width in points (1...20) ? : '
+                    width = ui.enter_data_spec_type_or_blank(prompt, int)
+                width *= 1/12
+                # Choose the measurement unit - and its equivalent in inches
+                options = {'A': 0.1660,
+                           'B': 0.1667,
+                           'D': 0.1776,
+                           'F': 0.1629}
+                message = ('Measurement? [A]merican Johnson pica point, '
+                           '[B]ritish pica point = DTP point, '
+                           '[D]idot point, [F]ournier point: ')
+                unit_coeff = ui.simple_menu(message, options)
+            # We now have width in picas or ciceros
+            # Enter units
+            wedge_base = {True: 0.1667, False: 0.166}
+            # Choose pica based on wedge, calculate line length in picas
             # Calculate the unit width difference and apply justification
             difference = units - row_units
             wedge_positions = typesetting.calculate_wedges(difference,
