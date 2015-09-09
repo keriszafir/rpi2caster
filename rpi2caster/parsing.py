@@ -161,7 +161,7 @@ def rewind_ribbon(contents):
             return False
 
 
-def signals_parser(raw_signals):
+def signals_parser(raw_signals, strip_o15=False):
     """signals_parser(raw_signals):
 
     Parses a string with Monotype signals on input.
@@ -193,7 +193,10 @@ def signals_parser(raw_signals):
     # Columns + S justification signal
     columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in raw_signals]
     # Return a list containing all signals
-    return columns + rows + justification
+    if strip_o15:
+        return strip_o_and_15(columns + rows + justification)
+    else:
+        return columns + rows + justification
 
 
 def strip_o_and_15(signals):
