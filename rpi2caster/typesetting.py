@@ -783,5 +783,10 @@ def calculate_wedges(difference, set_width, brit_pica=False):
         steps -= 15
         pos_0075 += 1
     pos_0005 = round(steps)
+    # Apply constraints: each wedge within 1...15
+    pos_0005 = max(1, pos_0005)
+    pos_0005 = min(pos_0005, 15)
+    pos_0075 = max(1, pos_0075)
+    pos_0075 = min(pos_0075, 15)
     # We now can return the wedge positions
     return (pos_0075, pos_0005)
