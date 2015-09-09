@@ -355,7 +355,7 @@ class Casting(object):
             except (IndexError, KeyError):
                 row_units = 5
             prompt = 'Unit width value? (default: %s) : ' % row_units
-            while units not in range(3, 25):
+            while (units < 2 or units > 25):
                 units = (ui.enter_data_spec_type_or_blank(prompt, float) or
                          row_units)
             # Calculate the unit width difference and apply justification
