@@ -337,7 +337,11 @@ class Casting(object):
             unit_shift = False
             # Ask for row number
             while row not in range(1, 17):
-                row = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 5)
+                try:
+                    row = ui.enter_data_spec_type_or_blank(prompt, int) or 5
+                    row = abs(row)
+                except TypeError:
+                    row = 0
             if row == 16:
                 question = 'Trying to access 16th row. Use unit shift?'
                 unit_shift = ui.yes_or_no(question)
