@@ -469,10 +469,6 @@ class Casting(object):
                 row_units = unit_arrangement[row - 1]
             except (IndexError, KeyError):
                 row_units = 6
-            # Add 5 em-quads before and after the proper spaces
-            # Hardcoded to be O 15
-            # We need 180 additional units for that - need to subtract
-            unit_line_length -= 180
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
             # Space width in points
@@ -503,7 +499,10 @@ class Casting(object):
             factor = pica_def / 0.1667
             sort_units = width * factor * set_width / 8
             # How many spaces will fit in a line? Calculate it...
-            sorts_number = int(unit_line_length // sort_units)
+            # We add 5 em-quads at O15 before and after the proper spaces
+            # We need 180 additional units for that - need to subtract
+            allowance = unit_line_length - 180
+            sorts_number = int(allowance // sort_units)
             # The first line will be filled to the brim with em-quads
             # i.e. 18-unit spaces
             # Put as many as we can
