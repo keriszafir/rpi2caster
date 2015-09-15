@@ -548,6 +548,8 @@ class Casting(object):
                             'Width in points: %s' % width,
                             'Width in %s-set units: %s' % (set_width,
                                                            sort_units),
+                            '0075 wedge at: %s' % wedge_positions[0],
+                            '0005 wedge at: %s' % wedge_positions[1],
                             'Line length in picas/ciceros: %s' % line_length,
                             'Number of sorts per line: %s' % sorts_number,
                             'Number of lines: %s' % lines]
