@@ -358,7 +358,7 @@ class Casting(object):
                 row_units = unit_arrangement[row - 1]
             except (IndexError, KeyError):
                 row_units = 5
-            prompt = 'Unit width value? (default: %s) : ' % row_units
+            prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
             while (units < 2 or units > 25):
                 units = (ui.enter_data_spec_type_or_blank(prompt, float) or
                          row_units)
@@ -415,13 +415,29 @@ class Casting(object):
         Spaces casting routine, based on the position in diecase.
         Ask user about the space width and measurement unit.
         """
+        # Ask about line length
+        prompt = 'Galley line length? [pica or cicero] (default: 25) : '
+        line_length = ui.enter_data_spec_type_or_blank(prompt, int) or 25
+        line_length = abs(line_length)
+        # Measurement system
+        options = {'A': 0.1660,
+                   'B': 0.1667,
+                   'D': 0.1776,
+                   'F': 0.1629}
+        message = ('Measurement? [A]merican Johnson pica = 0.166", '
+                   '[B]ritish pica = 0.1667",\n [D]idot cicero = 0.1776", '
+                   '[F]ournier cicero = 0.1629": ')
+        pica_def = ui.simple_menu(message, options)
+        # We need to choose a wedge unless we did it earlier
+        wedge = self.wedge or wedge_data.choose_wedge()
+        (_, _, set_width, brit_pica, unit_arrangement) = wedge
+        # Unit line length:
+        unit_line_length = int(18 * pica_def / 0.1667 * line_length *
+                               set_width / 12)
+        # Now we can cast multiple different spaces
         while True:
-            # Outer loop
             ui.clear()
             ui.display('Spaces / quads casting\n\n')
-            # We need to choose a wedge unless we did it earlier
-            wedge = self.wedge or wedge_data.choose_wedge()
-            (_, _, set_width, brit_pica, unit_arrangement) = wedge
             prompt = 'Column: NI, NL, A...O? (default: G): '
             # Got no signals? Use G5.
             column = ''
@@ -452,39 +468,49 @@ class Casting(object):
             try:
                 row_units = unit_arrangement[row - 1]
             except (IndexError, KeyError):
-                row_units = 5
+                row_units = 6
+            # Add 5 em-quads before and after the proper spaces
+            # Hardcoded to be O 15
+            # We need 180 additional units for that - need to subtract
+            unit_line_length -= 180
+            prompt = '\nHow many lines? (default: 1): '
+            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
             # Space width in points
-            options = {'A': 1/6,
-                       'B': 1/4,
-                       'C': 1/3,
-                       'D': 1/2,
-                       'E': 1,
-                       'F': 0}
-            message = ('Width? [A] = 1/6em, [B] = 1/4em, [C] = 1/3em, '
-                       '[D] = 1/2em, [E] = 1em, [F] for custom: ')
-            # Width in picas / ciceros
+            options = {'6': 1/6,
+                       '4': 1/4,
+                       '3': 1/3,
+                       '2': 1/2,
+                       '1': 1,
+                       'C': 0}
+            message = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
+                       '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
+            # Width in points
             width = ui.simple_menu(message, options) * 12
             # Ask about custom value, then specify units
             if not width:
-                while width not in range(1, 20):
-                    prompt = 'Custom width in points (1...20) ? : '
-                    width = ui.enter_data_spec_type_or_blank(prompt, int)
-                width *= 1/12
-                # Choose the measurement unit - and its equivalent in inches
-                options = {'A': 0.1660,
-                           'B': 0.1667,
-                           'D': 0.1776,
-                           'F': 0.1629}
-                message = ('Measurement? [A]merican Johnson pica point, '
-                           '[B]ritish pica point = DTP point, '
-                           '[D]idot point, [F]ournier point: ')
-                unit_coeff = ui.simple_menu(message, options)
-            # We now have width in picas or ciceros
-            # Enter units
-            wedge_base = {True: 0.1667, False: 0.166}
-            # Choose pica based on wedge, calculate line length in picas
-            # Calculate the unit width difference and apply justification
-            difference = units - row_units
+                while width < 1 or width > 20:
+                    prompt = 'Custom width in points (decimal, 1...20) ? : '
+                    width = ui.enter_data_spec_type_or_blank(prompt, float)
+            # We now have width in pica points
+            # If we don't use an old British pica wedge, we must take
+            # the pica difference into account
+            # Calculate unit width of said number of points
+            # We do it this way:
+            # units = picas * set_width/12 * 18
+            # a pica is 12 points, so:
+            # units = points * set_width/12 * 1 / 12 * 18
+            # 18 / (12*12) = 0.125, hence division by 8
+            factor = pica_def / 0.1667
+            sort_units = width * factor * set_width / 8
+            # How many spaces will fit in a line? Calculate it...
+            sorts_number = int(unit_line_length // sort_units)
+            # The first line will be filled to the brim with em-quads
+            # i.e. 18-unit spaces
+            # Put as many as we can
+            quads_number = int(unit_line_length // 18)
+            # Check if the corrections are needed at all
+            difference = sort_units - row_units
+            # Calculate the wedge positions
             wedge_positions = typesetting.calculate_wedges(difference,
                                                            set_width,
                                                            brit_pica)
@@ -494,16 +520,7 @@ class Casting(object):
                 signals = column + ' S ' + str(row)
             else:
                 signals = column + ' ' + str(row)
-            # Ask for number of sorts and lines, no negative numbers here
-            prompt = '\nHow many sorts per line? (default: 10): '
-            sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 10)
-            prompt = '\nHow many lines? (default: 1): '
-            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
-            # Warn if we want to cast too many sorts from a single matrix
-            warning = ('Warning: you want to cast a single character more than'
-                       ' 10 times. This may lead to matrix overheating!\n')
-            if sorts > 10:
-                ui.display(warning)
+            # Determine the number of quads per line to cast
             # After entering parameters, ask the operator if they're OK
             try:
                 while True:
@@ -511,20 +528,31 @@ class Casting(object):
                     # Menu subroutines
                     def cast_it():
                         """Cast the combination or go back to menu"""
-                        if self.cast_from_matrix(signals, sorts, lines,
-                                                 wedge_positions):
-                            ui.display('Casting finished successfully.')
-                        else:
-                            raise exceptions.ReturnToMenu
+                        message = 'First, cast a line of em-quads'
+                        ui.display(message)
+                        self.cast_from_matrix('O15', quads_number)
+                        self.cast_from_matrix('O15', end_galley_trip=False)
+                        self.cast_from_matrix(signals, sorts_number, lines,
+                                              wedge_positions,
+                                              end_galley_trip=False)
+                        self.cast_from_matrix('O15')
                     # End of menu subroutines.
                     options = {'C': cast_it,
                                'D': exceptions.change_parameters,
                                'M': exceptions.return_to_menu,
                                'E': exceptions.exit_program}
-                    message = ('Casting %s, %i lines of %i sorts.\n'
-                               '[C]ast it, [D]ifferent code/quantity, '
-                               '[M]enu or [E]xit? '
-                               % (signals, lines, sorts))
+                    info = ['Row: %s' % row,
+                            'Column: %s' % column,
+                            'Width in points: %s' % width,
+                            'Width in %s-set units: %s' % (set_width,
+                                                           sort_units),
+                            'Line length in picas/ciceros: %s' % line_length,
+                            'Number of sorts per line: %s' % sorts_number,
+                            'Number of lines: %s' % lines]
+                    for message in info:
+                        ui.display(message)
+                    message = ('[C]ast it, [D]ifferent parameters, '
+                               '[M]enu or [E]xit? ')
                     ui.simple_menu(message, options)()
             except exceptions.ChangeParameters:
                 # Skip the menu and casting altogether, repeat the outer loop
@@ -532,7 +560,9 @@ class Casting(object):
 
     @use_caster
     def cast_from_matrix(self, signals, num=5, lines=1,
-                         wedge_positions=(3, 8)):
+                         wedge_positions=(3, 8),
+                         start_galley_trip=False,
+                         end_galley_trip=True):
         """cast_from_matrix(combination, n, lines, (pos0075, pos0005)):
 
         Casts n sorts from combination of signals (list),
@@ -557,7 +587,7 @@ class Casting(object):
         set_0005 = parsing.signals_parser('N J 0005 %s' % pos_0005, True)
         set_0075 = parsing.signals_parser('N K 0075 %s' % pos_0075, True)
         # Galley trip signal
-        galley_trip = parsing.signals_parser('N K J 0005 0075')
+        galley_trip = parsing.signals_parser('N K J 0005 0075 %s' % pos_0005)
         # Parse the combination
         combination = parsing.signals_parser(signals, strip_o15=True)
         # Check if the machine is running first, end here if not
@@ -574,8 +604,15 @@ class Casting(object):
                 ui.display('0005 wedge at ' + pos_0005)
                 self.caster.process_signals(set_0005)
                 ui.display('0075 wedge at ' + pos_0075)
-                ui.display('Starting the pump...')
-                self.caster.process_signals(set_0075)
+                if start_galley_trip:
+                    # Double justification
+                    ui.display('Starting the pump and putting the line out...')
+                    self.caster.process_signals(galley_trip)
+                    self.caster.process_signals(set_0075)
+                else:
+                    # Starting a job
+                    ui.display('Starting the pump...')
+                    self.caster.process_signals(set_0075)
                 # Start casting characters
                 ui.display('Casting characters...')
                 # Cast n combinations of row & column, one by one
@@ -586,10 +623,11 @@ class Casting(object):
                     ui.display(info)
                     parsing.strip_o_and_15(combination)
                     self.caster.process_signals(combination)
+                if end_galley_trip:
                     # If everything went normally, put the line to the galley
-                ui.display('Putting line to the galley...')
-                self.caster.process_signals(galley_trip)
-                # After casting sorts we need to stop the pump
+                    ui.display('Putting line to the galley...')
+                    self.caster.process_signals(galley_trip)
+                    # After casting sorts we need to stop the pump
                 ui.display('Stopping the pump...')
                 self.caster.process_signals(set_0005)
             except exceptions.CastingAborted:
@@ -1127,6 +1165,7 @@ def main_menu(work=Casting()):
             check_diecase()
             options.extend([('Cast sorts from matrix coordinates',
                              work.cast_sorts),
+                            ('Cast spaces / quads', work.cast_spaces),
                             ('Caster diagnostics and calibration...',
                              work.service_menu)])
             # Catch "return to menu" and "exit program" exceptions here
