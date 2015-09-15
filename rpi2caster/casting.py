@@ -531,11 +531,13 @@ class Casting(object):
                         ui.display(message)
                         self.cast_from_matrix('O15', quads_number)
                         for n in range(lines):
-                            self.cast_from_matrix('O15', end_galley_trip=False)
-                            self.cast_from_matrix(signals, sorts_number,
+                            self.cast_from_matrix('O15', end_galley_trip=False,
+                                                  machine_check=False)
+                            self.cast_from_matrix(signals, sorts_number, 1,
                                                   wedge_positions,
-                                                  end_galley_trip=False)
-                            self.cast_from_matrix('O15')
+                                                  end_galley_trip=False,
+                                                  machine_check=False)
+                            self.cast_from_matrix('O15', machine_check=False)
                     # End of menu subroutines.
                     options = {'C': cast_it,
                                'D': exceptions.change_parameters,
@@ -562,7 +564,8 @@ class Casting(object):
     def cast_from_matrix(self, signals, num=5, lines=1,
                          wedge_positions=(3, 8),
                          start_galley_trip=False,
-                         end_galley_trip=True):
+                         end_galley_trip=True,
+                         machine_check=True):
         """cast_from_matrix(combination, n, lines, (pos0075, pos0005)):
 
         Casts n sorts from combination of signals (list),
@@ -591,8 +594,9 @@ class Casting(object):
         # Parse the combination
         combination = parsing.signals_parser(signals, strip_o15=True)
         # Check if the machine is running first, end here if not
-        ui.display('Start the machine...')
-        self.caster.detect_rotation()
+        if machine_check:
+            ui.display('Start the machine...')
+            self.caster.detect_rotation()
         # We're here because the machine is rotating. Start casting the job...
         for current_line in range(1, lines + 1):
             # Cast each line and if the CastingAborted exception is caught,
