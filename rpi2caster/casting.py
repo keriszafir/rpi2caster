@@ -587,10 +587,10 @@ class Casting(object):
         (pos_0075, pos_0005) = (str(x) for x in wedge_positions)
         # Signals for setting 0005 and 0075 justification wedges
         # Strip O and 15
-        set_0005 = parsing.signals_parser('N J 0005 %s' % pos_0005, True)
-        set_0075 = parsing.signals_parser('N K 0075 %s' % pos_0075, True)
+        set_0005 = parsing.signals_parser('N J S 0005 %s' % pos_0005, True)
+        set_0075 = parsing.signals_parser('N K S 0075 %s' % pos_0075, True)
         # Galley trip signal
-        galley_trip = parsing.signals_parser('N K J 0005 0075 %s' % pos_0005)
+        galley_trip = parsing.signals_parser('N K J S 0005 0075 %s' % pos_0005)
         # Parse the combination
         combination = parsing.signals_parser(signals, strip_o15=True)
         # Check if the machine is running first, end here if not
