@@ -531,11 +531,12 @@ class Casting(object):
                         message = 'First, cast a line of em-quads'
                         ui.display(message)
                         self.cast_from_matrix('O15', quads_number)
-                        self.cast_from_matrix('O15', end_galley_trip=False)
-                        self.cast_from_matrix(signals, sorts_number, lines,
-                                              wedge_positions,
-                                              end_galley_trip=False)
-                        self.cast_from_matrix('O15')
+                        for n in lines:
+                            self.cast_from_matrix('O15', end_galley_trip=False)
+                            self.cast_from_matrix(signals, sorts_number,
+                                                  wedge_positions,
+                                                  end_galley_trip=False)
+                            self.cast_from_matrix('O15')
                     # End of menu subroutines.
                     options = {'C': cast_it,
                                'D': exceptions.change_parameters,
