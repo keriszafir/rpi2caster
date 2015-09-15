@@ -497,7 +497,7 @@ class Casting(object):
             # units = points * set_width/12 * 1 / 12 * 18
             # 18 / (12*12) = 0.125, hence division by 8
             factor = pica_def / 0.1667
-            sort_units = width * factor * set_width / 8
+            sort_units = round(width * factor * set_width / 8, 2)
             # How many spaces will fit in a line? Calculate it...
             # We add 5 em-quads at O15 before and after the proper spaces
             # We need 180 additional units for that - need to subtract
