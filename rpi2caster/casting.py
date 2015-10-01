@@ -527,16 +527,21 @@ class Casting(object):
                     # Menu subroutines
                     def cast_it():
                         """Cast the combination or go back to menu"""
-                        message = 'First, cast a line of em-quads'
+                        message = ('\nFirst, we cast a line of em-quads '
+                                   'to heat up the mould. Discard them.\n')
                         ui.display(message)
                         self.cast_from_matrix('O15', quads_number)
                         for n in range(lines):
+                            ui.display('Now casting line %s' % str(n + 1))
+                            ui.display('\nFive quads before - discard them.\n')
                             self.cast_from_matrix('O15', end_galley_trip=False,
                                                   machine_check=False)
+                            ui.display('\nSpaces of desired width...\n')
                             self.cast_from_matrix(signals, sorts_number, 1,
                                                   wedge_positions,
                                                   end_galley_trip=False,
                                                   machine_check=False)
+                            ui.display('\nFive quads after - discard them.\n')
                             self.cast_from_matrix('O15', machine_check=False)
                     # End of menu subroutines.
                     options = {'C': cast_it,
@@ -937,7 +942,7 @@ class Casting(object):
             self.diecase_layout = None
             self.unit_arrangement = None
             self.wedge = None
-            author, title, unit_shift, diecase = None, None, False, None
+            author, title, unit_shift, diecase_id = None, None, False, None
             if 'diecase' in metadata:
                 diecase_id = metadata['diecase']
                 # Try to choose the diecase
@@ -960,8 +965,8 @@ class Casting(object):
             # Set up casting session attributes
             self.ribbon_file = ribbon_file
             self.ribbon_contents = ribbon_contents
-            self.ribbon_metadata = [title, author, diecase, unit_shift]
-            self.diecase_id = diecase
+            self.ribbon_metadata = [title, author, diecase_id, unit_shift]
+            self.diecase_id = diecase_id
             # Get back to menu
             exceptions.menu_level_up()
 
@@ -988,7 +993,10 @@ class Casting(object):
             # Get the metadata
             diecase_id = ribbon_metadata[2]
             # Select the matrix case automatically
-            choose_diecase(diecase_id)
+            try:
+                choose_diecase(diecase_id)
+            except (KeyError, exceptions.MenuLevelUp):
+                pass
             # Reset the "line aborted" on a new casting job
             self.line_aborted = 0
             # Set up casting session attributes
