@@ -40,7 +40,7 @@ def get_metadata(content):
     """
     parameters = ['diecase', 'title', 'author', 'unit-shift', 'justification']
     symbols = ['=', ':', ' ']
-    result = []
+    result = {}
     # Work on an unmodified copy and delete lines from the sequence
     for line in content[:]:
         for parameter in parameters:
@@ -49,12 +49,12 @@ def get_metadata(content):
                     members = line.split(symbol, 1)
                     try:
                         value = members[1].strip()
-                        result.append([parameter, value])
+                        result[parameter] = value
                         break
                     except (IndexError, ValueError):
                         pass
                 content.remove(line)
-    return dict(result)
+    return result
 
 
 def comments_parser(input_data):

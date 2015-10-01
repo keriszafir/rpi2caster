@@ -927,6 +927,7 @@ class Casting(object):
             """
             ribbon_file = ui.enter_input_filename()
             ribbon_contents = parsing.read_file(ribbon_file)
+            metadata = parsing.get_metadata(ribbon_contents)
             # Clear the previous ribbon, diecase, wedge selections
             self.ribbon_contents = None
             self.ribbon_file = None
@@ -936,23 +937,21 @@ class Casting(object):
             self.diecase_layout = None
             self.unit_arrangement = None
             self.wedge = None
-            # Read the metadata at the beginning of the ribbon file
-            metadata = parsing.get_metadata(ribbon_contents)
             author, title, unit_shift, diecase = None, None, False, None
             if 'diecase' in metadata:
-                diecase = metadata['diecase']
+                diecase_id = metadata['diecase']
                 # Try to choose the diecase
                 try:
-                    choose_diecase(diecase)
-                except KeyError:
+                    choose_diecase(diecase_id)
+                except (KeyError, exceptions.MenuLevelUp):
                     pass
             if 'author' in metadata:
                 author = metadata['author']
             if ('unit-shift' in metadata and
-                    metadata['unit-shift'].lower() in ['true', 'on']):
+                    metadata['unit-shift'].lower() in ['true', 'on', '1']):
                 unit_shift = True
             if ('unit-shift' in metadata and
-                    metadata['unit-shift'].lower() in ['false', 'off']):
+                    metadata['unit-shift'].lower() in ['false', 'off', '0']):
                 unit_shift = False
             if 'title' in metadata:
                 title = metadata['title']
@@ -1035,7 +1034,11 @@ class Casting(object):
                     self.diecase[2], self.diecase[3])
             except exceptions.NoMatchingData:
                 # Select it manually
-                choose_wedge()
+                try:
+                    choose_wedge()
+                # Catch the exception at the end of choose_wedge
+                except exceptions.MenuLevelUp:
+                    pass
             # Read the UA for the wedge
             self.unit_arrangement = self.wedge[-1]
             # Ask whether to show diecase layout:
