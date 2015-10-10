@@ -74,7 +74,7 @@ class Monotype(object):
         self.activate_valves(signals)
         ui.display('Turning the valves off...')
         self.deactivate_valves()
-        ui.display('Sequence cast successfully.')
+        ui.display('Sequence cast successfully.\n')
         return True
 
     def _stop_menu(self, casting=True):

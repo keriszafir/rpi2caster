@@ -241,6 +241,43 @@ def check_pump_stop(signals):
             set(['N', 'K']).issubset(signals))
 
 
+def check_pump_start(signals):
+    """check_pump_start(signals):
+
+    Checks if the pump start signal (0075 or NK and not 0005 or NJ) is present.
+    This is called to check if 0075 wedge was changed.
+    """
+    return (('0075' in signals or set(['N', 'K']).issubset(signals)) and
+            '0005' not in signals and not
+            set(['N', 'J']).issubset(signals))
+
+
+def check_wedge_positions(signals):
+    """check_pump_stop(signals):
+
+    Checks if the pump stop signal (0005 or NJ and not 0075 or NK) is present.
+    This is called to determine the ribbon direction.
+    """
+    working_signals = signals[:]
+    for signal in ['0005', '0075'] + [s for s in 'ABCDEFGHIJKLMNOS']:
+        try:
+            working_signals.remove(signal)
+        except ValueError:
+            pass
+    # Initialize with None positions
+    pos_0005 = [None]
+    pos_0075 = [None]
+    # Check which combination it is
+    # Determine 0075 position (if set, it'll override None)
+    if '0075' in signals or set(['N', 'K']).issubset(signals):
+        pos_0075 = working_signals or ['15']
+    # Determine 0005 position (if set, it'll override None)
+    if '0005' in signals or set(['N', 'J']).issubset(signals):
+        pos_0005 = working_signals or ['15']
+    # Now return the wedge positions
+    return tuple(pos_0075 + pos_0005)
+
+
 def check_character(signals):
     """Check if the combination is a character.
 

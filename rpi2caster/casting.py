@@ -144,6 +144,12 @@ class Casting(object):
         ui.display(intro)
         # Start only after the machine is running
         self.caster.detect_rotation()
+        # Dict for telling the user whether sth is on or off
+        status = {True: 'ON', False: 'OFF'}
+        # Initially the pump is not working...
+        pump_working = False
+        # Wedges are initially unset - 15/15
+        pos_0075, pos_0005 = '15', '15'
         # Read the reversed file contents, line by line, then parse
         # the lines, display comments & code combinations, and feed the
         # combinations to the caster
@@ -165,13 +171,19 @@ class Casting(object):
                 # Display number of the working line,
                 # number of all remaining lines, percent done
                 if not current_line:
-                    info_for_user.append('All lines successfully cast.\n')
+                    info_for_user.append('\nAll lines successfully cast.\n')
                 else:
                     info_for_user.append('Starting line no. %i (%i of %i '
                                          '[%i%% done]), %i remaining...\n'
                                          % (current_line, lines_done,
                                             all_lines, line_percent_done,
                                             all_lines - lines_done))
+                # The pump will be working - set the flag
+                pump_working = True
+            elif parsing.check_pump_start(signals):
+                pump_working = True
+            elif parsing.check_pump_stop(signals):
+                pump_working = False
             elif parsing.check_character(signals):
                 # Increase the current character and decrease characters left,
                 # then do some calculations
@@ -190,12 +202,20 @@ class Casting(object):
             # Just don't cast anything until we get to the correct line
             if lines_done <= lines_skipped:
                 continue
+            # Display wedge positions and pump status
+            pump_info = ('Pump is %s, 0075 wedge at %s, 0005 wedge at %s\n'
+                         % (status[pump_working], pos_0075, pos_0005))
+            info_for_user.append(pump_info)
             # Append signals to be cast
             info_for_user.append(' '.join(signals).ljust(15))
             # Add comment
-            info_for_user.append(comment)
+            info_for_user.append(comment + '\n')
             # Display the info
             ui.display(''.join(info_for_user))
+            # Determine if wedge positions change
+            (new_0075, new_0005) = parsing.check_wedge_positions(signals)
+            pos_0075 = new_0075 or pos_0075
+            pos_0005 = new_0005 or pos_0005
             # Proceed with casting only if code is explicitly stated
             # (i.e. O15 = cast, empty list = don't cast)
             if signals:
@@ -212,7 +232,7 @@ class Casting(object):
                     ui.hold_on_exit()
                     return False
         # After casting is finished, notify the user
-        ui.display('\nCasting finished successfully!')
+        ui.display('Casting finished successfully!\n')
         ui.hold_on_exit()
         return True
 

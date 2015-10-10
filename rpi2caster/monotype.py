@@ -244,48 +244,6 @@ class Monotype(object):
         # Max cycles exceeded = machine is running
         return True
 
-    def old_detect_rotation(self):
-        """detect_rotation():
-
-        Checks if the machine is running by counting pulses on a sensor
-        input. One pass of a while loop is a single cycle. If cycles_max
-        value is exceeded in a time <= time_max, the program assumes that
-        the caster is rotating and it can start controlling the machine.
-        """
-        # Let's count up to 3 cycles during 30s
-        cycles_max = 3
-        time_max = 30
-        # Check for sensor signals, keep checking until max time is exceeded
-        # or target number of cycles is reached
-        while True:
-            # Reset the cycle counter, input state and timer on each iteration
-            cycles = 0
-            prev_state = 0
-            time_start = time.time()
-            timeout = time_start + time_max
-            while time.time() <= timeout:
-                # Keep checking until timeout or max cycles reached
-                with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
-                    sensor_signals = select.epoll()
-                    sensor_signals.register(gpiostate, select.POLLPRI)
-                    events = sensor_signals.poll(0.5)
-                    # Check if the sensor changes state at all
-                    if events:
-                        gpiostate.seek(0)
-                        sensor_state = int(gpiostate.read())
-                        # Increment the number of passed machine cycles
-                        if sensor_state == 1 and prev_state == 0:
-                            prev_state = 1
-                            cycles += 1
-                        elif sensor_state == 0 and prev_state == 1:
-                            prev_state = 0
-                if cycles == cycles_max:
-                    # Max cycles exceeded = machine is running
-                    return True
-            # Timeout with no signals = go to stop menu
-            self._stop_menu(casting=False)
-            # Start over and check again (unless an exception occurred)
-
     def _send_signals_to_caster(self, signals, timeout):
         """_send_signals_to_caster:
 
