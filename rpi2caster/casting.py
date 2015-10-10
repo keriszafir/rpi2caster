@@ -198,6 +198,7 @@ class Casting(object):
                         % (current_line, lines_done, all_lines, current_char,
                            all_chars, char_percent_done, chars_left))
                 info_for_user.append(info)
+                info_for_user.append('Pump is %s\n' % status[pump_working])
             # Skipping the unneeded lines:
             # Just don't cast anything until we get to the correct line
             if lines_done <= lines_skipped:
@@ -207,8 +208,8 @@ class Casting(object):
             pos_0075 = new_0075 or pos_0075
             pos_0005 = new_0005 or pos_0005
             # Display wedge positions and pump status
-            pump_info = ('Pump is %s, 0075 wedge at %s, 0005 wedge at %s\n'
-                         % (status[pump_working], pos_0075, pos_0005))
+            pump_info = ('0075 wedge at %s, 0005 wedge at %s\n'
+                         % (pos_0075, pos_0005))
             info_for_user.append(pump_info)
             # Append signals to be cast
             info_for_user.append(' '.join(signals).ljust(15))
