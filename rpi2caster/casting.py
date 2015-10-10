@@ -171,7 +171,7 @@ class Casting(object):
                 # Display number of the working line,
                 # number of all remaining lines, percent done
                 if not current_line:
-                    info_for_user.append('\nAll lines successfully cast.\n')
+                    info_for_user.append('All lines successfully cast.\n\n')
                 else:
                     info_for_user.append('Starting line no. %i (%i of %i '
                                          '[%i%% done]), %i remaining...\n'
