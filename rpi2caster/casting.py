@@ -202,6 +202,10 @@ class Casting(object):
             # Just don't cast anything until we get to the correct line
             if lines_done <= lines_skipped:
                 continue
+            # Determine if wedge positions change
+            (new_0075, new_0005) = parsing.check_wedge_positions(signals)
+            pos_0075 = new_0075 or pos_0075
+            pos_0005 = new_0005 or pos_0005
             # Display wedge positions and pump status
             pump_info = ('Pump is %s, 0075 wedge at %s, 0005 wedge at %s\n'
                          % (status[pump_working], pos_0075, pos_0005))
@@ -212,10 +216,6 @@ class Casting(object):
             info_for_user.append(comment + '\n')
             # Display the info
             ui.display(''.join(info_for_user))
-            # Determine if wedge positions change
-            (new_0075, new_0005) = parsing.check_wedge_positions(signals)
-            pos_0075 = new_0075 or pos_0075
-            pos_0005 = new_0005 or pos_0005
             # Proceed with casting only if code is explicitly stated
             # (i.e. O15 = cast, empty list = don't cast)
             if signals:
