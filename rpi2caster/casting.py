@@ -146,7 +146,7 @@ class Casting(object):
         # Repeat casting the whole sequence as many times as we would like
         while current_run <= repetitions:
             ui.display('\n\nCASTING RUN %d / %d (%d left)...\n\n'
-                       % (current_run, repetitions, current_run - repetitions))
+                       % (current_run, repetitions, repetitions - current_run))
             current_run += 1
             # Characters already cast - start with zero
             current_char = 0
