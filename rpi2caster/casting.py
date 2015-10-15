@@ -100,11 +100,6 @@ class Casting(object):
         # Count all characters and lines in the ribbon
         (all_lines, all_chars) = parsing.count_lines_and_chars(
             self.ribbon_contents)
-        # The program counts galley trip sequences and determines line count.
-        # The first code to send to machine is galley trip (which also sets the
-        # justification wedges and turns the pump on). So, subtract this one
-        # to have the correct number of lines.
-        all_lines -= 1
         # Show the numbers to the operator
         ui.display('Lines found in ribbon: %i' % all_lines)
         ui.display('Characters: %i' % all_chars)
@@ -173,20 +168,21 @@ class Casting(object):
                 if parsing.check_newline(signals):
                     # Decrease the counter for each started new line
                     current_line -= 1
-                    lines_done += 1
                     # Percent of all lines done:
-                    line_percent_done = (100 * (all_lines - current_line) /
-                                         all_lines)
+                    line_percent_done = 100 * lines_done / (all_lines - 1)
+                    # Up the completed lines counter
+                    lines_done += 1
                     # Display number of the working line,
                     # number of all remaining lines, percent done
                     if not current_line:
                         info_for_user.append('All lines successfully cast.\n')
                     else:
-                        info_for_user.append('Starting line no. %i (%i of %i '
-                                             '[%i%% done]), %i remaining...\n'
+                        info_for_user.append('Starting line no. %i (%i of %i),'
+                                             ' %i remaining [%i%% done]...\n'
                                              % (current_line, lines_done,
-                                                all_lines, line_percent_done,
-                                                all_lines - lines_done))
+                                                all_lines - 1,
+                                                all_lines - lines_done,
+                                                line_percent_done))
                     # The pump will be working - set the flag
                     pump_working = True
                 elif parsing.check_pump_start(signals):
@@ -203,10 +199,10 @@ class Casting(object):
                     # Display number of chars done,
                     # number of all and remaining chars, % done
                     info = ('Casting line no. %i (%i of %i), character: '
-                            '%i of %i [%i%% done], %i remaining...\n'
-                            % (current_line, lines_done, all_lines,
+                            '%i of %i, %i remaining [%i%% done]...\n'
+                            % (current_line, lines_done, all_lines - 1,
                                current_char, all_chars,
-                               char_percent_done, chars_left))
+                               chars_left, char_percent_done))
                     info_for_user.append(info)
                     info_for_user.append('Pump is %s\n' % status[pump_working])
                 # Skipping the unneeded lines:
