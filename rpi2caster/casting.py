@@ -100,15 +100,6 @@ class Casting(object):
         # Count all characters and lines in the ribbon
         (all_lines, all_chars) = parsing.count_lines_and_chars(
             self.ribbon_contents)
-        # Characters already cast - start with zero
-        current_char = 0
-        chars_left = all_chars
-        # Line currently cast: since the caster casts backwards
-        # (from the last to the first line), this will decrease.
-        current_line = all_lines
-        # Lines done: this will increase
-        # We start with a galley trip
-        lines_done = 0
         # The program counts galley trip sequences and determines line count.
         # The first code to send to machine is galley trip (which also sets the
         # justification wedges and turns the pump on). So, subtract this one
@@ -150,10 +141,22 @@ class Casting(object):
         status = {True: 'ON', False: 'OFF'}
         # Initially the pump is not working...
         pump_working = False
+        # Current run number
+        current_run = 1
         # Repeat casting the whole sequence as many times as we would like
-        while repetitions:
-            ui.display('\nCasting the job %d more times...' % repetitions)
-            repetitions -= 1
+        while current_run <= repetitions:
+            ui.display('\n\nCASTING RUN %d / %d (%d left)...\n\n'
+                       % (current_run, repetitions, current_run - repetitions))
+            current_run += 1
+            # Characters already cast - start with zero
+            current_char = 0
+            chars_left = all_chars
+            # Line currently cast: since the caster casts backwards
+            # (from the last to the first line), this will decrease.
+            current_line = all_lines
+            # Lines done: this will increase
+            # We start with a galley trip
+            lines_done = 0
             # Wedges are initially unset - 15/15
             pos_0075, pos_0005 = '15', '15'
             # Read the reversed file contents, line by line, then parse
