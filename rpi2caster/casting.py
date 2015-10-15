@@ -130,15 +130,15 @@ class Casting(object):
         lines_skipped = (ui.enter_data_spec_type_or_blank(prompt, int) or
                          lines_skipped)
         prompt = 'How many times do you want to cast this? (default: 1) : '
-        times_repeated = ui.enter_data_spec_type_or_blank(prompt, int) or 1
+        repetitions = ui.enter_data_spec_type_or_blank(prompt, int) or 1
         # For casting, we need to check if the ribbon has to be read
         # forwards or backwards
         if parsing.rewind_ribbon(self.ribbon_contents):
             ui.display('Ribbon starts with pump stop sequence - rewinding...')
-            queue = reversed(self.ribbon_contents)
+            queue = [line for line in reversed(self.ribbon_contents)]
         else:
             ui.display('Ribbon starts with galley trip - not rewinding...')
-            queue = self.ribbon_contents
+            queue = [line for line in self.ribbon_contents]
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
@@ -151,8 +151,9 @@ class Casting(object):
         # Initially the pump is not working...
         pump_working = False
         # Repeat casting the whole sequence as many times as we would like
-        while times_repeated:
-            times_repeated -= 1
+        while repetitions:
+            ui.display('\nCasting the job %d more times...' % repetitions)
+            repetitions -= 1
             # Wedges are initially unset - 15/15
             pos_0075, pos_0005 = '15', '15'
             # Read the reversed file contents, line by line, then parse
