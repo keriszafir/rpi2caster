@@ -129,6 +129,8 @@ class Casting(object):
         prompt = 'How many lines to skip? (default: %s) : ' % lines_skipped
         lines_skipped = (ui.enter_data_spec_type_or_blank(prompt, int) or
                          lines_skipped)
+        prompt = 'How many times do you want to cast this? (default: 1) : '
+        times_repeated = ui.enter_data_spec_type_or_blank(prompt, int) or 1
         # For casting, we need to check if the ribbon has to be read
         # forwards or backwards
         if parsing.rewind_ribbon(self.ribbon_contents):
@@ -148,90 +150,94 @@ class Casting(object):
         status = {True: 'ON', False: 'OFF'}
         # Initially the pump is not working...
         pump_working = False
-        # Wedges are initially unset - 15/15
-        pos_0075, pos_0005 = '15', '15'
-        # Read the reversed file contents, line by line, then parse
-        # the lines, display comments & code combinations, and feed the
-        # combinations to the caster
-        for line in queue:
-            # Parse the row, return a list of signals and a comment.
-            # Both can have zero or positive length.
-            [raw_signals, comment] = parsing.comments_parser(line)
-            # Parse the signals
-            signals = parsing.signals_parser(raw_signals)
-            # A list with information for user: signals, comments, etc.
-            info_for_user = []
-            if parsing.check_newline(signals):
-                # Decrease the counter for each started new line
-                current_line -= 1
-                lines_done += 1
-                # Percent of all lines done:
-                line_percent_done = (100 * (all_lines - current_line) /
-                                     all_lines)
-                # Display number of the working line,
-                # number of all remaining lines, percent done
-                if not current_line:
-                    info_for_user.append('All lines successfully cast.\n\n')
-                else:
-                    info_for_user.append('Starting line no. %i (%i of %i '
-                                         '[%i%% done]), %i remaining...\n'
-                                         % (current_line, lines_done,
-                                            all_lines, line_percent_done,
-                                            all_lines - lines_done))
-                # The pump will be working - set the flag
-                pump_working = True
-            elif parsing.check_pump_start(signals):
-                pump_working = True
-            elif parsing.check_pump_stop(signals):
-                pump_working = False
-            elif parsing.check_character(signals):
-                # Increase the current character and decrease characters left,
-                # then do some calculations
-                current_char += 1
-                chars_left -= 1
-                # % of chars to cast in the line
-                char_percent_done = 100 * (current_char - 1) / all_chars
-                # Display number of chars done,
-                # number of all and remaining chars, % done
-                info = ('Casting line no. %i (%i of %i), character: %i of %i '
-                        '[%i%% done], %i remaining...\n'
-                        % (current_line, lines_done, all_lines, current_char,
-                           all_chars, char_percent_done, chars_left))
-                info_for_user.append(info)
-                info_for_user.append('Pump is %s\n' % status[pump_working])
-            # Skipping the unneeded lines:
-            # Just don't cast anything until we get to the correct line
-            if lines_done <= lines_skipped:
-                continue
-            # Determine if wedge positions change
-            (new_0075, new_0005) = parsing.check_wedge_positions(signals)
-            pos_0075 = new_0075 or pos_0075
-            pos_0005 = new_0005 or pos_0005
-            # Display wedge positions and pump status
-            pump_info = ('0075 wedge at %s, 0005 wedge at %s\n'
-                         % (pos_0075, pos_0005))
-            info_for_user.append(pump_info)
-            # Append signals to be cast
-            info_for_user.append(' '.join(signals).ljust(15))
-            # Add comment
-            info_for_user.append(comment + '\n')
-            # Display the info
-            ui.display(''.join(info_for_user))
-            # Proceed with casting only if code is explicitly stated
-            # (i.e. O15 = cast, empty list = don't cast)
-            if signals:
-                signals = parsing.strip_o_and_15(signals)
-                # Cast the sequence
-                try:
-                    self.caster.process_signals(signals)
-                except exceptions.CastingAborted:
-                    # On failure - abort the whole job.
-                    # Check the aborted line so we can get back to it.
-                    self.line_aborted = current_line
-                    ui.display('\nCasting aborted on line %i.'
-                               % self.line_aborted)
-                    ui.hold_on_exit()
-                    return False
+        # Repeat casting the whole sequence as many times as we would like
+        while times_repeated:
+            times_repeated -= 1
+            # Wedges are initially unset - 15/15
+            pos_0075, pos_0005 = '15', '15'
+            # Read the reversed file contents, line by line, then parse
+            # the lines, display comments & code combinations, and feed the
+            # combinations to the caster
+            for line in queue:
+                # Parse the row, return a list of signals and a comment.
+                # Both can have zero or positive length.
+                [raw_signals, comment] = parsing.comments_parser(line)
+                # Parse the signals
+                signals = parsing.signals_parser(raw_signals)
+                # A list with information for user: signals, comments, etc.
+                info_for_user = []
+                if parsing.check_newline(signals):
+                    # Decrease the counter for each started new line
+                    current_line -= 1
+                    lines_done += 1
+                    # Percent of all lines done:
+                    line_percent_done = (100 * (all_lines - current_line) /
+                                         all_lines)
+                    # Display number of the working line,
+                    # number of all remaining lines, percent done
+                    if not current_line:
+                        info_for_user.append('All lines successfully cast.\n')
+                    else:
+                        info_for_user.append('Starting line no. %i (%i of %i '
+                                             '[%i%% done]), %i remaining...\n'
+                                             % (current_line, lines_done,
+                                                all_lines, line_percent_done,
+                                                all_lines - lines_done))
+                    # The pump will be working - set the flag
+                    pump_working = True
+                elif parsing.check_pump_start(signals):
+                    pump_working = True
+                elif parsing.check_pump_stop(signals):
+                    pump_working = False
+                elif parsing.check_character(signals):
+                    # Increase the current character and decrease characters
+                    # left, then do some calculations
+                    current_char += 1
+                    chars_left -= 1
+                    # % of chars to cast in the line
+                    char_percent_done = 100 * (current_char - 1) / all_chars
+                    # Display number of chars done,
+                    # number of all and remaining chars, % done
+                    info = ('Casting line no. %i (%i of %i), character: '
+                            '%i of %i [%i%% done], %i remaining...\n'
+                            % (current_line, lines_done, all_lines,
+                               current_char, all_chars,
+                               char_percent_done, chars_left))
+                    info_for_user.append(info)
+                    info_for_user.append('Pump is %s\n' % status[pump_working])
+                # Skipping the unneeded lines:
+                # Just don't cast anything until we get to the correct line
+                if lines_done <= lines_skipped:
+                    continue
+                # Determine if wedge positions change
+                (new_0075, new_0005) = parsing.check_wedge_positions(signals)
+                pos_0075 = new_0075 or pos_0075
+                pos_0005 = new_0005 or pos_0005
+                # Display wedge positions and pump status
+                pump_info = ('0075 wedge at %s, 0005 wedge at %s\n'
+                             % (pos_0075, pos_0005))
+                info_for_user.append(pump_info)
+                # Append signals to be cast
+                info_for_user.append(' '.join(signals).ljust(15))
+                # Add comment
+                info_for_user.append(comment + '\n')
+                # Display the info
+                ui.display(''.join(info_for_user))
+                # Proceed with casting only if code is explicitly stated
+                # (i.e. O15 = cast, empty list = don't cast)
+                if signals:
+                    signals = parsing.strip_o_and_15(signals)
+                    # Cast the sequence
+                    try:
+                        self.caster.process_signals(signals)
+                    except exceptions.CastingAborted:
+                        # On failure - abort the whole job.
+                        # Check the aborted line so we can get back to it.
+                        self.line_aborted = current_line
+                        ui.display('\nCasting aborted on line %i.'
+                                   % self.line_aborted)
+                        ui.hold_on_exit()
+                        return False
         # After casting is finished, notify the user
         ui.display('Casting finished successfully!\n')
         ui.hold_on_exit()
