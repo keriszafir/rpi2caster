@@ -86,9 +86,6 @@ class Typesetter(object):
         # Get unit arrangement for the wedge
         self.unit_arrangement = wedge_data.get_unit_arrangement(
             self.wedge_series, self.set_width)
-        # Ask whether to show the matrix case layout
-        # (often useful if we have to alter it)
-        self.show_layout()
         # Warn if the wedge could be incompatible with the matrix case
         self._check_if_wedge_is_ok()
         # Enter the line length for typesetting, and calculate it
@@ -237,7 +234,7 @@ class Typesetter(object):
         # Otherwise, let user choose
         styles_list = ['%s : %s' % (x, options[x]) for x in sorted(options)]
         styles_list = ', '.join(styles_list)
-        prompt = 'Choose a style: %s ' % styles_list
+        prompt = 'Choose a dominant style: %s ' % styles_list
         self.main_style = ui.simple_menu(prompt, options)
 
     def _get_space_code(self, space_symbol, unit_width):
@@ -447,8 +444,6 @@ class Typesetter(object):
         column = matrix[2]
         row = matrix[3]
         normal_unit_width = matrix[4]
-        print(row)
-        print(self.unit_arrangement)
         # Add or subtract current unit correction
         char_units = normal_unit_width + self.unit_correction
         # Trying to access the 16th row with no unit shift activated
@@ -471,11 +466,20 @@ class Typesetter(object):
             shifted_row_units = self.unit_arrangement[shifted_row - 1]
         # Check if the character needs unit correction at all
         # Add it if not
+        # Display info for debugging
+        ui.debug_info('Character:', char, 'style:', self.current_style)
+        # Check if we need unit corrections at all...
         if char_units == row_units:
             combination = column + str(row)
+            ui.debug_info('No unit corrections needed.')
         # Try unit-shift next
         elif char_units == shifted_row_units:
             combination = shifted_column + str(shifted_row)
+            # Info for user
+            ui.debug_info('Correcting the width by unit shift...')
+            ui.debug_info('Character units:', char_units,
+                          'row units:', row_units,
+                          'matrix at:', str(column) + str(row))
         # Then try using the justification wedges
         else:
             # Calculate the difference between desired width and row width
@@ -484,12 +488,18 @@ class Typesetter(object):
             combination = column + 'S' + str(row)
             wedge_positions = calculate_wedges(difference, self.set_width,
                                                self.brit_pica)
-        # Finally, add combination and wedge positions to the buffer
-        ui.debug_info('Character: ', char, ' style: ', self.current_style)
-        ui.debug_info('Char. units: ', char_units, ' row: ', str(row),
-                      ' row units: ', str(row_units))
-        ui.debug_info('Combination: ', combination,
-                      ' wedges: ', wedge_positions)
+            # Info for user
+            ui.debug_info('Correcting the width by single justification...')
+            ui.debug_info('Character units:', char_units,
+                          'row units:', row_units,
+                          'difference:', difference, 'units',
+                          self.set_width, 'set')
+            ui.debug_info('Wedge positions:',
+                          '0075 at', wedge_positions[0],
+                          'and 0005 at', wedge_positions[1])
+        # The combination will always be displayed no matter what correction
+        # method (if any) should be used
+        ui.debug_info('Combination:', combination)
         self.line_buffer.append([combination, wedge_positions, char])
         # Return the character's unit width
         return char_units
