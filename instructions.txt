@@ -1,5 +1,9 @@
 Enter:
 ./cast.py - for casting;
-./inventory.py - for inventory manipulation (wedges, diecases)
+./inventory.py - for inventory manipulation (wedges, diecases);
 ./simulate.py - for casting simulation without using the actual caster
+
+HINT: Use shell auto-completion (e.g. "./ca[TAB]").
+
+Have a nice day!
 
