@@ -1,0 +1,8 @@
+Enter:
+./cast.py - for casting;
+./inventory.py - for inventory manipulation (wedges, diecases)
+./simulate.py - for casting simulation without using the actual caster
+
+Have a nice day!
+
+
