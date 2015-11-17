@@ -4,5 +4,3 @@ Enter:
 ./simulate.py - for casting simulation without using the actual caster
 
 Have a nice day!
-
-
