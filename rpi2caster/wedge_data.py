@@ -134,14 +134,19 @@ def add_wedge():
             (wedge_name, set_width) = wedge_name.strip('E').split('-')
         else:
             # For wedges marked as "5-6.5" etc.
-            (wedge_name, set_width) = wedge_name.split('-')
+            try:
+                (wedge_name, set_width) = wedge_name.split('-')
+            except ValueError:
+                # Will be set later
+                set_width = None
         # We now should have a wedge series and set width, as strings.
-        # Convert the set width to float or enter it manually.
+        # If user entered S in wedge name, throw it away
         wedge_series = wedge_name.strip('sS')
+        # Convert the set width to float or enter it manually.
         try:
             # Should work...
             set_width = float(set_width)
-        except ValueError:
+        except (TypeError, ValueError):
             # if not - enter the width manually
             prompt = 'Enter the set width as a decimal fraction: '
             set_width = ui.enter_data_spec_type(prompt, float)
