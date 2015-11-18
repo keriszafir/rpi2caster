@@ -30,15 +30,15 @@ class Typesetter(object):
         self.spaces = {'var_space_char': ' ',
                        'var_space_min_units': 4,
                        'var_space_symbol': ' ',
-                       'var_space_code': 'var_space',
+                       'var_space_code': 'GS2',
                        'fixed_space_units': 9,
-                       'fixed_space_code': ('G5', (None, None)),
+                       'fixed_space_code': 'G5',
                        'fixed_space_symbol': '_',
                        'nb_space_units': 9,
-                       'nb_space_code': ('G5', (None, None)),
+                       'nb_space_code': 'G5',
                        'nb_space_symbol': '~',
                        'quad_units': 18,
-                       'quad_code': ('O15', (None, None)),
+                       'quad_code': 'O15',
                        'quad_symbol': '\t'}
         # Current units in the line - start with 0
         self.current_units = 0
@@ -374,28 +374,27 @@ class Typesetter(object):
         # Detect any spaces and quads
         # Variable space (typically GS2, width adjusted, but minimum 4 units):
         if char == self.spaces['var_space_symbol']:
-            (combination, wedge_positions) = ('var_space', (3, 8))
-            self.line_buffer.append([combination, wedge_positions,
-                                     'Variable space'])
+            self.line_buffer.append((self.spaces['var_space_code'], 0,
+                                     'Variable space'))
             self.current_line_var_spaces += 1
             return self.spaces['var_space_min_units']
         # Fixed space (typically G5, 9 units wide)
         elif char == self.spaces['fixed_space_symbol']:
-            (combination, wedge_positions) = self.spaces['fixed_space_code']
-            self.line_buffer.append([combination, wedge_positions,
-                                     'Fixed space'])
+            self.line_buffer.append((self.spaces['fixed_space_code'],
+                                     self.spaces['fixed_space_units'],
+                                     'Fixed space'))
             return self.spaces['fixed_space_units']
         # Non-breaking space (typically G5, 9 units wide)
         elif char == self.spaces['nb_space_symbol']:
-            (combination, wedge_positions) = self.spaces['nb_space_code']
-            self.line_buffer.append([combination, wedge_positions,
-                                     'Non-breaking space'])
+            self.line_buffer.append((self.spaces['nb_space_code'],
+                                     self.spaces['nb_space_units'],
+                                     'Non-breaking space'))
             return self.spaces['nb_space_units']
         # Em quad (typically O15, 18 units wide)
         elif char == self.spaces['quad_symbol']:
-            (combination, wedge_positions) = self.spaces['quad_code']
-            self.line_buffer.append([combination, wedge_positions,
-                                     'Em quad'])
+            self.line_buffer.append((self.spaces['quad_code'],
+                                     self.spaces['quad_units'],
+                                     'Em quad'))
             return self.spaces['quad_units']
         # Space not recognized - so this is a character.
         # Get the matrix data: [char, style, column, row, units]
@@ -424,20 +423,23 @@ class Typesetter(object):
                                     options)
             self.custom_characters.append(matrix)
         # If char units is the same as the row units, no correction is needed
-        # Wedge positions for such character are null
-        wedge_positions = (None, None)
         # Get coordinates
         column = matrix[2]
         row = matrix[3]
+        # Combination to be cast
+        combination = column + str(row)
         normal_unit_width = matrix[4]
         # Add or subtract current unit correction
         char_units = normal_unit_width + self.unit_correction
+        row_units = self.unit_arrangement[row - 1]
+        # Is the character width correction needed at all?
+        unit_difference = char_units - row_units
+        # Tell us what we are translating
+        ui.debug_info('Character:', char, 'style:', self.current_style)
+        ui.debug_info('Matrix at:', combination)
         # Trying to access the 16th row with no unit shift activated
         if row == 16 and not self.unit_shift:
             self.convert_to_unit_shift()
-        row_units = self.unit_arrangement[row - 1]
-        # Shifted values apply only to unit-shift, start with empty
-        shifted_row, shifted_column, shifted_row_units = 0, '', 0
         # If we use unit shift, we can move the diecase one row further
         # This would mean e.g. that when using the 5-series wedge, with UA:
         # 5, 6, 7, 8, 9... - we can put the 8-unit character at A5
@@ -450,43 +452,35 @@ class Typesetter(object):
             column.replace('D', 'EF')
             shifted_column = column + 'D'
             shifted_row_units = self.unit_arrangement[shifted_row - 1]
-        # Check if the character needs unit correction at all
-        # Add it if not
-        # Display info for debugging
-        ui.debug_info('Character:', char, 'style:', self.current_style)
+            # Check if unit shift is needed for this character (if it's on)
+            if unit_difference and char_units == shifted_row_units:
+                # No unit difference between char and row
+                # (that's why we used unit shift)
+                unit_difference = 0
+                # Info for user
+                ui.debug_info('Correcting the width by unit shift...')
+                ui.debug_info('Character units:', char_units,
+                              'row units:', row_units)
+                # Override previous combination
+                combination = shifted_column + str(shifted_row)
+            elif row == 16:
+                # Use unit shift for these even if you have to add units
+                unit_difference = char_units - shifted_row_units
+                ui.debug_info('Casting from row 16 - unit shift is necessary')
+                ui.debug_info('Character units:', char_units,
+                              'row units:', shifted_row_units)
+                combination = shifted_column + str(shifted_row)
+            # Combination after corrections
+            ui.debug_info('Combination with unit shift:', combination, '')
         # Check if we need unit corrections at all...
-        if char_units == row_units:
-            combination = column + str(row)
+        if not unit_difference:
             ui.debug_info('No unit corrections needed.')
-        # Try unit-shift next
-        elif char_units == shifted_row_units:
-            combination = shifted_column + str(shifted_row)
-            # Info for user
-            ui.debug_info('Correcting the width by unit shift...')
-            ui.debug_info('Character units:', char_units,
-                          'row units:', row_units,
-                          'matrix at:', str(column) + str(row))
-        # Then try using the justification wedges
-        else:
-            # Calculate the difference between desired width and row width
-            difference = char_units - row_units
-            # Cast it with the S-needle
-            combination = column + 'S' + str(row)
-            wedge_positions = calculate_wedges(difference, self.set_width,
-                                               self.brit_pica)
-            # Info for user
-            ui.debug_info('Correcting the width by single justification...')
-            ui.debug_info('Character units:', char_units,
-                          'row units:', row_units,
-                          'difference:', difference, 'units',
-                          self.set_width, 'set')
-            ui.debug_info('Wedge positions:',
-                          '0075 at', wedge_positions[0],
-                          'and 0005 at', wedge_positions[1])
-        # The combination will always be displayed no matter what correction
-        # method (if any) should be used
-        ui.debug_info('Combination:', combination, '')
-        self.line_buffer.append([combination, wedge_positions, char])
+        elif unit_difference << 0:
+            ui.debug_ingo('Taking away %s units' % -1 * unit_difference)
+        elif unit_difference >> 0:
+            ui.debug_info('Adding %s units' % unit_difference)
+        # Finally add the translated character to output buffer
+        self.line_buffer.append((combination, unit_difference, char))
         # Return the character's unit width
         return char_units
 
@@ -502,24 +496,29 @@ class Typesetter(object):
         """Composes text automatically, deciding when to end the lines."""
         # Start with the empty work buffer
         self.buffer = []
-        try:
-            while True:
-                # Keep looping over all characters and lines
-                self.line_buffer = []
-                self.current_units = 0
-                # Try to fill the line and not hyphenate
-                while self.current_units < self.unit_line_length - 50:
-                    # Get the character from input
+        self.line_buffer = []
+        self.current_units = 0
+        finished = False
+        # Entering a line
+        while not finished:
+            # Keep looping over all characters and lines
+            # Try to fill the line and not hyphenate
+            while self.current_units < self.unit_line_length - 50:
+                # Get the character from input
+                try:
                     character = next(self.text_source)
-                    # Translate the character (add it to buffer),
-                    # get unit width for the character from function's retval
+                # Translate the character (add it to buffer),
+                # get unit width for the character from function's retval
                     self.current_units += self.translate(character)
-                self.current_alignment()
-                print(self.buffer)
-        except StopIteration:
-            # Text source exhausted
-            ui.confirm('Typesetting finished! [Enter] to continue...')
-            return True
+                except StopIteration:
+                    finished = True
+                    break
+            # Line composed now, align and justify it
+            ui.debug_info('Line finished. Now aligning...')
+            self.current_alignment()
+        # Now we're done typesetting
+        ui.confirm('Typesetting finished! [Enter] to continue...')
+        return True
 
     def _enter_line_length(self):
         """enter_line_length:
@@ -579,76 +578,86 @@ class Typesetter(object):
         """Sets superscript for the following text."""
         self.current_style = 'superscript'
 
-    def _start_new_line(self, wedge_positions):
+    def _start_new_line(self, var_space_units):
         """Starts a new line during typesetting"""
+        # Pass the unit width to the apply_justification later on
+        self.line_buffer.append(('newline', var_space_units, 'New line'))
         self.buffer.extend(self.line_buffer)
-        self.buffer.append(('newline', wedge_positions))
         self.line_buffer = []
+        self.current_units = 0
+        self.current_line_var_spaces = 0
 
     def _justify_line(self, mode=1):
-        """Justify the row; applies to all alignment routines"""
+        """justify_line(mode=1)
+
+        Justify the row; applies to all alignment routines.
+        This function supports various modes:
+        0: justification only by variable spaces
+        1: filling the line with one block of fixed spaces, then dividing
+           the remaining units among variable spaces
+        2: as above but with two blocks of fixed spaces
+        3, 4... - as above but with 3, 4... blocks of fixed spaces
+        Add fixed spaces only if mode is greater than 0
+        """
         # Add as many fixed spaces as we can
         # Don't exceed the line length (in units) specified in setup!
         # Predict if the increment will exceed it or not
+        ui.debug_info('Justifying line...')
         fill_spaces_number = 0
         space_units = self.spaces['fixed_space_units']
+        # Determine if we have to add any spaces (otherwise - skip the loop)
         result_length = self.current_units + mode * space_units
-        # This function supports various modes:
-        # 0: justification only by variable spaces
-        # 1: filling the line with one block of fixed spaces, then dividing
-        #    the remaining units among variable spaces
-        # 2: as above but with two blocks of fixed spaces
-        # 3, 4... - as above but with 3, 4... blocks of fixed spaces
-        # Add fixed spaces only if mode is greater than 0
-        spaces = []
+        # Start with no spaces
+        fill_spaces = []
         while mode and result_length < self.unit_line_length:
             # Add units
             self.current_units += mode * self.spaces['fixed_space_units']
             # Add a mode-dictated number of fill spaces
             fill_spaces_number += mode
             # Determine and add the space code to the line
-            space = (self.spaces['fixed_space_code'], (None, None),
-                     'Fixed space %i units wide'
-                     % self.spaces['fixed_space_units'])
+            space = list(self.spaces['fixed_space_code'])
+            space.append('Fixed space %i units wide'
+                         % self.spaces['fixed_space_units'])
+            space = tuple(space)
             # Add as many spaces as needed
-            spaces = ([space for i in range(fill_spaces_number)], 'roman')
+            fill_spaces = [space for i in range(fill_spaces_number)]
+            # Update resulting length
+            result_length = self.current_units + mode * space_units
         # The remaining units must be divided among the justifying spaces
-        # Determine the 0075 and 0005 justification wedge positions (1...15)
+        # Determine the unit width
         remaining_units = self.unit_line_length - self.current_units
-        space_increment = remaining_units / self.current_line_var_spaces
-        # Calculate the (0075 position, 0005 position) for variable spaces
-        wedge_positions = calculate_wedges(space_increment,
-                                           self.set_width, self.brit_pica)
-        # Reset the counters
-        self.current_line_var_spaces = 0
-        self.current_units = 0
+        var_space_units = remaining_units / self.current_line_var_spaces
         # Return the space chunk (that will be appended at the beginning
-        # or the end of the line, or both) and justification wedge positions
-        return (spaces, wedge_positions)
+        # or the end of the line, or both) and unit width
+        return (fill_spaces, var_space_units)
 
     def _align_left(self):
         """Aligns the previous chunk to the left."""
-        (spaces, wedge_positions) = self._justify_line()
+        ui.debug_info('Aligning line to the left...')
+        (spaces, var_space_units) = self._justify_line(mode=1)
         self.line_buffer.extend(spaces)
-        self._start_new_line(wedge_positions)
+        self._start_new_line(var_space_units)
 
     def _align_right(self):
         """Aligns the previous chunk to the right."""
-        (spaces, wedge_positions) = self._justify_line()
+        ui.debug_info('Aligning line to the right...')
+        (spaces, var_space_units) = self._justify_line(mode=1)
         self.line_buffer = spaces + self.line_buffer
-        self._start_new_line(wedge_positions)
+        self._start_new_line(var_space_units)
 
     def _align_center(self):
         """Aligns the previous chunk to the center."""
-        (spaces, wedge_positions) = self._justify_line(2)
+        ui.debug_info('Aligning line to the center...')
+        (spaces, var_space_units) = self._justify_line(mode=2)
         # Prepare the line: (content, wedge_positions)
         self.line_buffer = spaces + self.line_buffer + spaces
-        self._start_new_line(wedge_positions)
+        self._start_new_line(var_space_units)
 
     def _align_both(self):
         """Aligns the previous chunk to both edges and ends the line."""
-        (spaces, wedge_positions) = self._justify_line(0)
-        self._start_new_line(wedge_positions)
+        ui.debug_info('Aligning line to both edges...')
+        (spaces, var_space_units) = self._justify_line(mode=0)
+        self._start_new_line(var_space_units)
 
     def convert_to_unit_shift(self):
         """convert_to_unit_shift:
@@ -677,12 +686,14 @@ class Typesetter(object):
         current_wedge_positions = (3, 8)
         while self.buffer:
             # Take the last combination off
-            (combination, wedge_positions, comment) = self.buffer.pop()
+            (combination, justification, comment) = self.buffer.pop()
             # New line - use double justification
             if combination == 'newline':
-                line_wedge_positions = wedge_positions
+                # Variable space parameters: (var_space_code, wedge_positions)
+                var_space_params = self._get_space_code(justification)
+                (var_space_code, line_wedge_positions) = var_space_params
                 current_wedge_positions = line_wedge_positions
-                self.double_justification(wedge_positions)
+                self.double_justification(line_wedge_positions)
             # Justifying space - if wedges were set to different positions,
             # reset them to line justification positions
             elif combination == 'var_space':
@@ -691,13 +702,13 @@ class Typesetter(object):
                     self.single_justification(line_wedge_positions)
                 self.output_buffer.append(self.spaces['var_space_code'] +
                                           ' // ' + comment)
-            elif wedge_positions == (None, None):
+            elif justification == (None, None):
                 # No corrections needed
                 self.output_buffer.append(combination + ' // ' + comment)
-            elif wedge_positions != current_wedge_positions:
+            elif justification != current_wedge_positions:
                 # Correction needed - determine if wedges are already set
-                self.single_justification(wedge_positions)
-                current_wedge_positions = wedge_positions
+                self.single_justification(justification)
+                current_wedge_positions = justification
                 self.output_buffer.append(combination + ' // ' + comment)
         return self.output_buffer
 
