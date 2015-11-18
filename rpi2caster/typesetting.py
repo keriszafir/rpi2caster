@@ -254,7 +254,6 @@ class Typesetter(object):
         available_spaces = [sp for sp in self.diecase_layout if
                             sp[0] == space_symbol]
         spaces = []
-        shifted_spaces = []
         # Gather non-shifted spaces
         for space in available_spaces:
             # Get the unit value for this space
@@ -264,25 +263,12 @@ class Typesetter(object):
                 space_unit_width = self.unit_arrangement[row - 1]
                 space_code = column + str(row)
                 spaces.append((space_unit_width, space_code))
-            # Now check if unit-shift is available and gather shifted spaces
-            if self.unit_shift and row > 1:
-                # Convert non-shifted to shifted signals
-                shifted_column = column.replace('D', 'EF') + 'D'
-                shifted_row = row - 1
-                shifted_space_width = self.unit_arrangement[shifted_row - 1]
-                shifted_space_code = shifted_column + str(shifted_row)
-                shifted_spaces.append((shifted_space_width,
-                                       shifted_space_code))
         # Try matching a space
         for (space_unit_width, space_code) in spaces:
             if space_unit_width == unit_width:
                 return (space_code, (None, None))
         # Fell off the end of the loop - no match
-        # Try with unit-shift
-        for (space_unit_width, space_code) in shifted_spaces:
-            if space_unit_width == unit_width:
-                return (space_code, (None, None))
-        # This also failed? Need to use justification wedges...
+        # Need to use justification wedges...
         # First try to use the spaces narrower than desired unit width,
         # and add units to them
         corrected_spaces = ({unit_width - space_unit_width: space_code
@@ -499,7 +485,7 @@ class Typesetter(object):
                           'and 0005 at', wedge_positions[1])
         # The combination will always be displayed no matter what correction
         # method (if any) should be used
-        ui.debug_info('Combination:', combination)
+        ui.debug_info('Combination:', combination, '')
         self.line_buffer.append([combination, wedge_positions, char])
         # Return the character's unit width
         return char_units
@@ -789,14 +775,21 @@ def calculate_wedges(difference, set_width, brit_pica=False):
     # 3 / 8 = 1 * 15 + 8 = 53 "raw" steps of 0005 wedge
     pos_0075 = 0
     steps += 53
-    while steps > 16:
+    # Add safeguards against wrong wedge positions
+    # Minimum wedge positions (0075/0005) are 1/1, maximum 15/15
+    # This is equivalent to 1*15+1=16 steps (min) and 15*15+15=240 steps (max)
+    # Upper limit:
+    steps = min(steps, 240)
+    # Lower limit:
+    steps = max(16, steps)
+    # We're in these constraints now - but there is one more constraint:
+    # matrix size = .2x.2" (small composition)
+    # Opening the mould more than that will lead to lead splashes between mats
+    # (this is not a risk with low spaces, as the upper mould blade is closed)
+    while steps > 15:
         steps -= 15
         pos_0075 += 1
-    pos_0005 = round(steps)
-    # Apply constraints: each wedge within 1...15
-    pos_0005 = max(1, pos_0005)
-    pos_0005 = min(pos_0005, 15)
-    pos_0075 = max(1, pos_0075)
-    pos_0075 = min(pos_0075, 15)
+    # Round the remainder down
+    pos_0005 = int(steps)
     # We now can return the wedge positions
     return (pos_0075, pos_0005)
