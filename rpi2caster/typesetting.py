@@ -476,7 +476,7 @@ class Typesetter(object):
         if not unit_difference:
             ui.debug_info('No unit corrections needed.')
         elif unit_difference << 0:
-            ui.debug_ingo('Taking away %s units' % -1 * unit_difference)
+            ui.debug_info('Taking away %s units' % -1 * unit_difference)
         elif unit_difference >> 0:
             ui.debug_info('Adding %s units' % unit_difference)
         # Finally add the translated character to output buffer
