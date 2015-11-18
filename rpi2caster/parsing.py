@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Parser functions.
 
 This module contains file- and line-parsing functions for the casting program.

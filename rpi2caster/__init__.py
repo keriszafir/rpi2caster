@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """rpi2caster - control a Monotype composition caster with Raspberry Pi.
 
 Monotype composition caster & keyboard paper tower control program.

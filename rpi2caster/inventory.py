@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Inventory:
 
 Allows to add, list and delete wedges and diecases.

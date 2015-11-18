@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 typesetting_functions:
 
@@ -237,7 +238,7 @@ class Typesetter(object):
         prompt = 'Choose a dominant style: %s ' % styles_list
         self.main_style = ui.simple_menu(prompt, options)
 
-    def _get_space_code(self, space_symbol, unit_width):
+    def _get_space_code(self, unit_width, high_space=False):
         """get_space_code:
 
         Gets coordinates for the space of a desired unit width.
@@ -250,9 +251,10 @@ class Typesetter(object):
         wedge_positions are (pos0075, pos0005) - min. (1, 1), max (15, 15).
         Wedge positions are (None, None) if justification is not applied.
         """
-        # Space style: " " for low space and "_" for fixed space
+        # Space style: " " for low space and "_" for high space
+        space_symbols = {'□': False, '▣': True}
         available_spaces = [sp for sp in self.diecase_layout if
-                            sp[0] == space_symbol]
+                            sp[0] == space_symbols[high_space]]
         spaces = []
         # Gather non-shifted spaces
         for space in available_spaces:
@@ -374,27 +376,20 @@ class Typesetter(object):
         # Detect any spaces and quads
         # Variable space (typically GS2, width adjusted, but minimum 4 units):
         if char == self.spaces['var_space_symbol']:
-            self.line_buffer.append((self.spaces['var_space_code'], 0,
-                                     'Variable space'))
+            self.line_buffer.append(('var_space', 0, 'Variable space'))
             self.current_line_var_spaces += 1
             return self.spaces['var_space_min_units']
         # Fixed space (typically G5, 9 units wide)
         elif char == self.spaces['fixed_space_symbol']:
-            self.line_buffer.append((self.spaces['fixed_space_code'],
-                                     self.spaces['fixed_space_units'],
-                                     'Fixed space'))
+            self.line_buffer.append(('fixed_space', 0, 'Fixed space'))
             return self.spaces['fixed_space_units']
         # Non-breaking space (typically G5, 9 units wide)
         elif char == self.spaces['nb_space_symbol']:
-            self.line_buffer.append((self.spaces['nb_space_code'],
-                                     self.spaces['nb_space_units'],
-                                     'Non-breaking space'))
+            self.line_buffer.append(('nb_space', 0, 'Non-breaking space'))
             return self.spaces['nb_space_units']
         # Em quad (typically O15, 18 units wide)
         elif char == self.spaces['quad_symbol']:
-            self.line_buffer.append((self.spaces['quad_code'],
-                                     self.spaces['quad_units'],
-                                     'Em quad'))
+            self.line_buffer.append(('quad', 0, 'Quad'))
             return self.spaces['quad_units']
         # Space not recognized - so this is a character.
         # Get the matrix data: [char, style, column, row, units]
@@ -686,7 +681,7 @@ class Typesetter(object):
         current_wedge_positions = (3, 8)
         while self.buffer:
             # Take the last combination off
-            (combination, justification, comment) = self.buffer.pop()
+            (combination, unit_difference, comment) = self.buffer.pop()
             # New line - use double justification
             if combination == 'newline':
                 # Variable space parameters: (var_space_code, wedge_positions)
@@ -699,16 +694,19 @@ class Typesetter(object):
             elif combination == 'var_space':
                 if current_wedge_positions != line_wedge_positions:
                     # Set the line justification
-                    self.single_justification(line_wedge_positions)
+                    current_wedge_positions = line_wedge_positions
+                    self.single_justification(current_wedge_positions)
                 self.output_buffer.append(self.spaces['var_space_code'] +
                                           ' // ' + comment)
-            elif justification == (None, None):
+            elif combination == 'fixed_space':
+                pass
+            elif not unit_difference:
                 # No corrections needed
                 self.output_buffer.append(combination + ' // ' + comment)
-            elif justification != current_wedge_positions:
+            if wedge_positions != current_wedge_positions:
                 # Correction needed - determine if wedges are already set
-                self.single_justification(justification)
-                current_wedge_positions = justification
+                self.single_justification(wedge_positions)
+                current_wedge_positions = wedge_positions
                 self.output_buffer.append(combination + ' // ' + comment)
         return self.output_buffer
 

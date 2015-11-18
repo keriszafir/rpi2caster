@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 typesetter - program for generating the code sequence fed to
 a Monotype composition caster or type&rule caster.

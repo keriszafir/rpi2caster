@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Global settings for rpi2caster"""
 
 from rpi2caster import text_ui
