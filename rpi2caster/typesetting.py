@@ -28,19 +28,22 @@ class Typesetter(object):
         self.compose = self.auto_compose
         self.current_alignment = self._align_left
         # Set up the spaces
-        self.spaces = {'var_space_char': ' ',
-                       'var_space_min_units': 4,
-                       'var_space_symbol': ' ',
-                       'var_space_code': 'GS2',
-                       'fixed_space_units': 9,
-                       'fixed_space_code': 'G5',
-                       'fixed_space_symbol': '_',
-                       'nb_space_units': 9,
-                       'nb_space_code': 'G5',
-                       'nb_space_symbol': '~',
-                       'quad_units': 18,
-                       'quad_code': 'O15',
-                       'quad_symbol': '\t'}
+        self.spaces = {'var': {'high': False,
+                               'units': 4,
+                               'symbol': ' ',
+                               'code': 'GS2'},
+                       'fixed': {'high': False,
+                                 'units': 9,
+                                 'code': 'G5',
+                                 'symbol': '_'},
+                       'nb': {'high': False,
+                              'units': 9,
+                              'code': 'G5',
+                              'symbol': '~'},
+                       'quad': {'high': False,
+                                'units': 18,
+                                'code': 'O15',
+                                'symbol': '\t'}}
         # Current units in the line - start with 0
         self.current_units = 0
         # Justifying spaces number
@@ -238,7 +241,7 @@ class Typesetter(object):
         prompt = 'Choose a dominant style: %s ' % styles_list
         self.main_style = ui.simple_menu(prompt, options)
 
-    def _get_space_code(self, unit_width, high_space=False):
+    def _get_space_code(self, desired_unit_width, high_space=False):
         """get_space_code:
 
         Gets coordinates for the space of a desired unit width.
@@ -252,7 +255,7 @@ class Typesetter(object):
         Wedge positions are (None, None) if justification is not applied.
         """
         # Space style: " " for low space and "_" for high space
-        space_symbols = {'□': False, '▣': True}
+        space_symbols = {'□': False, ' ': False, '_': True, '▣': True}
         available_spaces = [sp for sp in self.diecase_layout if
                             sp[0] == space_symbols[high_space]]
         spaces = []
@@ -265,95 +268,82 @@ class Typesetter(object):
                 space_unit_width = self.unit_arrangement[row - 1]
                 space_code = column + str(row)
                 spaces.append((space_unit_width, space_code))
-        # Try matching a space
+        # Try matching a first available space
         for (space_unit_width, space_code) in spaces:
-            if space_unit_width == unit_width:
-                return (space_code, (None, None))
-        # Fell off the end of the loop - no match
-        # Need to use justification wedges...
-        # First try to use the spaces narrower than desired unit width,
-        # and add units to them
-        corrected_spaces = ({unit_width - space_unit_width: space_code
-                             for (space_unit_width, space_code) in spaces
-                             if space_unit_width in range(-2, 10)})
-        corrected_spaces = dict(spaces)
-        # Find a matching space code
-        try:
-            # Get the code for a space with smallest positive width difference
-            difference = min([x for x in corrected_spaces if x > 0])
-            space_code = corrected_spaces[difference] + 'S'
-        except ValueError:
-            # As above - now, the negative difference closest to zero
-            difference = max([x for x in corrected_spaces if x < 0])
-            space_code = corrected_spaces[difference] + 'S'
-        wedge_positions = calculate_wedges(difference, self.set_width,
-                                           self.brit_pica)
-        return (space_code, wedge_positions)
+            unit_difference = desired_unit_width - space_unit_width
+            if not unit_difference:
+                # We get a space of desired width
+                return space_code
+            elif 0 < unit_difference < 10:
+                # Unit correction: add max 10
+                return space_code
+        else:
+            # Return the space that is narrower and units can be added
+            return False
 
     def _configure_spaces(self):
         """Chooses the spaces that will be used in typesetting."""
+        # To make lines shorter
+        enter = ui.enter_data_or_blank
+        enter_type = ui.enter_data_spec_type_or_blank
+        get_space_code = self._get_space_code
+        yn = ui.yes_or_no
         # List available spaces
         # Matrix in layout is defined as follows:
         # (character, (style1, style2...)) : (column, row, unit_width)
-        var_prompt = 'Variable space: [L]ow or [H]igh? '
+        var_hi_prompt = 'Variable: is a high space? '
         var_units_prompt = 'How many units min. (default: 4)? '
         var_symbol_prompt = ('Variable space symbol in text file? '
                              '(default: " ") ? ')
-        fixed_prompt = 'Fixed space: [L]ow or [H]igh? '
+        fixed_hi_prompt = 'Fixed: is a high space? '
         fixed_units_prompt = 'How many units (default: 9)? '
         fixed_symbol_prompt = ('Fixed space symbol in text file? '
                                '(default: "_") ? ')
-        nbsp_prompt = 'Non-breaking space: [L]ow or [H]igh? '
+        nbsp_hi_prompt = 'Non-breaking: is a high space? '
         nbsp_units_prompt = 'How many units (default: 9)? '
         nbsp_symbol_prompt = ('Non-breaking space symbol in text file? '
                               '(default: "~") ? ')
         quad_symbol_prompt = ('Em-quad symbol in text file? '
-                              '(default: "[TAB]") ? ')
+                              '(default: "\\t") ? ')
         # Choose spaces
         spaces = {}
         # Variable space (justified) - minimum units
         # Ask if low or high and save the choice
-        variable_space = ui.simple_menu(var_prompt, {'L': ' ', 'H': '_'})
-        spaces['var_space_char'] = variable_space
+        variable_space = yn(var_hi_prompt)
+        spaces['var']['high'] = variable_space
         # Ask for minimum number of units of given set for the variable space
-        var_space_min_units = ui.enter_data_spec_type_or_blank(
-            var_units_prompt, int) or 4
-        spaces['var_space_min_units'] = var_space_min_units
+        spaces['var']['units'] = enter_type(var_units_prompt, int) or 4
         # Variable space code will be determined during justification
         # Don't do it now yet - we don't know the wedge positions
-        spaces['var_space_code'] = 'var_space'
+        spaces['var']['code'] = 'GS2'
         # Ask for the symbol representing the space in text
-        var_symbol = ui.enter_data_or_blank(var_symbol_prompt) or ' '
-        spaces['var_space_symbol'] = var_symbol
+        spaces['var']['symbol'] = enter(var_symbol_prompt) or ' '
         # Fixed space (allows line-breaking)
         # Ask if low or high and save the choice
-        fixed_space = ui.simple_menu(fixed_prompt, {'L': ' ', 'H': '_'})
+        spaces['fixed']['high'] = yn(fixed_hi_prompt)
         # Ask for unit-width of this space
-        fixed_space_units = ui.enter_data_spec_type_or_blank(
-            fixed_units_prompt, int) or 9
-        spaces['fixed_space_units'] = fixed_space_units
+        spaces['fixed']['units'] = enter_type(fixed_units_prompt, int) or 9
         # Determine fixed space code
-        spaces['fixed_space_code'] = self._get_space_code(fixed_space,
-                                                          fixed_space_units)
+        spaces['fixed']['code'] = get_space_code(spaces['fixed']['high'],
+                                                 spaces['fixed']['units'])
         # Ask for the symbol representing the space in text
-        fixed_symbol = ui.enter_data_or_blank(fixed_symbol_prompt) or '_'
-        spaces['fixed_space_symbol'] = fixed_symbol
+        spaces['fixed']['symbol'] = enter(fixed_symbol_prompt) or '_'
         # Non-breaking space
         # Ask if low or high and save the choice
-        nb_space = ui.simple_menu(nbsp_prompt, {'L': ' ', 'H': '_'})
+        spaces['nb']['high'] = yn(nbsp_hi_prompt)
         # Ask for unit-width of this space
-        nb_space_units = ui.enter_data_spec_type_or_blank(
-            nbsp_units_prompt, int) or 9
-        spaces['nb_space_units'] = nb_space_units
+        spaces['nb']['units'] = enter_type(nbsp_units_prompt, int) or 9
         # Determine non-breaking space code
-        spaces['nb_space_code'] = self._get_space_code(nb_space,
-                                                       nb_space_units)
+        spaces['nb']['code'] = get_space_code(spaces['nb']['high'],
+                                              spaces['nb']['units'])
         # Ask for the symbol representing the space in text
-        nbsp_symbol = ui.enter_data_or_blank(nbsp_symbol_prompt) or '~'
-        spaces['nb_space_symbol'] = nbsp_symbol
+        spaces['nb']['symbol'] = enter(nbsp_symbol_prompt) or '~'
+        # Set up the quad code arbitrarily
+        spaces['quad']['code'] = 'O15'
+        spaces['quad']['high'] = False
+        spaces['quad']['units'] = 18
         # Em quad symbol choice
-        quad_symbol = ui.enter_data_or_blank(quad_symbol_prompt) or '\t'
-        spaces['quad_symbol'] = quad_symbol
+        spaces['quad']['symbol'] = enter(quad_symbol_prompt) or '\t'
         # Finalize setup
         self.spaces = spaces
 
@@ -375,22 +365,22 @@ class Typesetter(object):
             pass
         # Detect any spaces and quads
         # Variable space (typically GS2, width adjusted, but minimum 4 units):
-        if char == self.spaces['var_space_symbol']:
+        if char == self.spaces['var']['symbol']:
             self.line_buffer.append(('var_space', 0, 'Variable space'))
             self.current_line_var_spaces += 1
-            return self.spaces['var_space_min_units']
+            return self.spaces['var']['units']
         # Fixed space (typically G5, 9 units wide)
-        elif char == self.spaces['fixed_space_symbol']:
+        elif char == self.spaces['fixed']['symbol']:
             self.line_buffer.append(('fixed_space', 0, 'Fixed space'))
-            return self.spaces['fixed_space_units']
+            return self.spaces['fixed']['units']
         # Non-breaking space (typically G5, 9 units wide)
-        elif char == self.spaces['nb_space_symbol']:
+        elif char == self.spaces['nb']['symbol']:
             self.line_buffer.append(('nb_space', 0, 'Non-breaking space'))
-            return self.spaces['nb_space_units']
+            return self.spaces['nb']['units']
         # Em quad (typically O15, 18 units wide)
-        elif char == self.spaces['quad_symbol']:
+        elif char == self.spaces['quad']['symbol']:
             self.line_buffer.append(('quad', 0, 'Quad'))
-            return self.spaces['quad_units']
+            return self.spaces['quad']['units']
         # Space not recognized - so this is a character.
         # Get the matrix data: [char, style, column, row, units]
         # First try custom-defined characters (overrides)
@@ -599,20 +589,20 @@ class Typesetter(object):
         # Predict if the increment will exceed it or not
         ui.debug_info('Justifying line...')
         fill_spaces_number = 0
-        space_units = self.spaces['fixed_space_units']
+        space_units = self.spaces['fixed']['units']
         # Determine if we have to add any spaces (otherwise - skip the loop)
         result_length = self.current_units + mode * space_units
         # Start with no spaces
         fill_spaces = []
         while mode and result_length < self.unit_line_length:
             # Add units
-            self.current_units += mode * self.spaces['fixed_space_units']
+            self.current_units += mode * self.spaces['fixed']['units']
             # Add a mode-dictated number of fill spaces
             fill_spaces_number += mode
             # Determine and add the space code to the line
-            space = list(self.spaces['fixed_space_code'])
+            space = list(self.spaces['fixed']['code'])
             space.append('Fixed space %i units wide'
-                         % self.spaces['fixed_space_units'])
+                         % self.spaces['fixed']['units'])
             space = tuple(space)
             # Add as many spaces as needed
             fill_spaces = [space for i in range(fill_spaces_number)]
@@ -674,18 +664,26 @@ class Typesetter(object):
     def apply_justification(self):
         """apply_justification:
 
-        Reads the buffer backwards and decides when to apply single
-        or double justification (for row). Outputs the ready sequence.
+        Reads the codes buffer backwards and checks if character needs
+        unit width correction (unit_difference != 0) - if so, calls
+        calculate_wedges to get the 0075 and 0005 wedge positions for the char.
+        If corrections are needed, applies single justification.
+        If "newline" combination is found, sets the wedges for a line.
+        Outputs the ready sequence.
         """
         line_wedge_positions = (3, 8)
         current_wedge_positions = (3, 8)
+        var_space_high = self.spaces['var']['high']
         while self.buffer:
             # Take the last combination off
             (combination, unit_difference, comment) = self.buffer.pop()
-            # New line - use double justification
+            # New line - use double justification;
+            # instead of unit difference between row and mat, we have
+            # unit width of a variable space
             if combination == 'newline':
                 # Variable space parameters: (var_space_code, wedge_positions)
-                var_space_params = self._get_space_code(justification)
+                var_space_params = self._get_space_code(unit_difference,
+                                                        var_space_high)
                 (var_space_code, line_wedge_positions) = var_space_params
                 current_wedge_positions = line_wedge_positions
                 self.double_justification(line_wedge_positions)
@@ -696,7 +694,7 @@ class Typesetter(object):
                     # Set the line justification
                     current_wedge_positions = line_wedge_positions
                     self.single_justification(current_wedge_positions)
-                self.output_buffer.append(self.spaces['var_space_code'] +
+                self.output_buffer.append(self.spaces['var']['code'] +
                                           ' // ' + comment)
             elif combination == 'fixed_space':
                 pass
