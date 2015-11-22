@@ -13,7 +13,9 @@ from rpi2caster import global_settings
 from rpi2caster import exceptions
 
 # Define some module constants
-CONFIG_PATH = global_settings.CONFIG_PATH or '/etc/rpi2caster.conf'
+config_paths = [global_settings.CONFIG_PATH,
+                '/etc/rpi2caster.conf',
+                '../data/rpi2caster.conf']
 TRUE_ALIASES = ['true', 'on', 'yes']
 FALSE_ALIASES = ['false', 'off', 'no']
 
@@ -24,13 +26,16 @@ def initialize_config():
     Looks for the configuration file, tests if it's readable.
     Throws an exception if errors occur.
     """
-    try:
-        with io.open(CONFIG_PATH, 'r'):
-            cfg = configparser.SafeConfigParser()
-            cfg.read(CONFIG_PATH)
-            return cfg
-    except (IOError, FileNotFoundError):
-        raise exceptions.ConfigFileUnavailable
+    for path in config_paths:
+        try:
+            with io.open(path, 'r'):
+                cfg = configparser.SafeConfigParser()
+                cfg.read(path)
+                return cfg
+        except (IOError, FileNotFoundError):
+            continue
+    # No config file specified can be accessed
+    raise exceptions.ConfigFileUnavailable
 
 
 def get_config(section_name, option_name):
