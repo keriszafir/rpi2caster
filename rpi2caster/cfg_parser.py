@@ -35,7 +35,8 @@ def initialize_config():
         except (IOError, FileNotFoundError):
             continue
     # No config file specified can be accessed
-    raise exceptions.ConfigFileUnavailable
+    raise exceptions.ConfigFileUnavailable('Cannot access config file: %s'
+                                           % path)
 
 
 def get_config(section_name, option_name):

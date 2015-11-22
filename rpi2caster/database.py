@@ -70,7 +70,8 @@ class Database(object):
                 pass
         else:
             # Fell off the end of the loop
-            raise exceptions.WrongConfiguration('Cannot connect to database!')
+            raise exceptions.WrongConfiguration('Cannot connect to '
+                                                'database file %s' % path)
 
     def __enter__(self):
         return self
