@@ -15,7 +15,7 @@ from rpi2caster import exceptions
 # Define some module constants
 config_paths = [global_settings.CONFIG_PATH,
                 '/etc/rpi2caster.conf',
-                '../data/rpi2caster.conf']
+                'data/rpi2caster.conf']
 TRUE_ALIASES = ['true', 'on', 'yes']
 FALSE_ALIASES = ['false', 'off', 'no']
 

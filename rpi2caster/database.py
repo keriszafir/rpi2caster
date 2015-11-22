@@ -58,7 +58,7 @@ class Database(object):
         database_paths = (global_settings.DATABASE_PATH,
                           '/var/rpi2caster/monotype.db',
                           '/var/rpi2caster/rpi2caster.db',
-                          '../data/rpi2caster.db')
+                          'data/rpi2caster.db')
         # Connect to the database
         for path in database_paths:
             try:
