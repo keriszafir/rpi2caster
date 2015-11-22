@@ -387,7 +387,7 @@ class Casting(object):
             except (IndexError, KeyError):
                 row_units = 5
             prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
-            while (units < 2 or units > 25):
+            while not 2 < units < 25:
                 units = (ui.enter_data_spec_type_or_blank(prompt, float) or
                          row_units)
             # Calculate the unit width difference and apply justification
@@ -559,8 +559,8 @@ class Casting(object):
                                    'to heat up the mould. Discard them.\n')
                         ui.display(message)
                         self.cast_from_matrix('O15', quads_number)
-                        for n in range(lines):
-                            ui.display('Now casting line %s' % str(n + 1))
+                        for num in range(lines):
+                            ui.display('Now casting line %s' % str(num + 1))
                             ui.display('\nFive quads before - discard them.\n')
                             self.cast_from_matrix('O15', end_galley_trip=False,
                                                   machine_check=False)
@@ -862,7 +862,7 @@ class Casting(object):
         # Translate the text to Monotype signals
         # Compose the text
         typesetter.compose()
-        self.ribbon_contents = typesetter.apply_justification()
+        self.ribbon_contents = typesetter.justify()
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
             self.preview_ribbon()

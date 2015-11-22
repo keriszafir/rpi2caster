@@ -66,6 +66,13 @@ class Typesetter(object):
         # Custom character definitions - e.g. if multiple alternatives
         # are found
         self.custom_characters = []
+        # Add comments to the ribbon?
+        self.comments = True
+        # Work with roman by default
+        self.main_style = 'roman'
+        self.current_style = 'roman'
+        # By default use automatic typesetting - less user control
+        self.manual_control = False
         # Combination buffer - empty now
         self.line_buffer = []
         self.buffer = []
@@ -116,57 +123,40 @@ class Typesetter(object):
         # This variable will prevent yielding a number of subsequent chars
         # after a ligature or command has been found and yielded.
         skip_steps = 0
-        for index, character in enumerate(input_text):
+        spaces_names = {self.spaces[name]['symbol']: name
+                        for name in self.spaces}
+        # Construct a list of characters that the diecase contains
+        command_codes = [code for code in self.typesetting_commands]
+        matrices = [mat[0] for mat in self.diecase_layout
+                    if self.current_style in mat[1]]
+        spaces = [space for space in spaces_names]
+        available_characters = command_codes + matrices + spaces
+        # Characters which will be skipped
+        ignored = ('\n',)
+        # What if char in text not present in diecase? Hmmm...
+        for index, _ in enumerate(input_text):
             if skip_steps:
                 # Skip it, decrease counter, yield nothing
                 skip_steps -= 1
                 continue
-            if character in (' ', '_', '~'):
-                # This is a space: variable, fixed, non-breaking
-                yield character
-                continue
-            elif character in ('\n',):
-                # Don't care about line breaks
-                continue
-            # Not space? Get the character and two next chars (triple),
-            # a character and one next char (double)
-            try:
-                # Get two following characters if we can
-                # Can cause problems at the end, so catch an exception
-                triple = input_text[index:index+3]
-            except IndexError:
-                triple = None
-            try:
-                # Try the above with one additional character
-                double = input_text[index:index+2]
-            except IndexError:
-                double = None
-            # Now we have a character + two next, character + one next,
-            # and a character
-            # If it is a command, yield it and move on
-            if triple in self.typesetting_commands:
-                skip_steps = 2
-                yield triple
-                continue
-            # Search for ligatures - 3-character first, if using
-            # 3-character ligatures was specified in setup...
-            if (self.ligatures == 3 and
-                    triple in (matrix[0] for matrix in self.diecase_layout
-                               if self.current_style in matrix[1])):
-                skip_steps = 2
-                yield triple
-                continue
-            # ...then look for 2-character ligatures...
-            elif (self.ligatures >= 2 and
-                  double in (matrix[0] for matrix in self.diecase_layout
-                             if self.current_style in matrix[1])):
-                skip_steps = 1
-                yield double
-                continue
-            # No ligatures found? Just yield a single character.
-            else:
-                yield character
-                continue
+            for i in range(self.ligatures, 0, -1):
+                # Start from longest, end with shortest
+                try:
+                    char = input_text[index:index+i]
+                    skip_steps = i - 1
+                    if char not in ignored and char in available_characters:
+                        # Try to look it up in spaces
+                        try:
+                            yield spaces_names[char]
+                        except KeyError:
+                            yield char
+                        # End on first (largest) combination found
+                        break
+                except IndexError:
+                    # Cannot generate a ligature (no more characters in input)
+                    # Iterate further
+                    pass
+            # Should add a custom character definition here...
 
     def _check_if_wedge_is_ok(self):
         """Checks if the wedge matches the chosen matrix case."""
@@ -271,10 +261,7 @@ class Typesetter(object):
         # Try matching a first available space
         for (space_unit_width, space_code) in spaces:
             unit_difference = desired_unit_width - space_unit_width
-            if not unit_difference:
-                # We get a space of desired width
-                return space_code
-            elif 0 < unit_difference < 10:
+            if 0 <= unit_difference < 10:
                 # Unit correction: add max 10
                 return space_code
         else:
@@ -287,19 +274,16 @@ class Typesetter(object):
         enter = ui.enter_data_or_blank
         enter_type = ui.enter_data_spec_type_or_blank
         get_space_code = self._get_space_code
-        yn = ui.yes_or_no
+        y_n = ui.yes_or_no
         # List available spaces
         # Matrix in layout is defined as follows:
         # (character, (style1, style2...)) : (column, row, unit_width)
-        var_hi_prompt = 'Variable: is a high space? '
         var_units_prompt = 'How many units min. (default: 4)? '
         var_symbol_prompt = ('Variable space symbol in text file? '
                              '(default: " ") ? ')
-        fixed_hi_prompt = 'Fixed: is a high space? '
         fixed_units_prompt = 'How many units (default: 9)? '
         fixed_symbol_prompt = ('Fixed space symbol in text file? '
                                '(default: "_") ? ')
-        nbsp_hi_prompt = 'Non-breaking: is a high space? '
         nbsp_units_prompt = 'How many units (default: 9)? '
         nbsp_symbol_prompt = ('Non-breaking space symbol in text file? '
                               '(default: "~") ? ')
@@ -309,7 +293,7 @@ class Typesetter(object):
         spaces = {}
         # Variable space (justified) - minimum units
         # Ask if low or high and save the choice
-        variable_space = yn(var_hi_prompt)
+        variable_space = y_n('Variable: is a high space? ')
         spaces['var']['high'] = variable_space
         # Ask for minimum number of units of given set for the variable space
         spaces['var']['units'] = enter_type(var_units_prompt, int) or 4
@@ -320,7 +304,7 @@ class Typesetter(object):
         spaces['var']['symbol'] = enter(var_symbol_prompt) or ' '
         # Fixed space (allows line-breaking)
         # Ask if low or high and save the choice
-        spaces['fixed']['high'] = yn(fixed_hi_prompt)
+        spaces['fixed']['high'] = y_n('Fixed: is a high space? ')
         # Ask for unit-width of this space
         spaces['fixed']['units'] = enter_type(fixed_units_prompt, int) or 9
         # Determine fixed space code
@@ -330,7 +314,7 @@ class Typesetter(object):
         spaces['fixed']['symbol'] = enter(fixed_symbol_prompt) or '_'
         # Non-breaking space
         # Ask if low or high and save the choice
-        spaces['nb']['high'] = yn(nbsp_hi_prompt)
+        spaces['nb']['high'] = y_n('Non-breaking: is a high space? ')
         # Ask for unit-width of this space
         spaces['nb']['units'] = enter_type(nbsp_units_prompt, int) or 9
         # Determine non-breaking space code
@@ -364,23 +348,14 @@ class Typesetter(object):
             # If not, then continue
             pass
         # Detect any spaces and quads
-        # Variable space (typically GS2, width adjusted, but minimum 4 units):
-        if char == self.spaces['var']['symbol']:
-            self.line_buffer.append(('var_space', 0, 'Variable space'))
-            self.current_line_var_spaces += 1
-            return self.spaces['var']['units']
-        # Fixed space (typically G5, 9 units wide)
-        elif char == self.spaces['fixed']['symbol']:
-            self.line_buffer.append(('fixed_space', 0, 'Fixed space'))
-            return self.spaces['fixed']['units']
-        # Non-breaking space (typically G5, 9 units wide)
-        elif char == self.spaces['nb']['symbol']:
-            self.line_buffer.append(('nb_space', 0, 'Non-breaking space'))
-            return self.spaces['nb']['units']
-        # Em quad (typically O15, 18 units wide)
-        elif char == self.spaces['quad']['symbol']:
-            self.line_buffer.append(('quad', 0, 'Quad'))
-            return self.spaces['quad']['units']
+        for name in self.spaces:
+            if char == self.spaces[name]['symbol']:
+                units = self.spaces[name]['units']
+                self.line_buffer.append((name, units,
+                                         self.spaces[name]['desc']))
+                if name == 'var':
+                    self.current_line_var_spaces += 1
+                return units
         # Space not recognized - so this is a character.
         # Get the matrix data: [char, style, column, row, units]
         # First try custom-defined characters (overrides)
@@ -416,56 +391,8 @@ class Typesetter(object):
         normal_unit_width = matrix[4]
         # Add or subtract current unit correction
         char_units = normal_unit_width + self.unit_correction
-        row_units = self.unit_arrangement[row - 1]
-        # Is the character width correction needed at all?
-        unit_difference = char_units - row_units
-        # Tell us what we are translating
-        ui.debug_info('Character:', char, 'style:', self.current_style)
-        ui.debug_info('Matrix at:', combination)
-        # Trying to access the 16th row with no unit shift activated
-        if row == 16 and not self.unit_shift:
-            self.convert_to_unit_shift()
-        # If we use unit shift, we can move the diecase one row further
-        # This would mean e.g. that when using the 5-series wedge, with UA:
-        # 5, 6, 7, 8, 9... - we can put the 8-unit character at A5
-        # (i.e. 9-unit position, normally), cast it with unit shift (add D
-        # to the column sequence) and have 8 units.
-        # Casting from column D will need us to replace the "D" signal,
-        # that we use normally, with combined "EF".
-        if self.unit_shift:
-            shifted_row = row - 1
-            column.replace('D', 'EF')
-            shifted_column = column + 'D'
-            shifted_row_units = self.unit_arrangement[shifted_row - 1]
-            # Check if unit shift is needed for this character (if it's on)
-            if unit_difference and char_units == shifted_row_units:
-                # No unit difference between char and row
-                # (that's why we used unit shift)
-                unit_difference = 0
-                # Info for user
-                ui.debug_info('Correcting the width by unit shift...')
-                ui.debug_info('Character units:', char_units,
-                              'row units:', row_units)
-                # Override previous combination
-                combination = shifted_column + str(shifted_row)
-            elif row == 16:
-                # Use unit shift for these even if you have to add units
-                unit_difference = char_units - shifted_row_units
-                ui.debug_info('Casting from row 16 - unit shift is necessary')
-                ui.debug_info('Character units:', char_units,
-                              'row units:', shifted_row_units)
-                combination = shifted_column + str(shifted_row)
-            # Combination after corrections
-            ui.debug_info('Combination with unit shift:', combination, '')
-        # Check if we need unit corrections at all...
-        if not unit_difference:
-            ui.debug_info('No unit corrections needed.')
-        elif unit_difference << 0:
-            ui.debug_info('Taking away %s units' % -1 * unit_difference)
-        elif unit_difference >> 0:
-            ui.debug_info('Adding %s units' % unit_difference)
         # Finally add the translated character to output buffer
-        self.line_buffer.append((combination, unit_difference, char))
+        self.line_buffer.append((combination, char_units, char))
         # Return the character's unit width
         return char_units
 
@@ -565,7 +492,7 @@ class Typesetter(object):
 
     def _start_new_line(self, var_space_units):
         """Starts a new line during typesetting"""
-        # Pass the unit width to the apply_justification later on
+        # Pass the unit width to the justify method later on
         self.line_buffer.append(('newline', var_space_units, 'New line'))
         self.buffer.extend(self.line_buffer)
         self.line_buffer = []
@@ -641,7 +568,7 @@ class Typesetter(object):
     def _align_both(self):
         """Aligns the previous chunk to both edges and ends the line."""
         ui.debug_info('Aligning line to both edges...')
-        (spaces, var_space_units) = self._justify_line(mode=0)
+        (_, var_space_units) = self._justify_line(mode=0)
         self._start_new_line(var_space_units)
 
     def convert_to_unit_shift(self):
@@ -661,8 +588,60 @@ class Typesetter(object):
             for (combination, _, _) in self.buffer:
                 combination.replace('D', 'EF')
 
-    def apply_justification(self):
-        """apply_justification:
+    def correct_units(self, combination, char_units, comment):
+        """Determines if unit correction is needed for a character"""
+        (column, row) = parse_combination(combination)
+        row_units = self.unit_arrangement[row - 1]
+        # Is the character width correction needed at all?
+        unit_difference = char_units - row_units
+        # Tell us what we are translating
+        ui.debug_info('Character:', comment, 'style:', self.current_style)
+        ui.debug_info('Matrix at:', combination)
+        # Trying to access the 16th row with no unit shift activated
+        if row == 16 and not self.unit_shift:
+            self.convert_to_unit_shift()
+        # If we use unit shift, we can move the diecase one row further
+        # This would mean e.g. that when using the 5-series wedge, with UA:
+        # 5, 6, 7, 8, 9... - we can put the 8-unit character at A5
+        # (i.e. 9-unit position, normally), cast it with unit shift (add D
+        # to the column sequence) and have 8 units.
+        # Casting from column D will need us to replace the "D" signal,
+        # that we use normally, with combined "EF".
+        if self.unit_shift:
+            shifted_row = row - 1
+            column.replace('D', 'EF')
+            shifted_column = column + 'D'
+            shifted_row_units = self.unit_arrangement[shifted_row - 1]
+            # Check if unit shift is needed for this character (if it's on)
+            if unit_difference and char_units == shifted_row_units:
+                # No unit difference between char and row
+                # (that's why we used unit shift)
+                unit_difference = 0
+                # Info for user
+                ui.debug_info('Correcting the width by unit shift...')
+                ui.debug_info('Character units:', char_units,
+                              'row units:', row_units)
+                # Override previous combination
+                combination = shifted_column + str(shifted_row)
+            elif row == 16:
+                # Use unit shift for these even if you have to add units
+                unit_difference = char_units - shifted_row_units
+                ui.debug_info('Casting from row 16 - unit shift is necessary')
+                ui.debug_info('Character units:', char_units,
+                              'row units:', shifted_row_units)
+                combination = shifted_column + str(shifted_row)
+            # Combination after corrections
+            ui.debug_info('Combination with unit shift:', combination, '')
+        # Check if we need unit corrections at all...
+        if not unit_difference:
+            ui.debug_info('No unit corrections needed.')
+        elif unit_difference << 0:
+            ui.debug_info('Taking away %s units' % -1 * unit_difference)
+        elif unit_difference >> 0:
+            ui.debug_info('Adding %s units' % unit_difference)
+
+    def justify(self):
+        """justify:
 
         Reads the codes buffer backwards and checks if character needs
         unit width correction (unit_difference != 0) - if so, calls
@@ -677,14 +656,16 @@ class Typesetter(object):
         while self.buffer:
             # Take the last combination off
             (combination, unit_difference, comment) = self.buffer.pop()
+            # If comments are enabled, and there is one, append it
+            # Else, append an empty string
+            comment = self.comments and comment and ' // ' + comment or ''
             # New line - use double justification;
             # instead of unit difference between row and mat, we have
             # unit width of a variable space
             if combination == 'newline':
                 # Variable space parameters: (var_space_code, wedge_positions)
-                var_space_params = self._get_space_code(unit_difference,
-                                                        var_space_high)
-                (var_space_code, line_wedge_positions) = var_space_params
+                var_space_code = self._get_space_code(unit_difference,
+                                                      var_space_high) + 'S'
                 current_wedge_positions = line_wedge_positions
                 self.double_justification(line_wedge_positions)
             # Justifying space - if wedges were set to different positions,
@@ -694,18 +675,17 @@ class Typesetter(object):
                     # Set the line justification
                     current_wedge_positions = line_wedge_positions
                     self.single_justification(current_wedge_positions)
-                self.output_buffer.append(self.spaces['var']['code'] +
-                                          ' // ' + comment)
+                self.output_buffer.append(self.spaces['var']['code'] + comment)
             elif combination == 'fixed_space':
                 pass
             elif not unit_difference:
                 # No corrections needed
-                self.output_buffer.append(combination + ' // ' + comment)
+                self.output_buffer.append(combination + comment)
             if wedge_positions != current_wedge_positions:
                 # Correction needed - determine if wedges are already set
                 self.single_justification(wedge_positions)
                 current_wedge_positions = wedge_positions
-                self.output_buffer.append(combination + ' // ' + comment)
+                self.output_buffer.append(combination + comment)
         return self.output_buffer
 
     def single_justification(self, wedge_positions):
@@ -800,3 +780,32 @@ def calculate_wedges(difference, set_width, brit_pica=False):
     pos_0005 = int(steps)
     # We now can return the wedge positions
     return (pos_0075, pos_0005)
+
+
+def parse_combination(combination):
+    """Simple function that gets the row and column from combination string."""
+    combination = str(combination).upper()
+    rows = []
+    # Look for column numbers from earliest to latest
+    column_numbers = ['NI', 'NL'] + list('ABCDEFGHIJKLMNO')
+    for num in column_numbers:
+        if num in combination:
+            column = num
+            break
+    else:
+        # No signal for column means we go all the way to "O" pin
+        column = 'O'
+    # Now look for a row number
+    # We can't look for them in ascending order though
+    for num in range(16, 0, -1):
+        if str(num) in combination:
+            combination = combination.replace(str(num), '')
+            rows.append(num)
+    # Get the minimum number
+    print(rows)
+    try:
+        row = min(rows)
+    except ValueError:
+        # This happens if no rows found - default to 15
+        row = 15
+    return {'column': column, 'row': row}
