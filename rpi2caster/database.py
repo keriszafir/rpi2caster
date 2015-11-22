@@ -55,12 +55,21 @@ class Database(object):
         Sets up config path (specified or default),
         sets up database path (specified, set up in config, then default),
         """
-        database_path = (global_settings.DATABASE_PATH or
-                         '/var/rpi2caster/monotype.db')
+        database_paths = (global_settings.DATABASE_PATH,
+                          '/var/rpi2caster/monotype.db',
+                          '/var/rpi2caster/rpi2caster.db',
+                          '../data/rpi2caster.db')
         # Connect to the database
-        try:
-            self.db_connection = sqlite3.connect(database_path)
-        except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        for path in database_paths:
+            try:
+                self.db_connection = sqlite3.connect(path)
+                # End on first successful find
+                break
+            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+                # Continue looping
+                pass
+        else:
+            # Fell off the end of the loop
             raise exceptions.WrongConfiguration('Cannot connect to database!')
 
     def __enter__(self):
