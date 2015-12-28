@@ -250,6 +250,153 @@ def yes_or_no(question):
     return simple_menu('%s [Y / N]: ' % question, {'Y': True, 'N': False})
 
 
+def display_diecase_layout(diecase_layout, unit_arrangement=None):
+    """display_diecase_layout:
+
+    Shows a layout for a given diecase ID.
+    Allows to specify a stopbar/wedge unit arrangement for this diecase,
+    or uses the typical S5 if not specified.
+    """
+    # Define subroutines
+    def get_styles(layout):
+        """Parses the diecase layout and gets available typeface styles.
+        Returns a list of them."""
+        try:
+            return list({style for mat in layout for style in mat[1] if style})
+        except TypeError:
+            return []
+            
+    def find_unused_matrices(layout):
+        """find_unused_matrices:
+
+        Flags matrices without characters and spaces as unused, preventing them
+        from being addressed during typesetting and casting.
+        """
+        # mat = [character, (style1, style2...), column, row, units]
+        unused_mats = []
+        row_numbers = sorted({mat[3] for mat in layout})
+        column_numbers = sorted({mat[2] for mat in layout})
+        # Sort them a bit
+        if 'NI' in column_numbers or 'NL' in column_numbers:
+            column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
+        else:
+            column_numbers = tuple([x for x in 'ABCDEFGHIJKLMNO'])
+        # Get all positions without a registered matrix
+        for row_number in row_numbers:
+            for column_number in column_numbers:
+                match = [mat for mat in layout if mat[3] == row_number and
+                         mat[2] == column_number]
+                if not match:
+                    record = ['', (), column_number, row_number, None]
+                    unused_mats.append(record)
+        return unused_mats
+
+    # Do we have a layout at all?
+    if not diecase_layout:
+        print('No layout to display!')
+        return False
+    # We have a layout, we can go further... get the wedge to display
+    # row unit values next to the layout table
+    s5_arrangement = (5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18)
+    # Safeguard against an empty unit arrangement: use S5 unit arrangement
+    unit_arrangement = unit_arrangement or s5_arrangement
+    unit_arrangement = dict(enumerate(unit_arrangement, start=1))
+    unit_arrangement[0] = ''
+    # Some unit arrangements are for 16-step HMN or KMN wedges
+    # Most of them is for 15-step wedges though
+    # Check if there is 16th step. If so - leave it. If not - add empty one.
+    try:
+        unit_arrangement[16] = unit_arrangement[16]
+    except KeyError:
+        unit_arrangement[16] = ''
+    # Build a list of all characters
+    # We must know all matrices/positions in the diecase, even if they're not
+    # defined in the original layout
+    all_mats = find_unused_matrices(diecase_layout)
+    for mat in diecase_layout:
+        # Mat is defined as (char, (style1, style2...), column, row, units)
+        character = mat[0]
+        styles = mat[1]
+        column = mat[2]
+        row = mat[3]
+        units = mat[4]
+        # Display different spaces as symbols
+        # Low space
+        if character == '_':
+            character = '▣'
+        # High space
+        elif character == ' ':
+            character = '□'
+        # Empty matrix = no character, unused
+        elif not character:
+            character = ' '
+        # Otherwise we have a character - modify how it's displayed
+        # based on style(s)
+        else:
+            try:
+                for style in styles:
+                    character = format_display(character, style)
+            except (IndexError, KeyError):
+                pass
+        # Add a record to processed matrices
+        all_mats.append((character, styles, column, row, units))
+    # Determine which rows have matrices
+    # This will skip unfilled rows (with blanks) at the end
+    # A list of integers
+    row_numbers = sorted({mat[3] for mat in all_mats})
+    # Build rows and columns to iterate over
+    column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
+    # Arrange matrices for displaying
+    diecase_arrangement = []
+    for row_number in row_numbers:
+        # Add only characters and styles, center chars to 5
+        row = [mat[0].center(4)
+               for column_number in column_numbers for mat in all_mats
+               if mat[2] == column_number and mat[3] == row_number]
+        diecase_arrangement.append(row)
+    # We can display it now
+    header = ['|' + 'Row' + '|']
+    header.extend([col.center(4) for col in column_numbers])
+    header.append('|' + 'Units' + '|')
+    header.append('Shift' + '|')
+    header = (''.join(header))
+    separator = '—' * len(header)
+    empty_row = ('|' + ' ' * 3 + '|' +
+                 ' ' * 4 * len(column_numbers) + '|' +
+                 ' ' * 5 + '|' + ' ' * 5 + '|')
+    print(separator, header, separator, empty_row, sep='\n')
+    # Get a unit-width for each row to display it at the end
+    for i, row in enumerate(diecase_arrangement, start=1):
+        try:
+            units = str(unit_arrangement[i])
+        except IndexError:
+            units = ' '
+        if i-2 < 0:
+            shifted_units = ' '
+        else:
+            try:
+                shifted_units = str(unit_arrangement[i-1])
+            except IndexError:
+                shifted_units = ''
+        # Now we are going to show the matrices
+        # First, display row number (and borders), then characters in row
+        data = ['|' + str(i).center(3) + '|'] + row
+        # At the end, unit-width and unit-width when using unit-shift
+        data.append('|' + units.center(5) + '|')
+        data.append(shifted_units.center(5) + '|')
+        data = ''.join(data)
+        # Finally, display the row and a newline
+        print(data, empty_row, sep='\n')
+    # Display header again
+    print(separator, header, separator, sep='\n', end='\n\n')
+    # Names of styles found in the diecase with formatting applied to them
+    displayed_styles = '\n'.join([format_display(style, style)
+                                  for style in get_styles(diecase_layout)])
+    # Explanation of symbols
+    print('Explanation:', '□ - low space', '▣ - high space',
+          displayed_styles, sep='\n', end='\n')
+
+
 def exit_program():
     """Exit program:
 

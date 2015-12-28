@@ -175,8 +175,8 @@ class Typesetter(object):
         """Asks whether to show the diecase layout. If so, prints it."""
         if ui.yes_or_no('Show the layout?'):
             ui.display('\n\n')
-            matrix_data.display_diecase_layout(self.diecase_layout,
-                                               self.unit_arrangement)
+            ui.display_diecase_layout(self.diecase_layout,
+                                      self.unit_arrangement)
             ui.display('\n\n')
 
     def _manual_or_automatic(self):

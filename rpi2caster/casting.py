@@ -943,7 +943,7 @@ class Casting(object):
         """Shows the diecase layout"""
         layout = self.diecase_layout
         unit_arrangement = self.unit_arrangement or None
-        matrix_data.display_diecase_layout(layout, unit_arrangement)
+        ui.display_diecase_layout(layout, unit_arrangement)
         ui.confirm('[Enter] to continue...')
 
     def data_menu(self):
