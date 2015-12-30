@@ -255,7 +255,7 @@ class Typesetter(object):
             column = space[2]
             row = space[3]
             if row < 16:
-                space_unit_width = self.unit_arrangement[row - 1]
+                space_unit_width = self.unit_arrangement[row]
                 space_code = column + str(row)
                 spaces.append((space_unit_width, space_code))
         # Try matching a first available space
@@ -591,7 +591,7 @@ class Typesetter(object):
     def correct_units(self, combination, char_units, comment):
         """Determines if unit correction is needed for a character"""
         (column, row) = parse_combination(combination)
-        row_units = self.unit_arrangement[row - 1]
+        row_units = self.unit_arrangement[row]
         # Is the character width correction needed at all?
         unit_difference = char_units - row_units
         # Tell us what we are translating
@@ -611,7 +611,7 @@ class Typesetter(object):
             shifted_row = row - 1
             column.replace('D', 'EF')
             shifted_column = column + 'D'
-            shifted_row_units = self.unit_arrangement[shifted_row - 1]
+            shifted_row_units = self.unit_arrangement[shifted_row]
             # Check if unit shift is needed for this character (if it's on)
             if unit_difference and char_units == shifted_row_units:
                 # No unit difference between char and row
