@@ -82,7 +82,7 @@ class Casting(object):
         self.diecase_layout = None
         # Unit arrangement: default is the S5 wedge
         self.wedge = None
-        self.unit_arrangement = wedge_data.WEDGES['5']
+        self.unit_arrangement = wedge_data.get_s5_arrangement()
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
@@ -383,7 +383,7 @@ class Casting(object):
                 column += ' D'
             # Determine the unit width for a row
             try:
-                row_units = unit_arrangement[row - 1]
+                row_units = unit_arrangement[row]
             except (IndexError, KeyError):
                 row_units = 5
             prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
@@ -494,7 +494,7 @@ class Casting(object):
                 column += ' D'
             # Determine the unit width for a row
             try:
-                row_units = unit_arrangement[row - 1]
+                row_units = unit_arrangement[row]
             except (IndexError, KeyError):
                 row_units = 6
             prompt = '\nHow many lines? (default: 1): '
@@ -941,9 +941,8 @@ class Casting(object):
 
     def show_diecase_layout(self):
         """Shows the diecase layout"""
-        layout = self.diecase_layout
-        unit_arrangement = self.unit_arrangement or None
-        ui.display_diecase_layout(layout, unit_arrangement)
+        ui.display_diecase_layout(self.diecase_layout,
+                                  self.unit_arrangement)
         ui.confirm('[Enter] to continue...')
 
     def data_menu(self):
@@ -968,7 +967,7 @@ class Casting(object):
             self.diecase = None
             self.diecase_id = None
             self.diecase_layout = None
-            self.unit_arrangement = None
+            self.unit_arrangement = wedge_data.get_s5_arrangement()
             self.wedge = None
             author, title, unit_shift, diecase_id = None, None, False, None
             if 'diecase' in metadata:
@@ -1012,7 +1011,7 @@ class Casting(object):
             self.diecase = None
             self.diecase_id = None
             self.diecase_layout = None
-            self.unit_arrangement = None
+            self.unit_arrangement = wedge_data.get_s5_arrangement()
             self.wedge = None
             ribbon_metadata = typesetting_data.get_ribbon_metadata(
                 ribbon_id)

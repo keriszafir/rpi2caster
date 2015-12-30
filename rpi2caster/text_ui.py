@@ -272,22 +272,22 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         Flags matrices without characters and spaces as unused, preventing them
         from being addressed during typesetting and casting.
         """
-        # mat = [character, (style1, style2...), column, row, units]
+        # mat = (character, (style1, style2...), column, row, units)
         unused_mats = []
+        columns_in_diecase = list({mat[2] for mat in layout})
         row_numbers = sorted({mat[3] for mat in layout})
-        column_numbers = sorted({mat[2] for mat in layout})
-        # Sort them a bit
-        if 'NI' in column_numbers or 'NL' in column_numbers:
-            column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
-        else:
-            column_numbers = tuple([x for x in 'ABCDEFGHIJKLMNO'])
+        # Check if it is a 15-column (older) or 17-column (newer) diecase
+        column_numbers = []
+        if 'NI' in columns_in_diecase or 'NL' in columns_in_diecase:
+            column_numbers = ['NI', 'NL']
+        column_numbers.extend([x for x in 'ABCDEFGHIJKLMNO'])
         # Get all positions without a registered matrix
         for row_number in row_numbers:
             for column_number in column_numbers:
                 match = [mat for mat in layout if mat[3] == row_number and
                          mat[2] == column_number]
                 if not match:
-                    record = ['', (), column_number, row_number, None]
+                    record = [' ', ('roman',), column_number, row_number, 0]
                     unused_mats.append(record)
         return unused_mats
 
@@ -297,29 +297,16 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         return False
     # We have a layout, we can go further... get the wedge to display
     # row unit values next to the layout table
-    s5_arrangement = (5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18)
+    s5_arr = ('', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
     # Safeguard against an empty unit arrangement: use S5 unit arrangement
-    unit_arrangement = unit_arrangement or s5_arrangement
-    unit_arrangement = dict(enumerate(unit_arrangement, start=1))
-    unit_arrangement[0] = ''
-    # Some unit arrangements are for 16-step HMN or KMN wedges
-    # Most of them is for 15-step wedges though
-    # Check if there is 16th step. If so - leave it. If not - add empty one.
-    try:
-        unit_arrangement[16] = unit_arrangement[16]
-    except KeyError:
-        unit_arrangement[16] = ''
+    unit_arrangement = unit_arrangement or s5_arr
     # Build a list of all characters
     # We must know all matrices/positions in the diecase, even if they're not
     # defined in the original layout
     all_mats = find_unused_matrices(diecase_layout)
     for mat in diecase_layout:
         # Mat is defined as (char, (style1, style2...), column, row, units)
-        character = mat[0]
-        styles = mat[1]
-        column = mat[2]
-        row = mat[3]
-        units = mat[4]
+        (character, styles, column, row, units) = mat
         # Display different spaces as symbols
         # Low space
         if character == '_':
@@ -367,26 +354,17 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     print(separator, header, separator, empty_row, sep='\n')
     # Get a unit-width for each row to display it at the end
     for i, row in enumerate(diecase_arrangement, start=1):
-        try:
-            units = str(unit_arrangement[i])
-        except IndexError:
-            units = ' '
-        if i-2 < 0:
-            shifted_units = ' '
-        else:
-            try:
-                shifted_units = str(unit_arrangement[i-1])
-            except IndexError:
-                shifted_units = ''
+        units = str(unit_arrangement[i] or '')
+        shifted_units = str(unit_arrangement[i-1] or '')
         # Now we are going to show the matrices
         # First, display row number (and borders), then characters in row
         data = ['|' + str(i).center(3) + '|'] + row
         # At the end, unit-width and unit-width when using unit-shift
         data.append('|' + units.center(5) + '|')
         data.append(shifted_units.center(5) + '|')
-        data = ''.join(data)
+        data_row = ''.join(data)
         # Finally, display the row and a newline
-        print(data, empty_row, sep='\n')
+        print(data_row, empty_row, sep='\n')
     # Display header again
     print(separator, header, separator, sep='\n', end='\n\n')
     # Names of styles found in the diecase with formatting applied to them
@@ -395,6 +373,38 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     # Explanation of symbols
     print('Explanation:', '□ - low space', '▣ - high space',
           displayed_styles, sep='\n', end='\n')
+
+
+def edit_diecase_layout(layout, unit_arrangement=None):
+    """edit_diecase_layout(layout, unit_arrangement):
+    
+    Edits a matrix case layout, row by row, matrix by matrix. Allows to enter
+    a position to be edited.
+    """
+    # If the layout is empty, we need to initialize it
+    if not layout:
+        prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
+        options = {'1': (15, 15), '2': (15, 17), '3': (16, 17)}
+        (rows_number, columns_number) = simple_menu(prompt, options)
+        # Generate column numbers
+        if columns_number == 17:
+            columns = ['NI', 'NL']
+        else:
+            columns = []
+        columns.extend([letter for letter in 'ABCDEFGHIJKLMNO'])
+        # Generate row numbers: 1...15 or 1...16
+        rows = [num + 1 for num in range(rows_number)]
+        # Map unit values to rows
+        s5_arr = ('', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
+        # Safeguard against an empty unit arrangement: use S5 unit arrangement
+        unit_arrangement = unit_arrangement or s5_arr
+        # Generate an empty layout with default row unit values
+        layout = [('', ('roman',), column, row, unit_arrangement[row])
+                  for row in rows for column in columns]
+        print(layout)
+        display_diecase_layout(layout, unit_arrangement)
+    # After editing, pass the layout to whatever called this function
+    return layout
 
 
 def exit_program():

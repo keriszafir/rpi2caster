@@ -10,36 +10,8 @@ Processes the data retrieved from database.
 from rpi2caster.global_settings import USER_INTERFACE as ui
 from rpi2caster import exceptions
 from rpi2caster import database
+from rpi2caster import wedge_arrangements
 DB = database.Database()
-
-# Wedge unit arrangement definitions
-# Thanks to John Cornelisse for those unit arrangements!
-WEDGES = {'5': (5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
-          '96': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18),
-          '111': (5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15),
-          '221': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 19),
-          '334': (5, 6, 7, 8, 9, 9, 10, 10, 11, 11, 13, 14, 15, 16, 18),
-          '344': (5, 6, 7, 9, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16),
-          '377': (5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
-          '409': (5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16),
-          '467': (5, 6, 7, 8, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18),
-          '486': (5, 7, 6, 8, 9, 11, 10, 10, 13, 12, 14, 15, 15, 18, 16),
-          '526': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18),
-          '536': (5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 17, 18),
-          '562': (5, 6, 7, 8, 9, 9, 9, 10, 11, 12, 13, 14, 15, 17, 18),
-          '607': (5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 18),
-          '611': (6, 6, 7, 9, 9, 10, 11, 11, 12, 12, 13, 14, 15, 16, 18),
-          '674': (5, 6, 7, 8, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18),
-          '724': (5, 6, 7, 8, 8, 9, 9, 10, 10, 11, 13, 14, 15, 16, 18),
-          '990': (5, 5, 6, 7, 8, 9, 9, 9, 9, 10, 10, 11, 13, 14, 18),
-          '1063': (5, 6, 8, 9, 9, 9, 9, 10, 12, 12, 13, 14, 15, 15, 18),
-          '1329': (4, 5, 7, 8, 9, 9, 9, 9, 10, 10, 11, 12, 12, 13, 15),
-          '1331': (4, 5, 7, 8, 8, 9, 9, 9, 9, 10, 11, 12, 12, 13, 15),
-          '1406': (4, 5, 6, 7, 8, 8, 9, 9, 9, 9, 10, 10, 11, 12, 13, 15),
-          '1676': (5, 6, 7, 8, 9, 9, 9, 9, 10, 11, 12, 14, 15, 18, 13),
-          '1881': (5, 6, 7, 8, 9, 9, 9, 12, 13, 10, 10, 14, 15, 11, 18),
-          '2006': (5, 6, 7, 8, 8, 9, 9, 10, 10, 13, 11, 16, 18, 14, 15),
-          'TPWR': (9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9)}
 
 
 def add_wedge():
@@ -157,7 +129,7 @@ def add_wedge():
         # (no need to enter the unit arrangement manually)
         try:
             # Look up the unit arrangement
-            unit_arrangement = WEDGES[wedge_series]
+            unit_arrangement = wedge_arrangements.table[wedge_series]
         except KeyError:
             # Unknown wedge
             unit_arrangement = None
@@ -275,24 +247,59 @@ def choose_wedge():
             continue
 
 
-def wedge_by_name_and_width(wedge_name, set_width):
+def wedge_by_name_and_width(wedge_series, set_width):
     """Wrapper for database function of the same name"""
-    return DB.wedge_by_name_and_width(wedge_name, set_width)
+    return DB.wedge_by_name_and_width(wedge_series, set_width)
 
 
 def get_unit_arrangement(wedge_series, set_width):
-    """Returns an unit arrangement for a given wedge."""
+    """get_unit_arrangement(wedge_series, set_width):
+    
+    Gets a unit arrangement for a given wedge.
+    Returns a 17-element tuple: (0, x, y...) so that unit values can be
+    addressed with row numbers (1, 2...16).
+    """
+    # We need to operate on lists here
+    unit_arrangement = []
     try:
-        wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
+        wedge = wedge_by_name_and_width(wedge_series, set_width)
+        # Wedge's 5th field is unit arrangement
         unit_arrangement = [int(i) for i in wedge[4]]
     except exceptions.NoMatchingData:
+        # Wedge is probably not registered in database
+        # Look for a unit arrangement in known UAs
         try:
-            unit_arrangement = WEDGES[wedge_series]
+            unit_arrangement = list(wedge_arrangements.table[wedge_series])
         except KeyError:
+            # Unit arrangement is not known - enter it manually
             prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
                       'separated by commas.\n')
             unit_arrangement = ui.enter_data(prompt).split(',')
-    return unit_arrangement
+        # Some unit arrangements are for 16-step HMN or KMN wedges
+        # Most of them is for 15-step wedges though
+        while True:
+            try:
+                # If no exception, do nothing
+                0 == unit_arrangement[16]
+                break
+            except IndexError:
+                # Keep adding the last value until there is 17 of them
+                unit_arrangement.append(unit_arrangement[-1])
+        # Now we have to prepend 0 as the first position (addressed by 0)
+        # This is necessary to address unit values with row numbers
+        unit_arrangement = [0] + unit_arrangement
+    # All done
+    return tuple(unit_arrangement)
+
+
+def get_s5_arrangement():
+    """Gets a unit arrangement for S5 wedge - used by default."""
+    s5_arrangement = [0] + [x for x in wedge_arrangements.table['5']]
+    try:
+        0 == s5_arrangement[16]
+    except IndexError:
+        s5_arrangement.append(s5_arrangement[-1])
+    return s5_arrangement
 
 
 def is_old_pica(wedge_series, set_width):

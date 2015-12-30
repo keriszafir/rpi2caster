@@ -95,6 +95,9 @@ class Database(object):
 
         unit_arrangement - a wedge's unit arrangement - list of unit values
         for each of the wedge's steps (i.e. diecase rows). Not null.
+        Unit arrangements are stored in database as 15- or 16-element array
+        (json-encoded), in simmilar format to those stored in
+        wedge_arrangements.
 
         An additional column, id, will be created and auto-incremented.
         This will be an unique identifier of a wedge.
@@ -147,15 +150,23 @@ class Database(object):
                 cursor.execute('SELECT * FROM wedges '
                                'WHERE wedge_number = ? AND set_width = ?',
                                [str(wedge_series), float(set_width)])
-                wedge = cursor.fetchone()
-                wedge = list(wedge)
-                # wedge[0] - ID
-                # wedge[1] - name
-                # wedge[2] - set width
-                # Change return value of brit_pica to boolean:
-                wedge[3] = bool(wedge[3])
+                (wedge_id, wedge_name, set_width, brit_pica,
+                 raw_unit_arrangement) = cursor.fetchone()
                 # Change return value of steps to list:
-                wedge[4] = json.loads(wedge[4])
+                unit_arrangement = json.loads(raw_unit_arrangement)
+                unit_arrangement = [0] + unit_arrangement
+                # Fill the wedge arrangement so that it has 16 steps
+                while True:
+                    try:
+                        # Check if 16th position is there (no exception)
+                        # If so - end here
+                        0 == unit_arrangement[16]
+                        break
+                    except IndexError:
+                        # No 16th position - add one more
+                        unit_arrangement.append(unit_arrangement[-1])
+                wedge = (wedge_id, wedge_name, set_width, bool(brit_pica),
+                         tuple(unit_arrangement))
                 return wedge
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
@@ -182,11 +193,23 @@ class Database(object):
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges WHERE id = ? ', [w_id])
-                ([w_id, wedge_series, set_width, raw_brit_pica,
+                ([w_id, wedge_series, set_width, brit_pica,
                  raw_unit_arrangement]) = cursor.fetchone()
                 # Transform the data on the fly
-                wedge = [w_id, wedge_series, set_width, bool(raw_brit_pica),
-                         json.loads(raw_unit_arrangement)]
+                unit_arrangement = json.loads(raw_unit_arrangement)
+                unit_arrangement = [0] + unit_arrangement
+                # Fill the wedge arrangement so that it has 16 steps
+                while True:
+                    try:
+                        # Check if 16th position is there (no exception)
+                        # If so - end here
+                        0 == unit_arrangement[16]
+                        break
+                    except IndexError:
+                        # No 16th position - add one more
+                        unit_arrangement.append(unit_arrangement[-1])
+                wedge = (w_id, wedge_series, set_width, bool(brit_pica),
+                         tuple(unit_arrangement))
                 return wedge
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
@@ -281,14 +304,14 @@ class Database(object):
         wedge_series - wedge series number, e.g. 5 (for stopbar S5 / wedge 5)
         layout - a list, constructed as following:
 
-        layout = [[character, [style1, style2...], column, row, units], [...]]
+        layout = ((character, (style1, style2...), column, row, units), (...))
         character = single character, double/triple character (for ligatures),
         ' ' for low space and '_' for high space
         style1, style2... - one or more styles a matrix belongs to,
         this will enable a matrix to be used with specified text styles only
         column - string (NI, NL, A...O)
         row_number - int (1...15 or 16)
-        unit_width - int (unit width of a character) or None if not specified
+        unit_width - int (unit width of a character) or 0 if not specified
         """
 
         # data - a list with diecase parameters to be written,
@@ -339,16 +362,15 @@ class Database(object):
                 layout = []
                 for record in raw_layout:
                     # Make a tuple of styles
-                    record[1] = tuple(record[1].split(','))
-                    # Convert the row number to int
-                    record[3] = int(record[3])
+                    (char, styles, column, row, units) = record
                     # Last field - unit width - was not mandatory
                     # Try to convert it to int
                     # If no unit width is specified, use None instead
                     try:
-                        record[4] = int(record[4])
+                        units = int(units)
                     except (IndexError, ValueError):
-                        record.append(None)
+                        record.append(0)
+                    record = (char, tuple(styles), column, int(row), units)
                     layout.append(record)
                     # Record is now:
                     # [character, (style1, style2...), column, row, units]

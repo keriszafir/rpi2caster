@@ -104,13 +104,17 @@ def show_diecase():
         # Choose diecase
         diecase_id = choose_diecase()
         # First, get diecase data
-        (diecase_id, _, _, wedge_series, set_width,
-         _, layout) = DB.diecase_by_id(diecase_id)
-        # Process metadata
-        # Get wedge unit arrangement
-        unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
-        ui.display_diecase_layout(layout, unit_arr)
-        ui.confirm('[Enter] to continue...')
+        try:
+            (diecase_id, _, _, wedge_series, set_width,
+             _, layout) = DB.diecase_by_id(diecase_id)
+            # Process metadata
+            # Get wedge unit arrangement
+            unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
+            ui.display_diecase_layout(layout, unit_arr)
+        except exceptions.NoMatchingData:
+            ui.display('Diecase layout not defined or cannot be displayed.')
+        # Choose another diecase
+        ui.confirm('[Enter] to return to diecase choice...')
 
 
 def add_diecase():
@@ -136,8 +140,10 @@ def add_diecase():
     if ui.yes_or_no('Add layout from file?'):
         layout = submit_layout_file()
     # Edit the layout
-    if ui.yes_or_no('Edit the layout file?'):
-        layout = ui.edit_diecase_layout(layout)
+    if ui.yes_or_no('Edit the layout now?'):
+        # Get unit arrangement for editing the wedge
+        unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
+        layout = ui.edit_diecase_layout(layout, unit_arr)
     # Display parameters before asking to commit
     info = []
     info.append('Diecase ID: %s' % diecase_id)
@@ -297,28 +303,30 @@ def submit_layout_file():
         # A record is a list with all diecase data:
         # [character, (style1, style2...), column, row, units]
         # Add a character - first item; if it's a space, don't change it
-        if record[0] == ' ':
-            processed_record = [record[0]]
-        else:
-            processed_record = [record[0].strip()]
-        # Parse the other items and strip the whitespace
-        for item in record[1:]:
-            item = str(item).strip()
-            processed_record.append(item)
-        # Get a string containing styles with no whitespace
-        styles = processed_record[1].split(',')
-        processed_styles = ','.join([style.strip() for style in styles])
-        processed_record[1] = processed_styles
-        # For code clarity
-        row = processed_record[2]
-        column = processed_record[3]
+        try:
+            # 5 fields in a record = unit value given
+            (char, styles, column, row, units) = record
+        except ValueError:
+            # 4 fields = unit value not given
+            (char, styles, column, row) = record
+            units = 0
+        if char != ' ':
+            char = char.strip()
+        styles = [style.strip() for style in styles.split(',')]
+        row = int(row.strip())
+        column = column.strip()
+        try:
+            units = int(units.strip())
+        except (ValueError, AttributeError):
+            units = 0
         # Print the duplicates
         if (row, column) in combinations:
             prompt = ('You already have a matrix at this position: %s %s'
                       % (row, column))
             ui.display(prompt)
-        # Add a list to the layout
-        layout.append(processed_record)
+        # Pack it again
+        record = (char, styles, column, row, units)
+        layout.append(record)
         # Add coordinates to the list
         if row and column:
             combinations.append((row, column))
