@@ -153,8 +153,11 @@ class Database(object):
                 (wedge_id, wedge_name, set_width, brit_pica,
                  raw_unit_arrangement) = cursor.fetchone()
                 # Change return value of steps to list:
-                unit_arrangement = json.loads(raw_unit_arrangement)
-                unit_arrangement = [0] + unit_arrangement
+                unit_arrangement = [int(x) for x in
+                                    json.loads(raw_unit_arrangement)]
+                # Add 0th element of 0
+                if unit_arrangement[0]:
+                    unit_arrangement = [0] + unit_arrangement
                 # Fill the wedge arrangement so that it has 16 steps
                 while True:
                     try:
@@ -196,8 +199,11 @@ class Database(object):
                 ([w_id, wedge_series, set_width, brit_pica,
                  raw_unit_arrangement]) = cursor.fetchone()
                 # Transform the data on the fly
-                unit_arrangement = json.loads(raw_unit_arrangement)
-                unit_arrangement = [0] + unit_arrangement
+                # Add 0th element of 0
+                unit_arrangement = [int(x) for x in
+                                    json.loads(raw_unit_arrangement)]
+                if unit_arrangement[0]:
+                    unit_arrangement = [0] + unit_arrangement
                 # Fill the wedge arrangement so that it has 16 steps
                 while True:
                     try:

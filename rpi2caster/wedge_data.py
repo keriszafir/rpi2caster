@@ -239,9 +239,11 @@ def choose_wedge():
         # Safeguards against entering a wrong number or non-numeric string
         try:
             # Return [series_number, set_width, brit_pica, unit_arrangement]
-            wedge = list(available_wedges[choice])
-            wedge[3] = bool(wedge[3])
-            return tuple(wedge)
+            (wedge_series, set_width, brit_pica,
+             unit_arrangement) = available_wedges[choice]
+            wedge = (wedge_series, set_width,
+                     bool(brit_pica), tuple(unit_arrangement))
+            return wedge
         except KeyError:
             ui.confirm('Wedge number is incorrect! [Enter] to continue...')
             continue
@@ -262,9 +264,8 @@ def get_unit_arrangement(wedge_series, set_width):
     # We need to operate on lists here
     unit_arrangement = []
     try:
-        wedge = wedge_by_name_and_width(wedge_series, set_width)
         # Wedge's 5th field is unit arrangement
-        unit_arrangement = [int(i) for i in wedge[4]]
+        unit_arrangement = wedge_by_name_and_width(wedge_series, set_width)[4]
     except exceptions.NoMatchingData:
         # Wedge is probably not registered in database
         # Look for a unit arrangement in known UAs
@@ -275,19 +276,21 @@ def get_unit_arrangement(wedge_series, set_width):
             prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
                       'separated by commas.\n')
             unit_arrangement = ui.enter_data(prompt).split(',')
+        # Now we have to prepend 0 as the first position (addressed by 0)
+        # This is necessary to address unit values with row numbers
+        # Some wedges may have 0 in the beginning, others may not
+        if unit_arrangement[0]:
+            unit_arrangement = [0] + unit_arrangement
         # Some unit arrangements are for 16-step HMN or KMN wedges
         # Most of them is for 15-step wedges though
+        # Fill until we have 0 + 16 values
         while True:
             try:
                 # If no exception, do nothing
                 0 == unit_arrangement[16]
                 break
             except IndexError:
-                # Keep adding the last value until there is 17 of them
                 unit_arrangement.append(unit_arrangement[-1])
-        # Now we have to prepend 0 as the first position (addressed by 0)
-        # This is necessary to address unit values with row numbers
-        unit_arrangement = [0] + unit_arrangement
     # All done
     return tuple(unit_arrangement)
 
@@ -295,10 +298,13 @@ def get_unit_arrangement(wedge_series, set_width):
 def get_s5_arrangement():
     """Gets a unit arrangement for S5 wedge - used by default."""
     s5_arrangement = [0] + [x for x in wedge_arrangements.table['5']]
-    try:
-        0 == s5_arrangement[16]
-    except IndexError:
-        s5_arrangement.append(s5_arrangement[-1])
+    # Fill until we have 16 values
+    while True:
+        try:
+            0 == s5_arrangement[16]
+            break
+        except IndexError:
+            s5_arrangement.append(s5_arrangement[-1])
     return s5_arrangement
 
 

@@ -395,11 +395,11 @@ def edit_diecase_layout(layout, unit_arrangement=None):
         # Generate row numbers: 1...15 or 1...16
         rows = [num + 1 for num in range(rows_number)]
         # Map unit values to rows
-        s5_arr = ('', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
+        s5_arr = (0, 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
         # Safeguard against an empty unit arrangement: use S5 unit arrangement
         unit_arrangement = unit_arrangement or s5_arr
         # Generate an empty layout with default row unit values
-        layout = [('', ('roman',), column, row, unit_arrangement[row])
+        layout = [['', ['roman'], column, row, unit_arrangement[row]]
                   for row in rows for column in columns]
         print(layout)
         display_diecase_layout(layout, unit_arrangement)

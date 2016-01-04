@@ -305,9 +305,12 @@ def submit_layout_file():
         # Add a character - first item; if it's a space, don't change it
         try:
             # 5 fields in a record = unit value given
+            # Unit value must be converted to int
             (char, styles, column, row, units) = record
-        except ValueError:
+            units = int(units.strip())
+        except (ValueError, AttributeError):
             # 4 fields = unit value not given
+            # (or unit value cannot be converted to int)
             (char, styles, column, row) = record
             units = 0
         if char != ' ':
@@ -315,10 +318,6 @@ def submit_layout_file():
         styles = [style.strip() for style in styles.split(',')]
         row = int(row.strip())
         column = column.strip()
-        try:
-            units = int(units.strip())
-        except (ValueError, AttributeError):
-            units = 0
         # Print the duplicates
         if (row, column) in combinations:
             prompt = ('You already have a matrix at this position: %s %s'
