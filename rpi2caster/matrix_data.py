@@ -279,27 +279,8 @@ def submit_layout_file():
     The format should be:
     "character";"style1,style2...";"column";"row";"unit_width"
     """
-    filename = ui.enter_input_filename()
-    if not filename:
-        return False
-    # Initialize the layout list
-    layout = []
-    all_records = []
-    # This will store the processed combinations - and whenever a duplicate
-    # is detected, the function will raise an exception
-    combinations = []
-    with io.open(filename, 'r') as layout_file:
-        input_data = csv.reader(layout_file, delimiter=';', quotechar='"')
-        all_records = [record for record in input_data]
-        displayed_lines = [' '.join(record) for record in all_records[:5]]
-        # Preview file
-        ui.display('File preview: displaying first 5 rows:\n')
-        ui.display('\n'.join(displayed_lines), end='\n\n')
-        # Ask if the first row is a header
-        if ui.yes_or_no('Is the 1st row a table header? '):
-            all_records.pop(0)
-    # Process the records
-    for record in all_records:
+    def process_record(record):
+        """Prepares the record found in file for adding to the layout"""
         # A record is a list with all diecase data:
         # [character, (style1, style2...), column, row, units]
         # Add a character - first item; if it's a space, don't change it
@@ -318,16 +299,43 @@ def submit_layout_file():
         styles = [style.strip() for style in styles.split(',')]
         row = int(row.strip())
         column = column.strip()
-        # Print the duplicates
-        if (row, column) in combinations:
-            prompt = ('You already have a matrix at this position: %s %s'
-                      % (row, column))
-            ui.display(prompt)
         # Pack it again
-        record = (char, styles, column, row, units)
-        layout.append(record)
-        # Add coordinates to the list
-        if row and column:
-            combinations.append((row, column))
+        return (char, styles, column, row, units)
+
+    # Give us a file or end here
+    filename = ui.enter_input_filename()
+    if not filename:
+        return False
+    # Initialize the records list
+    all_records = []
+    # This will store the processed combinations - and whenever a duplicate
+    # is detected, the function will raise an exception
+    with io.open(filename, 'r') as layout_file:
+        input_data = csv.reader(layout_file, delimiter=';', quotechar='"')
+        all_records = [record for record in input_data]
+        displayed_lines = [' '.join(record) for record in all_records[:5]]
+        # Preview file
+        ui.display('File preview: displaying first 5 rows:\n')
+        ui.display('\n'.join(displayed_lines), end='\n\n')
+        # Ask if the first row is a header - if so, away with it
+        if ui.yes_or_no('Is the 1st row a table header? '):
+            all_records.pop(0)
+    # Process the records
+    processed_records = [process_record(record) for record in all_records]
+    # Determine the diecase size based on row and column
+    # Get columns and rows lists
+    columns = {record[2] for record in processed_records}
+    rows = sorted({record[3] for record in processed_records})
+    # Check if 17 columns (15x17, 16x17), else 15 columns (old 15x15)
+    if 'NI' in columns or 'NL' in columns or max(rows) == 16:
+        columns = ['NI', 'NL']
+    else:
+        columns = []
+    columns.extend([x for x in 'ABCDEFGHIJKLMNO'])
     # We now have completed uploading a layout and making a list out of it
+    layout = [record for row in rows for col in columns
+              for record in processed_records
+              if record[2] == col and record[3] == row]
+    # Show the uploaded layout
+    ui.display_diecase_layout(layout)
     return layout

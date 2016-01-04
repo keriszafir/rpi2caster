@@ -265,7 +265,7 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
             return list({style for mat in layout for style in mat[1] if style})
         except TypeError:
             return []
-            
+
     def find_unused_matrices(layout):
         """find_unused_matrices:
 
@@ -377,7 +377,7 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
 
 def edit_diecase_layout(layout, unit_arrangement=None):
     """edit_diecase_layout(layout, unit_arrangement):
-    
+
     Edits a matrix case layout, row by row, matrix by matrix. Allows to enter
     a position to be edited.
     """
@@ -401,7 +401,6 @@ def edit_diecase_layout(layout, unit_arrangement=None):
         # Generate an empty layout with default row unit values
         layout = [['', ['roman'], column, row, unit_arrangement[row]]
                   for row in rows for column in columns]
-        print(layout)
         display_diecase_layout(layout, unit_arrangement)
     # After editing, pass the layout to whatever called this function
     return layout
