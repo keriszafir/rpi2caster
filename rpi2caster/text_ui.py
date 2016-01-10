@@ -391,10 +391,12 @@ def edit_diecase_layout(layout, unit_arrangement=None):
 
     def display_matrix_details(mat):
         """Displays details for a given mat"""
-        (char, styles, _, _, units) = mat
+        (char, styles, column, row, units) = mat
+        print('\nDetails for matrix at %s%s:' % (column, row))
         print('Character: %s' % char)
         print('Styles: %s' % ', '.join([style for style in styles]))
         print('Unit width: %s' % units)
+        print()
 
     def change_parameters(mat):
         """Edits a single mat in the diecase. Returns matrix description."""
@@ -403,7 +405,7 @@ def edit_diecase_layout(layout, unit_arrangement=None):
         print('Enter character: " " for low space (typical), "_" for '
               'high space (less common), leave empty to exit...')
         char = (enter_data_spec_type_or_blank('Character?: ', str) or
-                exceptions.menu_level_up)
+                exceptions.menu_level_up())
         available_styles = {'r': 'roman', 'b': 'bold',
                             'i': 'italic', 's': 'smallcaps',
                             'l': 'subscript', 'u': 'superscript'}
@@ -433,22 +435,25 @@ def edit_diecase_layout(layout, unit_arrangement=None):
 
     def edit_matrix(mat):
         """Displays a matrix layout, asks for confirmation, edits the mat"""
-        prompt = 'Edit this matrix: [Y]es / [N]o / [F]inish editing?'
-        options = {'Y': True, 'N': False, 'F': exceptions.menu_level_up()}
+        prompt = 'Edit this matrix: [Y]es / [N]o / [F]inish editing? '
+        options = {'Y': True, 'N': False, 'F': 'exit'}
         # Display, ask, edit, save - or do nothing
-        try:
-            display_matrix_details(mat)
-            if simple_menu(prompt, options):
+        display_matrix_details(mat)
+        decision = simple_menu(prompt, options)
+        if decision == 'exit':
+            exceptions.menu_level_up()
+        elif decision:
+            # Edit the mat
+            try:
                 mat = change_parameters(mat)
                 save_matrix(mat)
-        except exceptions.MenuLevelUp:
-            # Next matrix
-            pass
+            except exceptions.MenuLevelUp:
+                pass
 
     def single_mode():
         """Allows to specify a cell by its coordinates and edit it."""
         column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
-        col_prompt = 'Column [NI, NL, A...O or leave empty to exit]? :'
+        col_prompt = 'Column [NI, NL, A...O] or [Enter] to exit]? :'
         while True:
             try:
                 column = ''
@@ -465,8 +470,11 @@ def edit_diecase_layout(layout, unit_arrangement=None):
 
     def rows_mode():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
-        for mat in layout:
-            edit_matrix(mat)
+        try:
+            for mat in layout:
+                edit_matrix(mat)
+        except exceptions.MenuLevelUp:
+            pass
 
     def columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
@@ -494,7 +502,7 @@ def edit_diecase_layout(layout, unit_arrangement=None):
     print('\nCurrent diecase layout:\n')
     display_diecase_layout(layout, unit_arrangement)
     prompt = ('Choose edit mode: [R]ow by row, [C]olumn by column, '
-              '[S]ingle cell by coordinates - or [Enter] to quit')
+              '[S]ingle cell by coordinates - or [Enter] to quit: ')
     options = {'R': rows_mode,
                'S': single_mode,
                'C': columns_mode,

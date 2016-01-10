@@ -183,10 +183,14 @@ def edit_diecase():
         if not layout and ui.yes_or_no("Add layout from file?"):
             layout = submit_layout_file()
         # Edit the layout?
-        layout = ui.edit_diecase_layout(layout)
+        old_layout = layout[:]
+        new_layout = ui.edit_diecase_layout(layout)
+        # Check if any changes were made - if not, skip the rest
+        if new_layout == old_layout:
+            continue
         # Ask for confirmation
         ans = ui.yes_or_no('Commit to the database?')
-        if ans and DB.update_diecase_layout(diecase_id, layout):
+        if ans and DB.update_diecase_layout(diecase_id, new_layout):
             ui.display('Matrix case layout updated successfully.')
 
 
