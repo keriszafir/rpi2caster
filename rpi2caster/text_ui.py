@@ -133,11 +133,14 @@ def enter_data_spec_type_or_blank(prompt, datatype):
 
     Enter a value or leave blank, try to convert to the specified datatype
     """
-    value = input(prompt)
-    try:
-        return datatype(value)
-    except ValueError:
-        return value
+    while True:
+        value = input(prompt)
+        if not value:
+            return value
+        try:
+            return datatype(value)
+        except ValueError:
+            print('Incorrect value or data type!')
 
 
 def _format_display(character, style):
@@ -225,8 +228,8 @@ def simple_menu(message, options):
     A simple menu where user is asked what to do.
     Wrong choice points back to the menu.
 
-    Message: string displayed on screen;
-    options: a list or tuple of strings - options.
+    Message: prompt - string displayed on screen;
+    options: a dict {ans1:opt1, ans2:opt2...}.
     """
     ans = ''
     while True:
@@ -381,6 +384,93 @@ def edit_diecase_layout(layout, unit_arrangement=None):
     Edits a matrix case layout, row by row, matrix by matrix. Allows to enter
     a position to be edited.
     """
+    def get_matrix(column, row):
+        """Gets matrix data for given coordinates."""
+        mat = [m for m in layout if column == m[2] and row == m[3]][0]
+        return mat
+
+    def display_matrix_details(mat):
+        """Displays details for a given mat"""
+        (char, styles, _, _, units) = mat
+        print('Character: %s' % char)
+        print('Styles: %s' % ', '.join([style for style in styles]))
+        print('Unit width: %s' % units)
+
+    def change_parameters(mat):
+        """Edits a single mat in the diecase. Returns matrix description."""
+        (char, styles, column, row, units) = mat
+        # Edit it?
+        print('Enter character: " " for low space (typical), "_" for '
+              'high space (less common), leave empty to exit...')
+        char = (enter_data_spec_type_or_blank('Character?: ', str) or
+                exceptions.menu_level_up)
+        available_styles = {'r': 'roman', 'b': 'bold',
+                            'i': 'italic', 's': 'smallcaps',
+                            'l': 'subscript', 'u': 'superscript'}
+        print('Assign all text styles this matrix will be used for. '
+              'More than one style is OK - e.g. roman and small caps.\n'
+              'Available styles: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
+              '[l]ower index (a.k.a. subscript, inferior), '
+              '[u]pper index (a.k.a. superscript, superior).\n'
+              'Leave blank for roman only.')
+        styles = enter_data_spec_type_or_blank('Styles?: ', str) or 'r'
+        styles = [available_styles[char] for char in styles
+                  if char in available_styles]
+        print('How many units for this character? '
+              'Leave blank for normal wedge step value')
+        units = enter_data_spec_type_or_blank('Units?: ', int) or 0
+        # Matrix is defined, return the data
+        return [char, styles, column, row, units]
+
+    def save_matrix(mat):
+        """Updates the diecase layout with the new matrix data"""
+        (_, _, column, row, _) = mat
+        # Get current matrix data
+        old_mat = get_matrix(column, row)
+        mat_id = layout.index(old_mat)
+        if yes_or_no('Save the matrix in layout?'):
+            layout[mat_id] = mat
+
+    def edit_matrix(mat):
+        """Displays a matrix layout, asks for confirmation, edits the mat"""
+        prompt = 'Edit this matrix: [Y]es / [N]o / [F]inish editing?'
+        options = {'Y': True, 'N': False, 'F': exceptions.menu_level_up()}
+        # Display, ask, edit, save - or do nothing
+        try:
+            display_matrix_details(mat)
+            if simple_menu(prompt, options):
+                mat = change_parameters(mat)
+                save_matrix(mat)
+        except exceptions.MenuLevelUp:
+            # Next matrix
+            pass
+
+    def single_mode():
+        """Allows to specify a cell by its coordinates and edit it."""
+        column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
+        col_prompt = 'Column [NI, NL, A...O or leave empty to exit]? :'
+        while True:
+            try:
+                column = ''
+                row = 0
+                while column not in column_numbers:
+                    column = enter_data_spec_type_or_blank(col_prompt, str)
+                    column = column.upper() or exceptions.menu_level_up()
+                while row not in range(1, 17):
+                    row = enter_data_spec_type('Row (1 - 16)?: ', int)
+                mat = get_matrix(column, row)
+                edit_matrix(mat)
+            except exceptions.MenuLevelUp:
+                break
+
+    def rows_mode():
+        """Row-by-row editing - all cells in row 1, then 2 etc."""
+        for mat in layout:
+            edit_matrix(mat)
+
+    def columns_mode():
+        """Column-by-column editing - all cells in column NI, NL, A...O"""
+
     # If the layout is empty, we need to initialize it
     if not layout:
         prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
@@ -401,7 +491,19 @@ def edit_diecase_layout(layout, unit_arrangement=None):
         # Generate an empty layout with default row unit values
         layout = [['', ['roman'], column, row, unit_arrangement[row]]
                   for row in rows for column in columns]
-        display_diecase_layout(layout, unit_arrangement)
+    print('\nCurrent diecase layout:\n')
+    display_diecase_layout(layout, unit_arrangement)
+    prompt = ('Choose edit mode: [R]ow by row, [C]olumn by column, '
+              '[S]ingle cell by coordinates - or [Enter] to quit')
+    options = {'R': rows_mode,
+               'S': single_mode,
+               'C': columns_mode,
+               '': exceptions.menu_level_up}
+    while True:
+        try:
+            simple_menu(prompt, options)()
+        except exceptions.MenuLevelUp:
+            break
     # After editing, pass the layout to whatever called this function
     return layout
 
