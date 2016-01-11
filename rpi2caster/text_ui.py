@@ -450,7 +450,7 @@ def edit_diecase_layout(layout, unit_arrangement=None):
             except exceptions.MenuLevelUp:
                 pass
 
-    def single_mode():
+    def single_cell_mode():
         """Allows to specify a cell by its coordinates and edit it."""
         column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
         col_prompt = 'Column [NI, NL, A...O] or [Enter] to exit]? :'
@@ -468,7 +468,7 @@ def edit_diecase_layout(layout, unit_arrangement=None):
             except exceptions.MenuLevelUp:
                 break
 
-    def rows_mode():
+    def all_rows_mode():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
         try:
             for mat in layout:
@@ -476,8 +476,47 @@ def edit_diecase_layout(layout, unit_arrangement=None):
         except exceptions.MenuLevelUp:
             pass
 
-    def columns_mode():
+    def all_columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
+        column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
+        # Rearrange the layout so that it's read column by column
+        transposed_layout = [mat for col in column_numbers for mat in layout
+                             if mat[2] == col]
+        try:
+            for mat in transposed_layout:
+                edit_matrix(mat)
+        except exceptions.MenuLevelUp:
+            pass
+
+    def single_row_mode():
+        """Edits matrices found in a single row"""
+        while True:
+            try:
+                row = 0
+                while row not in range(1, 17):
+                    row = enter_data_spec_type_or_blank('Row (1 - 16)?: ', int)
+                    row = row or exceptions.menu_level_up()
+                workset = [mat for mat in layout if mat[3] == row]
+                for mat in workset:
+                    edit_matrix(mat)
+            except exceptions.MenuLevelUp:
+                break
+
+    def single_column_mode():
+        """Edits matrices found in a single column"""
+        column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
+        col_prompt = 'Column [NI, NL, A...O] or [Enter] to exit]? :'
+        while True:
+            try:
+                column = ''
+                while column not in column_numbers:
+                    column = enter_data_spec_type_or_blank(col_prompt, str)
+                    column = column.upper() or exceptions.menu_level_up()
+                workset = [mat for mat in layout if mat[2] == column]
+                for mat in workset:
+                    edit_matrix(mat)
+            except exceptions.MenuLevelUp:
+                break
 
     # If the layout is empty, we need to initialize it
     if not layout:
@@ -501,11 +540,18 @@ def edit_diecase_layout(layout, unit_arrangement=None):
                   for row in rows for column in columns]
     print('\nCurrent diecase layout:\n')
     display_diecase_layout(layout, unit_arrangement)
-    prompt = ('Choose edit mode: [R]ow by row, [C]olumn by column, '
-              '[S]ingle cell by coordinates - or [Enter] to quit: ')
-    options = {'R': rows_mode,
-               'S': single_mode,
-               'C': columns_mode,
+    prompt = ('\nChoose edit mode or press [Enter] to quit:\n'
+              'AR - all matrices row by row,\n'
+              'AC - all matrices column by column,\n'
+              'M - single matrix by coordinates,\n'
+              'R - all matrices in a specified row,\n'
+              'C - all matrices in a specified column.'
+              '\nYour choice:')
+    options = {'AR': all_rows_mode,
+               'AC': all_columns_mode,
+               'M': single_cell_mode,
+               'R': single_row_mode,
+               'C': single_column_mode,
                '': exceptions.menu_level_up}
     while True:
         try:
