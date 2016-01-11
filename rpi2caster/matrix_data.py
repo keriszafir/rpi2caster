@@ -25,23 +25,19 @@ def lookup_diecase(type_series, type_size):
     Searches for a diecase of given type series (e.g. 327) and size (e.g. 12),
     if several matches found - allows to choose one of them, returns data.
     """
-    matches = DB.diecase_by_series_and_size(type_series, type_size)
-    if len(matches) == 1:
+    data = DB.diecase_by_series_and_size(type_series, type_size)
+    if len(data) == 1:
         # One result found
-        return matches[0]
+        return data[0]
     else:
-        # More than one match - decide which one to use:
-        idents = [record[0] for record in matches]
-        # Associate diecases with IDs to select one later
-        assoc = dict(zip(idents, matches))
+        # More than one record - let user decide which one to use:
+        match = {record[0]: record for record in data}
         # Display a menu with diecases from 1 to the last:
-        options = [(i, k) for i, k in enumerate(matches, start=1)]
+        id_numbers = [(i, k) for i, k in enumerate(data, start=1)]
         header = 'Choose a diecase:'
-        choice = ui.menu(options, header)
-        # Choose one
-        chosen_id = options[choice]
-        # Return a list with chosen diecase's parameters:
-        return assoc[chosen_id]
+        choice = ui.menu(id_numbers, header)
+        # Choose a diecase and return a list of its parameters:
+        return match[id_numbers[choice]]
 
 
 def list_diecases():
@@ -72,49 +68,49 @@ def list_diecases():
     return results
 
 
-def choose_diecase():
-    """choose_diecase:
-
-    Lists diecases and lets the user choose one; returns the diecase name.
-    """
-    # Do it only if we have diecases (depends on list_diecases retval)
+def choose_diecase(diecase_id=None):
+    """Lists diecases and lets the user choose one; returns the record."""
+    # First try to get the diecase by ID:
+    if diecase_id:
+        try:
+            return DB.diecase_by_id(diecase_id)
+        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+            pass
+    # If this fails, choose manually
     while True:
         ui.clear()
         ui.display('Choose a matrix case:', end='\n\n')
         available_diecases = list_diecases()
         # Enter the diecase name
-        prompt = 'Number of a diecase? (leave blank to exit): '
+        prompt = 'Number of a diecase or [Enter] to exit: '
         choice = (ui.enter_data_or_blank(prompt) or
                   exceptions.return_to_menu())
         # Safeguards against entering a wrong number or non-numeric string
         try:
             diecase_id = available_diecases[choice]
-            return diecase_id
-        except KeyError:
+            return DB.diecase_by_id(diecase_id)
+        except (KeyError,
+                exceptions.NoMatchingData,
+                exceptions.DatabaseQueryError):
             ui.confirm('Diecase number is incorrect! [Enter] to continue...')
             continue
 
 
-def show_diecase():
+def show_diecase(diecase_id):
     """show_diecase:
 
     Wrapper function for menu: used for choosing and showing a diecase layout.
     """
-    while True:
-        # Choose diecase
-        diecase_id = choose_diecase()
-        # First, get diecase data
-        try:
-            (diecase_id, _, _, wedge_series, set_width,
-             _, layout) = DB.diecase_by_id(diecase_id)
-            # Process metadata
-            # Get wedge unit arrangement
-            unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
-            ui.display_diecase_layout(layout, unit_arr)
-        except exceptions.NoMatchingData:
-            ui.display('Diecase layout not defined or cannot be displayed.')
-        # Choose another diecase
-        ui.confirm('[Enter] to return to diecase choice...')
+    # First, get diecase data
+    try:
+        (_, _, _, wedge_series, set_width,
+         _, layout) = DB.diecase_by_id(diecase_id)
+        # Process metadata
+        # Get wedge unit arrangement
+        unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
+        ui.display_diecase_layout(layout, unit_arr)
+    except exceptions.NoMatchingData:
+        ui.display('Diecase layout not defined or cannot be displayed.')
 
 
 def add_diecase():
@@ -162,7 +158,7 @@ def add_diecase():
         ui.display('Data added successfully.')
 
 
-def edit_diecase():
+def edit_diecase(diecase_id):
     """edit_diecase:
 
     Chooses and edits a diecase layout.
@@ -175,63 +171,56 @@ def edit_diecase():
     can descend - and not where no hole is made, because trying to
     address such a cell can damage the caster!).
     If user wants to enter a space - decide if it is low or high.
-    At the end, confirm and commit."""
-    while True:
-        diecase_id = choose_diecase()
-        layout = get_layout(diecase_id)
-        # If layout is empty, user can submit it from file
-        if not layout and ui.yes_or_no("Add layout from file?"):
-            layout = submit_layout_file()
-        # Edit the layout?
-        old_layout = layout[:]
-        new_layout = ui.edit_diecase_layout(layout)
-        # Check if any changes were made - if not, skip the rest
-        if new_layout == old_layout:
-            continue
+    At the end, confirm and commit.
+    """
+    layout = get_layout(diecase_id)
+    # If layout is empty, user can submit it from file
+    if not layout and ui.yes_or_no("Add layout from file?"):
+        layout = submit_layout_file()
+    # Edit the layout?
+    old_layout = layout[:]
+    new_layout = ui.edit_diecase_layout(layout)
+    # Check if any changes were made - if not, skip the rest
+    if new_layout != old_layout:
         # Ask for confirmation
         ans = ui.yes_or_no('Commit to the database?')
         if ans and DB.update_diecase_layout(diecase_id, new_layout):
             ui.display('Matrix case layout updated successfully.')
 
 
-def upload_layout():
-    """upload_layout:
+def load_layout(diecase_id):
+    """load_layout:
 
     Allows user to upload a matrix case layout from a CSV file.
-    At the end, confirm and commit."""
-    while True:
-        diecase_id = choose_diecase()
-        # Load the layout from file? Ask only if no layout at input
-        layout = submit_layout_file()
-        # Ask for confirmation
-        ans = ui.yes_or_no('Commit to the database?')
-        if ans and DB.update_diecase_layout(diecase_id, layout):
-            ui.display('Matrix case layout uploaded successfully.')
+    At the end, confirm and commit.
+    """
+    # Load the layout from file? Ask only if no layout at input
+    layout = submit_layout_file()
+    # Ask for confirmation
+    ans = ui.yes_or_no('Commit to the database?')
+    if ans and DB.update_diecase_layout(diecase_id, layout):
+        ui.display('Matrix case layout uploaded successfully.')
 
 
-def clear_diecase():
+def clear_diecase(diecase_id):
     """clear_diecase:
 
     Clears the diecase layout, so it can be entered from scratch.
     You usually want to use this if you seriously mess something up.
     """
-    while True:
-        diecase_id = choose_diecase()
-        ans = ui.yes_or_no('Are you sure?')
-        if ans and DB.update_diecase_layout(diecase_id):
-            ui.display('Matrix case purged successfully - now empty.')
+    ans = ui.yes_or_no('Are you sure?')
+    if ans and DB.update_diecase_layout(diecase_id):
+        ui.display('Matrix case purged successfully - now empty.')
 
 
-def delete_diecase():
+def delete_diecase(diecase_id):
     """Used for deleting a diecase from database.
 
     Lists diecases, then allows user to choose ID.
     """
-    while True:
-        diecase_id = choose_diecase()
-        ans = ui.yes_or_no('Are you sure?')
-        if ans and DB.delete_diecase(diecase_id):
-            ui.display('Matrix case deleted successfully.')
+    ans = ui.yes_or_no('Are you sure?')
+    if ans and DB.delete_diecase(diecase_id):
+        ui.display('Matrix case deleted successfully.')
 
 
 def get_diecase_parameters(diecase_id):

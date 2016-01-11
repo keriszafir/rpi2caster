@@ -78,7 +78,6 @@ class Casting(object):
         self.line_aborted = 0
         # Diecase parameters
         self.diecase = None
-        self.diecase_id = None
         self.diecase_layout = None
         # Unit arrangement: default is the S5 wedge
         self.wedge = None
@@ -965,7 +964,6 @@ class Casting(object):
             self.ribbon_file = None
             self.ribbon_metadata = None
             self.diecase = None
-            self.diecase_id = None
             self.diecase_layout = None
             self.unit_arrangement = wedge_data.get_s5_arrangement()
             self.wedge = None
@@ -993,7 +991,6 @@ class Casting(object):
             self.ribbon_file = ribbon_file
             self.ribbon_contents = ribbon_contents
             self.ribbon_metadata = [title, author, diecase_id, unit_shift]
-            self.diecase_id = diecase_id
             # Get back to menu
             exceptions.menu_level_up()
 
@@ -1009,7 +1006,6 @@ class Casting(object):
             self.ribbon_file = None
             self.ribbon_metadata = None
             self.diecase = None
-            self.diecase_id = None
             self.diecase_layout = None
             self.unit_arrangement = wedge_data.get_s5_arrangement()
             self.wedge = None
@@ -1029,7 +1025,6 @@ class Casting(object):
             # Set up casting session attributes
             self.ribbon_contents = ribbon_contents
             self.ribbon_metadata = ribbon_metadata
-            self.diecase_id = diecase_id
             # Get back to menu
             exceptions.menu_level_up()
 
@@ -1057,16 +1052,14 @@ class Casting(object):
             self.wedge = None
             # Choose a diecase automatically (if fed to function)
             # or manually
-            self.diecase_id = diecase_id or matrix_data.choose_diecase()
-            # Get diecase parameters
-            self.diecase = matrix_data.get_diecase_parameters(self.diecase_id)
+            self.diecase = matrix_data.choose_diecase(diecase_id)
             # Often used parameters deserve their own object attributes
-            self.diecase_layout = self.diecase[5]
+            self.diecase_layout = self.diecase[6]
             # Get wedge parameters
             try:
                 # Look up the wedge in database automatically
                 self.wedge = wedge_data.wedge_by_name_and_width(
-                    self.diecase[2], self.diecase[3])
+                    self.diecase[3], self.diecase[4])
             except exceptions.NoMatchingData:
                 # Select it manually
                 try:

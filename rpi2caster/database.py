@@ -349,10 +349,7 @@ class Database(object):
                 raise exceptions.DatabaseQueryError
 
     def diecase_by_id(self, diecase_id):
-        """diecase_by_id:
-
-        Searches for diecase metadata, based on the unique diecase ID.
-        """
+        """Searches for diecase metadata, based on the unique diecase ID."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -513,7 +510,7 @@ class Database(object):
         # contents is a JSON-encoded list
         contents = json.dumps(contents)
         unit_shift = int(unit_shift)
-        data = [ribbon_id, title, author, diecase_id, unit_shiftcontents]
+        data = [ribbon_id, title, author, diecase_id, unit_shift, contents]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()

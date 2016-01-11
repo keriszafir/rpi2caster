@@ -88,12 +88,11 @@ class Typesetter(object):
         -manual mode (more control) or automatic mode (less control, faster)
         """
         # Choose a matrix case if ID not supplied
-        diecase_id = diecase_id or matrix_data.choose_diecase()
-        # Get matrix case parameters
-        diecase_parameters = matrix_data.get_diecase_parameters(diecase_id)
+        diecase = matrix_data.choose_diecase(diecase_id)
         # Parse the matrix case parameters
-        (type_series, self.type_size, self.wedge_series, self.set_width,
-         typeface_name, self.diecase_layout) = diecase_parameters
+        (diecase_id, type_series, self.type_size,
+         self.wedge_series, self.set_width,
+         typeface_name, self.diecase_layout) = diecase
         # Get unit arrangement for the wedge
         self.unit_arrangement = wedge_data.get_unit_arrangement(
             self.wedge_series, self.set_width)
