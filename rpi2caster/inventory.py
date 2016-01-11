@@ -15,6 +15,7 @@ def main_menu():
               '\n\nMain menu:\n')
     options = [('Exit program', exceptions.exit_program),
                ('Matrix manipulation...', matrix_menu),
+               ('Wedge manupulation...', wedge_menu),
                ('List matrix cases', matrix_data.list_diecases),
                ('Add a new, empty matrix case', matrix_data.add_diecase),
                ('List wedges', wedge_data.list_wedges),
@@ -63,6 +64,40 @@ def matrix_menu():
                'C': matrix_data.clear_diecase,
                'D': matrix_data.delete_diecase,
                'G': matrix_data.get_diecase_parameters,
+               '': another,
+               'M': menu}
+    while True:
+        diecase_id = matrix_data.choose_diecase()[0]
+        try:
+            while True:
+                ui.display('\nNow working on diecase %s' % diecase_id)
+                choice = ui.simple_menu(header, options)
+                ui.display('\n')
+                choice(diecase_id)
+                ui.confirm('[Enter] to continue...')
+        except exceptions.MenuLevelUp:
+            pass
+
+
+def wedge_menu():
+    """Wedge manipulation functions - listing, adding, deleting"""
+
+    def another(*args):
+        """Exits the diecase manipulation menu"""
+        exceptions.menu_level_up()
+
+    def menu(*args):
+        """Exits to main menu"""
+        exceptions.return_to_menu()
+
+    header = ('\nWedge manipulation menu:\n\n'
+              '[A]dd new wedge\n'
+              '[D]elete a wedge\n\n'
+              '[Enter] to choose another diecase\n'
+              '[M] to return to main menu\n\n'
+              'Your choice? : ')
+    options = {'A': wedge_data.add_diecase,
+               'D': wedge_data.delete_wedge,
                '': another,
                'M': menu}
     while True:

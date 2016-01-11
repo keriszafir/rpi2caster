@@ -932,11 +932,11 @@ class Casting(object):
             displayed_info.append('Type series: %s' % self.diecase[1])
             displayed_info.append('Type size: %s' % self.diecase[2])
         if self.wedge:
-            unit_arrangement = ', '.join([str(x) for x in self.wedge[4] if x])
+            unit_values = ' '.join([str(x) for x in self.wedge[4] if x])
             displayed_info.append('Wedge series: %s' % self.wedge[1])
             displayed_info.append('Set width: %s' % self.wedge[2])
             displayed_info.append('British pica wedge?: %s' % self.wedge[3])
-            displayed_info.append('Unit values: %s' % unit_arrangement)
+            displayed_info.append('Wedge unit arrangement: %s' % unit_values)
         return '\n'.join(displayed_info)
 
     def show_diecase_layout(self):
@@ -1059,8 +1059,8 @@ class Casting(object):
             # Get wedge parameters
             try:
                 # Look up the wedge in database automatically
-                self.wedge = wedge_data.wedge_by_name_and_width(
-                    self.diecase[3], self.diecase[4])
+                self.wedge = wedge_data.get_wedge(self.diecase[3],
+                                                  self.diecase[4])
             except exceptions.NoMatchingData:
                 # Select it manually
                 try:

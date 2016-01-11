@@ -113,15 +113,15 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS wedges ('
-                               'id INTEGER PRIMARY KEY ASC AUTOINCREMENT, '
-                               'wedge_number TEXT NOT NULL, '
+                               'wedge_series TEXT NOT NULL, '
                                'set_width REAL NOT NULL, '
                                'brit_pica INTEGER NOT NULL, '
-                               'unit_arrangement TEXT NOT NULL)')
+                               'unit_arrangement TEXT NOT NULL, '
+                               'PRIMARY KEY (wedge_series, set_width))')
                 # Then add an entry:
                 cursor.execute('INSERT INTO wedges ('
-                               'wedge_number,set_width,'
-                               'brit_pica,unit_arrangement'
+                               'wedge_series, set_width, '
+                               'brit_pica, unit_arrangement'
                                ') VALUES (?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
@@ -129,8 +129,8 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def wedge_by_name_and_width(self, wedge_series, set_width):
-        """wedge_by_name_and_width(wedge_series, set_width):
+    def get_wedge(self, wedge_series, set_width):
+        """get_wedge(wedge_series, set_width):
 
         Looks up a wedge with given ID and set width in database.
         Useful when coding a ribbon - wedge is obtained from diecase data.
@@ -148,9 +148,9 @@ class Database(object):
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges '
-                               'WHERE wedge_number = ? AND set_width = ?',
+                               'WHERE wedge_series = ? AND set_width = ?',
                                [str(wedge_series), float(set_width)])
-                (wedge_id, wedge_name, set_width, brit_pica,
+                (wedge_series, set_width, brit_pica,
                  raw_unit_arrangement) = cursor.fetchone()
                 # Change return value of steps to list:
                 unit_arrangement = [int(x) for x in
@@ -168,7 +168,7 @@ class Database(object):
                     except IndexError:
                         # No 16th position - add one more
                         unit_arrangement.append(unit_arrangement[-1])
-                wedge = (wedge_id, wedge_name, set_width, bool(brit_pica),
+                wedge = (wedge_series, set_width, bool(brit_pica),
                          tuple(unit_arrangement))
                 return wedge
             except (TypeError, ValueError, IndexError):
@@ -178,53 +178,7 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def wedge_by_id(self, w_id):
-        """wedge_by_id:
-
-        Gets parameters for a wedge with given ID.
-
-        If so, returns:
-        ID - unique, int (e.g. 0),
-        wedge_name - string (e.g. S5) - wedge name
-        set_width - float (e.g. 9.75) - set width,
-        brit_pica - bool - whether this is a British pica wedge or not,
-        steps - list of unit values for all wedge's steps.
-
-        Else, returns False.
-        """
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM wedges WHERE id = ? ', [w_id])
-                ([w_id, wedge_series, set_width, brit_pica,
-                 raw_unit_arrangement]) = cursor.fetchone()
-                # Transform the data on the fly
-                # Add 0th element of 0
-                unit_arrangement = [int(x) for x in
-                                    json.loads(raw_unit_arrangement)]
-                if unit_arrangement[0]:
-                    unit_arrangement = [0] + unit_arrangement
-                # Fill the wedge arrangement so that it has 16 steps
-                while True:
-                    try:
-                        # Check if 16th position is there (no exception)
-                        # If so - end here
-                        0 == unit_arrangement[16]
-                        break
-                    except IndexError:
-                        # No 16th position - add one more
-                        unit_arrangement.append(unit_arrangement[-1])
-                wedge = (w_id, wedge_series, set_width, bool(brit_pica),
-                         tuple(unit_arrangement))
-                return wedge
-            except (TypeError, ValueError, IndexError):
-                # No data or cannot process it
-                raise exceptions.NoMatchingData
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Database failed
-                raise exceptions.DatabaseQueryError
-
-    def delete_wedge(self, w_id):
+    def delete_wedge(self, wedge_series, set_width):
         """delete_wedge:
 
         Deletes a wedge with given unique ID from the database
@@ -236,12 +190,14 @@ class Database(object):
         """
         # Check if wedge is there (will raise an exception if not)
         # We don't care about the retval which is a list.
-        self.wedge_by_id(w_id)
+        self.get_wedge(wedge_series, set_width)
         # Okay, proceed:
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('DELETE FROM wedges WHERE id = ?', [w_id])
+                cursor.execute('DELETE FROM wedges '
+                               'WHERE wedge_series = ? AND set_width = ?',
+                               [str(wedge_series), float(set_width)])
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
@@ -259,16 +215,18 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM wedges')
                 # Check if we got any:
-                results = cursor.fetchall()
-                processed_results = []
-                if not results:
+                all_wedges = cursor.fetchall()
+                processed_wedges = []
+                if not all_wedges:
                     raise exceptions.NoMatchingData
-                for result in results:
-                    result = list(result)
-                    result[-1] = json.loads(result[-1])
-                    result[-2] = bool(result[-2])
-                    processed_results.append(result)
-                return processed_results
+                for record in all_wedges:
+                    record = [x for x in record]
+                    (wedge_series, set_width,
+                     brit_pica, unit_arrangement) = record
+                    record = (wedge_series, set_width, bool(brit_pica),
+                              json.loads(unit_arrangement))
+                    processed_wedges.append(record)
+                return processed_wedges
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError

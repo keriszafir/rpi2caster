@@ -19,8 +19,6 @@ def add_wedge():
 
     Used for adding wedges.
 
-    Can be called with or without arguments.
-
     wedge_name - string - series name for a wedge (e.g. S5, S111)
     set_width  - float - set width of a particular wedge (e.g. 9.75)
     brit_pica - boolean - whether the wedge is based on British pica
@@ -191,13 +189,14 @@ def delete_wedge():
                   exceptions.return_to_menu())
         # Safeguards against entering a wrong number or non-numeric string
         try:
-            wedge_id = available_wedges[choice][0]
+            (wedge_series, set_width, _, _) = available_wedges[choice]
         except KeyError:
             ui.display('Wedge number is incorrect!')
             continue
         # Ask for confirmation
-        if ui.yes_or_no('Are you sure?') and DB.delete_wedge(wedge_id):
-            ui.display('Wedge deleted successfully.')
+        if ui.yes_or_no('Are you sure?'):
+            if DB.delete_wedge(wedge_series, set_width):
+                ui.display('Wedge deleted successfully.')
 
 
 def list_wedges():
@@ -205,7 +204,7 @@ def list_wedges():
     data = DB.get_all_wedges()
     results = {}
     ui.display('\n' +
-               'ID'.ljust(5) +
+               'Pos.'.ljust(5) +
                'Series'.ljust(10) +
                'Set'.ljust(10) +
                'Br. pica?'.ljust(10) +
@@ -217,23 +216,20 @@ def list_wedges():
         results[index] = wedge
         # Display only wedge parameters and not ID
         number = [index.ljust(5)]
-        displayed_data = [str(field).ljust(10) for field in wedge[1:]]
+        displayed_data = [str(field).ljust(10) for field in wedge]
         ui.display(''.join(number + displayed_data))
     return results
 
 
 def choose_wedge():
-    """choose_wedge:
-
-    Lists wedges and lets the user choose one; returns the wedge ID.
-    """
+    """Lists wedges and lets the user choose one; returns the wedge."""
     # Do it only if we have diecases (depends on list_diecases retval)
     while True:
         ui.clear()
         ui.display('Choose a wedge:', end='\n\n')
         available_wedges = list_wedges()
         # Enter the diecase name
-        prompt = 'Number of a wedge? (leave blank to exit): '
+        prompt = 'Number of a wedge or [Enter] to exit: '
         choice = (ui.enter_data_or_blank(prompt) or
                   exceptions.return_to_menu())
         # Safeguards against entering a wrong number or non-numeric string
@@ -241,22 +237,21 @@ def choose_wedge():
             # Return [series_number, set_width, brit_pica, unit_arrangement]
             (wedge_series, set_width, brit_pica,
              unit_arrangement) = available_wedges[choice]
-            wedge = (wedge_series, set_width,
-                     bool(brit_pica), tuple(unit_arrangement))
-            return wedge
+            return (wedge_series, set_width,
+                    bool(brit_pica), tuple(unit_arrangement))
         except KeyError:
             ui.confirm('Wedge number is incorrect! [Enter] to continue...')
             continue
 
 
-def wedge_by_name_and_width(wedge_series, set_width):
+def get_wedge(wedge_series, set_width):
     """Wrapper for database function of the same name"""
-    return DB.wedge_by_name_and_width(wedge_series, set_width)
+    return DB.get_wedge(wedge_series, set_width)
 
 
 def get_unit_arrangement(wedge_series, set_width):
     """get_unit_arrangement(wedge_series, set_width):
-    
+
     Gets a unit arrangement for a given wedge.
     Returns a 17-element tuple: (0, x, y...) so that unit values can be
     addressed with row numbers (1, 2...16).
@@ -264,8 +259,8 @@ def get_unit_arrangement(wedge_series, set_width):
     # We need to operate on lists here
     unit_arrangement = []
     try:
-        # Wedge's 5th field is unit arrangement
-        unit_arrangement = wedge_by_name_and_width(wedge_series, set_width)[4]
+        # Wedge's 4th field is unit arrangement
+        unit_arrangement = get_wedge(wedge_series, set_width)[3]
     except exceptions.NoMatchingData:
         # Wedge is probably not registered in database
         # Look for a unit arrangement in known UAs
@@ -314,8 +309,8 @@ def is_old_pica(wedge_series, set_width):
     Checks whether this wedge is based on old British pica (.1667") or not.
     """
     try:
-        wedge = DB.wedge_by_name_and_width(wedge_series, set_width)
+        wedge = get_wedge(wedge_series, set_width)
         # British pica (1 or 0) is the fourth column
-        return bool(wedge[3])
+        return bool(wedge[2])
     except exceptions.NoMatchingData:
         return ui.yes_or_no('Using an old British pica (.1667") wedge?')
