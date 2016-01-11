@@ -75,9 +75,9 @@ def add_wedge():
         unit_arrangement = None
         while not wedge_name:
             # Ask for wedge name and set width as it is written on the wedge
-            prompt = ('Wedge name (leave blank to return to menu): ')
+            prompt = ('Wedge name or [Enter] to go back: ')
             wedge_name = (ui.enter_data_or_blank(prompt) or
-                          exceptions.return_to_menu())
+                          exceptions.menu_level_up())
         # For countries that use comma as decimal delimiter, convert to point:
             wedge_name = wedge_name.replace(',', '.').upper()
         if 'AK' in wedge_name:
@@ -173,30 +173,11 @@ def add_wedge():
             ui.display('Wedge added successfully.')
 
 
-def delete_wedge():
-    """Used for deleting a wedge from database.
-
-    Lists wedges, then allows user to choose ID.
-    """
-    ui.clear()
-    # Do it only if we have wedges (depends on list_wedges retval)
-    while True:
-        # Loop over or throw an exception if there are no diecases
-        available_wedges = list_wedges()
-        # Enter the diecase name
-        prompt = 'Number of a wedge to delete? (leave blank to exit): '
-        choice = (ui.enter_data_or_blank(prompt) or
-                  exceptions.return_to_menu())
-        # Safeguards against entering a wrong number or non-numeric string
-        try:
-            (wedge_series, set_width, _, _) = available_wedges[choice]
-        except KeyError:
-            ui.display('Wedge number is incorrect!')
-            continue
-        # Ask for confirmation
-        if ui.yes_or_no('Are you sure?'):
-            if DB.delete_wedge(wedge_series, set_width):
-                ui.display('Wedge deleted successfully.')
+def delete_wedge(wedge_series, set_width):
+    """Used for deleting a wedge from database."""
+    if ui.yes_or_no('Are you sure?'):
+        if DB.delete_wedge(wedge_series, set_width):
+            ui.display('Wedge deleted successfully.')
 
 
 def list_wedges():
