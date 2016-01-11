@@ -927,15 +927,16 @@ class Casting(object):
             displayed_info.append('Ribbon title: %s' % self.ribbon_metadata[0])
             displayed_info.append('Author: %s' % self.ribbon_metadata[1])
         if self.diecase:
-            displayed_info.append('Diecase: %s' % self.diecase_id)
-            displayed_info.append('Typeface: %s' % self.diecase[4])
-            displayed_info.append('Type series: %s' % self.diecase[0])
-            displayed_info.append('Type size: %s' % self.diecase[1])
+            displayed_info.append('Diecase: %s' % self.diecase[0])
+            displayed_info.append('Typeface: %s' % self.diecase[5])
+            displayed_info.append('Type series: %s' % self.diecase[1])
+            displayed_info.append('Type size: %s' % self.diecase[2])
         if self.wedge:
+            unit_arrangement = ', '.join([str(x) for x in self.wedge[4] if x])
             displayed_info.append('Wedge series: %s' % self.wedge[1])
             displayed_info.append('Set width: %s' % self.wedge[2])
             displayed_info.append('British pica wedge?: %s' % self.wedge[3])
-            displayed_info.append('Unit values: %s' % self.wedge[4])
+            displayed_info.append('Unit values: %s' % unit_arrangement)
         return '\n'.join(displayed_info)
 
     def show_diecase_layout(self):
