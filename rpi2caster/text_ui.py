@@ -333,17 +333,20 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     # Determine which rows have matrices
     # This will skip unfilled rows (with blanks) at the end
     # A list of integers
-    row_numbers = sorted({mat[3] for mat in all_mats})
+    cols_in_diecase = {mat[2] for mat in all_mats}
+    rows_in_diecase = {mat[3] for mat in all_mats}
     # Build rows and columns to iterate over
-    column_numbers = ('NI', 'NL') + tuple([x for x in 'ABCDEFGHIJKLMNO'])
+    column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
+    column_numbers = [x for x in column_numbers if x in cols_in_diecase]
+    row_numbers = [x for x in range(17) if x in rows_in_diecase]
     # Arrange matrices for displaying
-    diecase_arrangement = []
+    displayed_arrangement = []
     for row_number in row_numbers:
         # Add only characters and styles, center chars to 5
         row = [mat[0].center(4)
                for column_number in column_numbers for mat in all_mats
                if mat[2] == column_number and mat[3] == row_number]
-        diecase_arrangement.append(row)
+        displayed_arrangement.append(row)
     # We can display it now
     header = ['|' + 'Row' + '|']
     header.extend([col.center(4) for col in column_numbers])
@@ -356,7 +359,7 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
                  ' ' * 5 + '|' + ' ' * 5 + '|')
     print(separator, header, separator, empty_row, sep='\n')
     # Get a unit-width for each row to display it at the end
-    for i, row in enumerate(diecase_arrangement, start=1):
+    for i, row in enumerate(displayed_arrangement, start=1):
         units = str(unit_arrangement[i] or '')
         shifted_units = str(unit_arrangement[i-1] or '')
         # Now we are going to show the matrices

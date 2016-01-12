@@ -192,8 +192,17 @@ def load_layout(diecase_id):
     Allows user to upload a matrix case layout from a CSV file.
     At the end, confirm and commit.
     """
-    # Load the layout from file? Ask only if no layout at input
-    layout = submit_layout_file()
+    # Start with an empty layout
+    layout = generate_empty_layout()
+    # Load the layout from file
+    submitted_layout = submit_layout_file()
+    # Update the empty layout with characters read from file
+    # record = (char, styles, column, row, units)
+    for position in layout:
+        for record in submitted_layout:
+            if record[2] == position[2] and record[3] == position[3]:
+                layout[layout.index(position)] = record
+    # Other positions will be empty - like in a freshly generated null layout
     # Ask for confirmation
     ans = ui.yes_or_no('Commit to the database?')
     if ans and DB.update_diecase_layout(diecase_id, layout):
