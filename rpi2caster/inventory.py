@@ -35,7 +35,7 @@ def main_menu():
 def matrix_menu():
     """Matrix manipulation functions - creating, viewing, editing, deleting"""
 
-    def another(*args):
+    def back(*args):
         """Exits the diecase manipulation menu"""
         exceptions.menu_level_up()
 
@@ -51,8 +51,7 @@ def matrix_menu():
                   '[C]lear matrix case layout\n'
                   '[L]oad matrix case layout from file\n'
                   '[D]elete the matrix case\n\n'
-                  '[Enter] to choose another diecase\n'
-                  '[M] to return to main menu\n\n'
+                  '[Enter] to go back to matrix manipulation menu\n\n'
                   'Your choice? : ')
         options = {'S': matrix_data.show_diecase,
                    'L': matrix_data.load_layout,
@@ -60,45 +59,43 @@ def matrix_menu():
                    'C': matrix_data.clear_diecase,
                    'D': matrix_data.delete_diecase,
                    'G': matrix_data.get_diecase_parameters,
-                   '': another,
-                   'M': menu}
-        prompt = 'Number of a diecase or [Enter] to exit: '
+                   '': back}
         try:
             while True:
-                choice = (ui.enter_data_or_blank(prompt) or
-                          exceptions.return_to_menu())
-                # Safeguards against entering a wrong value
-                try:
-                    diecase_id = available_diecases[choice]
-                    break
-                except (KeyError,
-                        exceptions.NoMatchingData,
-                        exceptions.DatabaseQueryError):
-                    ui.display('Diecase number is incorrect!')
-            while True:
-                ui.display('\nNow working on diecase %s\n\n' % diecase_id)
+                ui.display('\n\nNow working on diecase %s\n' % diecase_id)
                 choice = ui.simple_menu(header, options)
                 ui.display('\n')
                 choice(diecase_id)
-                ui.confirm('[Enter] to continue...')
         except exceptions.MenuLevelUp:
             pass
 
-    header = ('Matrix case manipulation menu\n\n'
-              '[A]dd diecase\n'
-              '[C]hoose diecase to work on\n\n'
-              '[Enter] to go back to main menu\n\n'
+    prompt = ('Choose diecase from list by entering its number, '
+              'or [A] to add a new diecase, '
+              'or [Enter] to go back to main menu.\n\n'
               'Your choice? : ')
     options = {'A': matrix_data.add_diecase,
-               'C': work_on_diecase,
                '': menu}
     while True:
+        # First list what diecases we have
+        available_diecases = matrix_data.list_diecases()
+        all_options = {}
+        all_options.update(options)
+        all_options.update(available_diecases)
+        choice = ui.simple_menu(prompt, all_options)
         try:
-            available_diecases = matrix_data.list_diecases()
-            ui.simple_menu(header, options)()
-            ui.confirm('[Enter] to continue...')
+            if choice in available_diecases.values():
+                # Safeguards against entering a wrong value
+                diecase_id = choice
+                work_on_diecase()
+            elif choice in options.values():
+                # Choice is a function
+                choice()
         except exceptions.MenuLevelUp:
             pass
+        except (KeyError,
+                exceptions.NoMatchingData,
+                exceptions.DatabaseQueryError):
+            ui.display('Diecase number is incorrect!')
 
 
 def wedge_menu():

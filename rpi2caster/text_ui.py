@@ -435,7 +435,8 @@ def edit_diecase_layout(layout, unit_arrangement=None):
 
     def edit_matrix(mat):
         """Displays a matrix layout, asks for confirmation, edits the mat"""
-        prompt = 'Edit this matrix: [Y]es / [N]o / [F]inish editing? '
+        prompt = ('Edit this matrix: [Y]es / [N]o / '
+                  '[F]inish editing? ')
         options = {'Y': True, 'N': False, 'F': 'exit'}
         # Display, ask, edit, save - or do nothing
         display_matrix_details(mat)
@@ -517,27 +518,11 @@ def edit_diecase_layout(layout, unit_arrangement=None):
                     edit_matrix(mat)
             except exceptions.MenuLevelUp:
                 break
-
+    # Map unit values to rows
+    s5_arr = (0, 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
+    # Safeguard against an empty unit arrangement: use S5 unit arrangement
+    unit_arrangement = unit_arrangement or s5_arr
     # If the layout is empty, we need to initialize it
-    if not layout:
-        prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
-        options = {'1': (15, 15), '2': (15, 17), '3': (16, 17)}
-        (rows_number, columns_number) = simple_menu(prompt, options)
-        # Generate column numbers
-        if columns_number == 17:
-            columns = ['NI', 'NL']
-        else:
-            columns = []
-        columns.extend([letter for letter in 'ABCDEFGHIJKLMNO'])
-        # Generate row numbers: 1...15 or 1...16
-        rows = [num + 1 for num in range(rows_number)]
-        # Map unit values to rows
-        s5_arr = (0, 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
-        # Safeguard against an empty unit arrangement: use S5 unit arrangement
-        unit_arrangement = unit_arrangement or s5_arr
-        # Generate an empty layout with default row unit values
-        layout = [['', ['roman'], column, row, unit_arrangement[row]]
-                  for row in rows for column in columns]
     print('\nCurrent diecase layout:\n')
     display_diecase_layout(layout, unit_arrangement)
     prompt = ('\nChoose edit mode or press [Enter] to quit:\n'

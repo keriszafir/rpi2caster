@@ -130,13 +130,14 @@ def add_diecase():
     wedge_series = wedge_series.strip('sS')
     set_width = ui.enter_data_spec_type('Set width (decimal): ', float)
     typeface_name = ui.enter_data('Typeface name: ')
-    # Start with an empty layout
-    layout = None
-    # Ask if we want to enter a layout file
+    # Ask if we want to enter a layout file from file
     if ui.yes_or_no('Add layout from file?'):
         layout = submit_layout_file()
+    else:
+        # otherwise ask for diecase format and generate an empty layout
+        layout = generate_empty_layout()
     # Edit the layout
-    if ui.yes_or_no('Edit the layout now?'):
+    if ui.yes_or_no('Do you want to edit the layout now?'):
         # Get unit arrangement for editing the wedge
         unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
         layout = ui.edit_diecase_layout(layout, unit_arr)
@@ -174,9 +175,6 @@ def edit_diecase(diecase_id):
     At the end, confirm and commit.
     """
     layout = get_layout(diecase_id)
-    # If layout is empty, user can submit it from file
-    if not layout and ui.yes_or_no("Add layout from file?"):
-        layout = submit_layout_file()
     # Edit the layout?
     old_layout = layout[:]
     new_layout = ui.edit_diecase_layout(layout)
@@ -208,8 +206,9 @@ def clear_diecase(diecase_id):
     Clears the diecase layout, so it can be entered from scratch.
     You usually want to use this if you seriously mess something up.
     """
+    layout = generate_empty_layout()
     ans = ui.yes_or_no('Are you sure?')
-    if ans and DB.update_diecase_layout(diecase_id):
+    if ans and DB.update_diecase_layout(diecase_id, layout):
         ui.display('Matrix case purged successfully - now empty.')
 
 
@@ -331,4 +330,23 @@ def submit_layout_file():
               if record[2] == col and record[3] == row]
     # Show the uploaded layout
     ui.display_diecase_layout(layout)
+    return layout
+
+
+def generate_empty_layout():
+    """Generates a table of empty values for matrix case layout"""
+    prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
+    options = {'1': (15, 15), '2': (15, 17), '3': (16, 17)}
+    (rows_number, columns_number) = ui.simple_menu(prompt, options)
+    # Generate column numbers
+    if columns_number == 17:
+        columns = ['NI', 'NL']
+    else:
+        columns = []
+    columns.extend([letter for letter in 'ABCDEFGHIJKLMNO'])
+    # Generate row numbers: 1...15 or 1...16
+    rows = [num + 1 for num in range(rows_number)]
+    # Generate an empty layout with default row unit values
+    layout = [['', ['roman'], column, row, 0]
+              for row in rows for column in columns]
     return layout
