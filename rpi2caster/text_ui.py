@@ -306,7 +306,8 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     # Build a list of all characters
     # We must know all matrices/positions in the diecase, even if they're not
     # defined in the original layout
-    all_mats = find_unused_matrices(diecase_layout)
+    # all_mats = find_unused_matrices(diecase_layout)
+    all_mats = []
     for mat in diecase_layout:
         # Mat is defined as (char, (style1, style2...), column, row, units)
         (character, styles, column, row, units) = mat

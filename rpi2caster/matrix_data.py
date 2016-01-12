@@ -204,6 +204,8 @@ def load_layout(diecase_id):
                 layout[layout.index(position)] = record
     # Other positions will be empty - like in a freshly generated null layout
     # Ask for confirmation
+    ui.display('\nSubmitted layout:\n')
+    ui.display_diecase_layout(layout)
     ans = ui.yes_or_no('Commit to the database?')
     if ans and DB.update_diecase_layout(diecase_id, layout):
         ui.display('Matrix case layout uploaded successfully.')
@@ -338,7 +340,6 @@ def submit_layout_file():
               for record in processed_records
               if record[2] == col and record[3] == row]
     # Show the uploaded layout
-    ui.display_diecase_layout(layout)
     return layout
 
 
