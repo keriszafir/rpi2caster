@@ -35,10 +35,6 @@ def main_menu():
 def matrix_menu():
     """Matrix manipulation functions - creating, viewing, editing, deleting"""
 
-    def back(*args):
-        """Exits the diecase manipulation menu"""
-        exceptions.menu_level_up()
-
     def menu(*args):
         """Exits to main menu"""
         exceptions.return_to_menu()
@@ -53,15 +49,19 @@ def matrix_menu():
                    'E': matrix_data.edit_diecase,
                    'C': matrix_data.clear_diecase,
                    'D': matrix_data.delete_diecase,
-                   '': back}
+                   '': menu}
         try:
             while True:
-                ui.clear()
-                ui.display('Now working on diecase %s' % diecase_id)
-                matrix_data.show_diecase(diecase_id)
-                # Choose what to do
-                ui.simple_menu(header, options)(diecase_id)
-        except exceptions.MenuLevelUp:
+                try:
+                    ui.clear()
+                    ui.display('Now working on diecase %s' % diecase_id)
+                    matrix_data.show_diecase(diecase_id)
+                    # Choose what to do
+                    ui.simple_menu(header, options)(diecase_id)
+                except exceptions.MenuLevelUp:
+                    pass
+        except exceptions.ReturnToMenu:
+            # Go back to diecase selection
             pass
 
     prompt = ('Choose diecase from list by entering its number, '

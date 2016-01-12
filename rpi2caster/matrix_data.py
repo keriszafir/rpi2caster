@@ -195,13 +195,21 @@ def load_layout(diecase_id):
     # Start with an empty layout
     layout = generate_empty_layout()
     # Load the layout from file
-    submitted_layout = submit_layout_file()
+    try:
+        submitted_layout = submit_layout_file()
+    except (TypeError, ValueError):
+        ui.confirm('File does not contain a proper layout!')
+        exceptions.menu_level_up()
     # Update the empty layout with characters read from file
     # record = (char, styles, column, row, units)
-    for position in layout:
-        for record in submitted_layout:
-            if record[2] == position[2] and record[3] == position[3]:
-                layout[layout.index(position)] = record
+    try:
+        for position in layout:
+            for record in submitted_layout:
+                if record[2] == position[2] and record[3] == position[3]:
+                    layout[layout.index(position)] = record
+    except (TypeError, ValueError):
+        ui.confirm('Cannot process the uploaded layout!')
+        exceptions.menu_level_up()
     # Other positions will be empty - like in a freshly generated null layout
     # Ask for confirmation
     ui.display('\nSubmitted layout:\n')
@@ -306,9 +314,12 @@ def submit_layout_file():
         return (char, styles, column, row, units)
 
     # Give us a file or end here
-    filename = ui.enter_input_filename()
+    try:
+        filename = ui.enter_input_filename()
+    except exceptions.ReturnToMenu:
+        exceptions.menu_level_up()
     if not filename:
-        return False
+        exceptions.menu_level_up()
     # Initialize the records list
     all_records = []
     # This will store the processed combinations - and whenever a duplicate
@@ -323,6 +334,8 @@ def submit_layout_file():
         # Ask if the first row is a header - if so, away with it
         if ui.yes_or_no('Is the 1st row a table header? '):
             all_records.pop(0)
+    if not ui.yes_or_no('Proceed?'):
+        exceptions.menu_level_up()
     # Process the records
     processed_records = [process_record(record) for record in all_records]
     # Determine the diecase size based on row and column
