@@ -6,6 +6,7 @@ diecase storing, parameter searches.
 """
 # File operations
 import io
+import os
 import csv
 # We need user interface
 from rpi2caster.global_settings import USER_INTERFACE as ui
@@ -353,6 +354,19 @@ def submit_layout_file():
               if record[2] == col and record[3] == row]
     # Show the uploaded layout
     return layout
+
+
+def export_layout(diecase_id):
+    """Exports the matrix case layout to file."""
+    layout = get_layout(diecase_id)
+    filename = os.path.expanduser('~') + '/%s.csv' % diecase_id
+    with io.open(filename, 'a') as output_file:
+        csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
+                                quoting=csv.QUOTE_ALL)
+        for record in layout:
+            (char, styles, column, row, units) = record
+            csv_writer.writerow([char, ', '.join(styles), column, row, units])
+    ui.confirm('File %s successfully saved. [Enter] to continue...' % filename)
 
 
 def generate_empty_layout():
