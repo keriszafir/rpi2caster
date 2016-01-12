@@ -44,6 +44,7 @@ def list_diecases():
     """Lists all matrix cases we have."""
     data = DB.get_all_diecases()
     results = {}
+    ui.clear()
     ui.display('\n' +
                'Index'.ljust(7) +
                'Diecase ID'.ljust(20) +
@@ -78,7 +79,6 @@ def choose_diecase(diecase_id=None):
             pass
     # If this fails, choose manually
     while True:
-        ui.clear()
         ui.display('Choose a matrix case:', end='\n\n')
         available_diecases = list_diecases()
         # Enter the diecase name
@@ -122,7 +122,7 @@ def add_diecase():
     Displays info and asks for confirmation.
     """
     prompt = 'Diecase ID? (leave blank to exit) : '
-    diecase_id = ui.enter_data_or_blank(prompt) or exceptions.return_to_menu()
+    diecase_id = ui.enter_data_or_blank(prompt) or exceptions.menu_level_up()
     type_series = ui.enter_data('Fount series: ')
     type_size = ui.enter_data('Type size (end with D for Didot): ')
     wedge_series = ui.enter_data('Wedge/stopbar series for this typeface: ')
