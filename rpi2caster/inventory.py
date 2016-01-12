@@ -45,27 +45,25 @@ def matrix_menu():
 
     def work_on_diecase():
         """Options for working on a chosen diecase"""
-        header = ('[G]et matrix case parameters\n'
-                  '[S]how matrix case layout\n'
+        header = ('\n'
                   '[E]dit matrix case layout\n'
                   '[C]lear matrix case layout\n'
                   '[L]oad matrix case layout from file\n'
                   '[D]elete the matrix case\n\n'
                   '[Enter] to go back to matrix manipulation menu\n\n'
                   'Your choice? : ')
-        options = {'S': matrix_data.show_diecase,
-                   'L': matrix_data.load_layout,
+        options = {'L': matrix_data.load_layout,
                    'E': matrix_data.edit_diecase,
                    'C': matrix_data.clear_diecase,
                    'D': matrix_data.delete_diecase,
-                   'G': matrix_data.get_diecase_parameters,
                    '': back}
         try:
             while True:
-                ui.display('\n\nNow working on diecase %s\n' % diecase_id)
-                choice = ui.simple_menu(header, options)
-                ui.display('\n')
-                choice(diecase_id)
+                ui.clear()
+                ui.display('Now working on diecase %s' % diecase_id)
+                matrix_data.show_diecase(diecase_id)
+                # Choose what to do
+                ui.simple_menu(header, options)(diecase_id)
         except exceptions.MenuLevelUp:
             pass
 
