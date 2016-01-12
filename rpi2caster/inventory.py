@@ -72,6 +72,8 @@ def matrix_menu():
                '': menu}
     while True:
         # First list what diecases we have
+        ui.clear()
+        ui.display('\nList of available diecases:\n')
         available_diecases = matrix_data.list_diecases()
         all_options = {}
         all_options.update(options)

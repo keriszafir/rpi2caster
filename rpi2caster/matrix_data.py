@@ -44,7 +44,6 @@ def list_diecases():
     """Lists all matrix cases we have."""
     data = DB.get_all_diecases()
     results = {}
-    ui.clear()
     ui.display('\n' +
                'Index'.ljust(7) +
                'Diecase ID'.ljust(20) +
