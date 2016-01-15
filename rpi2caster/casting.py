@@ -309,19 +309,80 @@ class Casting(object):
         return True
 
     @use_caster
+    def test_front_pinblock(self):
+        """test_front_pinblock():
+
+        Tests all valves and composition caster's inputs on the front pinblock
+        to check if everything works and is properly connected.
+        Signals will be tested in order: 1 towards 14.
+        """
+        intro = ('This will test the front pinblock - signals 1 towards 14. '
+                 'At the end O+15 will be activated. [Enter] to continue... ')
+        ui.confirm(intro)
+        combinations = [str(n) for n in range(1, 15)]
+        # Send all the combinations to the caster, one by one.
+        # Set _machine_stopped timeout at 120s.
+        try:
+            for code in combinations:
+                ui.display(code)
+                code = parsing.signals_parser(code)
+                code = parsing.convert_o15(code)
+                self.caster.process_signals(code, 120)
+        except exceptions.CastingAborted:
+            return False
+        else:
+            ui.display('\nTesting finished!')
+            ui.hold_on_exit()
+            return True
+
+    @use_caster
+    def test_rear_pinblock(self):
+        """test_rear_pinblock():
+
+        Tests all valves and composition caster's inputs on the rear pinblock
+        to check if everything works and is properly connected.
+        Signals will be tested in order: NI, NL, A...N, O+15.
+        """
+        intro = ('This will test the front pinblock - signals NI, NL, A...N. '
+                 'At the end O+15 will be activated. [Enter] to continue... ')
+        ui.confirm(intro)
+        combinations = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
+        # Send all the combinations to the caster, one by one.
+        # Set _machine_stopped timeout at 120s.
+        try:
+            for code in combinations:
+                ui.display(code)
+                code = parsing.signals_parser(code)
+                code = parsing.convert_o15(code)
+                self.caster.process_signals(code, 120)
+        except exceptions.CastingAborted:
+            return False
+        else:
+            ui.display('\nTesting finished!')
+            ui.hold_on_exit()
+            return True
+
+    @use_caster
     def test_air(self):
         """test_air():
 
-        Tests all valves and composition caster's inputs to check
-        if everything works and is properly connected. Signals will be tested
-        in order: 0075 - S - 0005, 1 towards 14, A towards N, O+15.
+        Tests all valves and composition caster's inputs in original
+        Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
+        At the end O+15 signal is tested also.
         """
-        intro = ('This will check if the valves, pin blocks and 0075, S, '
-                 '0005 mechanisms are working. Press return to continue... ')
+        intro = ('This will test all the air lines in the same order '
+                 'as the holes on the paper tower: \n'
+                 'O N M L K J I H G F S E D 0075 C B A 1 2 3 4 5 6 7 8 9 10 '
+                 '11 12 13 14 0005\n '
+                 'At the end O+15 signal is tested. '
+                 'MAKE SURE THE PUMP IS DISENGAGED. [Enter] to continue... ')
         ui.confirm(intro)
-        combinations = (['0075', 'S', '0005'] +
-                        [str(n) for n in range(1, 15)] +
-                        [s for s in 'ABCDEFGHIJKLMNO'])
+        combinations = [x for x in 'NMLKJIHGFSED']
+        combinations.append('0075')
+        combinations.extend([x for x in 'CBA'])
+        combinations.extend([str(x) for x in range(1, 15)])
+        combinations.append('0005')
+        combinations.append('O')
         # Send all the combinations to the caster, one by one.
         # Set _machine_stopped timeout at 120s.
         try:
@@ -904,7 +965,9 @@ class Casting(object):
         """Settings and alignment menu for servicing the caster"""
         # Subroutines end here
         options = [('Return to main menu', exceptions.menu_level_up),
-                   ('Test the pneumatics, signal after signal', self.test_air),
+                   ('Test the air outputs signal after signal', self.test_air),
+                   ('Test the pins 1...14', self.test_front_pinblock),
+                   ('Test the pins NI, NL, A...N', self.test_rear_pinblock),
                    ('Send specified signals to caster', self.send_combination),
                    ('Calibrate the space transfer wedge', self.align_wedges),
                    ('Calibrate mould opening', self.align_mould),
