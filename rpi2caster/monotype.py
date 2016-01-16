@@ -11,6 +11,8 @@ import io
 import select
 # Built-in time library
 import time
+# Constants shared between modules
+from rpi2caster import constants
 # Custom exceptions
 from rpi2caster import exceptions
 # Configuration parser functions
@@ -112,11 +114,10 @@ class Monotype(object):
         except exceptions.NotConfigured:
             # Cannot read config? Use defaults:
             UI.display('Using hardcoded defaults for interface outputs...')
-            mcp0_address = 0x20
-            mcp1_address = 0x21
-            pin_base = 65
-            signals_arrangement = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
-                                   '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
+            mcp0_address = constants.MCP0
+            mcp1_address = constants.MCP1
+            pin_base = constants.PIN_BASE
+            signals_arrangement = constants.ALNUM_ARR
         # Setup the wiringPi MCP23017 chips for valve outputs
         wiringpi.mcp23017Setup(pin_base, mcp0_address)
         wiringpi.mcp23017Setup(pin_base + 16, mcp1_address)
@@ -141,8 +142,8 @@ class Monotype(object):
             except exceptions.NotConfigured:
                 # Cannot read config? Use defaults:
                 UI.display('Using hardcoded defaults for interface inputs...')
-                emergency_stop_gpio = 24
-                sensor_gpio = 17
+                emergency_stop_gpio = constants.EMERGENCY_STOP_GPIO
+                sensor_gpio = constants.SENSOR_GPIO
             # Set up a sysfs interface for machine cycle sensor:
             sensor = configure_sysfs_interface(sensor_gpio)
             (self.sensor_gpio_value_file, self.sensor_gpio_edge_file) = sensor

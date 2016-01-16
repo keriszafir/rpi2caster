@@ -1,0 +1,18 @@
+# -*- coding: utf-8 -*-
+"""Constants shared between modules in the rpi2caster package"""
+
+# Build a sequence of Monotype signals as they appear on the paper tower
+SIGNALS = ([x for x in 'NMLKJIHGFSED'] + ['0075'] + [x for x in 'CBA'] +
+           [str(x) for x in range(1, 15)] + ['0005', 'O15'])
+# Default hardware interface output data
+MCP0 = 0x20
+MCP1 = 0x21
+PIN_BASE = 65
+# Signals corresponding to MCP0 A0...A7, B0...B7, MCP1 A0...A7, B0...B7
+ALNUM_ARR = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
+             '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
+# Inputs for the casting interface
+EMERGENCY_STOP_GPIO = 24
+SENSOR_GPIO = 17
+# For parsing lines in ribbon files
+COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']

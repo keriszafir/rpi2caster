@@ -4,8 +4,12 @@
 This module contains file- and line-parsing functions for the casting program.
 """
 import io
-from rpi2caster.global_settings import COMMENT_SYMBOLS as GLOBAL_CS
-COMMENT_SYMBOLS = GLOBAL_CS or ['**', '*', '//', '##', '#']
+from rpi2caster import constants
+# Check if alternate comment symbols are configured
+try:
+    from rpi2caster.global_settings import COMMENT_SYMBOLS
+except ImportError:
+    COMMENT_SYMBOLS = constants.COMMENT_SYMBOLS
 
 
 def read_file(filename):
@@ -194,10 +198,9 @@ def signals_parser(raw_signals, strip_o15=False):
     # Columns + S justification signal
     columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in raw_signals]
     # Return a list containing all signals
-    if strip_o15:
-        return strip_o_and_15(columns + rows + justification)
-    else:
-        return columns + rows + justification
+    output_data = convert_o15(columns + rows + justification)
+    # Arrange it a bit and end here
+    return [x for x in constants.SIGNALS if x in output_data]
 
 
 def strip_o_and_15(signals):

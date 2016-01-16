@@ -30,7 +30,8 @@ from rpi2caster import matrix_data
 from rpi2caster import wedge_data
 # Read ribbon files
 from rpi2caster import typesetting_data
-
+# Constants shared between modules
+from rpi2caster import constants
 
 def use_caster(func):
     """Method decorator for requiring the caster context"""
@@ -218,7 +219,7 @@ class Casting(object):
                              % (pos_0075, pos_0005))
                 info_for_user.append(pump_info)
                 # Append signals to be cast
-                info_for_user.append(' '.join(signals).ljust(15))
+                info_for_user.append(' ' .join(signals).ljust(15))
                 # Add comment
                 info_for_user.append(comment + '\n')
                 # Display the info
@@ -226,8 +227,12 @@ class Casting(object):
                 # Proceed with casting only if code is explicitly stated
                 # (i.e. O15 = cast, empty list = don't cast)
                 if signals:
-                    signals = parsing.strip_o_and_15(signals)
-                    # Cast the sequence
+                    # Try stripping O and 15 during casting
+                    try:
+                        signals.remove('O15')
+                    except ValueError:
+                        pass
+                    # Cast the sequence (even if empty)
                     try:
                         self.caster.process_signals(signals)
                     except exceptions.CastingAborted:
@@ -371,22 +376,15 @@ class Casting(object):
         At the end O+15 signal is tested also.
         """
         intro = ('This will test all the air lines in the same order '
-                 'as the holes on the paper tower: \n'
-                 'O N M L K J I H G F S E D 0075 C B A 1 2 3 4 5 6 7 8 9 10 '
-                 '11 12 13 14 0005\n '
-                 'At the end O+15 signal is tested. '
-                 'MAKE SURE THE PUMP IS DISENGAGED. [Enter] to continue... ')
+                 'as the holes on the paper tower: \n%s\n'
+                 'At the end O+15 signal is tested.\n'
+                 'MAKE SURE THE PUMP IS DISENGAGED. [Enter] to continue... '
+                 % ' '.join(constants.SIGNALS))
         ui.confirm(intro)
-        combinations = [x for x in 'NMLKJIHGFSED']
-        combinations.append('0075')
-        combinations.extend([x for x in 'CBA'])
-        combinations.extend([str(x) for x in range(1, 15)])
-        combinations.append('0005')
-        combinations.append('O')
         # Send all the combinations to the caster, one by one.
         # Set _machine_stopped timeout at 120s.
         try:
-            for code in combinations:
+            for code in constants.SIGNALS:
                 ui.display(code)
                 code = parsing.signals_parser(code)
                 code = parsing.convert_o15(code)
@@ -820,8 +818,8 @@ class Casting(object):
         ui.display(intro)
         # Check if wedge is selected
         if self.wedge:
-            set_width = self.wedge[2]
-            brit_pica = self.wedge[3]
+            set_width = self.wedge[1]
+            brit_pica = self.wedge[2]
         else:
             set_width = ui.enter_data_spec_type('Set width? : ', float)
             brit_pica = ui.yes_or_no('British old pica wedge - .1667"? : ')
@@ -995,11 +993,13 @@ class Casting(object):
             displayed_info.append('Type series: %s' % self.diecase[1])
             displayed_info.append('Type size: %s' % self.diecase[2])
         if self.wedge:
-            unit_values = ' '.join([str(x) for x in self.wedge[4] if x])
-            displayed_info.append('Wedge series: %s' % self.wedge[1])
-            displayed_info.append('Set width: %s' % self.wedge[2])
-            displayed_info.append('British pica wedge?: %s' % self.wedge[3])
-            displayed_info.append('Wedge unit arrangement: %s' % unit_values)
+            (wedge_series, set_width, brit_pica, arrangement) = self.wedge
+            # Displayed unit arrangement
+            arrangement = ' '.join([str(x) for x in arrangement if x])
+            displayed_info.append('Wedge series: %s' % wedge_series)
+            displayed_info.append('Set width: %s' % set_width)
+            displayed_info.append('British pica wedge?: %s' % brit_pica)
+            displayed_info.append('Wedge unit arrangement: %s' % arrangement)
         return '\n'.join(displayed_info)
 
     def show_diecase_layout(self):
@@ -1117,13 +1117,12 @@ class Casting(object):
             # Choose a diecase automatically (if fed to function)
             # or manually
             self.diecase = matrix_data.choose_diecase(diecase_id)
-            # Often used parameters deserve their own object attributes
-            self.diecase_layout = self.diecase[6]
+            (_, _, _, wedge_series, set_width, _,
+             self.diecase_layout) = self.diecase
             # Get wedge parameters
             try:
                 # Look up the wedge in database automatically
-                self.wedge = wedge_data.get_wedge(self.diecase[3],
-                                                  self.diecase[4])
+                self.wedge = wedge_data.get_wedge(wedge_series, set_width)
             except exceptions.NoMatchingData:
                 # Select it manually
                 try:

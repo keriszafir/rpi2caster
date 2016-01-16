@@ -12,6 +12,8 @@ import time
 from rpi2caster import exceptions
 # Default user interface
 from rpi2caster.global_settings import USER_INTERFACE as ui
+# Constants shared between modules
+from rpi2caster import constants
 
 
 class Monotype(object):
