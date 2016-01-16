@@ -269,31 +269,6 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         except TypeError:
             return []
 
-    def find_unused_matrices(layout):
-        """find_unused_matrices:
-
-        Flags matrices without characters and spaces as unused, preventing them
-        from being addressed during typesetting and casting.
-        """
-        # mat = (character, (style1, style2...), column, row, units)
-        unused_mats = []
-        columns_in_diecase = list({mat[2] for mat in layout})
-        row_numbers = sorted({mat[3] for mat in layout})
-        # Check if it is a 15-column (older) or 17-column (newer) diecase
-        column_numbers = []
-        if 'NI' in columns_in_diecase or 'NL' in columns_in_diecase:
-            column_numbers = ['NI', 'NL']
-        column_numbers.extend([x for x in 'ABCDEFGHIJKLMNO'])
-        # Get all positions without a registered matrix
-        for row_number in row_numbers:
-            for column_number in column_numbers:
-                match = [mat for mat in layout if mat[3] == row_number and
-                         mat[2] == column_number]
-                if not match:
-                    record = [' ', ('roman',), column_number, row_number, 0]
-                    unused_mats.append(record)
-        return unused_mats
-
     # Do we have a layout at all?
     if not diecase_layout:
         print('No layout to display!')
