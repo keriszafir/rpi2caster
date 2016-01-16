@@ -33,6 +33,7 @@ from rpi2caster import typesetting_data
 # Constants shared between modules
 from rpi2caster import constants
 
+
 def use_caster(func):
     """Method decorator for requiring the caster context"""
     def func_wrapper(self, *args, **kwargs):
@@ -401,7 +402,7 @@ class Casting(object):
         """
         # We need to choose a wedge unless we did it earlier
         wedge = self.wedge or wedge_data.choose_wedge()
-        (_, _, set_width, brit_pica, unit_arrangement) = wedge
+        (_, set_width, brit_pica, unit_arrangement) = wedge
         while True:
             # Outer loop
             ui.clear()
@@ -513,7 +514,7 @@ class Casting(object):
         pica_def = ui.simple_menu(message, options)
         # We need to choose a wedge unless we did it earlier
         wedge = self.wedge or wedge_data.choose_wedge()
-        (_, _, set_width, brit_pica, unit_arrangement) = wedge
+        (_, set_width, brit_pica, unit_arrangement) = wedge
         # Unit line length:
         unit_line_length = int(18 * pica_def / 0.1667 * line_length *
                                set_width / 12)

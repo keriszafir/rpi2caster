@@ -54,8 +54,8 @@ class Database(object):
         Sets up config path (specified or default),
         sets up database path (specified, set up in config, then default),
         """
-        database_paths = [global_settings.DATABASE_PATH +
-                          constants.DEFAULT_DATABASE_PATHS]
+        database_paths = ([global_settings.DATABASE_PATH] +
+                          constants.DEFAULT_DATABASE_PATHS)
         # Connect to the database
         for path in database_paths:
             try:
@@ -161,7 +161,8 @@ class Database(object):
                         # Check if 16th position is there (no exception)
                         # If so - end here
                         if not unit_arrangement[16]:
-                            break
+                            pass
+                        break
                     except IndexError:
                         # No 16th position - add one more
                         unit_arrangement.append(unit_arrangement[-1])

@@ -264,7 +264,8 @@ def get_unit_arrangement(wedge_series, set_width):
             try:
                 # If no exception, do nothing
                 if not unit_arrangement[16]:
-                    break
+                    pass
+                break
             except IndexError:
                 unit_arrangement.append(unit_arrangement[-1])
     # All done
@@ -277,8 +278,10 @@ def get_s5_arrangement():
     # Fill until we have 16 values
     while True:
         try:
+            # If no exception, do nothing
             if not s5_arrangement[16]:
-                break
+                pass
+            break
         except IndexError:
             s5_arrangement.append(s5_arrangement[-1])
     return s5_arrangement

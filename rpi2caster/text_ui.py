@@ -329,7 +329,7 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     header.append('|' + 'Units' + '|')
     header.append('Shift' + '|')
     displayed_header = (''.join(header))
-    separator = '—' * len(header)
+    separator = '—' * len(displayed_header)
     empty_row = ('|' + ' ' * 3 + '|' +
                  ' ' * 4 * len(column_numbers) + '|' +
                  ' ' * 5 + '|' + ' ' * 5 + '|')
