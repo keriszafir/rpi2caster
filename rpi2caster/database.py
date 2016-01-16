@@ -7,14 +7,13 @@ Database-related classes for rpi2caster suite.
 # IMPORTS:
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
-try:
-    import json
-except ImportError:
-    import simplejson as json
+import json
 # Custom exceptions
 from rpi2caster import exceptions
 # Get global settings
 from rpi2caster import global_settings
+# Package constants
+from rpi2caster import constants
 # this module uses sqlite3 database for storing caster, interface,
 # wedge, diecase & matrix parameters:
 try:
@@ -55,10 +54,8 @@ class Database(object):
         Sets up config path (specified or default),
         sets up database path (specified, set up in config, then default),
         """
-        database_paths = (global_settings.DATABASE_PATH,
-                          '/var/rpi2caster/monotype.db',
-                          '/var/rpi2caster/rpi2caster.db',
-                          'data/rpi2caster.db')
+        database_paths = [global_settings.DATABASE_PATH +
+                          constants.DEFAULT_DATRABASE_PATHS]
         # Connect to the database
         for path in database_paths:
             try:
@@ -163,8 +160,8 @@ class Database(object):
                     try:
                         # Check if 16th position is there (no exception)
                         # If so - end here
-                        0 == unit_arrangement[16]
-                        break
+                        if not unit_arrangement[16]:
+                            break
                     except IndexError:
                         # No 16th position - add one more
                         unit_arrangement.append(unit_arrangement[-1])
@@ -389,7 +386,7 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def update_diecase_layout(self, diecase_id, layout={}):
+    def update_diecase_layout(self, diecase_id, layout):
         """update_diecase_layout:
 
         Changes the matrix case layout on an existing diecase.

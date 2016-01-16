@@ -11,13 +11,8 @@ import configparser
 from rpi2caster import global_settings
 # Custom exceptions
 from rpi2caster import exceptions
-
-# Define some module constants
-config_paths = [global_settings.CONFIG_PATH,
-                '/etc/rpi2caster.conf',
-                'data/rpi2caster.conf']
-TRUE_ALIASES = ['true', 'on', 'yes']
-FALSE_ALIASES = ['false', 'off', 'no']
+# Package constants
+from rpi2caster import constants
 
 
 def initialize_config():
@@ -26,6 +21,8 @@ def initialize_config():
     Looks for the configuration file, tests if it's readable.
     Throws an exception if errors occur.
     """
+    config_paths = ([global_settings.CONFIG_PATH] +
+                    constants.DEFAULT_CONFIG_PATHS)
     for path in config_paths:
         try:
             with io.open(path, 'r'):
@@ -33,10 +30,10 @@ def initialize_config():
                 cfg.read(path)
                 return cfg
         except (IOError, FileNotFoundError):
+            # Try next
             continue
     # No config file specified can be accessed
-    raise exceptions.ConfigFileUnavailable('Cannot access config file: %s'
-                                           % path)
+    raise exceptions.ConfigFileUnavailable('Cannot access config file!')
 
 
 def get_config(section_name, option_name):
@@ -73,10 +70,10 @@ def determine(value):
         elif value in ['none', 'null']:
             # Value was specified to be None or null
             return None
-        elif value in TRUE_ALIASES:
+        elif value in constants.TRUE_ALIASES:
             # Return boolean True if option was marked as 1, on, true, yes
             return True
-        elif value in FALSE_ALIASES:
+        elif value in constants.FALSE_ALIASES:
             # Return False if the option was marked as 0, off, false, no
             return False
         else:

@@ -16,3 +16,11 @@ EMERGENCY_STOP_GPIO = 24
 SENSOR_GPIO = 17
 # For parsing lines in ribbon files
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
+# Useful for config files
+DEFAULT_CONFIG_PATHS = ['/etc/rpi2caster.conf', 'data/rpi2caster.conf']
+TRUE_ALIASES = ['true', 'on', 'yes']
+FALSE_ALIASES = ['false', 'off', 'no']
+# Database file locations
+DEFAULT_DATABASE_PATHS = ['/var/rpi2caster/monotype.db',
+                          '/var/rpi2caster/rpi2caster.db',
+                          'data/rpi2caster.db']

@@ -166,7 +166,7 @@ def rewind_ribbon(contents):
             return False
 
 
-def signals_parser(raw_signals, strip_o15=False):
+def signals_parser(raw_signals):
     """signals_parser(raw_signals):
 
     Parses a string with Monotype signals on input.
@@ -203,9 +203,9 @@ def signals_parser(raw_signals, strip_o15=False):
     return [x for x in constants.SIGNALS if x in output_data]
 
 
-def strip_o_and_15(signals):
-    """Strip O and 15 signals from input sequence, we don't cast them"""
-    return [s for s in signals if s not in ['O', '15']]
+def strip_o15(input_signals):
+    """Strip O15 signals from input sequence, we don't cast them"""
+    return [s for s in input_signals if s not in ['O15']]
 
 
 def convert_o15(input_signals):
@@ -220,7 +220,7 @@ def convert_o15(input_signals):
     if 'O' in signals or '15' in signals:
         signals.append('O15')
     # Now remove the individual O and 15 signals and return the result
-    return strip_o_and_15(signals)
+    return [s for s in signals if s not in ['O', '15']]
 
 
 def check_newline(signals):

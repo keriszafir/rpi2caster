@@ -328,12 +328,12 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     header.extend([col.center(4) for col in column_numbers])
     header.append('|' + 'Units' + '|')
     header.append('Shift' + '|')
-    header = (''.join(header))
+    displayed_header = (''.join(header))
     separator = '—' * len(header)
     empty_row = ('|' + ' ' * 3 + '|' +
                  ' ' * 4 * len(column_numbers) + '|' +
                  ' ' * 5 + '|' + ' ' * 5 + '|')
-    print(separator, header, separator, empty_row, sep='\n')
+    print(separator, displayed_header, separator, empty_row, sep='\n')
     # Get a unit-width for each row to display it at the end
     for i, row in enumerate(displayed_arrangement, start=1):
         units = str(unit_arrangement[i] or '')
@@ -348,7 +348,7 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         # Finally, display the row and a newline
         print(data_row, empty_row, sep='\n')
     # Display header again
-    print(separator, header, separator, sep='\n', end='\n\n')
+    print(separator, displayed_header, separator, sep='\n', end='\n\n')
     # Names of styles found in the diecase with formatting applied to them
     displayed_styles = '\n'.join([format_display(style, style)
                                   for style in get_styles(diecase_layout)])
