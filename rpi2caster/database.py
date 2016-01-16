@@ -55,7 +55,7 @@ class Database(object):
         sets up database path (specified, set up in config, then default),
         """
         database_paths = [global_settings.DATABASE_PATH +
-                          constants.DEFAULT_DATRABASE_PATHS]
+                          constants.DEFAULT_DATABASE_PATHS]
         # Connect to the database
         for path in database_paths:
             try:
