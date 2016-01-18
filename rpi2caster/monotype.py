@@ -257,33 +257,39 @@ class Monotype(object):
         If no signals are detected within a given timeout - returns False
         (to signal the casting failure).
         """
-        with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
-            sensor_signals = select.epoll()
-            sensor_signals.register(gpiostate, select.POLLPRI)
-            prev_state = 0
-            while True:
-                # Polling the interrupt file
-                events = sensor_signals.poll(timeout)
-                if events:
-                    # Normal control flow when the machine is working
-                    # (cycle sensor generates events)
-                    gpiostate.seek(0)
-                    sensor_state = int(gpiostate.read())
-                    if sensor_state == 1 and prev_state == 0:
-                        # Now, the air bar on paper tower would go down -
-                        # we got signal from sensor to let the air in
-                        self.activate_valves(signals)
-                        prev_state = 1
-                    elif sensor_state == 0 and prev_state == 1:
-                        # Air bar on paper tower goes back up -
-                        # end of "air in" phase, turn off the valves
-                        self.deactivate_valves()
-                        prev_state = 0
-                        # Signals sent to the caster - successful ending
-                        return True
-                else:
-                    # Timeout with no signals - failed ending
-                    raise exceptions.MachineStopped
+        try:
+            with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
+                sensor_signals = select.epoll()
+                sensor_signals.register(gpiostate, select.POLLPRI)
+                prev_state = 0
+                while True:
+                    # Polling the interrupt file
+                    events = sensor_signals.poll(timeout)
+                    if events:
+                        # Normal control flow when the machine is working
+                        # (cycle sensor generates events)
+                        gpiostate.seek(0)
+                        sensor_state = int(gpiostate.read())
+                        if sensor_state == 1 and prev_state == 0:
+                            # Now, the air bar on paper tower would go down -
+                            # we got signal from sensor to let the air in
+                            self.activate_valves(signals)
+                            prev_state = 1
+                        elif sensor_state == 0 and prev_state == 1:
+                            # Air bar on paper tower goes back up -
+                            # end of "air in" phase, turn off the valves
+                            self.deactivate_valves()
+                            prev_state = 0
+                            # Signals sent to the caster - successful ending
+                            return True
+                    else:
+                        # Timeout with no signals - failed ending
+                        raise exceptions.MachineStopped
+        except (KeyboardInterrupt,
+                exceptions.MenuLevelUp, exceptions.ReturnToMenu):
+            # We need to make sure that valves go down when interrupting
+            self.deactivate_valves()
+            raise
 
     def _stop_menu(self, casting=True):
         """_stop_menu:

@@ -697,17 +697,16 @@ class Casting(object):
                 # Set up the justification, turn the pump on
                 ui.display('Casting line %i of %i' % (current_line, lines))
                 ui.display('0005 wedge at ' + pos_0005)
-                self.caster.process_signals(set_0005)
                 ui.display('0075 wedge at ' + pos_0075)
                 if start_galley_trip:
                     # Double justification
-                    ui.display('Starting the pump and putting the line out...')
+                    ui.display('Putting the line out...')
                     self.caster.process_signals(galley_trip)
-                    self.caster.process_signals(set_0075)
                 else:
                     # Starting a job
-                    ui.display('Starting the pump...')
-                    self.caster.process_signals(set_0075)
+                    self.caster.process_signals(set_0005)
+                ui.display('Starting the pump...')
+                self.caster.process_signals(set_0075)
                 # Start casting characters
                 ui.display('Casting characters...')
                 # Cast n combinations of row & column, one by one
