@@ -1272,6 +1272,6 @@ def main_menu(work=Casting()):
         except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
             # Will skip to the end of the loop, and start all over
             pass
-        except (KeyboardInterrupt, exceptions.ExitProgram):
+        except (KeyboardInterrupt, EOFError, exceptions.ExitProgram):
             # Will exit program
             ui.exit_program()

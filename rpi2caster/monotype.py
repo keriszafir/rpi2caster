@@ -285,11 +285,9 @@ class Monotype(object):
                     else:
                         # Timeout with no signals - failed ending
                         raise exceptions.MachineStopped
-        except (KeyboardInterrupt,
-                exceptions.MenuLevelUp, exceptions.ReturnToMenu):
-            # We need to make sure that valves go down when interrupting
-            self.deactivate_valves()
-            raise
+        except (KeyboardInterrupt, EOFError):
+            # Let user decide if they want to continue / go to menu / exit
+            self._stop_menu()
 
     def _stop_menu(self, casting=True):
         """_stop_menu:
@@ -323,6 +321,7 @@ class Monotype(object):
         if casting:
             # This happens when the caster is already casting,
             # and stops running.
+            self.deactivate_valves()
             options = {'C': continue_casting,
                        'M': with_cleanup_return_to_menu,
                        'E': with_cleanup_exit_program}

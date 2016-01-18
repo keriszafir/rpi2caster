@@ -533,5 +533,5 @@ def exit_program():
     This is because we may do something specific in different UIs,
     so an abstraction layer may come in handy.
     """
-    print('Goodbye!')
+    print('\n\nGoodbye!\n')
     exit()

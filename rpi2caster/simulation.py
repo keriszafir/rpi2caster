@@ -66,17 +66,22 @@ class Monotype(object):
         abort or exit program.
         """
         cycle_timeout = cycle_timeout
-        # Ask whether to cast or simulate machine stop
-        prompt = '[Enter] to cast or [S] to stop? '
-        if self.manual_mode and ui.enter_data_or_blank(prompt) in ['s', 'S']:
-            ui.display('Simulating machine stop...')
-            raise exceptions.MachineStopped
-        ui.display('Turning the valves on...')
-        self.activate_valves(signals)
-        ui.display('Turning the valves off...')
-        self.deactivate_valves()
-        ui.display('Sequence cast successfully.\n')
-        return True
+        try:
+            # Ask whether to cast or simulate machine stop
+            prompt = '[Enter] to cast or [S] to stop? '
+            if (self.manual_mode and
+                    ui.enter_data_or_blank(prompt) in ['s', 'S']):
+                ui.display('Simulating machine stop...')
+                raise exceptions.MachineStopped
+            ui.display('Turning the valves on...')
+            self.activate_valves(signals)
+            ui.display('Turning the valves off...')
+            self.deactivate_valves()
+            ui.display('Sequence cast successfully.\n')
+            return True
+        except (KeyboardInterrupt, EOFError):
+            # Let user decide if they want to continue / go to menu / exit
+            self._stop_menu()
 
     def _stop_menu(self, casting=True):
         """_stop_menu:
@@ -110,6 +115,7 @@ class Monotype(object):
         if casting:
             # This happens when the caster is already casting,
             # and stops running.
+            self.deactivate_valves()
             options = {'C': continue_casting,
                        'M': with_cleanup_return_to_menu,
                        'E': with_cleanup_exit_program}
