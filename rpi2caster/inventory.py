@@ -28,7 +28,7 @@ def main_menu():
         except exceptions.DatabaseQueryError:
             ui.display('Database query error!')
             ui.hold_on_exit()
-        except (KeyboardInterrupt, exceptions.ExitProgram):
+        except (KeyboardInterrupt, EOFError, exceptions.ExitProgram):
             ui.exit_program()
 
 
