@@ -428,7 +428,7 @@ class Typesetter(object):
             ui.debug_info('Line finished. Now aligning...')
             self.current_alignment()
         # Now we're done typesetting
-        ui.confirm('Typesetting finished! [Enter] to continue...')
+        ui.confirm('Typesetting finished!')
         return True
 
     def _enter_line_length(self):

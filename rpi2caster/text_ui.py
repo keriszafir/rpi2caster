@@ -92,14 +92,20 @@ def debug_info(*args, **kwargs):
 
 
 def debug_enter_data(prompt):
-    """For debug-specific data or confirmations"""
+    """For debug-specific data"""
     if DEBUG_MODE:
         return input(prompt)
 
 
-def confirm(prompt):
+def debug_confirm(prompt=''):
+    """For debug confirmations"""
+    if DEBUG_MODE:
+        input(prompt, '\n[Enter] to continue...')
+
+
+def confirm(prompt=''):
     """Waits until user presses return"""
-    input(prompt)
+    input(prompt, '\n[Enter] to continue...')
 
 
 def enter_data_or_blank(prompt):

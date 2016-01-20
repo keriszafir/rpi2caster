@@ -97,7 +97,7 @@ class Casting(object):
         last characters are cast first, after setting the justification.
         """
         if not self.ribbon_contents:
-            ui.confirm('You must select a ribbon! [Enter] to continue...')
+            ui.confirm('You must select a ribbon!')
             return False
         # Count all characters and lines in the ribbon
         (all_lines, all_chars) = parsing.count_lines_and_chars(
@@ -266,7 +266,7 @@ class Casting(object):
         Basically: less than two signals - no ribbon advance...
         """
         if not self.ribbon_contents:
-            ui.confirm('You must select a ribbon! [Enter] to continue...')
+            ui.confirm('You must select a ribbon!')
             return False
         # Count a number of combinations punched in ribbon
         all_combinations = parsing.count_combinations(self.ribbon_contents)
@@ -275,8 +275,8 @@ class Casting(object):
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the paper tower punches the ribbon.\n')
         ui.display(intro)
-        prompt = ('\nInput file found. Turn on the air, fit the tape '
-                  'on your paper tower and press return to start punching.')
+        prompt = ('\nInput file found. Turn on the air and fit the tape '
+                  'on your paper tower.')
         ui.confirm(prompt)
         for line in self.ribbon_contents:
             # Parse the row, return a list of signals and a comment.
@@ -320,7 +320,7 @@ class Casting(object):
         Signals will be tested in order: 1 towards 14.
         """
         intro = ('This will test the front pinblock - signals 1 towards 14. '
-                 'At the end O+15 will be activated. [Enter] to continue... ')
+                 'At the end O+15 will be activated.')
         ui.confirm(intro)
         combinations = [str(n) for n in range(1, 15)]
         # Send all the combinations to the caster, one by one.
@@ -347,7 +347,7 @@ class Casting(object):
         Signals will be tested in order: NI, NL, A...N, O+15.
         """
         intro = ('This will test the front pinblock - signals NI, NL, A...N. '
-                 'At the end O+15 will be activated. [Enter] to continue... ')
+                 'At the end O+15 will be activated.')
         ui.confirm(intro)
         combinations = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
         # Send all the combinations to the caster, one by one.
@@ -376,7 +376,7 @@ class Casting(object):
         intro = ('This will test all the air lines in the same order '
                  'as the holes on the paper tower: \n%s\n'
                  'At the end O+15 signal is tested.\n'
-                 'MAKE SURE THE PUMP IS DISENGAGED. [Enter] to continue... '
+                 'MAKE SURE THE PUMP IS DISENGAGED.'
                  % ' '.join(constants.SIGNALS))
         ui.confirm(intro)
         # Send all the combinations to the caster, one by one.
@@ -1004,7 +1004,7 @@ class Casting(object):
         """Shows the diecase layout"""
         ui.display_diecase_layout(self.diecase_layout,
                                   self.unit_arrangement)
-        ui.confirm('[Enter] to continue...')
+        ui.confirm()
 
     def data_menu(self):
         """Choose the ribbon and diecase, if needed"""

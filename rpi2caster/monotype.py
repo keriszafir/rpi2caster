@@ -158,7 +158,7 @@ class Monotype(object):
         for parameter in info:
             UI.debug_info(parameter)
         # Wait for user confirmation if in debug mode
-        UI.debug_enter_data('Caster configured. [Enter] to continue... ')
+        UI.debug_confirm('Caster configured.')
         # Assign wiringPi pin numbers on MCP23017s to the Monotype
         # control signals. Return the result.
         return dict(zip(signals_arrangement.split(','), pins))

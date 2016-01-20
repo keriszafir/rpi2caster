@@ -68,7 +68,7 @@ def choose_ribbon():
         ui.display('Choose a ribbon:', end='\n\n')
         available_ribbons = list_ribbons()
         if not available_ribbons:
-            ui.confirm('[Enter] to exit...')
+            ui.confirm('No ribbons found.')
             return False
         # Enter the diecase name
         prompt = 'Number of a ribbon? (leave blank to exit): '
@@ -79,7 +79,7 @@ def choose_ribbon():
             ribbon_id = available_ribbons[choice]
             return ribbon_id
         except KeyError:
-            ui.confirm('Ribbon number is incorrect! [Enter] to continue...')
+            ui.confirm('Ribbon number is incorrect!')
             continue
 
 
@@ -106,7 +106,7 @@ def show_ribbon():
         ui.display('\n\n')
         for line in contents:
             ui.display(line)
-        ui.confirm('\n[Enter] to continue...')
+        ui.confirm('\n')
 
 
 def add_ribbon(contents, title=None, author=None,
@@ -242,7 +242,7 @@ def choose_work():
             work_id = available_works[choice]
             return work_id
         except KeyError:
-            ui.confirm('Index number is incorrect! [Enter] to continue...')
+            ui.confirm('Index number is incorrect!')
             continue
 
 
@@ -265,7 +265,7 @@ def show_work():
         # Print it to the screen
         for line in contents:
             ui.display(line)
-        ui.confirm('\n[Enter] to continue...')
+        ui.confirm('\n')
 
 
 def add_work(contents, title=None, author=None):

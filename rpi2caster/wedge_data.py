@@ -221,7 +221,7 @@ def choose_wedge():
             return (wedge_series, set_width,
                     bool(brit_pica), tuple(unit_arrangement))
         except KeyError:
-            ui.confirm('Wedge number is incorrect! [Enter] to continue...')
+            ui.confirm('Wedge number is incorrect!')
             continue
 
 

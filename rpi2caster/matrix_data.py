@@ -92,7 +92,7 @@ def choose_diecase(diecase_id=None):
         except (KeyError,
                 exceptions.NoMatchingData,
                 exceptions.DatabaseQueryError):
-            ui.confirm('Diecase number is incorrect! [Enter] to continue...')
+            ui.confirm('Diecase number is incorrect!')
             continue
 
 
@@ -366,7 +366,7 @@ def export_layout(diecase_id):
         for record in layout:
             (char, styles, column, row, units) = record
             csv_writer.writerow([char, ', '.join(styles), column, row, units])
-    ui.confirm('File %s successfully saved. [Enter] to continue...' % filename)
+    ui.confirm('File %s successfully saved.' % filename)
 
 
 def generate_empty_layout():

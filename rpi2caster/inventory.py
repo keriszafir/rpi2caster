@@ -114,7 +114,7 @@ def wedge_menu():
             wedge_data.delete_wedge(wedge_series, set_width)
         except KeyError:
             ui.display('Wedge number is incorrect!')
-        ui.confirm('[Enter] to continue...')
+        ui.confirm()
         # Ask for confirmation
     header = ('\nWedge manipulation menu:\n\n'
               '[A]dd new wedge\n'
