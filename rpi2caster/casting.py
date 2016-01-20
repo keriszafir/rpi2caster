@@ -237,13 +237,11 @@ class Casting(object):
                         # On failure - abort the whole job.
                         # Check the aborted line so we can get back to it.
                         self.line_aborted = current_line
-                        ui.display('\nCasting aborted on line %i.'
-                                   % self.line_aborted)
-                        ui.hold_on_exit()
+                        ui.confirm('\nCasting aborted on line %i.'
+                                   % self.line_aborted, ui.MSG_MENU)
                         return False
         # After casting is finished, notify the user
-        ui.display('Casting finished successfully!\n')
-        ui.hold_on_exit()
+        ui.confirm('Casting finished successfully!', ui.MSG_MENU)
         return True
 
     @use_caster
@@ -307,8 +305,7 @@ class Casting(object):
                 self.caster.deactivate_valves()
                 time.sleep(0.2)
         # After punching is finished, notify the user:"""
-        ui.display('\nPunching finished!')
-        ui.hold_on_exit()
+        ui.confirm('\nPunching finished!', ui.MSG_MENU)
         return True
 
     @use_caster
@@ -334,8 +331,7 @@ class Casting(object):
         except exceptions.CastingAborted:
             return False
         else:
-            ui.display('\nTesting finished!')
-            ui.hold_on_exit()
+            ui.confirm('\nTesting finished!', ui.MSG_MENU)
             return True
 
     @use_caster
@@ -361,8 +357,7 @@ class Casting(object):
         except exceptions.CastingAborted:
             return False
         else:
-            ui.display('\nTesting finished!')
-            ui.hold_on_exit()
+            ui.confirm('\nTesting finished!', ui.MSG_MENU)
             return True
 
     @use_caster
@@ -390,8 +385,7 @@ class Casting(object):
         except exceptions.CastingAborted:
             return False
         else:
-            ui.display('\nTesting finished!')
-            ui.hold_on_exit()
+            ui.confirm('\nTesting finished!', ui.MSG_MENU)
             return True
 
     def cast_sorts(self):
@@ -945,7 +939,7 @@ class Casting(object):
         except KeyboardInterrupt:
             # Press ctrl-C to abort displaying long ribbons
             pass
-        ui.hold_on_exit()
+        ui.confirm('', ui.MSG_MENU)
 
     def heatup(self):
         """heatup

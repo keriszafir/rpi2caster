@@ -21,6 +21,9 @@ STYLE_MODIFIERS = {'roman': ' ',
                    'smallcaps': '#',
                    'subscript': '_',
                    'superscript': '^'}
+# Some standard prompts
+MSG_MENU = '[Enter] to go back to main menu...'
+MSG_CONTINUE = '[Enter] to continue...'
 
 
 def menu(options, header='', footer=''):
@@ -97,15 +100,15 @@ def debug_enter_data(prompt):
         return input(prompt)
 
 
-def debug_confirm(prompt=''):
+def debug_confirm(msg1='', msg2=MSG_CONTINUE):
     """For debug confirmations"""
     if DEBUG_MODE:
-        input(prompt + '\n[Enter] to continue...')
+        input(msg1 + '\n' + msg2)
 
 
-def confirm(prompt=''):
+def confirm(msg1='', msg2=MSG_CONTINUE):
     """Waits until user presses return"""
-    input(prompt + '\n[Enter] to continue...')
+    input(msg1 + '\n' + msg2)
 
 
 def enter_data_or_blank(prompt):
@@ -221,11 +224,6 @@ def enter_output_filename():
                 exceptions.return_to_menu())
     filename = os.path.realpath(filename)
     return filename
-
-
-def hold_on_exit():
-    """Waits for user to press return before going back to menu"""
-    input('Press [Enter] to return to main menu...')
 
 
 def simple_menu(message, options):

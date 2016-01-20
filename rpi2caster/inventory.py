@@ -19,15 +19,13 @@ def main_menu():
     while True:
         try:
             ui.menu(options, header=header, footer='')()
-            ui.hold_on_exit()
+            ui.confirm('Finished!', ui.MSG_MENU)
         except exceptions.ReturnToMenu:
             pass
         except exceptions.NoMatchingData:
-            ui.display('No matching data found!')
-            ui.hold_on_exit()
+            ui.confirm('No matching data found!', ui.MSG_MENU)
         except exceptions.DatabaseQueryError:
-            ui.display('Database query error!')
-            ui.hold_on_exit()
+            ui.confirm('Database query error!', ui.MSG_MENU)
         except (KeyboardInterrupt, EOFError, exceptions.ExitProgram):
             ui.exit_program()
 
