@@ -429,13 +429,12 @@ def edit_diecase_layout(layout, unit_arrangement=None):
 
     def single_cell_mode():
         """Allows to specify a cell by its coordinates and edit it."""
-        column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
         col_prompt = 'Column [NI, NL, A...O] or [Enter] to exit]? :'
         while True:
             try:
                 column = ''
                 row = 0
-                while column not in column_numbers:
+                while column not in constants.COLUMNS_17:
                     column = enter_data_spec_type_or_blank(col_prompt, str)
                     column = column.upper() or exceptions.menu_level_up()
                 while row not in range(1, 17):
@@ -455,9 +454,9 @@ def edit_diecase_layout(layout, unit_arrangement=None):
 
     def all_columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
-        column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
         # Rearrange the layout so that it's read column by column
-        transposed_layout = [mat for col in column_numbers for mat in layout
+        transposed_layout = [mat
+                             for col in constants.COLUMNS_17 for mat in layout
                              if mat[2] == col]
         try:
             for mat in transposed_layout:
@@ -481,12 +480,11 @@ def edit_diecase_layout(layout, unit_arrangement=None):
 
     def single_column_mode():
         """Edits matrices found in a single column"""
-        column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
         col_prompt = 'Column [NI, NL, A...O] or [Enter] to exit]? :'
         while True:
             try:
                 column = ''
-                while column not in column_numbers:
+                while column not in constants.COLUMNS_17:
                     column = enter_data_spec_type_or_blank(col_prompt, str)
                     column = column.upper() or exceptions.menu_level_up()
                 workset = [mat for mat in layout if mat[2] == column]
@@ -495,9 +493,8 @@ def edit_diecase_layout(layout, unit_arrangement=None):
             except exceptions.MenuLevelUp:
                 break
     # Map unit values to rows
-    s5_arr = (0, 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
     # Safeguard against an empty unit arrangement: use S5 unit arrangement
-    unit_arrangement = unit_arrangement or s5_arr
+    unit_arrangement = unit_arrangement or constants.S5
     # If the layout is empty, we need to initialize it
     print('\nCurrent diecase layout:\n')
     display_diecase_layout(layout, unit_arrangement)
