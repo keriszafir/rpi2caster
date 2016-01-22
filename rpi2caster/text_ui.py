@@ -11,6 +11,7 @@ import os
 import readline
 import glob
 from rpi2caster import exceptions
+from rpi2caster import constants
 
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
@@ -273,33 +274,15 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         except TypeError:
             return []
 
-    # Do we have a layout at all?
-    if not diecase_layout:
-        print('No layout to display!')
-        return False
-    # We have a layout, we can go further... get the wedge to display
-    # row unit values next to the layout table
-    s5_arr = ('', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
-    # Safeguard against an empty unit arrangement: use S5 unit arrangement
-    unit_arrangement = unit_arrangement or s5_arr
-    # Build a list of all characters
-    # We must know all matrices/positions in the diecase, even if they're not
-    # defined in the original layout
-    # all_mats = find_unused_matrices(diecase_layout)
-    all_mats = []
-    for mat in diecase_layout:
+    def process_matrix(mat):
+        """Modifies matrix for displaying"""
         # Mat is defined as (char, (style1, style2...), column, row, units)
         (character, styles, column, row, units) = mat
         # Display different spaces as symbols
+        spaces_symbols = {'_': '▣', ' ': '□', '': ' '}
         # Low space
-        if character == '_':
-            character = '▣'
-        # High space
-        elif character == ' ':
-            character = '□'
-        # Empty matrix = no character, unused
-        elif not character:
-            character = ' '
+        if character in spaces_symbols:
+            character = spaces_symbols[character]
         # Otherwise we have a character - modify how it's displayed
         # based on style(s)
         else:
@@ -308,57 +291,67 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
                     character = format_display(character, style)
             except (IndexError, KeyError):
                 pass
-        # Add a record to processed matrices
-        all_mats.append((character, styles, column, row, units))
-    # Determine which rows have matrices
-    # This will skip unfilled rows (with blanks) at the end
-    # A list of integers
-    cols_in_diecase = {mat[2] for mat in all_mats}
-    rows_in_diecase = {mat[3] for mat in all_mats}
+        # Add column and row to sets
+        cols_set.add(column)
+        rows_set.add(row)
+        # Finish
+        return (character, styles, column, row, units)
+
+    # Do we have a layout at all?
+    if not diecase_layout:
+        print('No layout to display!')
+        return False
+    # Initialize columns and rows sets
+    cols_set = rows_set = set()
+    # We have a layout, we can go further... get the wedge to display
+    # row unit values next to the layout table
+    # Safeguard against an empty unit arrangement: use S5 unit arrangement
+    unit_arrangement = unit_arrangement or constants.S5
+    # Build a list of all characters
+    all_mats = [process_matrix(mat) for mat in diecase_layout]
     # Build rows and columns to iterate over
-    column_numbers = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
-    column_numbers = [x for x in column_numbers if x in cols_in_diecase]
-    row_numbers = [x for x in range(17) if x in rows_in_diecase]
+    cols_17 = 'NI' in cols_set or 'NL' in cols_set
+    rows_16 = 16 in rows_set
+    column_numbers = cols_17 and constants.COLUMNS_17 or constants.COLUMNS_15
+    row_numbers = [x for x in range(1, rows_16 and 17 or 16)]
     # Arrange matrices for displaying
-    displayed_arrangement = []
-    for row_number in row_numbers:
-        # Add only characters and styles, center chars to 5
-        row = [mat[0].center(4)
-               for column_number in column_numbers for mat in all_mats
-               if mat[2] == column_number and mat[3] == row_number]
-        displayed_arrangement.append(row)
-    # We can display it now
-    header = ['|' + 'Row' + '|']
+    # Generate a header with column numbers
+    header = ['|Row|']
     header.extend([col.center(4) for col in column_numbers])
-    header.append('|' + 'Units' + '|')
-    header.append('Shift' + '|')
-    displayed_header = (''.join(header))
-    separator = '—' * len(displayed_header)
+    header.append('|Units|Shift|')
+    header = ''.join(header)
+    # "-----" line in the table
+    separator = '—' * len(header)
+    # A row with only spaces and vertical lines in it
     empty_row = ('|' + ' ' * 3 + '|' +
                  ' ' * 4 * len(column_numbers) + '|' +
                  ' ' * 5 + '|' + ' ' * 5 + '|')
-    print(separator, displayed_header, separator, empty_row, sep='\n')
-    # Get a unit-width for each row to display it at the end
-    for i, row in enumerate(displayed_arrangement, start=1):
-        units = str(unit_arrangement[i] or '')
-        shifted_units = str(unit_arrangement[i-1] or '')
-        # Now we are going to show the matrices
-        # First, display row number (and borders), then characters in row
-        data = ['|' + str(i).center(3) + '|'] + row
-        # At the end, unit-width and unit-width when using unit-shift
-        data.append('|' + units.center(5) + '|')
-        data.append(shifted_units.center(5) + '|')
-        data_row = ''.join(data)
-        # Finally, display the row and a newline
-        print(data_row, empty_row, sep='\n')
-    # Display header again
-    print(separator, displayed_header, separator, sep='\n', end='\n\n')
-    # Names of styles found in the diecase with formatting applied to them
-    displayed_styles = '\n'.join([format_display(style, style)
-                                  for style in get_styles(diecase_layout)])
+    # Initialize the displayed layout
+    displayed_layout = [separator, header, separator, empty_row]
+    for row_number in row_numbers:
+        # Get unit width value of the wedge for this row
+        units = unit_arrangement[row_number] or ''
+        shifted_units = unit_arrangement[row_number-1] or ''
+        # Start with row number...
+        row = ['|' + str(row_number).center(3) + '|']
+        # Add only characters and styles, center chars to 4
+        row.extend([mat[0].center(4)
+                   for column_number in column_numbers for mat in all_mats
+                   if mat[2] == column_number and mat[3] == row_number])
+        row.append('|' + str(units).center(5) + '|')
+        row.append(str(shifted_units).center(5) + '|')
+        row = ''.join(row)
+        displayed_layout.append(row)
+        displayed_layout.append(empty_row)
+    displayed_layout.extend([separator, header, separator])
+    # We can display it now
+    for row in displayed_layout:
+        print(row)
     # Explanation of symbols
-    print('Explanation:', '□ - low space', '▣ - high space',
-          displayed_styles, sep='\n', end='\n')
+    print('\nExplanation:', '□ = low space, ▣ = high space',
+          '*a = bold, /a = italic, #a = small caps',
+          '_a = subscript (inferior), ^a = superscript (superior)',
+          sep='\n', end='\n\n')
 
 
 def edit_diecase_layout(layout, unit_arrangement=None):
