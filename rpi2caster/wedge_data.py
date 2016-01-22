@@ -272,21 +272,6 @@ def get_unit_arrangement(wedge_series, set_width):
     return tuple(unit_arrangement)
 
 
-def get_s5_arrangement():
-    """Gets a unit arrangement for S5 wedge - used by default."""
-    s5_arrangement = [0] + [x for x in wedge_arrangements.table['5']]
-    # Fill until we have 16 values
-    while True:
-        try:
-            # If no exception, do nothing
-            if not s5_arrangement[16]:
-                pass
-            break
-        except IndexError:
-            s5_arrangement.append(s5_arrangement[-1])
-    return s5_arrangement
-
-
 def is_old_pica(wedge_series, set_width):
     """is_old_pica:
 

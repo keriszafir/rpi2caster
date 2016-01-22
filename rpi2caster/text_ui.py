@@ -266,14 +266,6 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     or uses the typical S5 if not specified.
     """
     # Define subroutines
-    def get_styles(layout):
-        """Parses the diecase layout and gets available typeface styles.
-        Returns a list of them."""
-        try:
-            return list({style for mat in layout for style in mat[1] if style})
-        except TypeError:
-            return []
-
     def process_matrix(mat):
         """Modifies matrix for displaying"""
         # Mat is defined as (char, (style1, style2...), column, row, units)
@@ -328,6 +320,7 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
                  ' ' * 5 + '|' + ' ' * 5 + '|')
     # Initialize the displayed layout
     displayed_layout = [separator, header, separator, empty_row]
+    # Process each row
     for row_number in row_numbers:
         # Get unit width value of the wedge for this row
         units = unit_arrangement[row_number] or ''
@@ -336,13 +329,14 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         row = ['|' + str(row_number).center(3) + '|']
         # Add only characters and styles, center chars to 4
         row.extend([mat[0].center(4)
-                   for column_number in column_numbers for mat in all_mats
-                   if mat[2] == column_number and mat[3] == row_number])
+                    for column_number in column_numbers for mat in all_mats
+                    if mat[2] == column_number and mat[3] == row_number])
         row.append('|' + str(units).center(5) + '|')
         row.append(str(shifted_units).center(5) + '|')
         row = ''.join(row)
         displayed_layout.append(row)
         displayed_layout.append(empty_row)
+    # Add the header at the bottom
     displayed_layout.extend([separator, header, separator])
     # We can display it now
     for row in displayed_layout:

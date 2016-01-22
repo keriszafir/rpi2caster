@@ -83,7 +83,7 @@ class Casting(object):
         self.diecase_layout = None
         # Unit arrangement: default is the S5 wedge
         self.wedge = None
-        self.unit_arrangement = wedge_data.get_s5_arrangement()
+        self.unit_arrangement = constants.S5
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
@@ -220,7 +220,7 @@ class Casting(object):
                              % (pos_0075, pos_0005))
                 info_for_user.append(pump_info)
                 # Append signals to be cast
-                info_for_user.append(' ' .join(signals).ljust(15))
+                info_for_user.append(' '.join(signals).ljust(15))
                 # Add comment
                 info_for_user.append(comment + '\n')
                 # Display the info
@@ -1021,7 +1021,7 @@ class Casting(object):
             self.ribbon_metadata = None
             self.diecase = None
             self.diecase_layout = None
-            self.unit_arrangement = wedge_data.get_s5_arrangement()
+            self.unit_arrangement = constants.S5
             self.wedge = None
             author, title, unit_shift, diecase_id = None, None, False, None
             if 'diecase' in metadata:
@@ -1063,12 +1063,10 @@ class Casting(object):
             self.ribbon_metadata = None
             self.diecase = None
             self.diecase_layout = None
-            self.unit_arrangement = wedge_data.get_s5_arrangement()
+            self.unit_arrangement = constants.S5
             self.wedge = None
-            ribbon_metadata = typesetting_data.get_ribbon_metadata(
-                ribbon_id)
-            ribbon_contents = typesetting_data.get_ribbon_contents(
-                ribbon_id)
+            ribbon_metadata = typesetting_data.get_ribbon_metadata(ribbon_id)
+            ribbon_contents = typesetting_data.get_ribbon_contents(ribbon_id)
             # Get the metadata
             diecase_id = ribbon_metadata[2]
             # Select the matrix case automatically

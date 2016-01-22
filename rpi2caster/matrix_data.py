@@ -16,6 +16,8 @@ from rpi2caster import exceptions
 from rpi2caster import database
 # Wedge operations for several matrix-case management functions
 from rpi2caster import wedge_data
+# Constants module
+from rpi2caster import constants
 # Create an instance of Database class with default parameters
 DB = database.Database()
 
@@ -343,11 +345,10 @@ def submit_layout_file():
     columns = {record[2] for record in processed_records}
     rows = sorted({record[3] for record in processed_records})
     # Check if 17 columns (15x17, 16x17), else 15 columns (old 15x15)
-    if 'NI' in columns or 'NL' in columns or max(rows) == 16:
-        columns = ['NI', 'NL']
+    if 'NI' in columns or 'NL' in columns or 16 in rows:
+        columns = constants.COLUMNS_17
     else:
-        columns = []
-    columns.extend([x for x in 'ABCDEFGHIJKLMNO'])
+        columns = constants.COLUMNS_15
     # We now have completed uploading a layout and making a list out of it
     layout = [record for row in rows for col in columns
               for record in processed_records
@@ -376,10 +377,9 @@ def generate_empty_layout():
     (rows_number, columns_number) = ui.simple_menu(prompt, options)
     # Generate column numbers
     if columns_number == 17:
-        columns = ['NI', 'NL']
+        columns = constants.COLUMNS_17
     else:
-        columns = []
-    columns.extend([letter for letter in 'ABCDEFGHIJKLMNO'])
+        columns = constants.COLUMNS_15
     # Generate row numbers: 1...15 or 1...16
     rows = [num + 1 for num in range(rows_number)]
     # Generate an empty layout with default row unit values
