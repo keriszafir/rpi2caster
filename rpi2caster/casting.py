@@ -249,19 +249,9 @@ class Casting(object):
         """punch_composition():
 
         When punching, the input file is read forwards. An additional line
-        (O+15) is switched on for operating the paper tower, if less than
-        two signals are found in a sequence.
-
-        We can't use automatic machine cycle detection like we do in
-        cast_composition, because keyboard's paper tower doesn't run
-        by itself - it must get air into tubes to operate, punches
-        the perforations, and doesn't give any feedback.
-
-        For punching, O+15 are needed if <2 lines are active.
-        That's because of how the keyboard's paper tower is built -
-        it has a balance mechanism that advances paper tape only if two
-        signals can outweigh constant air pressure on the other side.
-        Basically: less than two signals - no ribbon advance...
+        (O+15) is switched on for operating the paper tower to exert enough
+        force to drive the punches and advance the ribbon.
+        This mode uses arbitrary timings for air on / off phases.
         """
         if not self.ribbon_contents:
             ui.confirm('You must select a ribbon!')
@@ -287,28 +277,45 @@ class Casting(object):
             # Add signals to be cast
             if signals:
                 info_for_user += ' '.join(signals).ljust(20)
+            else:
+                info_for_user += 'O15'.ljust(20)
             # Add comment
             if comment:
                 info_for_user += comment
             # Display the info
             ui.display(info_for_user)
-            # Send the signals, adding O+15 whenever needed
+            # Send the signals
             if signals:
                 # Convert O or 15 to a combined O+15 signal:"""
                 signals = parsing.convert_o15(signals)
-                if len(signals) < 2:
+                # In any case add O+15 (to put enough force on punches)
+                if 'O15' not in signals:
                     signals.append('O15')
                 # Punch it!"""
                 self.caster.activate_valves(signals)
                 # The pace is arbitrary, let's set it to 200ms/200ms
                 time.sleep(0.2)
                 self.caster.deactivate_valves()
-                time.sleep(0.2)
+                time.sleep(0.5)
         # After punching is finished, notify the user:"""
         ui.confirm('\nPunching finished!', ui.MSG_MENU)
         return True
 
     @use_caster
+    def test_air_signals(self, combinations):
+        """Tests a sequence of signals specified on input"""
+        try:
+            for code in combinations:
+                ui.display(code)
+                code = parsing.signals_parser(code)
+                code = parsing.convert_o15(code)
+                self.caster.process_signals(code, 120)
+        except exceptions.CastingAborted:
+            return False
+        else:
+            ui.confirm('\nTesting finished!', ui.MSG_MENU)
+            return True
+
     def test_front_pinblock(self):
         """test_front_pinblock():
 
@@ -319,22 +326,8 @@ class Casting(object):
         intro = ('This will test the front pinblock - signals 1 towards 14. '
                  'At the end O+15 will be activated.')
         ui.confirm(intro)
-        combinations = [str(n) for n in range(1, 15)]
-        # Send all the combinations to the caster, one by one.
-        # Set _machine_stopped timeout at 120s.
-        try:
-            for code in combinations:
-                ui.display(code)
-                code = parsing.signals_parser(code)
-                code = parsing.convert_o15(code)
-                self.caster.process_signals(code, 120)
-        except exceptions.CastingAborted:
-            return False
-        else:
-            ui.confirm('\nTesting finished!', ui.MSG_MENU)
-            return True
+        self.test_air_signals([str(n) for n in range(1, 15)])
 
-    @use_caster
     def test_rear_pinblock(self):
         """test_rear_pinblock():
 
@@ -345,24 +338,10 @@ class Casting(object):
         intro = ('This will test the front pinblock - signals NI, NL, A...N. '
                  'At the end O+15 will be activated.')
         ui.confirm(intro)
-        combinations = ['NI', 'NL'] + [x for x in 'ABCDEFGHIJKLMNO']
-        # Send all the combinations to the caster, one by one.
-        # Set _machine_stopped timeout at 120s.
-        try:
-            for code in combinations:
-                ui.display(code)
-                code = parsing.signals_parser(code)
-                code = parsing.convert_o15(code)
-                self.caster.process_signals(code, 120)
-        except exceptions.CastingAborted:
-            return False
-        else:
-            ui.confirm('\nTesting finished!', ui.MSG_MENU)
-            return True
+        self.test_air_signals(constants.COLUMNS_17)
 
-    @use_caster
-    def test_air(self):
-        """test_air():
+    def test_all(self):
+        """test_all():
 
         Tests all valves and composition caster's inputs in original
         Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
@@ -374,19 +353,7 @@ class Casting(object):
                  'MAKE SURE THE PUMP IS DISENGAGED.'
                  % ' '.join(constants.SIGNALS))
         ui.confirm(intro)
-        # Send all the combinations to the caster, one by one.
-        # Set _machine_stopped timeout at 120s.
-        try:
-            for code in constants.SIGNALS:
-                ui.display(code)
-                code = parsing.signals_parser(code)
-                code = parsing.convert_o15(code)
-                self.caster.process_signals(code, 120)
-        except exceptions.CastingAborted:
-            return False
-        else:
-            ui.confirm('\nTesting finished!', ui.MSG_MENU)
-            return True
+        self.test_air_signals(constants.SIGNALS)
 
     def cast_sorts(self):
         """cast_sorts():
@@ -955,7 +922,7 @@ class Casting(object):
         """Settings and alignment menu for servicing the caster"""
         # Subroutines end here
         options = [('Return to main menu', exceptions.menu_level_up),
-                   ('Test the air outputs signal after signal', self.test_air),
+                   ('Test the air outputs signal after signal', self.test_all),
                    ('Test the pins 1...14', self.test_front_pinblock),
                    ('Test the pins NI, NL, A...N', self.test_rear_pinblock),
                    ('Send specified signals to caster', self.send_combination),
