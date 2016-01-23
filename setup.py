@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 long_description = """
 Typesetting and casting software for a Raspberry Pi-based computer control
@@ -42,4 +42,4 @@ setup(name='rpi2caster',
                    'Topic :: Artistic Software'],
       keywords=['Monotype', 'typography', 'typesetting', 'typecasting', 'Raspberry Pi'],
       packages=['rpi2caster', 'scripts'],
-      entry_points={'console_scripts':['cast=cast:main', 'debug-cast=debug-cast:main', 'inventory=inventory:main', 'simulate=simulate:main']})
+      entry_points={'console_scripts':['cast=cast:main', 'inventory=inventory:main', 'simulate=simulate:main']})
