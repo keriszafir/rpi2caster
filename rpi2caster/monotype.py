@@ -18,8 +18,7 @@ from rpi2caster import exceptions
 # Configuration parser functions
 from rpi2caster import cfg_parser
 # Default user interface
-from rpi2caster import global_settings
-UI = global_settings.USER_INTERFACE
+from rpi2caster.global_settings import USER_INTERFACE as ui
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:
     import wiringpi2 as wiringpi
@@ -37,7 +36,7 @@ class Monotype(object):
     def __init__(self, name=''):
         """Creates a caster object for a given caster name
         """
-        self.name = name or global_settings.CASTER_NAME
+        self.name = 'Monotype'
         self.is_perforator = None
         self.lock = None
         self.sensor_gpio_edge_file = None
@@ -50,9 +49,9 @@ class Monotype(object):
     def __enter__(self):
         """Run the setup when entering the context:
         """
-        UI.debug_info('Entering caster/interface context...')
+        ui.debug_info('Entering caster/interface context...')
         if self.lock:
-            UI.display('Caster %s is already busy!' % self.name)
+            ui.display('Caster %s is already busy!' % self.name)
         else:
             self.lock = True
             return self
@@ -85,12 +84,12 @@ class Monotype(object):
                 # for both rising and falling edge:
                 with io.open(gpio_edge_file, 'r') as edge_file:
                     if 'both' not in edge_file.read():
-                        UI.display('%s: file does not exist, cannot be read, '
+                        ui.display('%s: file does not exist, cannot be read, '
                                    'or the interrupt on GPIO %i is not set '
                                    'to "both". Check the system configuration.'
                                    % (gpio_edge_file, gpio))
             except (IOError, FileNotFoundError):
-                UI.display('%s : file does not exist or cannot be read. '
+                ui.display('%s : file does not exist or cannot be read. '
                            'You must export the GPIO no %s as input first!'
                            % (gpio_value_file, gpio))
             else:
@@ -102,7 +101,7 @@ class Monotype(object):
             (self.is_perforator, interface_id) = caster_settings
         except exceptions.NotConfigured:
             # Cannot read config? Use defaults:
-            UI.display('Using hardcoded defaults for caster settings...')
+            ui.display('Using hardcoded defaults for caster settings...')
             self.is_perforator = False
             interface_id = 0
 
@@ -113,7 +112,7 @@ class Monotype(object):
              pin_base, signals_arrangement) = out_settings
         except exceptions.NotConfigured:
             # Cannot read config? Use defaults:
-            UI.display('Using hardcoded defaults for interface outputs...')
+            ui.display('Using hardcoded defaults for interface outputs...')
             mcp0_address = constants.MCP0
             mcp1_address = constants.MCP1
             pin_base = constants.PIN_BASE
@@ -141,7 +140,7 @@ class Monotype(object):
                  sensor_gpio) = cfg_parser.get_input_settings(interface_id)
             except exceptions.NotConfigured:
                 # Cannot read config? Use defaults:
-                UI.display('Using hardcoded defaults for interface inputs...')
+                ui.display('Using hardcoded defaults for interface inputs...')
                 emergency_stop_gpio = constants.EMERGENCY_STOP_GPIO
                 sensor_gpio = constants.SENSOR_GPIO
             # Set up a sysfs interface for machine cycle sensor:
@@ -156,9 +155,9 @@ class Monotype(object):
 
         # Iterate over the collected data and print the output
         for parameter in info:
-            UI.debug_info(parameter)
+            ui.debug_info(parameter)
         # Wait for user confirmation if in debug mode
-        UI.debug_confirm('Caster configured.')
+        ui.debug_confirm('Caster configured.')
         # Assign wiringPi pin numbers on MCP23017s to the Monotype
         # control signals. Return the result.
         return dict(zip(signals_arrangement.split(','), pins))
@@ -335,7 +334,7 @@ class Monotype(object):
                        'E': exceptions.exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
-        UI.simple_menu(message, options)()
+        ui.simple_menu(message, options)()
 
     def _emergency_cleanup(self):
         """emergency_cleanup:
@@ -350,7 +349,7 @@ class Monotype(object):
         """
         pump_off = False
         stop_signal = ('N', 'J', '0005')
-        UI.display('Stopping the pump...')
+        ui.display('Stopping the pump...')
         while not pump_off:
             try:
                 # Try stopping the pump until we succeed!
@@ -360,7 +359,7 @@ class Monotype(object):
             except exceptions.MachineStopped:
                 # Loop over
                 pass
-        UI.display('Pump stopped. All valves off...')
+        ui.display('Pump stopped. All valves off...')
         self.deactivate_valves()
         time.sleep(1)
         return True
@@ -392,5 +391,5 @@ class Monotype(object):
     def __exit__(self, *args):
         """On exit, do the cleanup:
         """
-        UI.debug_info('Exiting caster/interface context.')
+        ui.debug_info('Exiting caster/interface context.')
         self.lock = False

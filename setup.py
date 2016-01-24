@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 long_description = """
 Typesetting and casting software for a Raspberry Pi-based computer control
@@ -25,7 +25,7 @@ The workflow is as follows:
 """
 
 setup(name='rpi2caster',
-      version='0.1a1',
+      version='0.1dev1',
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
@@ -35,7 +35,7 @@ setup(name='rpi2caster',
       zip_safe=False,
       tests.suite='nose.collector',
       tests.require=['nose'],
-      classifiers=['Development Status :: 3 - Alpha',
+      classifiers=['Development Status :: 2 - Pre-Alpha',
                    'Intended Audience :: Manufacturing',
                    'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
                    'Natural Language :: English',
@@ -43,5 +43,5 @@ setup(name='rpi2caster',
                    'Programming Language :: Python :: 3 :: Only',
                    'Topic :: Artistic Software'],
       keywords=['Monotype', 'typography', 'typesetting', 'typecasting', 'Raspberry Pi'],
-      packages=['rpi2caster', 'scripts'],
+      packages=find_packages(exclude=['tests']),
       entry_points={'console_scripts':['cast=cast:main', 'inventory=inventory:main', 'simulate=simulate:main']})

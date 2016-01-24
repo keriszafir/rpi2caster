@@ -103,7 +103,7 @@ def comments_parser(input_data):
             [raw_signals, comment] = input_data.split(symbol, 1)
             break
     # Return a list with unprocessed signals and comment
-    return [raw_signals.strip(), comment.strip()]
+    return [raw_signals.strip().upper(), comment.strip()]
 
 
 def count_lines_and_chars(contents):
