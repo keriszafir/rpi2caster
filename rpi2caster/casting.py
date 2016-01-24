@@ -83,7 +83,6 @@ class Casting(object):
         self.diecase_layout = None
         # Unit arrangement: default is the S5 wedge
         self.wedge = None
-        self.unit_arrangement = constants.S5
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
@@ -362,8 +361,7 @@ class Casting(object):
         Ask user about the diecase row & column, as well as number of sorts.
         """
         # We need to choose a wedge unless we did it earlier
-        wedge = self.wedge or wedge_data.choose_wedge()
-        (_, set_width, brit_pica, unit_arrangement) = wedge
+        wedge = self.wedge or wedge_data.Wedge()
         while True:
             # Outer loop
             ui.clear()
@@ -400,7 +398,7 @@ class Casting(object):
                 column += ' D'
             # Determine the unit width for a row
             try:
-                row_units = unit_arrangement[row]
+                row_units = wedge.unit_arrangement[row]
             except (IndexError, KeyError):
                 row_units = 5
             prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
@@ -410,8 +408,8 @@ class Casting(object):
             # Calculate the unit width difference and apply justification
             difference = units - row_units
             wedge_positions = typesetting.calculate_wedges(difference,
-                                                           set_width,
-                                                           brit_pica)
+                                                           wedge.set_width,
+                                                           wedge.brit_pica)
             if difference:
                 # If we need to correct the width -
                 # we must cast with the S needle
@@ -474,11 +472,10 @@ class Casting(object):
                    '[F]ournier cicero = 0.1629": ')
         pica_def = ui.simple_menu(message, options)
         # We need to choose a wedge unless we did it earlier
-        wedge = self.wedge or wedge_data.choose_wedge()
-        (_, set_width, brit_pica, unit_arrangement) = wedge
+        wedge = self.wedge or wedge_data.Wedge()
         # Unit line length:
         unit_line_length = int(18 * pica_def / 0.1667 * line_length *
-                               set_width / 12)
+                               wedge.set_width / 12)
         # Now we can cast multiple different spaces
         while True:
             ui.clear()
@@ -511,7 +508,7 @@ class Casting(object):
                 column += ' D'
             # Determine the unit width for a row
             try:
-                row_units = unit_arrangement[row]
+                row_units = wedge.unit_arrangement[row]
             except (IndexError, KeyError):
                 row_units = 6
             prompt = '\nHow many lines? (default: 1): '
@@ -542,7 +539,7 @@ class Casting(object):
             # units = points * set_width/12 * 1 / 12 * 18
             # 18 / (12*12) = 0.125, hence division by 8
             factor = pica_def / 0.1667
-            sort_units = round(width * factor * set_width / 8, 2)
+            sort_units = round(width * factor * wedge.set_width / 8, 2)
             # How many spaces will fit in a line? Calculate it...
             # We add 5 em-quads at O15 before and after the proper spaces
             # We need 180 additional units for that - need to subtract
@@ -556,8 +553,8 @@ class Casting(object):
             difference = sort_units - row_units
             # Calculate the wedge positions
             wedge_positions = typesetting.calculate_wedges(difference,
-                                                           set_width,
-                                                           brit_pica)
+                                                           wedge.set_width,
+                                                           wedge.brit_pica)
             if difference:
                 # If we need to correct the width -
                 # we must cast with the S needle
@@ -596,7 +593,7 @@ class Casting(object):
                     info = ['Row: %s' % row,
                             'Column: %s' % column,
                             'Width in points: %s' % width,
-                            'Width in %s-set units: %s' % (set_width,
+                            'Width in %s-set units: %s' % (wedge.set_width,
                                                            sort_units),
                             '0075 wedge at: %s' % wedge_positions[0],
                             '0005 wedge at: %s' % wedge_positions[1],
@@ -774,20 +771,15 @@ class Casting(object):
                  'Cast some 9-unit characters, then measure the width.\n'
                  'Adjust if needed.')
         ui.display(intro)
-        # Check if wedge is selected
-        if self.wedge:
-            set_width = self.wedge[1]
-            brit_pica = self.wedge[2]
-        else:
-            set_width = ui.enter_data_spec_type('Set width? : ', float)
-            brit_pica = ui.yes_or_no('British old pica wedge - .1667"? : ')
+        # Use current wedge or select one
+        wedge = self.wedge or wedge_data.Wedge()
         # Selected
-        if brit_pica:
+        if wedge.brit_pica:
             pica = 0.1667
         else:
             pica = 0.166
         # We calculate the width of double 9 units = 18 units, i.e. 1 pica em
-        em_width = pica * set_width / 12
+        em_width = pica * wedge.set_width / 12
         ui.display('Type 9 units (1en) width: %s' % round(em_width / 2, 4))
         ui.display('Type 18 units (1em) width: %s' % round(em_width, 4))
         while True:
@@ -822,7 +814,7 @@ class Casting(object):
         try:
             # Find the en-dash automatically
             dash_position = [mat[2] + str(mat[3])
-                             for mat in self.diecase_layout
+                             for mat in self.diecase.layout
                              if mat[0] == '–'][0]
         except (exceptions.MatrixNotFound, TypeError, IndexError):
             # Choose it manually
@@ -830,7 +822,7 @@ class Casting(object):
         try:
             # Find the "n" letter automatically
             lowercase_n_position = [mat[2] + str(mat[3])
-                                    for mat in self.diecase_layout
+                                    for mat in self.diecase.layout
                                     if mat[0] == 'n'][0]
         except (exceptions.MatrixNotFound, TypeError, IndexError):
             # Choose itmanually
@@ -947,25 +939,20 @@ class Casting(object):
             displayed_info.append('Ribbon title: %s' % self.ribbon_metadata[0])
             displayed_info.append('Author: %s' % self.ribbon_metadata[1])
         if self.diecase:
-            displayed_info.append('Diecase: %s' % self.diecase[0])
-            displayed_info.append('Typeface: %s' % self.diecase[5])
-            displayed_info.append('Type series: %s' % self.diecase[1])
-            displayed_info.append('Type size: %s' % self.diecase[2])
+            displayed_info.append('Diecase: %s' % self.diecase.id)
+            displayed_info.append('Typeface: %s' % self.diecase.typeface_name)
+            displayed_info.append('Type series: %s' % self.diecase.type_series)
+            displayed_info.append('Type size: %s' % self.diecase.type_size)
         if self.wedge:
-            (wedge_series, set_width, brit_pica, arrangement) = self.wedge
             # Displayed unit arrangement
-            arrangement = ' '.join([str(x) for x in arrangement if x])
-            displayed_info.append('Wedge series: %s' % wedge_series)
-            displayed_info.append('Set width: %s' % set_width)
-            displayed_info.append('British pica wedge?: %s' % brit_pica)
+            arrangement = ' '.join([str(x)
+                                   for x in self.wedge.unit_arrangement if x])
+            displayed_info.append('Wedge series: %s' % self.wedge.series)
+            displayed_info.append('Set width: %s' % self.wedge.set_width)
+            displayed_info.append('British pica wedge?: %s'
+                                  % self.wedge.brit_pica)
             displayed_info.append('Wedge unit arrangement: %s' % arrangement)
         return '\n'.join(displayed_info)
-
-    def show_diecase_layout(self):
-        """Shows the diecase layout"""
-        ui.display_diecase_layout(self.diecase_layout,
-                                  self.unit_arrangement)
-        ui.confirm()
 
     def data_menu(self):
         """Choose the ribbon and diecase, if needed"""
@@ -987,7 +974,6 @@ class Casting(object):
             self.ribbon_file = None
             self.ribbon_metadata = None
             self.diecase = None
-            self.diecase_layout = None
             self.unit_arrangement = constants.S5
             self.wedge = None
             author, title, unit_shift, diecase_id = None, None, False, None
@@ -1029,8 +1015,6 @@ class Casting(object):
             self.ribbon_file = None
             self.ribbon_metadata = None
             self.diecase = None
-            self.diecase_layout = None
-            self.unit_arrangement = constants.S5
             self.wedge = None
             ribbon_metadata = typesetting_data.get_ribbon_metadata(ribbon_id)
             ribbon_contents = typesetting_data.get_ribbon_contents(ribbon_id)
@@ -1073,25 +1057,12 @@ class Casting(object):
             self.wedge = None
             # Choose a diecase automatically (if fed to function)
             # or manually
-            self.diecase = matrix_data.choose_diecase(diecase_id)
-            (_, _, _, wedge_series, set_width, _,
-             self.diecase_layout) = self.diecase
-            # Get wedge parameters
-            try:
-                # Look up the wedge in database automatically
-                self.wedge = wedge_data.get_wedge(wedge_series, set_width)
-            except exceptions.NoMatchingData:
-                # Select it manually
-                try:
-                    choose_wedge()
-                # Catch the exception at the end of choose_wedge
-                except exceptions.MenuLevelUp:
-                    pass
-            # Read the UA for the wedge
-            self.unit_arrangement = self.wedge[-1]
+            self.diecase = matrix_data.Diecase(diecase_id)
+            # Get wedge
+            self.wedge = self.diecase.wedge
             # Ask whether to show diecase layout:
-            if self.diecase_layout and ui.yes_or_no('Show diecase layout?'):
-                self.show_diecase_layout()
+            if ui.yes_or_no('Show diecase layout?'):
+                self.diecase.show_layout()
             exceptions.menu_level_up()
 
         def choose_wedge():
@@ -1103,8 +1074,7 @@ class Casting(object):
                            'too narrow or to wide!')
                 if not ui.yes_or_no('Proceed?'):
                     return False
-            self.wedge = wedge_data.choose_wedge()
-            self.unit_arrangement = self.wedge[-1]
+            self.wedge = wedge_data.Wedge()
             exceptions.menu_level_up()
 
         def check_database():
@@ -1191,9 +1161,9 @@ def main_menu(work=Casting()):
 
     def check_diecase():
         """Checks if diecase is set and enables certain options"""
-        opts = (('View the matrix case layout', work.show_diecase_layout),
-                ('Compose and cast a line of text', work.line_casting))
         if work.diecase:
+            opts = (('View the matrix case layout', work.diecase.show_layout),
+                    ('Compose and cast a line of text', work.line_casting))
             for option in opts:
                 options.append(option)
 

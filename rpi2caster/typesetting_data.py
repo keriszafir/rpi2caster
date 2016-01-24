@@ -19,6 +19,16 @@ from rpi2caster import database
 DB = database.Database()
 
 
+class Ribbon(object):
+    """Ribbon objects - no matter whether files or db"""
+    def __init__(self):
+        self.id = None
+        self.author = None
+        self.diecase_id = None
+        self.unit_shift = None
+        self.contents = None
+
+
 def check_if_ribbons():
     """Checks if any ribbons are available in the database"""
     try:
