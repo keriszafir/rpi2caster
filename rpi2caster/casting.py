@@ -43,6 +43,34 @@ def use_caster(func):
     return func_wrapper
 
 
+class Diecase(object):
+    """Diecase: matrix case attributes and operations"""
+    def __init__(self, diecase_id=None):
+        diecase = matrix_data.choose_diecase(diecase_id)
+        (self.id, self.type_series, self.type_size,
+         wedge_series, set_width,
+         self.typeface_name, self.layout) = diecase
+        # Associated wedge
+        self.wedge = Wedge(wedge_series, set_width)
+
+    def show_layout(self):
+        """Shows the diecase layout"""
+        ui.display_diecase_layout(self.layout,
+                                  self.wedge.unit_arrangement)
+        ui.confirm()
+
+
+class Wedge(object):
+    """Wedge: wedge data"""
+    def __init__(self, wedge_series=None, set_width=None):
+        try:
+            wedge = wedge_data.get_wedge(wedge_series, set_width)
+        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+            wedge = wedge_data.choose_wedge()
+        (self.series, self.set_width, self.brit_pica,
+         self.unit_arrangement) = wedge
+
+
 class Casting(object):
     """Casting:
 
@@ -973,13 +1001,13 @@ class Casting(object):
         options = []
 
         # Define subroutines used only here
-        def ribbon_from_file():
+        def ribbon_from_file(ribbon_file=''):
             """ribbon_from_file
 
             Asks the user for the ribbon filename.
             Checks if the file is readable, and pre-processes it.
             """
-            ribbon_file = ui.enter_input_filename()
+            ribbon_file = ribbon_file or ui.enter_input_filename()
             ribbon_contents = parsing.read_file(ribbon_file)
             metadata = parsing.get_metadata(ribbon_contents)
             # Clear the previous ribbon, diecase, wedge selections
@@ -1001,10 +1029,10 @@ class Casting(object):
             if 'author' in metadata:
                 author = metadata['author']
             if ('unit-shift' in metadata and
-                    metadata['unit-shift'].lower() in ['true', 'on', '1']):
+                    metadata['unit-shift'].lower() in constants.TRUE_ALIASES):
                 unit_shift = True
             if ('unit-shift' in metadata and
-                    metadata['unit-shift'].lower() in ['false', 'off', '0']):
+                    metadata['unit-shift'].lower() in constants.FALSE_ALIASES):
                 unit_shift = False
             if 'title' in metadata:
                 title = metadata['title']
