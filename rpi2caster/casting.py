@@ -43,34 +43,6 @@ def use_caster(func):
     return func_wrapper
 
 
-class Diecase(object):
-    """Diecase: matrix case attributes and operations"""
-    def __init__(self, diecase_id=None):
-        diecase = matrix_data.choose_diecase(diecase_id)
-        (self.id, self.type_series, self.type_size,
-         wedge_series, set_width,
-         self.typeface_name, self.layout) = diecase
-        # Associated wedge
-        self.wedge = Wedge(wedge_series, set_width)
-
-    def show_layout(self):
-        """Shows the diecase layout"""
-        ui.display_diecase_layout(self.layout,
-                                  self.wedge.unit_arrangement)
-        ui.confirm()
-
-
-class Wedge(object):
-    """Wedge: wedge data"""
-    def __init__(self, wedge_series=None, set_width=None):
-        try:
-            wedge = wedge_data.get_wedge(wedge_series, set_width)
-        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-            wedge = wedge_data.choose_wedge()
-        (self.series, self.set_width, self.brit_pica,
-         self.unit_arrangement) = wedge
-
-
 class Casting(object):
     """Casting:
 

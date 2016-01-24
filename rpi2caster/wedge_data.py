@@ -14,6 +14,19 @@ from rpi2caster import wedge_arrangements
 DB = database.Database()
 
 
+class Wedge(object):
+    """Wedge: wedge data"""
+    def __init__(self, series=None, set_width=None):
+        # Try to find a wedge with given series and set width
+        try:
+            wedge = get_wedge(series, set_width)
+        # Cannot find wedge with this series and set width = choose it
+        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+            wedge = choose_wedge()
+        (self.series, self.set_width, self.brit_pica,
+         self.unit_arrangement) = wedge
+
+
 def add_wedge():
     """add_wedge()
 

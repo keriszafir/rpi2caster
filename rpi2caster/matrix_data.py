@@ -22,6 +22,25 @@ from rpi2caster import constants
 DB = database.Database()
 
 
+class Diecase(object):
+    """Diecase: matrix case attributes and operations"""
+    def __init__(self, diecase_id=None):
+        # Choose automatically or manually
+        diecase = choose_diecase(diecase_id)
+        # Set some attributes
+        (self.id, self.type_series, self.type_size,
+         wedge_series, set_width,
+         self.typeface_name, self.layout) = diecase
+        # Associated wedge
+        self.wedge = wedge_data.Wedge(wedge_series, set_width)
+
+    def show_layout(self):
+        """Shows the diecase layout"""
+        ui.display_diecase_layout(self.layout,
+                                  self.wedge.unit_arrangement)
+        ui.confirm()
+
+
 def lookup_diecase(type_series, type_size):
     """lookup_diecase
 
