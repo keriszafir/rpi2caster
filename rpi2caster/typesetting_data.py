@@ -15,6 +15,8 @@ from rpi2caster import exceptions
 from rpi2caster import parsing
 # We need to operate on a database
 from rpi2caster import database
+# Constants for rpi2caster
+from rpi2caster import constants
 # Create an instance of Database class with default parameters
 DB = database.Database()
 
@@ -23,28 +25,37 @@ class Ribbon(object):
     """Ribbon objects - no matter whether files or database entries.
 
     A ribbon has the following attributes:
-    author, title
-    customer
+    author, title, customer - strings
     diecase_id (diecase is selected automatically on casting, so user can e.g.
                 view the layout or know which wedge to use)
     unit_shift - bool - stores whether this was coded for unit-shift or not
     contents - series of Monotype codes
 
     Methods:
+    choose_ribbon - choose ribbon automatically or manually,
+        first try to get a ribbon with ribbon_id, and if that fails
+        ask and select ribbon manually from database, and if that fails
+        ask and load ribbon from file
     read_from_file - select a file, parse the metadata, set the attributes
-    read_from_db - get data from database
-    write_to_file - store the metadata and contents in text file
-    write_to_db - store the metadata and contents in db
+    get_from_db - get data from database
+    export_to_file - store the metadata and contents in text file
+    store_in_db - store the metadata and contents in db
+    set_[author, title, customer, diecase_id, unit_shift] - set parameters
+        manually
+
     """
-    def __init__(self, ribbon_id=None, diecase_id=None, contents=None):
+    def __init__(self, ribbon_id=None, diecase_id=None, contents=()):
         self.author = None
         self.title = None
         self.customer = None
         self.diecase_id = diecase_id
         self.unit_shift = False
+        # Start with empty or contents or what was passed on instantiation
         self.contents = contents
         # Choose the ribbon automatically or manually
         self.choose_ribbon(ribbon_id)
+        # Assign diecase
+        self.set_diecase_id(diecase_id)
 
     def set_author(self):
         """Manually sets the author"""
@@ -61,10 +72,11 @@ class Ribbon(object):
         prompt = 'Enter the customer\'s name for this ribbon: '
         self.customer = ui.enter_data_or_blank(prompt) or self.customer
 
-    def set_diecase_id(self):
+    def set_diecase_id(self, diecase_id=None):
         """Manually sets the diecase ID"""
         prompt = 'Enter the diecase ID for this ribbon: '
-        self.diecase_id = ui.enter_data_or_blank(prompt) or self.diecase_id
+        self.diecase_id = (diecase_id or ui.enter_data_or_blank(prompt) or
+                           self.diecase_id)
 
     def set_unit_shift(self):
         """Chooses whether unit-shift is needed"""
@@ -80,7 +92,7 @@ class Ribbon(object):
         # If given an ID on instantiation - look it up in database
         # If no ID given - will select manually
         # If this fails - will load from file
-        self.get_from_db(ribbon_id) or self.read_from_file()
+        (_,) = self.get_from_db(ribbon_id) or self.read_from_file()
 
     def display_data(self):
         """Displays all available data"""
@@ -112,32 +124,18 @@ class Ribbon(object):
 
     def get_from_db(self, ribbon_id):
         """Gets the ribbon from database"""
+        # If id not supplied, choose a ribbon
+        question = 'Select ribbon from database?'
+        ribbon_id = ribbon_id or ui.yes_or_no(question) and choose_ribbon()
+        # Now get its parameters
         try:
             ribbon = DB.ribbon_by_id(ribbon_id)
-        except (exceptions.DatabaseQueryError, exceptions.NoMatchingData):
-            while True:
-                ui.clear()
-                ui.display('Choose a ribbon:', end='\n\n')
-                available_ribbons = list_ribbons()
-                if not available_ribbons:
-                    ui.confirm('No ribbons found.')
-                    return False
-                # Enter the diecase name
-                prompt = 'Number of a ribbon? (leave blank to exit): '
-                choice = (ui.enter_data_or_blank(prompt) or
-                          exceptions.return_to_menu())
-                # Safeguards against entering a wrong number
-                # or non-numeric string
-                try:
-                    ribbon_id = available_ribbons[choice]
-                    break
-                except KeyError:
-                    ui.confirm('Ribbon number is incorrect!')
-                    continue
-        except exceptions.ReturnToMenu:
+        except (exceptions.DatabaseQueryError,
+                exceptions.NoMatchingData,
+                exceptions.ReturnToMenu):
             return False
-        ribbon = DB.ribbon_by_id(ribbon_id)
-        (_, self.author, self.title, self.diecase_id, self.customer,
+        # Set ribbon attributes
+        (self.author, self.title, self.diecase_id, self.customer,
          self.unit_shift, self.contents) = ribbon
         return True
 
@@ -160,29 +158,40 @@ class Ribbon(object):
             return False
         # Initialize the contents
         with io.open(filename, mode='r') as ribbon_file:
-            content = [x for x in ribbon_file]
+            contents = [x for x in ribbon_file]
         # Parse the file, get metadata
-        metadata = parsing.get_metadata(content)
+        metadata = parsing.get_metadata(contents)
         # Metadata parsing
-        author, title, unit_shift, diecase = None, None, None, None
+        self.author, self.title, self.customer = None, None, None
+        self.unit_shift, self.diecase_id, self.contents = False, None, None
         if 'diecase' in metadata:
-            diecase = metadata['diecase']
+            self.diecase_id = metadata['diecase']
         if 'author' in metadata:
-            author = metadata['author']
-        if ('unit-shift' in metadata and
-                metadata['unit-shift'].lower() in ['true', 'on']):
-            unit_shift = True
-        if ('unit-shift' in metadata and
-                metadata['unit-shift'].lower() in ['false', 'off']):
-            unit_shift = False
+            self.author = metadata['author']
         if 'title' in metadata:
-            title = metadata['title']
-        add_ribbon(content, title, author, diecase, unit_shift)
+            self.title = metadata['title']
+        if 'customer' in metadata:
+            self.customer = metadata['customer']
+        if ('unit-shift' in metadata and
+                metadata['unit-shift'].lower() in constants.TRUE_ALIASES):
+            self.unit_shift = True
+        if ('unit-shift' in metadata and
+                metadata['unit-shift'].lower() in constants.FALSE_ALIASES):
+            self.unit_shift = False
+        # Add the whole contents as the attribute
+        self.contents = contents
 
     def export_to_file(self):
         """Exports the ribbon to a text file"""
         self.display_data()
-        pass
+        # Now enter filename for writing
+        filename = ui.enter_output_filename()
+        if not filename:
+            return False
+        # Write everything to the file
+        with io.open(filename, mode='w') as ribbon_file:
+            for line in self.contents:
+                ribbon_file.write(line)
 
 
 class Work(object):
@@ -221,6 +230,8 @@ class Work(object):
         """Manually sets the customer"""
         prompt = 'Enter the customer\'s name for this work: '
         self.customer = ui.enter_data_or_blank(prompt) or self.customer
+
+
 
 
 def check_if_ribbons():
@@ -276,23 +287,27 @@ def delete_ribbon():
             ui.display('Ribbon deleted successfully.')
 
 
-def get_ribbon_contents(ribbon_id):
-    """get_ribbon_contents:
-
-    Returns the contents of a ribbon.
-    """
-    ribbon_contents = DB.ribbon_by_id(ribbon_id)[-1]
-    return ribbon_contents
-
-
-def get_ribbon_metadata(ribbon_id):
-    """get_ribbon_metadata:
-
-    Returns the ribbon metadata: title, author, diecase ID, unit shift
-    requirement.
-    """
-    ribbon_metadata = DB.ribbon_by_id(ribbon_id)[1:5]
-    return ribbon_metadata
+def choose_ribbon():
+    """Chooses a ribbon from database, returns ribbon id"""
+    while True:
+        ui.clear()
+        ui.display('Choose a ribbon:', end='\n\n')
+        available_ribbons = list_ribbons()
+        if not available_ribbons:
+            ui.confirm('No ribbons found.')
+            return None
+        # Enter the diecase name or raise an exception to break the loop
+        prompt = 'Number of a ribbon? (leave blank to exit): '
+        choice = (ui.enter_data_or_blank(prompt) or
+                  exceptions.return_to_menu())
+        # Safeguards against entering a wrong number
+        # or non-numeric string
+        try:
+            ribbon_id = available_ribbons[choice]
+            return ribbon_id
+        except KeyError:
+            ui.confirm('Ribbon number is incorrect!')
+            continue
 
 
 def list_works():
@@ -338,28 +353,6 @@ def choose_work():
             continue
 
 
-def show_work():
-    """show_work:
-
-    Shows a text file.
-    """
-    while True:
-        # Choose the work
-        work_id = choose_work()
-        # First, get the work data
-        (work_id, title, author, contents) = DB.work_by_id(work_id)
-        info = []
-        info.append('Title: %s' % title)
-        info.append('Autor: %s' % author)
-        for line in info:
-            ui.display(line)
-        ui.display('\n\n')
-        # Print it to the screen
-        for line in contents:
-            ui.display(line)
-        ui.confirm('\n')
-
-
 def add_work(contents, title=None, author=None):
     """add_work:
 
@@ -393,15 +386,6 @@ def delete_work():
         ans = ui.yes_or_no('Are you sure?')
         if ans and DB.delete_work(work_id):
             ui.display('Ribbon deleted successfully.')
-
-
-def get_text(work_id):
-    """get_text:
-
-    Returns the contents of a text.
-    """
-    contents = DB.work_by_id(work_id)[-1]
-    return contents
 
 
 def submit_work_file():

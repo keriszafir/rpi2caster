@@ -472,7 +472,7 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS ribbons ('
-                               'ribbon_id INTEGER PRIMARY KEY, '
+                               'ribbon_id INTEGER PRIMARY KEY AUTOINCREMENT, '
                                'title TEXT, '
                                'author TEXT, '
                                'customer TEXT, '
