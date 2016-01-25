@@ -449,7 +449,7 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def add_ribbon(self, ribbon_id, title, author, diecase_id, unit_shift,
+    def add_ribbon(self, title, author, customer, diecase_id, unit_shift,
                    contents):
         """add_ribbon:
 
@@ -457,30 +457,31 @@ class Database(object):
         Returns True if successful, raises an exception otherwise.
 
         Arguments:
-        ribbon_id - user-defined unique ribbon ID
         title - title of a work,
-        author - author's name (or system login),
+        author - author's name,
+        customer - customer's name,
         diecase_id - diecase used for casting the ribbon,
         contents - codes to send to the caster
         """
         # contents is a JSON-encoded list
         contents = json.dumps(contents)
         unit_shift = int(unit_shift)
-        data = [ribbon_id, title, author, diecase_id, unit_shift, contents]
+        data = [author, title, customer, diecase_id, unit_shift, contents]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS ribbons ('
-                               'ribbon_id TEXT UNIQUE PRIMARY KEY, '
-                               'title TEXT NOT NULL, '
-                               'author TEXT NOT NULL, '
+                               'ribbon_id INTEGER PRIMARY KEY, '
+                               'title TEXT, '
+                               'author TEXT, '
+                               'customer TEXT, '
                                'diecase_id TEXT NOT NULL, '
                                'unit_shift INTEGER NOT NULL, '
                                'contents TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT INTO ribbons ('
-                               'ribbon_id,title,author,diecase_id,contents'
+                               'title,author,customer,diecase_id,contents'
                                ') VALUES (?, ?, ?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
@@ -499,12 +500,18 @@ class Database(object):
                 cursor.execute('SELECT * FROM ribbons '
                                'WHERE ribbon_id = ?', [ribbon_id])
                 ribbon = list(cursor.fetchone())
-                # De-serialize the contents, convert it back to a list
+                # Take the last item which is contents
+                # De-serialize it, convert it back to a list
                 raw_contents = json.loads(ribbon.pop())
+                # From the remaining list, take the last item which is
+                # the unit-shift flag (int, 0 or 1), make it boolean
                 unit_shift = bool(ribbon.pop())
+                # Add converted unit-shift back to the ribbon list
                 ribbon.append(unit_shift)
+                # Add the contents
                 ribbon.append(raw_contents)
-                return ribbon
+                # Return the list apart from ID - not needed
+                return ribbon[1:]
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise exceptions.NoMatchingData

@@ -890,15 +890,9 @@ class Casting(object):
         and displays its contents line by line, or displays
         an error message.
         """
-        ui.clear()
-        ui.display('Ribbon preview:\n')
-        try:
-            for line in self.ribbon_contents:
-                ui.display(line)
-        except KeyboardInterrupt:
-            # Press ctrl-C to abort displaying long ribbons
-            pass
-        ui.confirm('', ui.MSG_MENU)
+        self.ribbon.display_data()
+        ui.confirm('Showing the ribbon contents:')
+        self.ribbon.display_contents()
 
     def heatup(self):
         """heatup
@@ -1052,11 +1046,7 @@ class Casting(object):
                 # Clear any ribbon and wedge choice
                 self.ribbon_metadata = None
                 self.ribbon_contents = None
-            # Wedge will be automatically or manually selected soon
-            # Temporarily, no wedge
-            self.wedge = None
-            # Choose a diecase automatically (if fed to function)
-            # or manually
+            # Choose a diecase automatically or manually
             self.diecase = matrix_data.Diecase(diecase_id)
             # Get wedge
             self.wedge = self.diecase.wedge
