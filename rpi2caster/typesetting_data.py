@@ -44,33 +44,38 @@ class Ribbon(object):
         manually
 
     """
-    def __init__(self, ribbon_id=None, diecase_id=None, contents=()):
+    def __init__(self, diecase_id=None, contents=()):
         self.author = None
         self.title = None
         self.customer = None
         self.diecase_id = diecase_id
         self.unit_shift = False
+        self.filename = None
         # Start with empty or contents or what was passed on instantiation
         self.contents = contents
-        # Choose the ribbon automatically or manually
-        self.choose_ribbon(ribbon_id)
-        # Assign diecase
-        self.set_diecase_id(diecase_id)
 
-    def set_author(self):
+    def setup(self, ribbon_id=None, filename=None, diecase_id=None):
+        """Setup a ribbon object manually or automatically"""
+        self.choose_ribbon(ribbon_id, filename)
+        # Assign diecase
+        if not self.diecase_id:
+            self.set_diecase_id(diecase_id)
+
+    def set_author(self, author=None):
         """Manually sets the author"""
         prompt = 'Enter the author name for this ribbon: '
-        self.author = ui.enter_data_or_blank(prompt) or self.author
+        self.author = author or ui.enter_data_or_blank(prompt) or self.author
 
-    def set_title(self):
+    def set_title(self, title=None):
         """Manually sets the title"""
         prompt = 'Enter the title: '
-        self.title = ui.enter_data_or_blank(prompt) or self.title
+        self.title = title or ui.enter_data_or_blank(prompt) or self.title
 
-    def set_customer(self):
+    def set_customer(self, customer=None):
         """Manually sets the customer"""
         prompt = 'Enter the customer\'s name for this ribbon: '
-        self.customer = ui.enter_data_or_blank(prompt) or self.customer
+        self.customer = (customer or ui.enter_data_or_blank(prompt) or
+                         self.customer)
 
     def set_diecase_id(self, diecase_id=None):
         """Manually sets the diecase ID"""
@@ -78,21 +83,23 @@ class Ribbon(object):
         self.diecase_id = (diecase_id or ui.enter_data_or_blank(prompt) or
                            self.diecase_id)
 
-    def set_unit_shift(self):
+    def set_unit_shift(self, unit_shift=False):
         """Chooses whether unit-shift is needed"""
         prompt = 'Is unit shift needed?'
-        self.unit_shift = ui.yes_or_no(prompt)
+        self.unit_shift = unit_shift or ui.yes_or_no(prompt) or self.unit_shift
 
-    def choose_ribbon(self, ribbon_id=None):
+    def choose_ribbon(self, ribbon_id=None, filename=None):
         """Choose a ribbon from database or file.
         If supplied ribbon_id, try to choose automatically.
         If no ribbon_id or the above failed, choose the ribbon manually
         from database or file.
         """
-        # If given an ID on instantiation - look it up in database
-        # If no ID given - will select manually
+        # If called with a filename - select from file
+        # If called with ID - select automatically from database
+        # If no or wrong ID given - will select manually
         # If this fails - will load from file
-        (_,) = self.get_from_db(ribbon_id) or self.read_from_file()
+        if filename or not self.get_from_db(ribbon_id):
+            self.read_from_file(filename)
 
     def display_data(self):
         """Displays all available data"""
@@ -105,11 +112,11 @@ class Ribbon(object):
         if self.diecase_id:
             ui.display('Matrix case ID: %s' % self.diecase_id)
         if self.unit_shift:
-            ui.display('This ribbon was coded for casting WITH unit-shift')
+            ui.display('This ribbon was coded for casting WITH unit-shift.')
         elif self.unit_shift is None:
-            ui.display('Unit shift status is not defined')
+            ui.display('Unit shift status is not defined.')
         else:
-            ui.display('This ribbon was coded for casting WITHOUT unit-shift')
+            ui.display('This ribbon was coded for casting WITHOUT unit-shift.')
 
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
@@ -122,7 +129,7 @@ class Ribbon(object):
             pass
         ui.confirm('', ui.MSG_MENU)
 
-    def get_from_db(self, ribbon_id):
+    def get_from_db(self, ribbon_id=None):
         """Gets the ribbon from database"""
         # If id not supplied, choose a ribbon
         question = 'Select ribbon from database?'
@@ -148,24 +155,26 @@ class Ribbon(object):
                           self.diecase_id, self.unit_shift, self.contents)
             ui.display('Data added successfully.')
 
-    def read_from_file(self):
+    def read_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
         # Ask, and stop here if answered no
-        if not ui.yes_or_no('Add the ribbon from file?'):
-            return False
-        filename = ui.enter_input_filename()
+        ui.display('\nLoading the ribbon from file...')
+        filename = filename or ui.enter_input_filename()
         if not filename:
             return False
         # Initialize the contents
         with io.open(filename, mode='r') as ribbon_file:
-            contents = [x for x in ribbon_file]
+            contents = [x.strip('\n') for x in ribbon_file]
         # Parse the file, get metadata
         metadata = parsing.get_metadata(contents)
+        print(metadata)
         # Metadata parsing
         self.author, self.title, self.customer = None, None, None
         self.unit_shift, self.diecase_id, self.contents = False, None, None
         if 'diecase' in metadata:
             self.diecase_id = metadata['diecase']
+        elif 'diecase_id' in metadata:
+            self.diecase_id = metadata['diecase_id']
         if 'author' in metadata:
             self.author = metadata['author']
         if 'title' in metadata:
@@ -180,6 +189,8 @@ class Ribbon(object):
             self.unit_shift = False
         # Add the whole contents as the attribute
         self.contents = contents
+        # Info about the filename
+        self.filename = filename
 
     def export_to_file(self):
         """Exports the ribbon to a text file"""
@@ -232,8 +243,6 @@ class Work(object):
         self.customer = ui.enter_data_or_blank(prompt) or self.customer
 
 
-
-
 def check_if_ribbons():
     """Checks if any ribbons are available in the database"""
     try:
@@ -275,13 +284,13 @@ def list_ribbons():
     return results
 
 
-def delete_ribbon():
+def delete_ribbon(ribbon_id=None):
     """Used for deleting a ribbon from database.
 
     Lists ribbons, then allows user to choose ID.
     """
     while True:
-        ribbon_id = choose_ribbon()
+        ribbon_id = ribbon_id or choose_ribbon() or exceptions.return_to_menu()
         ans = ui.yes_or_no('Are you sure?')
         if ans and DB.delete_ribbon(ribbon_id):
             ui.display('Ribbon deleted successfully.')
@@ -376,13 +385,13 @@ def add_work(contents, title=None, author=None):
         ui.display('Data added successfully.')
 
 
-def delete_work():
+def delete_work(work_id=None):
     """Used for deleting a ribbon from database.
 
     Lists ribbons, then allows user to choose ID.
     """
     while True:
-        work_id = choose_work()
+        work_id = work_id or choose_work() or exceptions.return_to_menu()
         ans = ui.yes_or_no('Are you sure?')
         if ans and DB.delete_work(work_id):
             ui.display('Ribbon deleted successfully.')

@@ -43,7 +43,8 @@ def get_metadata(content):
     operator is used for splitting the string in two (parameter and value),
     and a dictionary with parsed parameters is returned.
     """
-    parameters = ['diecase', 'title', 'author', 'unit-shift', 'justification']
+    parameters = ['diecase', 'title', 'author', 'unit-shift', 'justification',
+                  'diecase_id', 'customer']
     symbols = ['=', ':', ' ']
     result = {}
     # Work on an unmodified copy and delete lines from the sequence

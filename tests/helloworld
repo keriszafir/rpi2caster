@@ -2,7 +2,7 @@ diecase 327-12-KS01
 title Hello World
 author Christophe Slychan
 unit-shift OFF
-justification normal
+customer Muzeum Książki Artystycznej
 0005       // Pump off
 0075 0005  // Line to the galley
 O 15

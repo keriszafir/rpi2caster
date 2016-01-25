@@ -27,14 +27,17 @@ MSG_MENU = '[Enter] to go back to main menu...'
 MSG_CONTINUE = '[Enter] to continue...'
 
 
-def menu(options, header='', footer=''):
+def menu(options, header='', footer='', no_debug=False):
     """menu(options=[(name1, opt1), (name2, opt2)...],
                     header=foo,
-                    footer=bar):
+                    footer=bar,
+                    no_debug=False):
 
     A menu which takes three arguments:
     header - string to be displayed above,
     footer - string to be displayed below,
+    no_debug - True if we don't want to tell the user
+        that the program is in debugging mode.
 
     After choice is made, return the command.
 
@@ -62,6 +65,8 @@ def menu(options, header='', footer=''):
     # Print footer, if defined
     if footer:
         print(footer, end='\n\n')
+    if DEBUG_MODE and not no_debug:
+        print('The program is now in debugging mode!', end='\n\n')
     # Add an empty line to separate prompt
     print('\n')
     # Ask for user input

@@ -28,7 +28,7 @@ class Diecase(object):
         # Choose automatically or manually
         diecase = choose_diecase(diecase_id)
         # Set some attributes
-        (self.id, self.type_series, self.type_size,
+        (self.diecase_id, self.type_series, self.type_size,
          wedge_series, set_width,
          self.typeface_name, self.layout) = diecase
         # Associated wedge

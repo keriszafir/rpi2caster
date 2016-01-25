@@ -70,23 +70,27 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster - this will be set up later
         self.caster = None
-        # You can initialize the casting job with a ribbon
-        # Filename will be displayed
-        self.ribbon_file = ribbon_file
-        # Ribbon contents and metadata
-        self.ribbon_contents = None
-        self.ribbon_metadata = None
+        # Ribbon object
+        self.ribbon = typesetting_data.Ribbon()
+        # Diecase object
+        self.diecase = None
+        # Wedge object
+        self.wedge = None
+        # Automatically set up a ribbon, diecase and wedge if loaded with file
+        self.setup_ribbon_file(ribbon_file)
         # Indicates which line the last casting was aborted on
         self.line_aborted = 0
-        # Diecase parameters
-        self.diecase = None
-        self.diecase_layout = None
-        # Unit arrangement: default is the S5 wedge
-        self.wedge = None
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
         main_menu()
+
+    def setup_ribbon_file(self, ribbon_file=None):
+        """Sets up the ribbon if filename was given as a cmdline argument"""
+        if ribbon_file:
+            self.ribbon.setup(filename=ribbon_file)
+            self.diecase = matrix_data.Diecase(self.ribbon.diecase_id)
+            self.wedge = self.diecase.wedge
 
     @use_caster
     def cast_composition(self):
@@ -95,12 +99,12 @@ class Casting(object):
         Composition casting routine. The input file is read backwards -
         last characters are cast first, after setting the justification.
         """
-        if not self.ribbon_contents:
+        if not self.ribbon.contents:
             ui.confirm('You must select a ribbon!')
             return False
         # Count all characters and lines in the ribbon
         (all_lines, all_chars) = parsing.count_lines_and_chars(
-            self.ribbon_contents)
+            self.ribbon.contents)
         # Show the numbers to the operator
         ui.display('Lines found in ribbon: %i' % all_lines)
         ui.display('Characters: %i' % all_chars)
@@ -120,12 +124,12 @@ class Casting(object):
         repetitions = ui.enter_data_spec_type_or_blank(prompt, int) or 1
         # For casting, we need to check if the ribbon has to be read
         # forwards or backwards
-        if parsing.rewind_ribbon(self.ribbon_contents):
+        if parsing.rewind_ribbon(self.ribbon.contents):
             ui.display('Ribbon starts with pump stop sequence - rewinding...')
-            queue = [line for line in reversed(self.ribbon_contents)]
+            queue = [line for line in reversed(self.ribbon.contents)]
         else:
             ui.display('Ribbon starts with galley trip - not rewinding...')
-            queue = [line for line in self.ribbon_contents]
+            queue = [line for line in self.ribbon.contents]
         # Display a little explanation
         intro = ('\nThe combinations of Monotype signals will be displayed '
                  'on screen while the machine casts the type.\n'
@@ -252,11 +256,11 @@ class Casting(object):
         force to drive the punches and advance the ribbon.
         This mode uses arbitrary timings for air on / off phases.
         """
-        if not self.ribbon_contents:
+        if not self.ribbon.contents:
             ui.confirm('You must select a ribbon!')
             return False
         # Count a number of combinations punched in ribbon
-        all_combinations = parsing.count_combinations(self.ribbon_contents)
+        all_combinations = parsing.count_combinations(self.ribbon.contents)
         ui.display('Combinations in ribbon: %i', all_combinations)
         # Wait until the operator confirms.
         intro = ('\nThe combinations of Monotype signals will be displayed '
@@ -265,7 +269,7 @@ class Casting(object):
         prompt = ('\nInput file found. Turn on the air and fit the tape '
                   'on your paper tower.')
         ui.confirm(prompt)
-        for line in self.ribbon_contents:
+        for line in self.ribbon.contents:
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
             [raw_signals, comment] = parsing.comments_parser(line)
@@ -871,10 +875,10 @@ class Casting(object):
         # Translate the text to Monotype signals
         # Compose the text
         typesetter.compose()
-        self.ribbon_contents = typesetter.justify()
+        self.ribbon.contents = typesetter.justify()
         # Ask whether to display buffer contents
         if ui.yes_or_no('Show the codes?'):
-            self.preview_ribbon()
+            self.ribbon.display_contents()
         # We're casting
         if ui.yes_or_no('Cast it?'):
             try:
@@ -929,18 +933,23 @@ class Casting(object):
     def display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
         displayed_info = []
-        if self.ribbon_metadata:
-            displayed_info.append('Ribbon title: %s' % self.ribbon_metadata[0])
-            displayed_info.append('Author: %s' % self.ribbon_metadata[1])
+        if self.ribbon.title:
+            displayed_info.append('Ribbon title: %s' % self.ribbon.title)
+        if self.ribbon.author:
+            displayed_info.append('Author: %s' % self.ribbon.author)
+        if self.ribbon.customer:
+            displayed_info.append('Customer: %s' % self.ribbon.customer)
+        if self.ribbon and self.ribbon.unit_shift:
+            displayed_info.append('This ribbon must be cast with unit-shift!')
         if self.diecase:
-            displayed_info.append('Diecase: %s' % self.diecase.id)
+            displayed_info.append('Diecase: %s' % self.diecase.diecase_id)
             displayed_info.append('Typeface: %s' % self.diecase.typeface_name)
             displayed_info.append('Type series: %s' % self.diecase.type_series)
             displayed_info.append('Type size: %s' % self.diecase.type_size)
         if self.wedge:
             # Displayed unit arrangement
             arrangement = ' '.join([str(x)
-                                   for x in self.wedge.unit_arrangement if x])
+                                    for x in self.wedge.unit_arrangement if x])
             displayed_info.append('Wedge series: %s' % self.wedge.series)
             displayed_info.append('Set width: %s' % self.wedge.set_width)
             displayed_info.append('British pica wedge?: %s'
@@ -954,126 +963,21 @@ class Casting(object):
         options = []
 
         # Define subroutines used only here
-        def ribbon_from_file(ribbon_file=''):
-            """ribbon_from_file
-
-            Asks the user for the ribbon filename.
-            Checks if the file is readable, and pre-processes it.
-            """
-            ribbon_file = ribbon_file or ui.enter_input_filename()
-            ribbon_contents = parsing.read_file(ribbon_file)
-            metadata = parsing.get_metadata(ribbon_contents)
-            # Clear the previous ribbon, diecase, wedge selections
-            self.ribbon_contents = None
-            self.ribbon_file = None
-            self.ribbon_metadata = None
-            self.diecase = None
-            self.unit_arrangement = constants.S5
-            self.wedge = None
-            author, title, unit_shift, diecase_id = None, None, False, None
-            if 'diecase' in metadata:
-                diecase_id = metadata['diecase']
-                # Try to choose the diecase
-                try:
-                    choose_diecase(diecase_id)
-                except (KeyError, exceptions.MenuLevelUp):
-                    pass
-            if 'author' in metadata:
-                author = metadata['author']
-            if ('unit-shift' in metadata and
-                    metadata['unit-shift'].lower() in constants.TRUE_ALIASES):
-                unit_shift = True
-            if ('unit-shift' in metadata and
-                    metadata['unit-shift'].lower() in constants.FALSE_ALIASES):
-                unit_shift = False
-            if 'title' in metadata:
-                title = metadata['title']
-            # Reset the "line aborted" on a new casting job
-            self.line_aborted = 0
-            # Set up casting session attributes
-            self.ribbon_file = ribbon_file
-            self.ribbon_contents = ribbon_contents
-            self.ribbon_metadata = [title, author, diecase_id, unit_shift]
-            # Get back to menu
-            exceptions.menu_level_up()
-
-        def ribbon_from_db():
-            """Get the ribbon stored in database"""
-            # Choose the ribbon
-            ribbon_id = typesetting_data.choose_ribbon()
-            # If canot choose the ribbon, go back to menu
-            if not ribbon_id:
-                return False
-            # Clear the previous ribbon, diecase, wedge selections
-            self.ribbon_contents = None
-            self.ribbon_file = None
-            self.ribbon_metadata = None
-            self.diecase = None
-            self.wedge = None
-            ribbon_metadata = typesetting_data.get_ribbon_metadata(ribbon_id)
-            ribbon_contents = typesetting_data.get_ribbon_contents(ribbon_id)
-            # Get the metadata
-            diecase_id = ribbon_metadata[2]
-            # Select the matrix case automatically
-            try:
-                choose_diecase(diecase_id)
-            except (KeyError, exceptions.MenuLevelUp):
-                pass
-            # Reset the "line aborted" on a new casting job
-            self.line_aborted = 0
-            # Set up casting session attributes
-            self.ribbon_contents = ribbon_contents
-            self.ribbon_metadata = ribbon_metadata
-            # Get back to menu
-            exceptions.menu_level_up()
-
-        def choose_diecase(diecase_id=None):
-            """choose_diecase
-
-            Allows the user to choose the diecase manually.
-            Deletes any ribbon choice (to prevent casting the ribbon with a
-            wrong diecase).
-            """
-            # Display a warning if function called without argument
-            # and diecase and ribbon are chosen
-            if self.ribbon_metadata and self.diecase and not diecase_id:
-                ui.display('WARNING: you have already chosen a ribbon!\n'
-                           'A diecase has been selected automatically.'
-                           '\nChoosing a different diecase will unselect '
-                           'the ribbon.')
-                if not ui.yes_or_no('Proceed?'):
-                    return False
-                # Clear any ribbon and wedge choice
-                self.ribbon_metadata = None
-                self.ribbon_contents = None
-            # Choose a diecase automatically or manually
-            self.diecase = matrix_data.Diecase(diecase_id)
-            # Get wedge
+        def choose_ribbon():
+            """Chooses a ribbon from database or file"""
+            self.ribbon = typesetting_data.Ribbon()
+            self.ribbon.setup()
+            self.diecase = matrix_data.Diecase(self.ribbon.diecase_id)
             self.wedge = self.diecase.wedge
-            # Ask whether to show diecase layout:
-            if ui.yes_or_no('Show diecase layout?'):
-                self.diecase.show_layout()
-            exceptions.menu_level_up()
+
+        def choose_diecase():
+            """Chooses a diecase from database"""
+            self.diecase = matrix_data.Diecase()
+            self.wedge = self.diecase.wedge
 
         def choose_wedge():
-            """Sets or changes a wedge to user-selected one"""
-            if self.diecase and self.wedge:
-                ui.display('WARNING: A proper wedge has been selected '
-                           'automatically when selecting a diecase.\n'
-                           'Changing this may led to casting type either '
-                           'too narrow or to wide!')
-                if not ui.yes_or_no('Proceed?'):
-                    return False
+            """Chooses a wedge from registered ones"""
             self.wedge = wedge_data.Wedge()
-            exceptions.menu_level_up()
-
-        def check_database():
-            """Displays database-related options"""
-            opts = (('View ribbons in database', typesetting_data.show_ribbon),
-                    ('Choose the ribbon from database', ribbon_from_db))
-            if typesetting_data.check_if_ribbons():
-                for option in opts:
-                    options.append(option)
 
         # Subroutines end here
         # Header is static
@@ -1082,8 +986,8 @@ class Casting(object):
         while True:
             # Options list is dynamic
             options = [('Return to main menu', exceptions.menu_level_up)]
-            check_database()
-            options.extend([('Choose the ribbon from file', ribbon_from_file),
+            # check_database() TODO: deprecated
+            options.extend([('Choose the ribbon', choose_ribbon),
                             ('Choose the matrix case', choose_diecase),
                             ('Choose the wedge', choose_wedge)])
             try:
@@ -1110,13 +1014,6 @@ def main_menu(work=Casting()):
     options = []
 
     # Declare subroutines
-    def debug_notice():
-        """Prints a notice if the program is in debug mode."""
-        if ui.DEBUG_MODE:
-            return '\n\nThe program is now in debugging mode!'
-        else:
-            return ''
-
     def additional_info():
         """additional_info:
 
@@ -1126,8 +1023,8 @@ def main_menu(work=Casting()):
         """
         info = []
         # Add ribbon filename, if any
-        if work.ribbon_file:
-            info.append('Input file name: ' + work.ribbon_file)
+        if work.ribbon.filename:
+            info.append('Input file name: ' + work.ribbon.filename)
         # Add a caster name
         info.append('Using caster: ' + work.caster.name)
         # Display the line last casting was aborted on, if applicable:
@@ -1144,9 +1041,9 @@ def main_menu(work=Casting()):
         a perforator - if so, a "punch ribbon" feature will be
         available instead of "cast composition".
         """
-        if work.caster.is_perforator and work.ribbon_contents:
+        if work.caster.is_perforator and work.ribbon.contents:
             options.append(('Punch composition', work.punch_composition))
-        elif work.ribbon_contents:
+        elif work.ribbon.contents:
             options.append(('Cast composition', work.cast_composition))
 
     def check_diecase():
@@ -1157,19 +1054,23 @@ def main_menu(work=Casting()):
             for option in opts:
                 options.append(option)
 
+    def preview_ribbon():
+        """Displays ribbon metadata and contents"""
+        work.ribbon.display_data()
+        work.ribbon.display_contents()
+
     def check_ribbon():
         """Checks if ribbon is selected and allows to display it"""
-        if work.ribbon_contents:
-            options.append(('Preview ribbon', work.preview_ribbon))
+        if work.ribbon.contents:
+            options.append(('Preview ribbon', preview_ribbon))
 
     # End of menu subroutines
     # Header is static, menu content is dynamic
     header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
               'for Monotype Composition or Type and Rule casters.'
               '\n\n'
-              'This program reads a ribbon (input file) '
-              'and casts the type on a composition caster.' +
-              debug_notice() + '\n\nMain Menu:')
+              'This program reads a ribbon (from file or database) '
+              'and casts the type on a composition caster. \n\nMain Menu:')
     # Keep displaying the menu and go back here after any method ends
     while True:
         try:
