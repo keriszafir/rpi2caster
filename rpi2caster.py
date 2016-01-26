@@ -16,6 +16,8 @@ def cast(args):
     # Tie them together
     job = casting.Casting(args.ribbon)
     job.caster = casting_backend.Monotype()
+    # Perforation mode if desired
+    job.caster.is_perforator = args.is_perforator
     casting.main_menu(job)
 
 
@@ -47,9 +49,9 @@ def main():
     # General options parser
     #
     gen_parser = argparse.ArgumentParser(description='General options')
-    gen_parser.add_argument('-d', '--debug', help='turns the debug mode on',
+    gen_parser.add_argument('-d', '--debug', help='Debug mode',
                             action="store_true")
-    gen_parser.add_argument('-u', '--upgrade', help='upgrades the software',
+    gen_parser.add_argument('-u', '--upgrade', help='Upgrades the software',
                             action="store_true")
     # Define commands
     #
@@ -64,9 +66,11 @@ def main():
                                   parents=[gen_parser], add_help=False,
                                   help=('Casting with a Monotype caster '
                                         'or mockup caster for testing'))
-    cast_parser.add_argument('-s', '--simulate',
-                             help='Simulate casting instead of real casting',
-                             action='store_true')
+    cast_parser.add_argument('-s', '--simulate', action='store_true',
+                             help='Simulate casting instead of real casting')
+    cast_parser.add_argument('-p', '--perforate', action='store_true',
+                             dest='is_perforator',
+                             help='Ribbon perforation mode')
     cast_parser.add_argument('ribbon', metavar='ribbon_file', nargs='?',
                              help='Ribbon file name')
     cast_parser.set_defaults(job=cast, ribbon=None)

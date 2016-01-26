@@ -22,9 +22,9 @@ class Monotype(object):
     to the physical machine.
     """
 
-    def __init__(self, name='Monotype Simulator', is_perforator=False):
-        self.name = name
-        self.is_perforator = is_perforator
+    def __init__(self):
+        self.name = 'Monotype Simulator'
+        self.is_perforator = False
         self.manual_mode = False
         self.pump = Pump()
 

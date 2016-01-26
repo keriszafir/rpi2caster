@@ -44,13 +44,13 @@ class Ribbon(object):
         manually
 
     """
-    def __init__(self, diecase_id=None, contents=()):
+    def __init__(self, diecase_id=None, filename=None, contents=()):
         self.author = None
         self.title = None
         self.customer = None
         self.diecase_id = diecase_id
         self.unit_shift = False
-        self.filename = None
+        self.filename = filename
         # Start with empty or contents or what was passed on instantiation
         self.contents = contents
 
@@ -131,6 +131,10 @@ class Ribbon(object):
 
     def get_from_db(self, ribbon_id=None):
         """Gets the ribbon from database"""
+        # Check if we have any ribbons in the database at all... if not, exit
+        if not check_if_ribbons():
+            ui.display('No ribbons found in database.')
+            return False
         # If id not supplied, choose a ribbon
         question = 'Select ribbon from database?'
         ribbon_id = ribbon_id or ui.yes_or_no(question) and choose_ribbon()
@@ -158,7 +162,7 @@ class Ribbon(object):
     def read_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
         # Ask, and stop here if answered no
-        ui.display('\nLoading the ribbon from file...')
+        ui.display('Loading the ribbon from file...')
         filename = filename or ui.enter_input_filename()
         if not filename:
             return False

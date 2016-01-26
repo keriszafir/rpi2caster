@@ -30,6 +30,7 @@ class Diecase(object):
         self.type_size = None
         self.typeface_name = None
         self.wedge = wedge_data.Wedge()
+        self.layout = generate_empty_layout(15, 17)
         # Diecases created with diecase_id will be set up automatically
         if diecase_id:
             self.setup(diecase_id)
@@ -400,19 +401,20 @@ def export_layout(diecase_id):
     ui.confirm('File %s successfully saved.' % filename)
 
 
-def generate_empty_layout():
+def generate_empty_layout(rows=0, columns=0):
     """Generates a table of empty values for matrix case layout"""
-    prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
     options = {'1': (15, 15), '2': (15, 17), '3': (16, 17)}
-    (rows_number, columns_number) = ui.simple_menu(prompt, options)
+    if (rows, columns) not in options.values():
+        prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
+        (rows, columns) = ui.simple_menu(prompt, options)
     # Generate column numbers
-    if columns_number == 17:
-        columns = constants.COLUMNS_17
+    if columns == 17:
+        columns_list = constants.COLUMNS_17
     else:
-        columns = constants.COLUMNS_15
+        columns_list = constants.COLUMNS_15
     # Generate row numbers: 1...15 or 1...16
-    rows = [num + 1 for num in range(rows_number)]
+    rows_list = [num + 1 for num in range(rows)]
     # Generate an empty layout with default row unit values
     layout = [['', ['roman'], column, row, 0]
-              for row in rows for column in columns]
+              for row in rows_list for column in columns_list]
     return layout

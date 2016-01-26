@@ -866,52 +866,45 @@ class Casting(object):
                 # If casting aborted - don't go back to menu
                 pass
 
-    def preview_ribbon(self):
-        """preview_ribbon:
-
-        Determines if we have a ribbon file that can be previewed,
-        and displays its contents line by line, or displays
-        an error message.
-        """
-        self.ribbon.display_data()
-        ui.confirm('Showing the ribbon contents:')
-        self.ribbon.display_contents()
-
     def heatup(self):
-        """heatup
-
-        Allows to heat up the mould before casting, in order to
-        stabilize the mould temperature (affects the type quality).
-        Casts two lines of em-quads, which can be thrown back to the pot.
-        """
+        """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
         ui.clear()
         self.cast_from_matrix('O15', num=20, lines=2)
 
-    def service_menu(self):
+    def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
-        # Subroutines end here
-        options = [('Return to main menu', exceptions.menu_level_up),
-                   ('Test the air outputs signal after signal', self.test_all),
-                   ('Test the pins 1...14', self.test_front_pinblock),
-                   ('Test the pins NI, NL, A...N', self.test_rear_pinblock),
-                   ('Send specified signals to caster', self.send_combination),
-                   ('Calibrate the space transfer wedge', self.align_wedges),
-                   ('Calibrate mould opening', self.align_mould),
-                   ('Calibrate diecase X-Y', self.align_diecase),
-                   ('Cast some quads to heat up the mould', self.heatup)]
+        def menu_options():
+            """Build a list of options, adding an option if condition is met"""
+            opts = [(exceptions.menu_level_up, 'Return to main menu', True),
+                    (self.test_all, 'Test the air outputs one by one', True),
+                    (self.test_front_pinblock, 'Test the pins 1...14',
+                     not self.caster.is_perforator),
+                    (self.test_rear_pinblock, 'Test the pins NI, NL, A...N',
+                     not self.caster.is_perforator),
+                    (self.send_combination, 'Send specified signals', True),
+                    (self.align_wedges, 'Calibrate the space transfer wedge',
+                     not self.caster.is_perforator),
+                    (self.align_mould, 'Calibrate mould opening',
+                     not self.caster.is_perforator),
+                    (self.align_diecase, 'Calibrate diecase X-Y',
+                     not self.caster.is_perforator)]
+            return [(desc, func) for (func, desc, cond) in opts if cond]
+
         header = ('Diagnostics and machine calibration menu:\n\n')
         # Keep displaying the menu and go back here after any method ends
         while True:
             try:
                 # Catch "return to menu" and "exit program" exceptions here
-                ui.menu(options, header=header)()
+                ui.menu(menu_options(), header=header)()
             except exceptions.ReturnToMenu:
                 # Stay in the menu
                 pass
 
     def display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
-        data = [(self.ribbon.title, 'Ribbon title'),
+        data = [(self.caster.name, 'Caster name'),
+                (self.ribbon.filename, 'Ribbon filename'),
+                (self.ribbon.title, 'Ribbon title'),
                 (self.ribbon.author, 'Author'),
                 (self.ribbon.customer, 'Customer'),
                 (self.ribbon.unit_shift, 'Casting with unit-shift on?'),
@@ -923,50 +916,10 @@ class Casting(object):
                 (self.wedge.set_width, 'Set width of a wedge'),
                 (self.wedge.brit_pica, 'British pica (.1667") based wedge?'),
                 (' '.join([str(x) for x in self.wedge.unit_arrangement if x]),
-                 'Unit arrangement for this wedge')]
+                 'Unit arrangement for this wedge'),
+                (self.line_aborted, 'Last casting was aborted on line no')]
         info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
         return '\n'.join(info)
-
-    def data_menu(self):
-        """Choose the ribbon and diecase, if needed"""
-        # Start with an empty options list
-        options = []
-
-        # Define subroutines used only here
-        def choose_ribbon():
-            """Chooses a ribbon from database or file"""
-            self.ribbon = typesetting_data.Ribbon()
-            self.ribbon.setup()
-            self.diecase = matrix_data.Diecase(self.ribbon.diecase_id)
-            self.wedge = self.diecase.wedge
-
-        def choose_diecase():
-            """Chooses a diecase from database"""
-            self.diecase = matrix_data.Diecase()
-            self.wedge = self.diecase.wedge
-
-        def choose_wedge():
-            """Chooses a wedge from registered ones"""
-            self.wedge = wedge_data.Wedge()
-
-        # Subroutines end here
-        # Header is static
-        header = 'Input data choice menu:\n\n'
-        # Keep displaying the menu and go back here after any method ends
-        while True:
-            # Options list is dynamic
-            options = [('Return to main menu', exceptions.menu_level_up)]
-            # check_database() TODO: deprecated
-            options.extend([('Choose the ribbon', choose_ribbon),
-                            ('Choose the matrix case', choose_diecase),
-                            ('Choose the wedge', choose_wedge)])
-            try:
-                # Catch "return to menu" and "exit program" exceptions here
-                ui.menu(options, header=header,
-                        footer=self.display_additional_info())()
-            except exceptions.ReturnToMenu:
-                # Stay in the menu
-                pass
 
     def __exit__(self, *args):
         ui.debug_info('Exiting casting job context.')
@@ -980,85 +933,62 @@ def main_menu(work=Casting()):
     Header: string displayed over menu
     Footer: string displayed under menu (all info will be added here).
     """
-    # Empty options list
-    options = []
+    def choose_ribbon():
+        """Chooses a ribbon from database or file"""
+        work.ribbon = typesetting_data.Ribbon()
+        work.ribbon.setup()
+        choose_diecase()
 
-    # Declare subroutines
-    def additional_info():
-        """additional_info:
+    def choose_diecase():
+        """Chooses a diecase from database"""
+        work.diecase = matrix_data.Diecase(work.ribbon.diecase_id)
+        if not work.ribbon.diecase_id:
+            work.diecase.setup()
+        work.wedge = work.diecase.wedge
 
-        Displays additional info as a menu footer.
-        Starts with an empty list, and checks whether the casting job
-        objects has attributes that are parameters to be displayed.
-        """
-        info = []
-        # Add ribbon filename, if any
-        if work.ribbon.filename:
-            info.append('Input file name: ' + work.ribbon.filename)
-        # Add a caster name
-        info.append('Using caster: ' + work.caster.name)
-        # Display the line last casting was aborted on, if applicable:
-        if work.line_aborted:
-            info.append('Last casting was aborted on line ' +
-                        str(work.line_aborted))
-        # Convert it all to a multiline string
-        return '\n'.join(info)
+    def choose_wedge():
+        """Chooses a wedge from registered ones"""
+        work.wedge = wedge_data.Wedge()
 
-    def cast_or_punch():
-        """cast_or_punch:
+    def menu_options():
+        """Build a list of options, adding an option if condition is met"""
+        # Options are described with tuples: (function, description, condition)
+        opts = [(exceptions.exit_program, 'Exit program', True),
+                (choose_ribbon, 'Select ribbon from database or file', True),
+                (choose_diecase, 'Select a matrix case', True),
+                (choose_wedge, 'Select a normal wedge', True),
+                (work.ribbon.display_contents, 'Preview ribbon',
+                 work.ribbon.contents),
+                (work.heatup, 'Cast some quads to heat up the mould',
+                 not work.caster.is_perforator),
+                (work.punch_composition, 'Punch composition',
+                 work.ribbon.contents and work.caster.is_perforator),
+                (work.cast_composition, 'Cast composition',
+                 work.ribbon.contents and not work.caster.is_perforator),
+                (work.diecase.show_layout, 'View the matrix case layout',
+                 work.diecase.diecase_id),
+                (work.line_casting, 'Compose and cast a line of text',
+                 work.diecase.diecase_id),
+                (work.cast_sorts, 'Cast sorts from matrix coordinates',
+                 not work.caster.is_perforator),
+                (work.cast_spaces, 'Cast spaces or quads',
+                 not work.caster.is_perforator),
+                (work.diagnostics_submenu, 'Diagnostics and calibration', True)
+                ]
+        # Built a list of menu options conditionally
+        return [(desc, func) for (func, desc, cond) in opts if cond]
 
-        Determines if the caster specified for the job is actually
-        a perforator - if so, a "punch ribbon" feature will be
-        available instead of "cast composition".
-        """
-        if work.caster.is_perforator and work.ribbon.contents:
-            options.append(('Punch composition', work.punch_composition))
-        elif work.ribbon.contents:
-            options.append(('Cast composition', work.cast_composition))
-
-    def check_diecase():
-        """Checks if diecase is set and enables certain options"""
-        if work.diecase:
-            opts = (('View the matrix case layout', work.diecase.show_layout),
-                    ('Compose and cast a line of text', work.line_casting))
-            for option in opts:
-                options.append(option)
-
-    def preview_ribbon():
-        """Displays ribbon metadata and contents"""
-        work.ribbon.display_data()
-        work.ribbon.display_contents()
-
-    def check_ribbon():
-        """Checks if ribbon is selected and allows to display it"""
-        if work.ribbon.contents:
-            options.append(('Preview ribbon', preview_ribbon))
-
-    # End of menu subroutines
     # Header is static, menu content is dynamic
     header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-              'for Monotype Composition or Type and Rule casters.'
-              '\n\n'
+              'for Monotype Composition or Type and Rule casters.\n\n'
               'This program reads a ribbon (from file or database) '
               'and casts the type on a composition caster. \n\nMain Menu:')
     # Keep displaying the menu and go back here after any method ends
     while True:
+        # Catch any known exceptions here
         try:
-            # Menu content is dynamic and must be refreshed each time
-            # Now construct the menu, starting with available options
-            options = [('Exit program', exceptions.exit_program),
-                       ('Select ribbon or diecase...', work.data_menu)]
-            check_ribbon()
-            cast_or_punch()
-            check_diecase()
-            options.extend([('Cast sorts from matrix coordinates',
-                             work.cast_sorts),
-                            ('Cast spaces / quads', work.cast_spaces),
-                            ('Caster diagnostics and calibration...',
-                             work.service_menu)])
-            # Catch "return to menu" and "exit program" exceptions here
-            footer = additional_info() + '\n' + work.display_additional_info()
-            ui.menu(options, header=header, footer=footer)()
+            ui.menu(menu_options(), header=header,
+                    footer=work.display_additional_info())()
         except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
             # Will skip to the end of the loop, and start all over
             pass
