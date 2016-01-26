@@ -158,9 +158,7 @@ class Casting(object):
             for line in queue:
                 # Parse the row, return a list of signals and a comment.
                 # Both can have zero or positive length.
-                [raw_signals, comment] = parsing.comments_parser(line)
-                # Parse the signals
-                signals = parsing.signals_parser(raw_signals)
+                [signals, comment] = parsing.comments_parser(line)
                 # A list with information for user: signals, comments, etc.
                 info_for_user = []
                 if parsing.check_newline(signals):
@@ -247,18 +245,14 @@ class Casting(object):
         all_combinations = parsing.count_combinations(self.ribbon.contents)
         ui.display('Combinations in ribbon: %i', all_combinations)
         # Wait until the operator confirms.
-        intro = ('\nThe combinations of Monotype signals will be displayed '
-                 'on screen while the paper tower punches the ribbon.\n')
-        ui.display(intro)
-        prompt = ('\nInput file found. Turn on the air and fit the tape '
-                  'on your paper tower.')
-        ui.confirm(prompt)
+        ui.display('\nThe combinations of Monotype signals will be displayed '
+                   'on screen while the paper tower punches the ribbon.\n'
+                   'Turn on the air and fit the tape on your paper tower.')
+        ui.confirm()
         for line in self.ribbon.contents:
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
-            [raw_signals, comment] = parsing.comments_parser(line)
-            # Parse the signals
-            signals = parsing.signals_parser(raw_signals)
+            [signals, comment] = parsing.comments_parser(line)
             # A string with information for user: signals, comments, etc.
             info_for_user = ''
             # Add signals to be cast
