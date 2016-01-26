@@ -99,9 +99,6 @@ class Casting(object):
         Composition casting routine. The input file is read backwards -
         last characters are cast first, after setting the justification.
         """
-        if not self.ribbon.contents:
-            ui.confirm('The ribbon has empty contents - cannot cast!')
-            return False
         # Count all characters and lines in the ribbon
         (all_lines, all_chars) = parsing.count_lines_and_chars(
             self.ribbon.contents)
@@ -246,9 +243,6 @@ class Casting(object):
         force to drive the punches and advance the ribbon.
         This mode uses arbitrary timings for air on / off phases.
         """
-        if not self.ribbon.contents:
-            ui.confirm('You must select a ribbon!')
-            return False
         # Count a number of combinations punched in ribbon
         all_combinations = parsing.count_combinations(self.ribbon.contents)
         ui.display('Combinations in ribbon: %i', all_combinations)
