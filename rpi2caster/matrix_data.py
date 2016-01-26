@@ -30,6 +30,7 @@ class Diecase(object):
         self.type_size = None
         self.typeface_name = None
         self.wedge = wedge_data.Wedge()
+        # Diecases created with diecase_id will be set up automatically
         if diecase_id:
             self.setup(diecase_id)
 

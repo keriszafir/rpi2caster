@@ -11,16 +11,21 @@ from rpi2caster.global_settings import USER_INTERFACE as ui
 from rpi2caster import exceptions
 from rpi2caster import database
 from rpi2caster import wedge_arrangements
+from rpi2caster import constants
 DB = database.Database()
 
 
 class Wedge(object):
     """Wedge: wedge data"""
-    def __init__(self, series='5', set_width=12):
-        self.series = series
-        self.set_width = set_width
-        self.brit_pica = False
-        self.unit_arrangement = wedge_arrangements.table[series]
+    def __init__(self, series=None, set_width=None):
+        # Default wedge data - for S5-12E
+        self.series = 'S5'
+        self.set_width = 12
+        self.brit_pica = True
+        self.unit_arrangement = constants.S5
+        # Wedges supplied with series and set width will be setup automatically
+        if series and set_width:
+            self.setup(series, set_width)
 
     def setup(self, series=None, set_width=None):
         """Choose a wedge from registered ones automatically or manually"""

@@ -70,11 +70,11 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster - this will be set up later
         self.caster = None
-        # Ribbon object
+        # Ribbon object, start with a default empty ribbon
         self.ribbon = typesetting_data.Ribbon()
-        # Diecase object
+        # Diecase object, empty now
         self.diecase = matrix_data.Diecase()
-        # Wedge object
+        # Wedge object, create a default one first
         self.wedge = wedge_data.Wedge()
         # Automatically set up a ribbon, diecase and wedge if loaded with file
         self.setup_ribbon_file(ribbon_file)
@@ -100,7 +100,7 @@ class Casting(object):
         last characters are cast first, after setting the justification.
         """
         if not self.ribbon.contents:
-            ui.confirm('You must select a ribbon!')
+            ui.confirm('The ribbon has empty contents - cannot cast!')
             return False
         # Count all characters and lines in the ribbon
         (all_lines, all_chars) = parsing.count_lines_and_chars(
