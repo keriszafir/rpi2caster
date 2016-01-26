@@ -935,7 +935,7 @@ class Casting(object):
                 (self.wedge.set_width, 'Set width of a wedge'),
                 (self.wedge.brit_pica, 'British pica (.1667") based wedge?'),
                 (' '.join([str(x) for x in self.wedge.unit_arrangement if x]),
-                    'Unit arrangement for this wedge')]
+                 'Unit arrangement for this wedge')]
         info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
         return '\n'.join(info)
 
