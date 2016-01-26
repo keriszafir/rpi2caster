@@ -246,17 +246,6 @@ def check_pump_stop(signals):
             set(['N', 'K']).issubset(signals))
 
 
-def check_pump_start(signals):
-    """check_pump_start(signals):
-
-    Checks if the pump start signal (0075 or NK and not 0005 or NJ) is present.
-    This is called to check if 0075 wedge was changed.
-    """
-    return (('0075' in signals or set(['N', 'K']).issubset(signals)) and
-            '0005' not in signals and not
-            set(['N', 'J']).issubset(signals))
-
-
 def check_wedge_positions(signals):
     """check_pump_stop(signals):
 

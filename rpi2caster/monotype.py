@@ -45,6 +45,8 @@ class Monotype(object):
         self.emerg_gpio_value_file = None
         # Configure the caster
         self.interface_pin_number = self.caster_setup()
+        # Add a pump
+        self.pump = Pump()
 
     def __enter__(self):
         """Run the setup when entering the context:
@@ -347,15 +349,14 @@ class Monotype(object):
         the situation, it needs turning the machine at least one
         full revolution. The program MUST turn the pump off to move on.
         """
-        pump_off = False
         stop_signal = ('N', 'J', '0005')
-        ui.display('Stopping the pump...')
-        while not pump_off:
+        while self.pump.working:
             try:
                 # Try stopping the pump until we succeed!
                 # Keep calling _send_signals_to_caster until it returns True
                 # (the machine receives and processes the pump stop signal)
-                pump_off = self._send_signals_to_caster(stop_signal, 60)
+                ui.display('Stopping the pump...')
+                self._send_signals_to_caster(stop_signal, 60)
             except exceptions.MachineStopped:
                 # Loop over
                 pass
@@ -374,6 +375,7 @@ class Monotype(object):
         Do nothing if the function receives an empty sequence, which will
         occur if we cast with the matrix found at position O15.
         """
+        self.pump.check_working(signals)
         pins = [self.interface_pin_number[sig] for sig in signals]
         for pin in pins:
             wiringpi.digitalWrite(pin, 1)
@@ -393,3 +395,18 @@ class Monotype(object):
         """
         ui.debug_info('Exiting caster/interface context.')
         self.lock = False
+
+
+class Pump(object):
+    """Pump class for storing the working/non-working status."""
+    def __init__(self):
+        self.working = False
+
+    def check_working(self, signals):
+        """Checks if pump is working based on signals in sequence"""
+        # 0075 / NK is satisfactory to turn the pump on...
+        if '0075' in signals or set(['N', 'K']).issubset(signals):
+            self.working = True
+        # No 0075 / NK; then 0005 / NJ turns the pump off
+        elif '0005' in signals or set(['N', 'J']).issubset(signals):
+            self.working = False

@@ -25,6 +25,16 @@ DB = database.Database()
 class Diecase(object):
     """Diecase: matrix case attributes and operations"""
     def __init__(self, diecase_id=None):
+        self.diecase_id = None
+        self.type_series = None
+        self.type_size = None
+        self.typeface_name = None
+        self.wedge = wedge_data.Wedge()
+        if diecase_id:
+            self.setup(diecase_id)
+
+    def setup(self, diecase_id=None):
+        """Sets attributes for the diecase object"""
         # Choose automatically or manually
         diecase = choose_diecase(diecase_id)
         # Set some attributes

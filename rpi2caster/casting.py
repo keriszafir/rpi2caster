@@ -73,9 +73,9 @@ class Casting(object):
         # Ribbon object
         self.ribbon = typesetting_data.Ribbon()
         # Diecase object
-        self.diecase = None
+        self.diecase = matrix_data.Diecase()
         # Wedge object
-        self.wedge = None
+        self.wedge = wedge_data.Wedge()
         # Automatically set up a ribbon, diecase and wedge if loaded with file
         self.setup_ribbon_file(ribbon_file)
         # Indicates which line the last casting was aborted on
@@ -113,8 +113,7 @@ class Casting(object):
         # so that the mould temperature has a chance to stabilize
         lines_skipped = self.line_aborted - 2
         # This must be non-negative
-        if lines_skipped < 0:
-            lines_skipped = 0
+        lines_skipped = max(lines_skipped, 0)
         ui.display('You can skip a number of lines so that you can e.g. start '
                    'a casting job aborted earlier.')
         prompt = 'How many lines to skip? (default: %s) : ' % lines_skipped
@@ -122,8 +121,7 @@ class Casting(object):
                          lines_skipped)
         prompt = 'How many times do you want to cast this? (default: 1) : '
         repetitions = ui.enter_data_spec_type_or_blank(prompt, int) or 1
-        # For casting, we need to check if the ribbon has to be read
-        # forwards or backwards
+        # For casting, we need to check the direction of ribbon
         if parsing.rewind_ribbon(self.ribbon.contents):
             ui.display('Ribbon starts with pump stop sequence - rewinding...')
             queue = [line for line in reversed(self.ribbon.contents)]
@@ -139,8 +137,6 @@ class Casting(object):
         self.caster.detect_rotation()
         # Dict for telling the user whether sth is on or off
         status = {True: 'ON', False: 'OFF'}
-        # Initially the pump is not working...
-        pump_working = False
         # Current run number
         current_run = 1
         # Repeat casting the whole sequence as many times as we would like
@@ -182,18 +178,11 @@ class Casting(object):
                     if not current_line:
                         info_for_user.append('All lines successfully cast.\n')
                     else:
-                        info_for_user.append('Starting line no. %i (%i of %i),'
-                                             ' %i remaining [%i%% done]...\n'
-                                             % (current_line, lines_done,
-                                                all_lines - 1,
-                                                all_lines - lines_done,
-                                                line_percent_done))
-                    # The pump will be working - set the flag
-                    pump_working = True
-                elif parsing.check_pump_start(signals):
-                    pump_working = True
-                elif parsing.check_pump_stop(signals):
-                    pump_working = False
+                        msg = ('Starting line no. %i (%i of %i), %i remaining '
+                               '[%i%% done]...\n' %
+                               (current_line, lines_done, all_lines - 1,
+                                all_lines - lines_done, line_percent_done))
+                        info_for_user.append(msg)
                 elif parsing.check_character(signals):
                     # Increase the current character and decrease characters
                     # left, then do some calculations
@@ -203,13 +192,12 @@ class Casting(object):
                     char_percent_done = 100 * (current_char - 1) / all_chars
                     # Display number of chars done,
                     # number of all and remaining chars, % done
-                    info = ('Casting line no. %i (%i of %i), character: '
-                            '%i of %i, %i remaining [%i%% done]...\n'
-                            % (current_line, lines_done, all_lines - 1,
-                               current_char, all_chars,
-                               chars_left, char_percent_done))
-                    info_for_user.append(info)
-                    info_for_user.append('Pump is %s\n' % status[pump_working])
+                    msg = ('Casting line no. %i (%i of %i), character: '
+                           '%i of %i, %i remaining [%i%% done]...\n'
+                           % (current_line, lines_done, all_lines - 1,
+                              current_char, all_chars,
+                              chars_left, char_percent_done))
+                    info_for_user.append(msg)
                 # Skipping the unneeded lines:
                 # Just don't cast anything until we get to the correct line
                 if lines_done <= lines_skipped:
@@ -219,9 +207,11 @@ class Casting(object):
                 pos_0075 = new_0075 or pos_0075
                 pos_0005 = new_0005 or pos_0005
                 # Display wedge positions and pump status
-                pump_info = ('0075 wedge at %s, 0005 wedge at %s\n'
-                             % (pos_0075, pos_0005))
-                info_for_user.append(pump_info)
+                wedges_info = ('0075 wedge at %s, 0005 wedge at %s\n'
+                               % (pos_0075, pos_0005))
+                info_for_user.append(wedges_info)
+                info_for_user.append('Pump is %s\n'
+                                     % status[self.caster.pump.working])
                 # Append signals to be cast
                 info_for_user.append(' '.join(signals).ljust(15))
                 # Add comment
@@ -868,7 +858,8 @@ class Casting(object):
         # Initialize the typesetter for a chosen diecase
         typesetter = typesetting.Typesetter()
         # Supply the diecase id
-        typesetter.session_setup(self.diecase[0])
+        # TODO: refactor it to use the new diecase and wedge data model!
+        typesetter.session_setup(self.diecase.diecase_id)
         # Enter text
         text = ui.enter_data("Enter text to compose: ")
         typesetter.text_source = typesetter.parse_and_generate(text)
@@ -932,30 +923,21 @@ class Casting(object):
 
     def display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
-        displayed_info = []
-        if self.ribbon.title:
-            displayed_info.append('Ribbon title: %s' % self.ribbon.title)
-        if self.ribbon.author:
-            displayed_info.append('Author: %s' % self.ribbon.author)
-        if self.ribbon.customer:
-            displayed_info.append('Customer: %s' % self.ribbon.customer)
-        if self.ribbon and self.ribbon.unit_shift:
-            displayed_info.append('This ribbon must be cast with unit-shift!')
-        if self.diecase:
-            displayed_info.append('Diecase: %s' % self.diecase.diecase_id)
-            displayed_info.append('Typeface: %s' % self.diecase.typeface_name)
-            displayed_info.append('Type series: %s' % self.diecase.type_series)
-            displayed_info.append('Type size: %s' % self.diecase.type_size)
-        if self.wedge:
-            # Displayed unit arrangement
-            arrangement = ' '.join([str(x)
-                                    for x in self.wedge.unit_arrangement if x])
-            displayed_info.append('Wedge series: %s' % self.wedge.series)
-            displayed_info.append('Set width: %s' % self.wedge.set_width)
-            displayed_info.append('British pica wedge?: %s'
-                                  % self.wedge.brit_pica)
-            displayed_info.append('Wedge unit arrangement: %s' % arrangement)
-        return '\n'.join(displayed_info)
+        data = [(self.ribbon.title, 'Ribbon title'),
+                (self.ribbon.author, 'Author'),
+                (self.ribbon.customer, 'Customer'),
+                (self.ribbon.unit_shift, 'Casting with unit-shift on?'),
+                (self.diecase.diecase_id, 'Diecase ID'),
+                (self.diecase.typeface_name, 'Typeface'),
+                (self.diecase.type_series, 'Type series'),
+                (self.diecase.type_size, 'Type size'),
+                (self.wedge.series, 'Wedge series'),
+                (self.wedge.set_width, 'Set width of a wedge'),
+                (self.wedge.brit_pica, 'British pica (.1667") based wedge?'),
+                (' '.join([str(x) for x in self.wedge.unit_arrangement if x]),
+                    'Unit arrangement for this wedge')]
+        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
+        return '\n'.join(info)
 
     def data_menu(self):
         """Choose the ribbon and diecase, if needed"""
