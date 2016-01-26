@@ -254,30 +254,18 @@ class Casting(object):
             # Both can have zero or positive length.
             [signals, comment] = parsing.comments_parser(line)
             # A string with information for user: signals, comments, etc.
-            info_for_user = ''
-            # Add signals to be cast
-            if signals:
-                info_for_user += ' '.join(signals).ljust(20)
-            else:
-                info_for_user += 'O15'.ljust(20)
-            # Add comment
-            if comment:
-                info_for_user += comment
-            # Display the info
-            ui.display(info_for_user)
+            ui.display(' '.join(signals).ljust(20) + comment)
             # Send the signals
             if signals:
-                # Convert O or 15 to a combined O+15 signal:"""
-                signals = parsing.convert_o15(signals)
                 # In any case add O+15 (to put enough force on punches)
                 if 'O15' not in signals:
                     signals.append('O15')
-                # Punch it!"""
+                # Punch it!
                 self.caster.activate_valves(signals)
                 # The pace is arbitrary, let's set it to 200ms/200ms
                 time.sleep(0.2)
                 self.caster.deactivate_valves()
-                time.sleep(0.5)
+                time.sleep(0.2)
         # After punching is finished, notify the user:"""
         ui.confirm('\nPunching finished!', ui.MSG_MENU)
         return True
@@ -289,7 +277,6 @@ class Casting(object):
             for code in combinations:
                 ui.display(code)
                 code = parsing.signals_parser(code)
-                code = parsing.convert_o15(code)
                 self.caster.process_signals(code, 120)
         except exceptions.CastingAborted:
             return False
@@ -655,7 +642,7 @@ class Casting(object):
                             % (' '.join(combination).ljust(20),
                                i, num, 100 * i / num))
                     ui.display(info)
-                    parsing.strip_o15(combination)
+                    combination = parsing.strip_o15(combination)
                     self.caster.process_signals(combination)
                 if end_galley_trip:
                     # If everything went normally, put the line to the galley
@@ -692,8 +679,6 @@ class Casting(object):
             # Parse the combination, get the signals (first item returned
             # by the parsing function)
             signals = parsing.signals_parser(signals)
-            # Add O+15 signal if it was desired
-            signals = parsing.convert_o15(signals)
             # Turn the valves on
             ui.display(' '.join(signals))
             self.caster.activate_valves(signals)

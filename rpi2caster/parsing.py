@@ -201,29 +201,16 @@ def signals_parser(raw_signals):
     # Columns + S justification signal
     columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in raw_signals]
     # Return a list containing all signals
-    output_data = convert_o15(columns + rows + justification)
+    signals = columns + rows + justification
+    if 'O' in signals or '15' in signals:
+        signals.append('O15')
     # Arrange it a bit and end here
-    return [x for x in constants.SIGNALS if x in output_data]
+    return [x for x in constants.SIGNALS if x in signals]
 
 
 def strip_o15(input_signals):
     """Strip O15 signals from input sequence, we don't cast them"""
     return [s for s in input_signals if s not in ['O15']]
-
-
-def convert_o15(input_signals):
-    """Convert O or 15 to O15.
-
-    Combines O and 15 signals to a single O15 signal that can be fed
-    to keyboard control routines when punching the ribbon.
-
-    Does not modify the original argument.
-    """
-    signals = input_signals
-    if 'O' in signals or '15' in signals:
-        signals.append('O15')
-    # Now remove the individual O and 15 signals and return the result
-    return [s for s in signals if s not in ['O', '15']]
 
 
 def check_newline(signals):
