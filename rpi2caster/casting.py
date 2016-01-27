@@ -345,46 +345,42 @@ class Casting(object):
             # Initially set this to zero to enable the while loop
             row = 0
             units = 0
-            # Not using unit shift by default
-            unit_shift = False
             # Ask for row number
             while row not in range(1, 17):
                 try:
                     row = ui.enter_data_spec_type_or_blank(prompt, int) or 5
                     row = abs(row)
-                except TypeError:
+                except (TypeError, ValueError):
+                    # Repeat loop and enter new one
                     row = 0
-            if row == 16:
-                question = 'Trying to access 16th row. Use unit shift?'
-                unit_shift = ui.yes_or_no(question)
-                row = 15
-                if not unit_shift:
-                    ui.display('Cannot access the 16th row; using 15 instead')
-                    ui.yes_or_no('Is it okay?') or exceptions.return_to_menu()
+            # If we want to cast from row 16, we need unit-shift
+            # HMN or KMN systems are not supported yet
+            question = 'Trying to access 16th row. Use unit shift?'
+            unit_shift = row == 16 and ui.yes_or_no(question)
+            if row == 16 and not unit_shift:
+                ui.confirm('Aborting.')
+                continue
             # Correct the column number if using unit shift
             if unit_shift:
+                row = 15
                 column = column.replace('D', 'E F')
                 column += ' D'
             # Determine the unit width for a row
-            try:
-                row_units = wedge.unit_arrangement[row]
-            except (IndexError, KeyError):
-                row_units = 5
+            row_units = wedge.unit_arrangement[row]
+            # Enter custom unit value (no points-based calculation yet)
             prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
             while not 2 < units < 25:
                 units = (ui.enter_data_spec_type_or_blank(prompt, float) or
                          row_units)
             # Calculate the unit width difference and apply justification
-            difference = units - row_units
-            wedge_positions = typesetting.calculate_wedges(difference,
-                                                           wedge.set_width,
-                                                           wedge.brit_pica)
-            if difference:
-                # If we need to correct the width -
-                # we must cast with the S needle
-                signals = column + ' S ' + str(row)
-            else:
-                signals = column + ' ' + str(row)
+            diff = units - row_units
+            calc = typesetting.calculate_wedges
+            wedge_positions = calc(diff, wedge.set_width, wedge.brit_pica)
+            signals = column
+            if diff:
+                # If we need to correct the width - cast with the S needle
+                signals += ' S '
+            signals += str(row)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts per line? (default: 10): '
             sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 10)
@@ -463,23 +459,25 @@ class Casting(object):
             unit_shift = False
             # Ask for row number
             while row not in range(1, 17):
-                row = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 2)
-            if row == 16:
-                question = 'Trying to access 16th row. Use unit shift?'
-                unit_shift = ui.yes_or_no(question)
-                row = 15
-                if not unit_shift:
-                    ui.display('Cannot access the 16th row; using 15 instead')
-                    ui.yes_or_no('Is it okay?') or exceptions.return_to_menu()
-            # Correct the column number if using unit shift
+                try:
+                    row = ui.enter_data_spec_type_or_blank(prompt, int) or 2
+                    row = abs(row)
+                except (TypeError, ValueError):
+                    # Repeat loop and enter new one
+                    row = 0
+            # If we want to cast from row 16, we need unit-shift
+            # HMN or KMN systems are not supported yet
+            question = 'Trying to access 16th row. Use unit shift?'
+            unit_shift = row == 16 and ui.yes_or_no(question)
+            if row == 16 and not unit_shift:
+                ui.confirm('Aborting.')
+                continue
             if unit_shift:
+                row = 15
                 column = column.replace('D', 'E F')
                 column += ' D'
             # Determine the unit width for a row
-            try:
-                row_units = wedge.unit_arrangement[row]
-            except (IndexError, KeyError):
-                row_units = 6
+            row_units = wedge.unit_arrangement[row]
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
             # Space width in points
@@ -494,10 +492,9 @@ class Casting(object):
             # Width in points
             width = ui.simple_menu(message, options) * 12
             # Ask about custom value, then specify units
-            if not width:
-                while width < 1 or width > 20:
-                    prompt = 'Custom width in points (decimal, 1...20) ? : '
-                    width = ui.enter_data_spec_type_or_blank(prompt, float)
+            while not 1 <= width <= 20:
+                prompt = 'Custom width in points (decimal, 1...20) ? : '
+                width = ui.enter_data_spec_type_or_blank(prompt, float)
             # We now have width in pica points
             # If we don't use an old British pica wedge, we must take
             # the pica difference into account
@@ -837,7 +834,6 @@ class Casting(object):
         text = ui.enter_data("Enter text to compose: ")
         typesetter.text_source = typesetter.parse_and_generate(text)
         # Translate the text to Monotype signals
-        # Compose the text
         typesetter.compose()
         self.ribbon.contents = typesetter.justify()
         # Ask whether to display buffer contents
@@ -885,6 +881,23 @@ class Casting(object):
                 # Stay in the menu
                 pass
 
+    def choose_ribbon(self):
+        """Chooses a ribbon from database or file"""
+        self.ribbon = typesetting_data.Ribbon()
+        self.ribbon.setup()
+        self.choose_diecase()
+
+    def choose_diecase(self):
+        """Chooses a diecase from database"""
+        self.diecase = matrix_data.Diecase(self.ribbon.diecase_id)
+        if not self.ribbon.diecase_id:
+            self.diecase.setup()
+        self.wedge = self.diecase.wedge
+
+    def choose_wedge(self):
+        """Chooses a wedge from registered ones"""
+        self.wedge = wedge_data.Wedge()
+
     def display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
         data = [(self.caster.name, 'Caster name'),
@@ -906,6 +919,36 @@ class Casting(object):
         info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
         return '\n'.join(info)
 
+    def main_menu_options(self):
+        """Build a list of options, adding an option if condition is met"""
+        # Options are described with tuples: (function, description, condition)
+        perforator = self.caster.is_perforator
+        ribbon = self.ribbon.contents
+        diecase_selected = self.diecase.diecase_id
+        opts = [(exceptions.exit_program, 'Exit program', True),
+                (self.choose_ribbon, 'Select ribbon from database or file',
+                 True),
+                (self.choose_diecase, 'Select a matrix case', True),
+                (self.choose_wedge, 'Select a normal wedge', True),
+                (self.ribbon.display_contents, 'Preview ribbon', ribbon),
+                (self.heatup, 'Cast some quads to heat up the mould',
+                 not perforator),
+                (self.punch_composition, 'Punch composition',
+                 ribbon and perforator),
+                (self.cast_composition, 'Cast composition',
+                 ribbon and not perforator),
+                (self.diecase.show_layout, 'View the matrix case layout',
+                 diecase_selected),
+                (self.line_casting, 'Compose and cast a line of text',
+                 diecase_selected),
+                (self.cast_sorts, 'Cast sorts from matrix coordinates',
+                 not perforator),
+                (self.cast_spaces, 'Cast spaces or quads', not perforator),
+                (self.diagnostics_submenu, 'Diagnostics and calibration',
+                 True)]
+        # Built a list of menu options conditionally
+        return [(desc, func) for (func, desc, cond) in opts if cond]
+
     def __exit__(self, *args):
         ui.debug_info('Exiting casting job context.')
 
@@ -918,52 +961,6 @@ def main_menu(work=Casting()):
     Header: string displayed over menu
     Footer: string displayed under menu (all info will be added here).
     """
-    def choose_ribbon():
-        """Chooses a ribbon from database or file"""
-        work.ribbon = typesetting_data.Ribbon()
-        work.ribbon.setup()
-        choose_diecase()
-
-    def choose_diecase():
-        """Chooses a diecase from database"""
-        work.diecase = matrix_data.Diecase(work.ribbon.diecase_id)
-        if not work.ribbon.diecase_id:
-            work.diecase.setup()
-        work.wedge = work.diecase.wedge
-
-    def choose_wedge():
-        """Chooses a wedge from registered ones"""
-        work.wedge = wedge_data.Wedge()
-
-    def menu_options():
-        """Build a list of options, adding an option if condition is met"""
-        # Options are described with tuples: (function, description, condition)
-        opts = [(exceptions.exit_program, 'Exit program', True),
-                (choose_ribbon, 'Select ribbon from database or file', True),
-                (choose_diecase, 'Select a matrix case', True),
-                (choose_wedge, 'Select a normal wedge', True),
-                (work.ribbon.display_contents, 'Preview ribbon',
-                 work.ribbon.contents),
-                (work.heatup, 'Cast some quads to heat up the mould',
-                 not work.caster.is_perforator),
-                (work.punch_composition, 'Punch composition',
-                 work.ribbon.contents and work.caster.is_perforator),
-                (work.cast_composition, 'Cast composition',
-                 work.ribbon.contents and not work.caster.is_perforator),
-                (work.diecase.show_layout, 'View the matrix case layout',
-                 work.diecase.diecase_id),
-                (work.line_casting, 'Compose and cast a line of text',
-                 work.diecase.diecase_id),
-                (work.cast_sorts, 'Cast sorts from matrix coordinates',
-                 not work.caster.is_perforator),
-                (work.cast_spaces, 'Cast spaces or quads',
-                 not work.caster.is_perforator),
-                (work.diagnostics_submenu, 'Diagnostics and calibration', True)
-                ]
-        # Built a list of menu options conditionally
-        return [(desc, func) for (func, desc, cond) in opts if cond]
-
-    # Header is static, menu content is dynamic
     header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
               'for Monotype Composition or Type and Rule casters.\n\n'
               'This program reads a ribbon (from file or database) '
@@ -972,7 +969,7 @@ def main_menu(work=Casting()):
     while True:
         # Catch any known exceptions here
         try:
-            ui.menu(menu_options(), header=header,
+            ui.menu(work.main_menu_options(), header=header,
                     footer=work.display_additional_info())()
         except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
             # Will skip to the end of the loop, and start all over
