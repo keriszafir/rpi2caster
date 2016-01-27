@@ -212,7 +212,7 @@ class Caster(object):
 
     def __exit__(self, *args):
         self.deactivate_valves()
-        ui.debug_info('Exiting caster/keyboard simulation context.')
+        ui.debug_info('Caster no longer in use.')
         self.lock = False
 
 

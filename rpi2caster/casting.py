@@ -126,10 +126,9 @@ class Casting(object):
             ui.display('Ribbon starts with galley trip - not rewinding...')
             queue = [line for line in self.ribbon.contents]
         # Display a little explanation
-        intro = ('\nThe combinations of Monotype signals will be displayed '
-                 'on screen while the machine casts the type.\n'
-                 'Turn on the machine and the program will start.\n')
-        ui.display(intro)
+        ui.display('\nThe combinations of Monotype signals will be displayed '
+                   'on screen while the machine casts the type.\n'
+                   'Turn on the machine and the program will start.\n')
         # Start only after the machine is running
         self.caster.detect_rotation()
         # Dict for telling the user whether sth is on or off

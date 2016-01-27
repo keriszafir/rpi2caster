@@ -170,9 +170,8 @@ class Caster(common_caster.Caster):
             with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
                 sensor_signals = select.epoll()
                 sensor_signals.register(gpiostate, select.POLLPRI)
-                events = sensor_signals.poll(time_max)
                 # Check if the sensor changes state at all
-                if events:
+                if sensor_signals.poll(time_max):
                     gpiostate.seek(0)
                     sensor_state = int(gpiostate.read())
                     # Increment the number of passed machine cycles
@@ -203,8 +202,7 @@ class Caster(common_caster.Caster):
                 prev_state = 0
                 while True:
                     # Polling the interrupt file
-                    events = sensor_signals.poll(timeout)
-                    if events:
+                    if sensor_signals.poll(timeout):
                         # Normal control flow when the machine is working
                         # (cycle sensor generates events)
                         gpiostate.seek(0)
