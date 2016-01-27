@@ -516,17 +516,14 @@ class Casting(object):
             # Put as many as we can
             quads_number = int(unit_line_length // 18)
             # Check if the corrections are needed at all
-            difference = sort_units - row_units
-            # Calculate the wedge positions
-            wedge_positions = typesetting.calculate_wedges(difference,
-                                                           wedge.set_width,
-                                                           wedge.brit_pica)
-            if difference:
-                # If we need to correct the width -
-                # we must cast with the S needle
-                signals = column + ' S ' + str(row)
-            else:
-                signals = column + ' ' + str(row)
+            diff = sort_units - row_units
+            calc = typesetting.calculate_wedges
+            wedge_positions = calc(diff, wedge.set_width, wedge.brit_pica)
+            signals = column
+            if diff:
+                # If we need to correct the width - cast with the S needle
+                signals += ' S '
+            signals += str(row)
             # Determine the number of quads per line to cast
             # After entering parameters, ask the operator if they're OK
             try:

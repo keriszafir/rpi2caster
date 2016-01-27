@@ -7,15 +7,15 @@ import argparse
 def cast(args):
     """Casting on an actual caster or simulation"""
     from rpi2caster import casting
-    if args.simulate:
-        from rpi2caster import simulation as casting_backend
-    else:
-        from rpi2caster import monotype as casting_backend
-    # Pass the debug mode flag to the UI
-    casting_backend.ui.DEBUG_MODE = args.debug
-    # Tie them together
     job = casting.Casting(args.ribbon)
-    job.caster = casting_backend.Monotype()
+    if args.simulate:
+        # Simulation mockup caster
+        from rpi2caster import common_caster as caster_module
+    else:
+        # Real caster
+        from rpi2caster import monotype as caster_module
+    caster_module.ui.DEBUG_MODE = args.debug
+    job.caster = caster_module.Caster()
     # Perforation mode if desired
     job.caster.is_perforator = args.is_perforator
     casting.main_menu(job)
