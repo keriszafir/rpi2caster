@@ -92,7 +92,7 @@ class Caster(common_caster.Caster):
             (self.is_perforator, interface_id) = caster_settings
         except exceptions.NotConfigured:
             # Cannot read config? Use defaults:
-            ui.display('Using hardcoded defaults for caster settings...')
+            ui.debug_info('Using hardcoded defaults for caster settings...')
             self.is_perforator = False
             interface_id = 0
 
@@ -103,7 +103,7 @@ class Caster(common_caster.Caster):
              pin_base, signals_arrangement) = out_settings
         except exceptions.NotConfigured:
             # Cannot read config? Use defaults:
-            ui.display('Using hardcoded defaults for interface outputs...')
+            ui.debug_info('Using hardcoded defaults for interface outputs...')
             mcp0_address = constants.MCP0
             mcp1_address = constants.MCP1
             pin_base = constants.PIN_BASE

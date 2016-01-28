@@ -221,7 +221,7 @@ class Casting(object):
         """
         # Count a number of combinations punched in ribbon
         all_combinations = parsing.count_combinations(self.ribbon.contents)
-        ui.display('Combinations in ribbon: %i', all_combinations)
+        ui.display('Combinations in ribbon: %i' % all_combinations)
         # Wait until the operator confirms.
         ui.confirm('\nThe combinations of Monotype signals will be displayed '
                    'on screen while the paper tower punches the ribbon.\n'
