@@ -34,14 +34,17 @@ class Diecase(object):
     def setup(self, diecase_id=None):
         """Sets attributes for the diecase object"""
         # Choose automatically or manually
-        diecase = choose_diecase(diecase_id)
-        # Set some attributes
-        if diecase:
-            (self.diecase_id, self.type_series, self.type_size,
-             wedge_series, set_width,
-             self.typeface_name, self.layout) = diecase
-            # Associated wedge
-            self.wedge = wedge_data.Wedge(wedge_series, set_width)
+        try:
+            diecase = choose_diecase(diecase_id)
+            # Set some attributes
+            if diecase:
+                (self.diecase_id, self.type_series, self.type_size,
+                 wedge_series, set_width,
+                 self.typeface_name, self.layout) = diecase
+                # Associated wedge
+                self.wedge = wedge_data.Wedge(wedge_series, set_width)
+        except exceptions.ReturnToMenu:
+            pass
 
     def show_layout(self):
         """Shows the diecase layout"""
