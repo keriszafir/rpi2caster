@@ -7,11 +7,16 @@ This sits on top of the database module and is an abstraction layer
 for other modules (like inventory, casting, typesetter).
 Processes the data retrieved from database.
 """
+# Default user interface
 from rpi2caster.global_settings import USER_INTERFACE as ui
+# Custom exceptions for rpi2caster suite
 from rpi2caster import exceptions
-from rpi2caster import database
+# Constants for known normal wedge unit arrangements
 from rpi2caster import wedge_arrangements
+# Constants shared among modules
 from rpi2caster import constants
+# Database backend
+from rpi2caster import database
 DB = database.Database()
 
 
@@ -19,24 +24,13 @@ class Wedge(object):
     """Wedge: wedge data"""
     def __init__(self, series=None, set_width=None):
         # Default wedge data - for S5-12E
-        self.series = 'S5'
+        self.series = '5'
         self.set_width = 12
         self.brit_pica = True
         self.unit_arrangement = constants.S5
-        # Wedges supplied with series and set width will be setup automatically
-        if series and set_width:
-            self.setup(series, set_width)
-
-    def setup(self, series=None, set_width=None):
-        """Choose a wedge from registered ones automatically or manually"""
-        # Try to find a wedge with given series and set width
-        try:
-            wedge = get_wedge(series, set_width)
-        # Cannot find wedge with this series and set width = choose it
-        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-            wedge = choose_wedge()
+        # Wedges will be setup automatically
         (self.series, self.set_width, self.brit_pica,
-         self.unit_arrangement) = wedge
+         self.unit_arrangement) = choose_wedge(series, set_width)
 
 
 def add_wedge():
@@ -227,9 +221,17 @@ def list_wedges():
     return results
 
 
-def choose_wedge():
+def choose_wedge(wedge_series=None, set_width=None):
     """Lists wedges and lets the user choose one; returns the wedge."""
     # Do it only if we have diecases (depends on list_diecases retval)
+    try:
+        wedge = get_wedge(wedge_series, set_width)
+        (wedge_series, set_width, brit_pica, unit_arrangement) = wedge
+        return (wedge_series, set_width,
+                bool(brit_pica), tuple(unit_arrangement))
+    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+        pass
+    # Select manually
     while True:
         ui.clear()
         ui.display('Choose a wedge:', end='\n\n')

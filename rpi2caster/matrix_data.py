@@ -8,43 +8,40 @@ diecase storing, parameter searches.
 import io
 import os
 import csv
-# We need user interface
-from rpi2caster.global_settings import USER_INTERFACE as ui
 # Some functions raise custom exceptions
 from rpi2caster import exceptions
-# We need to operate on a database
-from rpi2caster import database
 # Wedge operations for several matrix-case management functions
 from rpi2caster import wedge_data
 # Constants module
 from rpi2caster import constants
-# Create an instance of Database class with default parameters
-DB = database.Database()
+# Use the same database backend and user interface as wedge_data uses
+DB = wedge_data.DB
+ui = wedge_data.ui
 
 
 class Diecase(object):
     """Diecase: matrix case attributes and operations"""
     def __init__(self, diecase_id=None):
-        self.diecase_id = None
-        self.type_series = None
-        self.type_size = None
-        self.typeface_name = None
-        self.wedge = wedge_data.Wedge()
+        self.diecase_id = diecase_id
+        self.type_series = ''
+        self.type_size = ''
+        self.typeface_name = ''
+        self.wedge = wedge_data.Wedge('5', 12)
         self.layout = generate_empty_layout(15, 17)
         # Diecases created with diecase_id will be set up automatically
-        if diecase_id:
-            self.setup(diecase_id)
+        self.setup(diecase_id)
 
     def setup(self, diecase_id=None):
         """Sets attributes for the diecase object"""
         # Choose automatically or manually
         diecase = choose_diecase(diecase_id)
         # Set some attributes
-        (self.diecase_id, self.type_series, self.type_size,
-         wedge_series, set_width,
-         self.typeface_name, self.layout) = diecase
-        # Associated wedge
-        self.wedge = wedge_data.Wedge(wedge_series, set_width)
+        if diecase:
+            (self.diecase_id, self.type_series, self.type_size,
+             wedge_series, set_width,
+             self.typeface_name, self.layout) = diecase
+            # Associated wedge
+            self.wedge = wedge_data.Wedge(wedge_series, set_width)
 
     def show_layout(self):
         """Shows the diecase layout"""
@@ -110,6 +107,9 @@ def choose_diecase(diecase_id=None):
             return DB.diecase_by_id(diecase_id)
         except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
             pass
+    # No diecase id given = stop here
+    elif diecase_id is None:
+        return
     # If this fails, choose manually
     while True:
         ui.display('Choose a matrix case:', end='\n\n')

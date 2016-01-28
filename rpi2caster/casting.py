@@ -18,20 +18,20 @@ A module for everything related to working on a Monotype composition caster:
 import time
 # Signals parsing methods for rpi2caster
 from rpi2caster import parsing
-# User interfaces module for rpi2caster:
-from rpi2caster.global_settings import USER_INTERFACE as ui
 # Custom exceptions
 from rpi2caster import exceptions
 # Typesetting functions module
 from rpi2caster import typesetting
-# Diecase manipulation functions
-from rpi2caster import matrix_data
-# Wedge manipulation functions
-from rpi2caster import wedge_data
 # Read ribbon files
 from rpi2caster import typesetting_data
 # Constants shared between modules
 from rpi2caster import constants
+# Modules imported in the typesetting_data - matrix_data - wedge_data
+# No need to import them again - just point to them
+matrix_data = typesetting_data.matrix_data
+wedge_data = matrix_data.wedge_data
+# User interface is the same as typesetting data
+ui = typesetting_data.ui
 
 
 def use_caster(func):
@@ -71,26 +71,15 @@ class Casting(object):
         # Caster - this will be set up later
         self.caster = None
         # Ribbon object, start with a default empty ribbon
-        self.ribbon = typesetting_data.Ribbon()
-        # Diecase object, empty now
-        self.diecase = matrix_data.Diecase()
-        # Wedge object, create a default one first
-        self.wedge = wedge_data.Wedge()
-        # Automatically set up a ribbon, diecase and wedge if loaded with file
-        self.setup_ribbon_file(ribbon_file)
+        self.ribbon = typesetting_data.Ribbon(filename=ribbon_file)
+        self.diecase = self.ribbon.diecase
+        self.wedge = self.diecase.wedge
         # Indicates which line the last casting was aborted on
         self.line_aborted = 0
 
     def __enter__(self):
         ui.debug_info('Entering casting job context...')
         main_menu()
-
-    def setup_ribbon_file(self, ribbon_filename=None):
-        """Sets up the ribbon if filename was given as a cmdline argument"""
-        if ribbon_filename:
-            self.ribbon.setup(filename=ribbon_filename)
-            self.diecase = matrix_data.Diecase(self.ribbon.diecase_id)
-            self.wedge = self.diecase.wedge
 
     @use_caster
     def cast_composition(self):
@@ -869,19 +858,17 @@ class Casting(object):
     def choose_ribbon(self):
         """Chooses a ribbon from database or file"""
         self.ribbon = typesetting_data.Ribbon()
-        self.ribbon.setup()
-        self.choose_diecase()
+        self.diecase = self.ribbon.diecase
+        self.wedge = self.diecase.wedge
 
     def choose_diecase(self):
         """Chooses a diecase from database"""
-        self.diecase = matrix_data.Diecase(self.ribbon.diecase_id)
-        if not self.ribbon.diecase_id:
-            self.diecase.setup()
+        self.diecase = matrix_data.Diecase(0)
         self.wedge = self.diecase.wedge
 
     def choose_wedge(self):
         """Chooses a wedge from registered ones"""
-        self.wedge = wedge_data.Wedge()
+        self.wedge = wedge_data.Wedge(0)
 
     def display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
@@ -937,28 +924,27 @@ class Casting(object):
     def __exit__(self, *args):
         ui.debug_info('Exiting casting job context.')
 
+    def main_menu(self):
+        """main_menu:
 
-def main_menu(work=Casting()):
-    """main_menu:
-
-    Calls ui.menu() with options, a header and a footer.
-    Options: {option_name : description}
-    Header: string displayed over menu
-    Footer: string displayed under menu (all info will be added here).
-    """
-    header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-              'for Monotype Composition or Type and Rule casters.\n\n'
-              'This program reads a ribbon (from file or database) '
-              'and casts the type on a composition caster. \n\nMain Menu:')
-    # Keep displaying the menu and go back here after any method ends
-    while True:
-        # Catch any known exceptions here
-        try:
-            ui.menu(work.main_menu_options(), header=header,
-                    footer=work.display_additional_info())()
-        except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
-            # Will skip to the end of the loop, and start all over
-            pass
-        except (KeyboardInterrupt, EOFError, exceptions.ExitProgram):
-            # Will exit program
-            ui.exit_program()
+        Calls ui.menu() with options, a header and a footer.
+        Options: {option_name : description}
+        Header: string displayed over menu
+        Footer: string displayed under menu (all info will be added here).
+        """
+        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+                  'for Monotype Composition or Type and Rule casters.\n\n'
+                  'This program reads a ribbon (from file or database) '
+                  'and casts the type on a composition caster. \n\nMain Menu:')
+        # Keep displaying the menu and go back here after any method ends
+        while True:
+            # Catch any known exceptions here
+            try:
+                ui.menu(self.main_menu_options(), header=header,
+                        footer=self.display_additional_info())()
+            except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
+                # Will skip to the end of the loop, and start all over
+                pass
+            except (KeyboardInterrupt, EOFError, exceptions.ExitProgram):
+                # Will exit program
+                ui.exit_program()

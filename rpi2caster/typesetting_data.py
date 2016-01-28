@@ -7,18 +7,17 @@ Database operations for text and ribbon storing, retrieving and deleting.
 import os
 # File operations
 import io
-# We need user interface
-from rpi2caster.global_settings import USER_INTERFACE as ui
 # Some functions raise custom exceptions
 from rpi2caster import exceptions
 # Ribbon metadata parsing needs this
 from rpi2caster import parsing
-# We need to operate on a database
-from rpi2caster import database
 # Constants for rpi2caster
 from rpi2caster import constants
-# Create an instance of Database class with default parameters
-DB = database.Database()
+# Matrix data for diecases
+from rpi2caster import matrix_data
+# Use the same database backend and user interface that matrix_data uses
+DB = matrix_data.DB
+ui = matrix_data.ui
 
 
 class Ribbon(object):
@@ -48,18 +47,12 @@ class Ribbon(object):
         self.author = None
         self.title = None
         self.customer = None
-        self.diecase_id = diecase_id
+        self.diecase = matrix_data.Diecase(diecase_id)
         self.unit_shift = False
         self.filename = filename
         # Start with empty or contents or what was passed on instantiation
         self.contents = contents
-
-    def setup(self, ribbon_id=None, filename=None, diecase_id=None):
-        """Setup a ribbon object manually or automatically"""
-        self.choose_ribbon(ribbon_id, filename)
-        # Assign diecase
-        if not self.diecase_id:
-            self.set_diecase_id(diecase_id)
+        self.setup(filename=filename)
 
     def set_author(self, author=None):
         """Manually sets the author"""
@@ -77,18 +70,16 @@ class Ribbon(object):
         self.customer = (customer or ui.enter_data_or_blank(prompt) or
                          self.customer)
 
-    def set_diecase_id(self, diecase_id=None):
-        """Manually sets the diecase ID"""
-        prompt = 'Enter the diecase ID for this ribbon: '
-        self.diecase_id = (diecase_id or ui.enter_data_or_blank(prompt) or
-                           self.diecase_id)
+    def set_diecase(self, diecase_id=None):
+        """Chooses the diecase for this ribbon"""
+        self.diecase = matrix_data.Diecase(diecase_id)
 
     def set_unit_shift(self, unit_shift=False):
         """Chooses whether unit-shift is needed"""
         prompt = 'Is unit shift needed?'
         self.unit_shift = unit_shift or ui.yes_or_no(prompt) or self.unit_shift
 
-    def choose_ribbon(self, ribbon_id=None, filename=None):
+    def setup(self, ribbon_id=None, filename=None):
         """Choose a ribbon from database or file.
         If supplied ribbon_id, try to choose automatically.
         If no ribbon_id or the above failed, choose the ribbon manually
@@ -109,8 +100,8 @@ class Ribbon(object):
             ui.display('Title: %s' % self.title)
         if self.customer:
             ui.display('Customer: %s' % self.customer)
-        if self.diecase_id:
-            ui.display('Matrix case ID: %s' % self.diecase_id)
+        if self.diecase.diecase_id:
+            ui.display('Matrix case ID: %s' % self.diecase.diecase_id)
         if self.unit_shift:
             ui.display('This ribbon was coded for casting WITH unit-shift.')
         elif self.unit_shift is None:
@@ -141,14 +132,16 @@ class Ribbon(object):
         # Now get its parameters
         try:
             ribbon = DB.ribbon_by_id(ribbon_id)
+            # Set ribbon attributes
+            (self.author, self.title, diecase_id, self.customer,
+             self.unit_shift, self.contents) = ribbon
+            # Choose diecase automatically or manually
+            self.set_diecase(diecase_id)
+            return True
         except (exceptions.DatabaseQueryError,
                 exceptions.NoMatchingData,
                 exceptions.ReturnToMenu):
             return False
-        # Set ribbon attributes
-        (self.author, self.title, self.diecase_id, self.customer,
-         self.unit_shift, self.contents) = ribbon
-        return True
 
     def store_in_db(self):
         """Stores the ribbon in database"""
@@ -156,15 +149,19 @@ class Ribbon(object):
         # Ask for confirmation
         if ui.yes_or_no('Commit to the database?'):
             DB.add_ribbon(self.title, self.author, self.customer,
-                          self.diecase_id, self.unit_shift, self.contents)
+                          self.diecase.diecase_id,
+                          self.unit_shift, self.contents)
             ui.display('Data added successfully.')
 
     def read_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
         # Ask, and stop here if answered no
         ui.display('Loading the ribbon from file...')
-        filename = filename or ui.enter_input_filename()
-        if not filename:
+        try:
+            filename = filename or ui.enter_input_filename()
+            if not filename:
+                return False
+        except exceptions.ReturnToMenu:
             return False
         # Initialize the contents
         with io.open(filename, mode='r') as ribbon_file:
@@ -174,11 +171,11 @@ class Ribbon(object):
         print(metadata)
         # Metadata parsing
         self.author, self.title, self.customer = None, None, None
-        self.unit_shift, self.diecase_id, self.contents = False, None, None
+        self.unit_shift, diecase_id, self.contents = False, 0, None
         if 'diecase' in metadata:
-            self.diecase_id = metadata['diecase']
+            diecase_id = metadata['diecase']
         elif 'diecase_id' in metadata:
-            self.diecase_id = metadata['diecase_id']
+            diecase_id = metadata['diecase_id']
         if 'author' in metadata:
             self.author = metadata['author']
         if 'title' in metadata:
@@ -195,6 +192,8 @@ class Ribbon(object):
         self.contents = contents
         # Info about the filename
         self.filename = filename
+        # Choose diecase automatically
+        self.set_diecase(diecase_id)
 
     def export_to_file(self):
         """Exports the ribbon to a text file"""

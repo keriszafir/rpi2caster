@@ -7,7 +7,7 @@ import argparse
 def cast(args):
     """Casting on an actual caster or simulation"""
     from rpi2caster import casting
-    job = casting.Casting(args.ribbon)
+    job = casting.Casting(args.ribbon_file)
     if args.simulate:
         # Simulation mockup caster
         from rpi2caster import common_caster as caster_module
@@ -18,7 +18,7 @@ def cast(args):
     job.caster = caster_module.Caster()
     # Perforation mode if desired
     job.caster.is_perforator = args.is_perforator
-    casting.main_menu(job)
+    job.main_menu()
 
 
 def inventory(args):
@@ -71,9 +71,9 @@ def main():
     cast_parser.add_argument('-p', '--perforate', action='store_true',
                              dest='is_perforator',
                              help='Ribbon perforation mode')
-    cast_parser.add_argument('ribbon', metavar='ribbon_file', nargs='?',
+    cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='Ribbon file name')
-    cast_parser.set_defaults(job=cast, ribbon=None)
+    cast_parser.set_defaults(job=cast, ribbon_file=None)
     #
     # Inventory management subparser
     #
