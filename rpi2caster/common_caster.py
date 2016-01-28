@@ -14,9 +14,14 @@ class Caster(object):
     def __init__(self):
         self.name = 'Mockup caster for testing'
         self.is_perforator = False
+        # Manual mode needs confirmation before casting each combination
         self.manual_mode = False
         self.lock = False
+        # Attach a pump
         self.pump = Pump()
+        # Set default wedge positions
+        self.current_0005 = '15'
+        self.current_0075 = '15'
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
@@ -25,6 +30,9 @@ class Caster(object):
         if self.lock:
             ui.display('Caster %s is already busy!' % self.name)
         else:
+            # Set default wedge positions
+            self.current_0005 = '15'
+            self.current_0075 = '15'
             self.lock = True
             return self
 
@@ -70,12 +78,11 @@ class Caster(object):
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
                 self._send_signals_to_caster(signals, cycle_timeout)
+                # Successful ending - the combination has been cast
+                return True
             except exceptions.MachineStopped:
                 # Machine stopped during casting - ask what to do
                 self._stop_menu()
-            else:
-                # Successful ending - the combination has been cast
-                return True
 
     def _send_signals_to_caster(self, signals, cycle_timeout):
         """send_signals_to_caster
@@ -90,11 +97,15 @@ class Caster(object):
         cycle_timeout = cycle_timeout
         try:
             # Ask whether to cast or simulate machine stop
-            prompt = '[Enter] to cast or [S] to stop? '
-            if (self.manual_mode and
-                    ui.enter_data_or_blank(prompt) in ['s', 'S']):
+            prompt = ('[Enter] to cast, [S] to stop '
+                      'or [A] to switch to automatic mode? ')
+            answer = self.manual_mode and ui.enter_data_or_blank(prompt)
+            if answer in ['s', 'S']:
                 ui.display('Simulating machine stop...')
                 raise exceptions.MachineStopped
+            elif answer in ['a', 'A']:
+                ui.display('Running in automatic mode from now on...')
+                self.manual_mode = False
             ui.display('Turning the valves on...')
             self.activate_valves(signals)
             ui.display('Turning the valves off...')
@@ -185,12 +196,34 @@ class Caster(object):
         """If there are any signals, print them out"""
         if signals:
             self.pump.check_working(signals)
+            self.get_wedge_positions(signals)
             message = ('Activating valves: ' + ' '.join(signals))
             ui.display(message)
 
     def deactivate_valves(self):
         """No need to do anything"""
         ui.display('Valves deactivated.')
+
+    def get_wedge_positions(self, signals):
+        """Gets current positions of 0005 and 0075 wedges"""
+        # Check 0005
+        if '0005' in signals or {'N', 'J'}.issubset(signals):
+            pos_0005 = [x for x in range(15) if str(x) in signals]
+            if pos_0005:
+                # One or more signals detected
+                self.current_0005 = str(min(pos_0005))
+            else:
+                # 0005 with no signal = wedge at 15
+                self.current_0005 = '15'
+        # Check 0075
+        if '0075' in signals or {'N', 'K'}.issubset(signals):
+            pos_0075 = [x for x in range(15) if str(x) in signals]
+            if pos_0075:
+                # One or more signals detected
+                self.current_0075 = str(min(pos_0075))
+            else:
+                # 0005 with no signal = wedge at 15
+                self.current_0075 = '15'
 
     def detect_rotation(self):
         """Detect rotation:
@@ -214,26 +247,6 @@ class Caster(object):
         self.deactivate_valves()
         ui.debug_info('Caster no longer in use.')
         self.lock = False
-
-
-class SimulationCaster(Caster):
-    """Simulation caster - no actual casting and machine control"""
-
-    def __init__(self):
-        self.name = 'Monotype Simulator'
-        self.is_perforator = False
-        self.manual_mode = False
-        self.pump = Pump()
-
-    def __enter__(self):
-        """Lock the resource so that only one object can use it
-        with context manager"""
-        ui.debug_info('Using a simulation caster %s' % self.name)
-        if self.lock:
-            ui.display('Caster is already busy!')
-        else:
-            self.lock = True
-            return self
 
 
 class Pump(object):

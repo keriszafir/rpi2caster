@@ -149,8 +149,6 @@ class Casting(object):
             # Lines done: this will increase
             # We start with a galley trip
             lines_done = 0
-            # Wedges are initially unset - 15/15
-            pos_0075, pos_0005 = '15', '15'
             # Read the reversed file contents, line by line, then parse
             # the lines, display comments & code combinations, and feed the
             # combinations to the caster
@@ -196,13 +194,10 @@ class Casting(object):
                 # Just don't cast anything until we get to the correct line
                 if lines_done <= lines_skipped:
                     continue
-                # Determine if wedge positions change
-                (new_0075, new_0005) = parsing.check_wedge_positions(signals)
-                pos_0075 = new_0075 or pos_0075
-                pos_0005 = new_0005 or pos_0005
                 # Display wedge positions and pump status
                 wedges_info = ('0075 wedge at %s, 0005 wedge at %s\n'
-                               % (pos_0075, pos_0005))
+                               % (self.caster.current_0005,
+                                  self.caster.current_0075))
                 info_for_user.append(wedges_info)
                 info_for_user.append('Pump is %s\n'
                                      % status[self.caster.pump.working])

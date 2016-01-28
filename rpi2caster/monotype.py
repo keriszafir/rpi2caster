@@ -181,6 +181,8 @@ class Caster(common_caster.Caster):
                 else:
                     # Timeout with no signals = go to stop menu
                     self._stop_menu(casting=False)
+                    # Start counting cycles all over again
+                    cycles = 0
         # Max cycles exceeded = machine is running
         return True
 
