@@ -131,8 +131,6 @@ class Casting(object):
                    'Turn on the machine and the program will start.\n')
         # Start only after the machine is running
         self.caster.detect_rotation()
-        # Dict for telling the user whether sth is on or off
-        status = {True: 'ON', False: 'OFF'}
         # Current run number
         current_run = 1
         # Repeat casting the whole sequence as many times as we would like
@@ -199,8 +197,7 @@ class Casting(object):
                                % (self.caster.current_0005,
                                   self.caster.current_0075))
                 info_for_user.append(wedges_info)
-                info_for_user.append('Pump is %s\n'
-                                     % status[self.caster.pump.working])
+                info_for_user.append(self.caster.pump.status)
                 # Append signals to be cast
                 info_for_user.append(' '.join(signals).ljust(15))
                 # Add comment

@@ -49,6 +49,9 @@ class Caster(common_caster.Caster):
         self.interface_pin_number = self.caster_setup()
         # Add a pump
         self.pump = common_caster.Pump()
+        # Set default wedge positions
+        self.current_0005 = '15'
+        self.current_0075 = '15'
 
     def caster_setup(self):
         """Sets up initial default parameters for caster & interface."""

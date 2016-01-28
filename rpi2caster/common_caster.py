@@ -252,13 +252,20 @@ class Caster(object):
 class Pump(object):
     """Pump class for storing the pump working/non-working status."""
     def __init__(self):
-        self.working = False
+        self.is_working = False
 
     def check_working(self, signals):
         """Checks if pump is working based on signals in sequence"""
         # 0075 / NK is satisfactory to turn the pump on...
         if '0075' in signals or set(['N', 'K']).issubset(signals):
-            self.working = True
+            self.is_working = True
         # No 0075 / NK; then 0005 / NJ turns the pump off
         elif '0005' in signals or set(['N', 'J']).issubset(signals):
-            self.working = False
+            self.is_working = False
+
+    def status(self):
+        """Displays info whether pump is working or not"""
+        if self.is_working:
+            return('Pump is ON')
+        else:
+            return('Pump is OFF')
