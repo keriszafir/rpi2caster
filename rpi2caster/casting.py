@@ -85,10 +85,10 @@ class Casting(object):
         ui.debug_info('Entering casting job context...')
         main_menu()
 
-    def setup_ribbon_file(self, ribbon_file=None):
+    def setup_ribbon_file(self, ribbon_filename=None):
         """Sets up the ribbon if filename was given as a cmdline argument"""
-        if ribbon_file:
-            self.ribbon.setup(filename=ribbon_file)
+        if ribbon_filename:
+            self.ribbon.setup(filename=ribbon_filename)
             self.diecase = matrix_data.Diecase(self.ribbon.diecase_id)
             self.wedge = self.diecase.wedge
 
@@ -131,22 +131,20 @@ class Casting(object):
                    'Turn on the machine and the program will start.\n')
         # Start only after the machine is running
         self.caster.detect_rotation()
-        # Current run number
+        # Current run number - (start with 1 and increase)
         current_run = 1
         # Repeat casting the whole sequence as many times as we would like
         while current_run <= repetitions:
             ui.display('\n\nCASTING RUN %d / %d (%d left)...\n\n'
                        % (current_run, repetitions, repetitions - current_run))
             current_run += 1
-            # Characters already cast - start with zero
+            # Characters already cast, lines done - start with zero
             current_char = 0
+            lines_done = 0
             chars_left = all_chars
             # Line currently cast: since the caster casts backwards
             # (from the last to the first line), this will decrease.
             current_line = all_lines
-            # Lines done: this will increase
-            # We start with a galley trip
-            lines_done = 0
             # Read the reversed file contents, line by line, then parse
             # the lines, display comments & code combinations, and feed the
             # combinations to the caster
@@ -197,7 +195,7 @@ class Casting(object):
                                % (self.caster.current_0005,
                                   self.caster.current_0075))
                 info_for_user.append(wedges_info)
-                info_for_user.append(self.caster.pump.status)
+                info_for_user.append(self.caster.pump.status() + '\n')
                 # Append signals to be cast
                 info_for_user.append(' '.join(signals).ljust(15))
                 # Add comment
@@ -236,10 +234,9 @@ class Casting(object):
         all_combinations = parsing.count_combinations(self.ribbon.contents)
         ui.display('Combinations in ribbon: %i', all_combinations)
         # Wait until the operator confirms.
-        ui.display('\nThe combinations of Monotype signals will be displayed '
+        ui.confirm('\nThe combinations of Monotype signals will be displayed '
                    'on screen while the paper tower punches the ribbon.\n'
                    'Turn on the air and fit the tape on your paper tower.')
-        ui.confirm()
         for line in self.ribbon.contents:
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
