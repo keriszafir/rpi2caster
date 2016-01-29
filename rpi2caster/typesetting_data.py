@@ -168,7 +168,7 @@ class Ribbon(object):
             return False
         # Initialize the contents
         with io.open(filename, mode='r') as ribbon_file:
-            contents = [x.strip('\n') for x in ribbon_file]
+            contents = [x.strip('\n') for x in ribbon_file if x]
         # Parse the file, get metadata
         metadata = parsing.get_metadata(contents)
         print(metadata)

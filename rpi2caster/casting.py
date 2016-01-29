@@ -124,7 +124,7 @@ class Casting(object):
         current_run = 1
         # Repeat casting the whole sequence as many times as we would like
         while current_run <= repetitions:
-            ui.display('\n\nCASTING RUN %d / %d (%d left)...\n\n'
+            ui.display('\n\nSTARTING THE CASTING RUN %d / %d (%d left)...\n\n'
                        % (current_run, repetitions, repetitions - current_run))
             current_run += 1
             # Characters already cast, lines done - start with zero
@@ -144,8 +144,6 @@ class Casting(object):
                 # A list with information for user: signals, comments, etc.
                 info_for_user = []
                 if parsing.check_newline(signals):
-                    # Decrease the counter for each started new line
-                    current_line -= 1
                     # Percent of all lines done:
                     line_percent_done = 100 * lines_done / (all_lines - 1)
                     # Up the completed lines counter
@@ -155,11 +153,14 @@ class Casting(object):
                     if not current_line:
                         info_for_user.append('All lines successfully cast.\n')
                     else:
+                        # Decrease the counter for each started new line
                         msg = ('Starting line no. %i (%i of %i), %i remaining '
                                '[%i%% done]...\n' %
-                               (current_line, lines_done, all_lines - 1,
+                               (current_line, lines_done, all_lines,
                                 all_lines - lines_done, line_percent_done))
                         info_for_user.append(msg)
+                        # Decrease the line counter
+                        current_line -= 1
                 elif parsing.check_character(signals):
                     # Increase the current character and decrease characters
                     # left, then do some calculations
@@ -171,7 +172,7 @@ class Casting(object):
                     # number of all and remaining chars, % done
                     msg = ('Casting line no. %i (%i of %i), character: '
                            '%i of %i, %i remaining [%i%% done]...\n'
-                           % (current_line, lines_done, all_lines - 1,
+                           % (current_line, lines_done, all_lines,
                               current_char, all_chars,
                               chars_left, char_percent_done))
                     info_for_user.append(msg)

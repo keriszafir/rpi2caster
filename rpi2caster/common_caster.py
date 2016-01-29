@@ -177,7 +177,7 @@ class Caster(object):
         revolution. The program MUST turn the pump off to go on.
         """
         stop_signal = ['N', 'J', '0005']
-        while self.pump.working:
+        while self.pump.is_working:
             try:
                 # Try stopping the pump until we succeed!
                 # Keep calling _send_signals_to_caster until it returns True
@@ -252,16 +252,21 @@ class Caster(object):
 class Pump(object):
     """Pump class for storing the pump working/non-working status."""
     def __init__(self):
+        self.last_state = False
         self.is_working = False
 
     def check_working(self, signals):
         """Checks if pump is working based on signals in sequence"""
         # 0075 / NK is satisfactory to turn the pump on...
         if '0075' in signals or set(['N', 'K']).issubset(signals):
-            self.is_working = True
+            self.is_working = False
+            self.last_state = True
         # No 0075 / NK; then 0005 / NJ turns the pump off
         elif '0005' in signals or set(['N', 'J']).issubset(signals):
             self.is_working = False
+            self.last_state = False
+        else:
+            self.is_working = self.last_state
 
     def status(self):
         """Displays info whether pump is working or not"""

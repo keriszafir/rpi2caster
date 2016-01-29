@@ -111,7 +111,6 @@ def comments_parser(input_data):
 
 def count_lines_and_chars(contents):
     """Count newlines and characters+spaces in ribbon file.
-
     This is usually called when pre-processing the file for casting.
     """
     all_lines = 0
@@ -125,6 +124,9 @@ def count_lines_and_chars(contents):
             all_chars += 1
         elif check_newline(signals):
             all_lines += 1
+    # -1 lines because of the starting galley trip / double justification code
+    # Cannot be negative
+    all_lines = max(0, all_lines - 1)
     return [all_lines, all_chars]
 
 
