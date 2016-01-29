@@ -47,9 +47,9 @@ class Ribbon(object):
         self.author = None
         self.title = None
         self.customer = None
-        self.diecase = matrix_data.Diecase(diecase_id)
         self.unit_shift = False
         self.filename = filename
+        self.diecase = matrix_data.EmptyDiecase()
         # Start with empty or contents or what was passed on instantiation
         self.contents = contents
         self.setup(filename=filename)
@@ -112,13 +112,16 @@ class Ribbon(object):
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
         ui.display('Ribbon contents preview:\n')
+        contents_generator = (line for line in self.contents if line)
         try:
-            for line in self.contents:
-                ui.display(line)
-        except KeyboardInterrupt:
+            while True:
+                ui.display(contents_generator.__next__())
+        except (StopIteration):
+            # End of generator
+            ui.confirm('Finished', ui.MSG_MENU)
+        except (EOFError, KeyboardInterrupt):
             # Press ctrl-C to abort displaying long ribbons
-            pass
-        ui.confirm('', ui.MSG_MENU)
+            ui.confirm('Aborted', ui.MSG_MENU)
 
     def get_from_db(self, ribbon_id=None):
         """Gets the ribbon from database"""
@@ -208,6 +211,18 @@ class Ribbon(object):
                 ribbon_file.write(line)
 
 
+class EmptyRibbon(Ribbon):
+    """A class for new/empty ribbons"""
+    def __init__(self):
+        self.author = None
+        self.title = None
+        self.customer = None
+        self.diecase = matrix_data.EmptyDiecase()
+        self.unit_shift = False
+        self.filename = None
+        self.contents = ()
+
+
 class Work(object):
     """Work objects = input files (and input from editor).
 
@@ -244,6 +259,20 @@ class Work(object):
         """Manually sets the customer"""
         prompt = 'Enter the customer\'s name for this work: '
         self.customer = ui.enter_data_or_blank(prompt) or self.customer
+
+    def display_contents(self):
+        """Displays the contents"""
+        ui.display(self.contents)
+
+
+class EmptyWork(Work):
+    """A class for new/empty works (sources) for typesetting"""
+    def __init__(self):
+        self.work_id = None
+        self.title = None
+        self.author = None
+        self.customer = None
+        self.contents = ''
 
 
 def check_if_ribbons():

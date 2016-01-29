@@ -22,15 +22,15 @@ from rpi2caster import parsing
 from rpi2caster import exceptions
 # Typesetting functions module
 from rpi2caster import typesetting
-# Read ribbon files
-from rpi2caster import typesetting_data
 # Constants shared between modules
 from rpi2caster import constants
+# Read ribbon files
+from rpi2caster import typesetting_data
 # Modules imported in the typesetting_data - matrix_data - wedge_data
 # No need to import them again - just point to them
 matrix_data = typesetting_data.matrix_data
 wedge_data = matrix_data.wedge_data
-# User interface is the same as typesetting data
+# User interface is the same as in typesetting_data
 ui = typesetting_data.ui
 
 
@@ -71,7 +71,11 @@ class Casting(object):
         # Caster - this will be set up later
         self.caster = None
         # Ribbon object, start with a default empty ribbon
-        self.ribbon = typesetting_data.Ribbon(filename=ribbon_file)
+        if ribbon_file:
+            self.ribbon = typesetting_data.Ribbon(filename=ribbon_file)
+        else:
+            # Start with empty ribbon
+            self.ribbon = typesetting_data.EmptyRibbon()
         self.diecase = self.ribbon.diecase
         self.wedge = self.diecase.wedge
         # Indicates which line the last casting was aborted on
@@ -859,7 +863,7 @@ class Casting(object):
 
     def choose_diecase(self):
         """Chooses a diecase from database"""
-        self.diecase = matrix_data.Diecase(0)
+        self.diecase = matrix_data.Diecase()
         self.wedge = self.diecase.wedge
 
     def choose_wedge(self):

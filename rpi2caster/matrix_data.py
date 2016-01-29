@@ -26,7 +26,7 @@ class Diecase(object):
         self.type_series = ''
         self.type_size = ''
         self.typeface_name = ''
-        self.wedge = wedge_data.Wedge('5', 12)
+        self.wedge = wedge_data.DefaultWedge()
         self.layout = generate_empty_layout(15, 17)
         # Diecases created with diecase_id will be set up automatically
         self.setup(diecase_id)
@@ -121,9 +121,6 @@ def choose_diecase(diecase_id=None):
             return DB.diecase_by_id(diecase_id)
         except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
             pass
-    # No diecase id given = stop here
-    elif diecase_id is None:
-        return
     # If this fails, choose manually
     while True:
         ui.display('Choose a matrix case:', end='\n\n')
