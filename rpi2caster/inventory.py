@@ -3,10 +3,10 @@
 
 Allows to add, list and delete wedges and diecases.
 """
-from rpi2caster.global_settings import USER_INTERFACE as ui
 from rpi2caster import exceptions
 from rpi2caster import matrix_data
-from rpi2caster import wedge_data
+wedge_data = matrix_data.wedge_data
+ui = matrix_data.ui
 
 
 def main_menu():

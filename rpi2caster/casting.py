@@ -77,10 +77,6 @@ class Casting(object):
         # Indicates which line the last casting was aborted on
         self.line_aborted = 0
 
-    def __enter__(self):
-        ui.debug_info('Entering casting job context...')
-        main_menu()
-
     @use_caster
     def cast_composition(self):
         """cast_composition()
@@ -920,9 +916,6 @@ class Casting(object):
                  True)]
         # Built a list of menu options conditionally
         return [(desc, func) for (func, desc, cond) in opts if cond]
-
-    def __exit__(self, *args):
-        ui.debug_info('Exiting casting job context.')
 
     def main_menu(self):
         """main_menu:

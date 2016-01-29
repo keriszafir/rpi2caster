@@ -185,7 +185,7 @@ class Ribbon(object):
         if ('unit-shift' in metadata and
                 metadata['unit-shift'].lower() in constants.TRUE_ALIASES):
             self.unit_shift = True
-        if ('unit-shift' in metadata and
+        elif ('unit-shift' in metadata and
                 metadata['unit-shift'].lower() in constants.FALSE_ALIASES):
             self.unit_shift = False
         # Add the whole contents as the attribute

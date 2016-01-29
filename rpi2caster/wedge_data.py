@@ -33,6 +33,16 @@ class Wedge(object):
          self.unit_arrangement) = choose_wedge(series, set_width)
 
 
+class DefaultWedge(Wedge):
+    """Default S5-12E wedge"""
+    def __init__(self, series=None, set_width=None):
+        # Default wedge data - for S5-12E
+        self.series = '5'
+        self.set_width = 12
+        self.brit_pica = True
+        self.unit_arrangement = constants.S5
+
+
 def add_wedge():
     """add_wedge()
 
@@ -222,7 +232,9 @@ def list_wedges():
 
 
 def choose_wedge(wedge_series=None, set_width=None):
-    """Lists wedges and lets the user choose one; returns the wedge."""
+    """Tries to choose a wedge of given series and set width.
+    If that fails, lists wedges and lets the user choose one;
+    returns the wedge."""
     # Do it only if we have diecases (depends on list_diecases retval)
     try:
         wedge = get_wedge(wedge_series, set_width)

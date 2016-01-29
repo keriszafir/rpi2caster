@@ -53,6 +53,17 @@ class Diecase(object):
         ui.confirm()
 
 
+class EmptyDiecase(Diecase):
+    """Empty diecase, used for initializing"""
+    def __init__(self):
+        self.diecase_id = ''
+        self.type_series = ''
+        self.type_size = ''
+        self.typeface_name = ''
+        self.wedge = wedge_data.DefaultWedge()
+        self.layout = generate_empty_layout(15, 17)
+
+
 def lookup_diecase(type_series, type_size):
     """lookup_diecase
 
