@@ -854,7 +854,7 @@ class Casting(object):
                     (self.align_diecase, 'Calibrate matrix X-Y',
                      'Calibrate the character-to-body positioning',
                      not self.caster.is_perforator)]
-            return [(description, long_description, function) for
+            return [(function, description, long_description) for
                     (function, description, long_description, condition)
                     in opts if condition]
 
@@ -936,7 +936,7 @@ class Casting(object):
                 (self.diagnostics_submenu, 'Service...',
                  'Interface and machine diagnostic functions', True)]
         # Built a list of menu options conditionally
-        return [(description, long_description, function)
+        return [(function, description, long_description)
                 for (function, description, long_description, condition)
                 in opts if condition]
 

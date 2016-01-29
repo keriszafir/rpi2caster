@@ -54,18 +54,16 @@ def menu(options, header='', footer='', no_debug=False):
         print(header, end='\n\n')
     # Get the first option - this will be listed last
     try:
-        (zero_desc, zero_long_desc, zero_function) = options[0]
+        (zero_function, zero_desc, zero_long_desc) = options[0]
+        functions = [zero_function]
     except IndexError:
         raise exceptions.ExitProgram
-    functions = [zero_function]
     # Display all the options
-    opts = [(i, desc, long_desc, function)
-            for i, (desc, long_desc, function) in enumerate(options) if i]
-    # Menu body
     # Tab indent, option number, option name (not processing option 0 yet!)
-    for (i, desc, long_desc, function) in opts:
-        functions.append(function)
-        print('\t %i : %s \n\t\t %s \n' % (i, desc, long_desc))
+    for i, (function, desc, long_desc) in enumerate(options):
+        if i:
+            functions.append(function)
+            print('\t %i : %s \n\t\t %s \n' % (i, desc, long_desc))
     # Option 0 is displayed last, add some whitespace around it
     print('\n\t %i : %s \n\t\t %s \n' % (0, zero_desc, zero_long_desc))
     # Print footer, if defined
@@ -77,6 +75,7 @@ def menu(options, header='', footer='', no_debug=False):
     print('\n')
     # Ask for user input
     your_choice = ''
+    # Get only available options and exclude non-numeric strings
     while your_choice not in range(len(options)):
         # Wait until user enters proper data
         your_choice = input('Your choice: ')

@@ -13,12 +13,12 @@ def main_menu():
     """Display the main menu for inventory management"""
     header = ('Matrix case  and wedge management utility for rpi2caster.'
               '\n\nMain menu:\n')
-    options = [('Exit', 'Exits the inventory management',
-                exceptions.exit_program),
-               ('Matrix manipulation...',
-                'Work on matrix cases', matrix_menu),
-               ('Wedge manupulation...',
-                'List, add and remove wedge definitions', wedge_menu)]
+    options = [(exceptions.exit_program, 'Exit',
+                'Exits the inventory management'),
+               (matrix_menu, 'Matrix manipulation...',
+                'Work on matrix cases'),
+               (wedge_menu, 'Wedge manupulation...',
+                'List, add and remove wedge definitions')]
     while True:
         try:
             ui.menu(options, header=header, footer='')()
@@ -98,10 +98,6 @@ def matrix_menu():
 def wedge_menu():
     """Wedge manipulation functions - listing, adding, deleting"""
 
-    def menu():
-        """Exits to main menu"""
-        exceptions.return_to_menu()
-
     def delete_wedge():
         """Lets user select and delete a wedge from database."""
         prompt = 'Number of a wedge to delete? (leave blank to exit): '
@@ -114,7 +110,7 @@ def wedge_menu():
         except KeyError:
             ui.display('Wedge number is incorrect!')
         ui.confirm()
-        # Ask for confirmation
+
     header = ('\nWedge manipulation menu:\n\n'
               '[A]dd new wedge\n'
               '[D]elete a wedge\n\n'
@@ -122,7 +118,7 @@ def wedge_menu():
               'Your choice? : ')
     options = {'A': wedge_data.add_wedge,
                'D': delete_wedge,
-               '': menu}
+               '': exceptions.return_to_menu}
     while True:
         available_wedges = wedge_data.list_wedges()
         try:
