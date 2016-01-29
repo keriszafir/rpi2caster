@@ -854,7 +854,9 @@ class Casting(object):
                     (self.align_diecase, 'Calibrate matrix X-Y',
                      'Calibrate the character-to-body positioning',
                      not self.caster.is_perforator)]
-            return [(desc, func) for (func, desc, cond) in opts if cond]
+            return [(description, long_description, function) for
+                    (function, description, long_description, condition)
+                    in opts if condition]
 
         header = ('Diagnostics and machine calibration menu:\n\n')
         # Keep displaying the menu and go back here after any method ends

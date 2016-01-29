@@ -28,7 +28,7 @@ MSG_CONTINUE = '[Enter] to continue...'
 
 
 def menu(options, header='', footer='', no_debug=False):
-    """menu(options=[(name1, long1, opt1), (name2, long2, opt2)...],
+    """menu(options=[(name1, long1, func1), (name2, long2, func2)...],
                     header=foo,
                     footer=bar,
                     no_debug=False):
@@ -52,17 +52,23 @@ def menu(options, header='', footer='', no_debug=False):
     clear()
     if header:
         print(header, end='\n\n')
-    # Display all the options; we'll take care of 0 later
-    options = dict([(i, option) for i, option in enumerate(options)])
+    # Get the first option - this will be listed last
+    try:
+        (zero_desc, zero_long_desc, zero_function) = options[0]
+    except IndexError:
+        raise exceptions.ExitProgram
+    functions = [zero_function]
+    # Display all the options
+    opts = [(i, desc, long_desc, function)
+            for i, (desc, long_desc, function) in enumerate(options) if i]
     # Menu body
     # Tab indent, option number, option name (not processing option 0 yet!)
-    print('\n'.join(['\t %i : %s \n \t\t %s \n'
-                     % (k, options[k][0], options[k][1])
-                     for k in sorted(options) if k]))
+    for (i, desc, long_desc, function) in opts:
+        functions.append(function)
+        print('\t %i : %s \n\t\t %s \n' % (i, desc, long_desc))
     # Option 0 is displayed last, add some whitespace around it
     try:
-        print('\n\n\t %i : %s' % (0, options[0][0]))
-        print('\t\t %s \n' % options[0][1])
+        print('\n\t %i : %s \n\t\t %s \n' % (0, zero_desc, zero_long_desc))
     except KeyError:
         # Theoretically, there's always an option number zero... but if not?
         pass
@@ -75,7 +81,7 @@ def menu(options, header='', footer='', no_debug=False):
     print('\n')
     # Ask for user input
     your_choice = ''
-    while your_choice not in options:
+    while your_choice not in range(len(options)):
         # Wait until user enters proper data
         your_choice = input('Your choice: ')
         try:
@@ -85,7 +91,7 @@ def menu(options, header='', footer='', no_debug=False):
             your_choice = ''
     # At last, we have chosen a valid option...
     # Return a corresponding value - which is option[2]
-    return options[your_choice][2]
+    return functions[your_choice]
 
 
 def clear():
