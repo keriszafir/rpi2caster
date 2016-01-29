@@ -834,18 +834,25 @@ class Casting(object):
         """Settings and alignment menu for servicing the caster"""
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
-            opts = [(exceptions.menu_level_up, 'Return to main menu', True),
-                    (self.test_all, 'Test the air outputs one by one', True),
-                    (self.test_front_pinblock, 'Test the pins 1...14',
+            opts = [(exceptions.menu_level_up, 'Back',
+                     'Returns to main menu', True),
+                    (self.test_all, 'Test outputs',
+                     'Tests all the air outputs one by one', True),
+                    (self.test_front_pinblock, 'Test the front pinblock',
+                     'Tests the pins 1...14', not self.caster.is_perforator),
+                    (self.test_rear_pinblock, 'Test the rear pinblock',
+                    'Tests the pins NI, NL, A...N one by one',
                      not self.caster.is_perforator),
-                    (self.test_rear_pinblock, 'Test the pins NI, NL, A...N',
-                     not self.caster.is_perforator),
-                    (self.send_combination, 'Send specified signals', True),
-                    (self.align_wedges, 'Calibrate the space transfer wedge',
+                    (self.send_combination, 'Send specified signals',
+                     'Sends the specified signal combination', True),
+                    (self.align_wedges, 'Adjust the 52D wedge',
+                     'Calibrate the space transfer wedge for correct width',
                      not self.caster.is_perforator),
                     (self.align_mould, 'Calibrate mould opening',
+                     'Casts 9-unit characters to adjust the type width',
                      not self.caster.is_perforator),
-                    (self.align_diecase, 'Calibrate diecase X-Y',
+                    (self.align_diecase, 'Calibrate matrix X-Y',
+                     'Calibrate the character-to-body positioning',
                      not self.caster.is_perforator)]
             return [(desc, func) for (func, desc, cond) in opts if cond]
 
@@ -901,29 +908,35 @@ class Casting(object):
         perforator = self.caster.is_perforator
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
-        opts = [(exceptions.exit_program, 'Exit program', True),
-                (self.choose_ribbon, 'Select ribbon from database or file',
-                 True),
-                (self.choose_diecase, 'Select a matrix case', True),
-                (self.choose_wedge, 'Select a normal wedge', True),
-                (self.ribbon.display_contents, 'Preview ribbon', ribbon),
-                (self.heatup, 'Cast some quads to heat up the mould',
-                 not perforator),
+        opts = [(exceptions.exit_program, 'Exit', 'Exits the program', True),
+                (self.choose_ribbon, 'Select ribbon',
+                 'Selects a ribbon from database or file', True),
+                (self.choose_diecase, 'Select diecase',
+                 'Selects a matrix case from database', True),
+                (self.choose_wedge, 'Select wedge',
+                 'Selects a wedge from database', True),
+                (self.ribbon.display_contents, 'View codes',
+                 'Displays all sequences in a ribbon', ribbon),
+                (self.heatup, 'Heat the mould up',
+                'Casts some quads to heat up the mould', not perforator),
                 (self.punch_composition, 'Punch composition',
-                 ribbon and perforator),
+                 'Punches a ribbon using a perforator', ribbon and perforator),
                 (self.cast_composition, 'Cast composition',
-                 ribbon and not perforator),
-                (self.diecase.show_layout, 'View the matrix case layout',
-                 diecase_selected),
-                (self.line_casting, 'Compose and cast a line of text',
-                 diecase_selected),
-                (self.cast_sorts, 'Cast sorts from matrix coordinates',
-                 not perforator),
-                (self.cast_spaces, 'Cast spaces or quads', not perforator),
-                (self.diagnostics_submenu, 'Diagnostics and calibration',
-                 True)]
+                 'Casts type with a caster', ribbon and not perforator),
+                (self.diecase.show_layout, 'Show diecase layout',
+                'Views the matrix case layout', diecase_selected),
+                (self.line_casting, 'Ad-hoc typesetting',
+                'Compose and cast a line of text', diecase_selected),
+                (self.cast_sorts, 'Cast sorts',
+                'Cast from matrix with given coordinates', not perforator),
+                (self.cast_spaces, 'Cast spaces or quads',
+                 'Casts spaces or quads of a specified width', not perforator),
+                (self.diagnostics_submenu, 'Service...',
+                 'Interface and machine diagnostic functions', True)]
         # Built a list of menu options conditionally
-        return [(desc, func) for (func, desc, cond) in opts if cond]
+        return [(description, long_description, function)
+                for (function, description, long_description, condition)
+                in opts if condition]
 
     def main_menu(self):
         """main_menu:
@@ -946,6 +959,3 @@ class Casting(object):
             except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
                 # Will skip to the end of the loop, and start all over
                 pass
-            except (KeyboardInterrupt, EOFError, exceptions.ExitProgram):
-                # Will exit program
-                ui.exit_program()

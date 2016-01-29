@@ -13,9 +13,12 @@ def main_menu():
     """Display the main menu for inventory management"""
     header = ('Matrix case  and wedge management utility for rpi2caster.'
               '\n\nMain menu:\n')
-    options = [('Exit program', exceptions.exit_program),
-               ('Matrix manipulation...', matrix_menu),
-               ('Wedge manupulation...', wedge_menu)]
+    options = [('Exit', 'Exits the inventory management',
+                exceptions.exit_program),
+               ('Matrix manipulation...',
+                'Work on matrix cases', matrix_menu),
+               ('Wedge manupulation...',
+                'List, add and remove wedge definitions', wedge_menu)]
     while True:
         try:
             ui.menu(options, header=header, footer='')()
@@ -26,8 +29,6 @@ def main_menu():
             ui.confirm('No matching data found!', ui.MSG_MENU)
         except exceptions.DatabaseQueryError:
             ui.confirm('Database query error!', ui.MSG_MENU)
-        except (KeyboardInterrupt, EOFError, exceptions.ExitProgram):
-            ui.exit_program()
 
 
 def matrix_menu():

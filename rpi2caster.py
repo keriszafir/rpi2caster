@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """rpi2caster - top-level script for starting the components"""
 import argparse
+from rpi2caster import exceptions
 
 
 def cast(args):
@@ -109,8 +110,13 @@ def main():
     # Upgrade routine
     if args.upgrade:
         print('Upgrading...')
-    else:
-        args.job(args)
+    elif args.job:
+        try:
+            args.job(args)
+        except exceptions.ExitProgram:
+            print('Goodbye!')
+        except (KeyboardInterrupt, EOFError):
+            print('\nInterrupted by user.')
 
 
 if __name__ == '__main__':

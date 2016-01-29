@@ -28,12 +28,14 @@ MSG_CONTINUE = '[Enter] to continue...'
 
 
 def menu(options, header='', footer='', no_debug=False):
-    """menu(options=[(name1, opt1), (name2, opt2)...],
+    """menu(options=[(name1, long1, opt1), (name2, long2, opt2)...],
                     header=foo,
                     footer=bar,
                     no_debug=False):
 
-    A menu which takes three arguments:
+    A menu which takes four arguments:
+    options list - contains tuples for each option:
+        (description, long_description, function)
     header - string to be displayed above,
     footer - string to be displayed below,
     no_debug - True if we don't want to tell the user
@@ -54,11 +56,13 @@ def menu(options, header='', footer='', no_debug=False):
     options = dict([(i, option) for i, option in enumerate(options)])
     # Menu body
     # Tab indent, option number, option name (not processing option 0 yet!)
-    print('\n'.join(['\t %i : %s \n' % (k, options[k][0])
+    print('\n'.join(['\t %i : %s \n \t\t %s \n'
+                     % (k, options[k][0], options[k][1])
                      for k in sorted(options) if k]))
     # Option 0 is displayed last, add some whitespace around it
     try:
-        print('\n\n\t %i : %s \n' % (0, options[0][0]))
+        print('\n\n\t %i : %s' % (0, options[0][0]))
+        print('\t\t %s \n' % options[0][1])
     except KeyError:
         # Theoretically, there's always an option number zero... but if not?
         pass
@@ -80,8 +84,8 @@ def menu(options, header='', footer='', no_debug=False):
             # Entered anything non-digit - repeat
             your_choice = ''
     # At last, we have chosen a valid option...
-    # Return a corresponding value - which is option[1]
-    return options[your_choice][1]
+    # Return a corresponding value - which is option[2]
+    return options[your_choice][2]
 
 
 def clear():
