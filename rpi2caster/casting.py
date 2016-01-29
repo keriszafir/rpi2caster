@@ -137,10 +137,10 @@ class Casting(object):
             # Read the reversed file contents, line by line, then parse
             # the lines, display comments & code combinations, and feed the
             # combinations to the caster
-            for line in queue:
+            for record in queue:
                 # Parse the row, return a list of signals and a comment.
                 # Both can have zero or positive length.
-                [signals, comment] = parsing.comments_parser(line)
+                [signals, comment] = parsing.comments_parser(record)
                 # A list with information for user: signals, comments, etc.
                 info_for_user = []
                 if parsing.check_newline(signals):
@@ -151,7 +151,8 @@ class Casting(object):
                     # Display number of the working line,
                     # number of all remaining lines, percent done
                     if not current_line:
-                        info_for_user.append('All lines successfully cast.\n')
+                        info = 'All lines successfully cast. Stopping...\n'
+                        info_for_user.append(info)
                     else:
                         # Decrease the counter for each started new line
                         msg = ('Starting line no. %i (%i of %i), %i remaining '
@@ -185,6 +186,8 @@ class Casting(object):
                                % (self.caster.current_0005,
                                   self.caster.current_0075))
                 info_for_user.append(wedges_info)
+                # Got to check before we display info
+                self.caster.pump.check_working(signals)
                 info_for_user.append(self.caster.pump.status() + '\n')
                 # Append signals to be cast
                 info_for_user.append(' '.join(signals).ljust(15))

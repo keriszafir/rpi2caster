@@ -168,10 +168,9 @@ class Ribbon(object):
             return False
         # Initialize the contents
         with io.open(filename, mode='r') as ribbon_file:
-            contents = [x.strip('\n') for x in ribbon_file if x]
+            contents = [x.strip() for x in ribbon_file if x.strip()]
         # Parse the file, get metadata
         metadata = parsing.get_metadata(contents)
-        print(metadata)
         # Metadata parsing
         self.author, self.title, self.customer = None, None, None
         self.unit_shift, diecase_id, self.contents = False, 0, None
