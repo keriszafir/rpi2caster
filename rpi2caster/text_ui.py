@@ -67,11 +67,7 @@ def menu(options, header='', footer='', no_debug=False):
         functions.append(function)
         print('\t %i : %s \n\t\t %s \n' % (i, desc, long_desc))
     # Option 0 is displayed last, add some whitespace around it
-    try:
-        print('\n\t %i : %s \n\t\t %s \n' % (0, zero_desc, zero_long_desc))
-    except KeyError:
-        # Theoretically, there's always an option number zero... but if not?
-        pass
+    print('\n\t %i : %s \n\t\t %s \n' % (0, zero_desc, zero_long_desc))
     # Print footer, if defined
     if footer:
         print(footer, end='\n\n')
