@@ -74,9 +74,9 @@ def menu(options, header='', footer='', no_debug=False):
     # Add an empty line to separate prompt
     print('\n')
     # Ask for user input
-    your_choice = ''
+    choice_number = -1
     # Get only available options and exclude non-numeric strings
-    while your_choice not in range(len(options)):
+    while choice_number not in range(len(options)):
         # Wait until user enters proper data
         your_choice = input('Your choice: ')
         try:
@@ -290,22 +290,19 @@ def display_diecase_layout(diecase):
     # Build a list of all characters
     all_mats = [process_matrix(mat) for mat in diecase.layout]
     # Build rows and columns to iterate over
-    cols_17 = 'NI' in cols_set or 'NL' in cols_set
-    rows_16 = 16 in rows_set
-    column_numbers = ((rows_16 or cols_17) and constants.COLUMNS_17 or
-                      constants.COLUMNS_15)
-    row_numbers = [x for x in range(1, rows_16 and 17 or 16)]
+    col_numbers = ((16 in rows_set or 'NI' in cols_set or 'NL' in cols_set) and
+                   constants.COLUMNS_17 or constants.COLUMNS_15)
+    # If row 16 found - generate 16 rows; else 15
+    row_numbers = [x for x in range(1, 16 in rows_set and 17 or 16)]
     # Arrange matrices for displaying
     # Generate a header with column numbers
-    header_list = ['|Row|']
-    header_list.extend([col.center(4) for col in column_numbers])
-    header_list.append('|Units|Shift|')
-    header = ''.join(header_list)
+    header = ('|Row|' + ''.join([col.center(4) for col in col_numbers]) +
+              '|Units|Shift|')
     # "-----" line in the table
     separator = '—' * len(header)
     # A row with only spaces and vertical lines in it
     empty_row = ('|' + ' ' * 3 + '|' +
-                 ' ' * 4 * len(column_numbers) + '|' +
+                 ' ' * 4 * len(col_numbers) + '|' +
                  ' ' * 5 + '|' + ' ' * 5 + '|')
     # Initialize the displayed layout
     displayed_layout = [separator, header, separator, empty_row]
@@ -318,12 +315,11 @@ def display_diecase_layout(diecase):
         row = ['|' + str(row_number).center(3) + '|']
         # Add only characters and styles, center chars to 4
         row.extend([mat[0].center(4)
-                    for column_number in column_numbers for mat in all_mats
+                    for column_number in col_numbers for mat in all_mats
                     if mat[2] == column_number and mat[3] == row_number])
         row.append('|' + str(units).center(5) + '|')
         row.append(str(shifted_units).center(5) + '|')
-        displayed_row = ''.join(row)
-        displayed_layout.append(displayed_row)
+        displayed_layout.append(''.join(row))
         displayed_layout.append(empty_row)
     # Add the header at the bottom
     displayed_layout.extend([separator, header, separator])
