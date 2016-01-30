@@ -196,10 +196,14 @@ class DefaultWedge(object):
 
 class Wedge(DefaultWedge):
     """Wedge: wedge data"""
-    def __init__(self, series=None, set_width=None):
-        DefaultWedge.__init__()
+    def __init__(self, series='', set_width=0):
+        DefaultWedge.__init__(self)
         # Wedges will be setup automatically
-        self = choose_wedge(series, set_width)
+        temp_wedge = choose_wedge(series, set_width)
+        self.series = temp_wedge.series
+        self.set_width = temp_wedge.set_width
+        self.brit_pica = temp_wedge.brit_pica
+        self.unit_arrangement = temp_wedge.unit_arrangement
 
 
 def wedge_operations():
@@ -264,27 +268,26 @@ def choose_wedge(wedge_series='', set_width=0):
     try:
         wedge = DB.get_wedge(wedge_series, set_width)
     except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-        pass
-    # Select manually
-    while True:
-        ui.display('\nChoose a wedge:', end='\n')
-        try:
-            available_wedges = list_wedges()
-        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-            ui.display('No wedges found in database. Using default S5-12E...')
-            return DefaultWedge()
-        # Enter the diecase name
-        prompt = 'Enter number (leave blank to work with default S5-12E): '
-        choice = ui.enter_data_or_blank(prompt, int)
-        if not choice:
-            return DefaultWedge()
-        # Safeguards against entering a wrong number or non-numeric string
-        try:
-            wedge = available_wedges[choice]
-            break
-        except KeyError:
-            ui.confirm('Wedge number is incorrect!')
-            continue
+        while True:
+            ui.display('\nChoose a wedge:', end='\n')
+            try:
+                available_wedges = list_wedges()
+            except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+                ui.display('No wedges found in database. '
+                           'Using default S5-12E...')
+                return DefaultWedge()
+            # Enter the diecase name
+            prompt = 'Enter number (leave blank to work with default S5-12E): '
+            choice = ui.enter_data_or_blank(prompt, int)
+            if not choice:
+                return DefaultWedge()
+            # Safeguards against entering a wrong number or non-numeric string
+            try:
+                wedge = available_wedges[choice]
+                break
+            except KeyError:
+                ui.confirm('Wedge number is incorrect!')
+                continue
     temp_wedge = DefaultWedge()
     (temp_wedge.series, temp_wedge.set_width, brit_pica,
      temp_wedge.unit_arrangement) = wedge

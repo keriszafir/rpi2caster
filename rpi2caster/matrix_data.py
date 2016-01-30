@@ -29,21 +29,6 @@ class EmptyDiecase(object):
         self.wedge = wedge_data.DefaultWedge()
         self.layout = generate_empty_layout(15, 17)
 
-    def setup(self, diecase_id=None):
-        """Sets attributes for the diecase object"""
-        # Choose automatically or manually
-        try:
-            diecase = choose_diecase(diecase_id)
-            # Set some attributes
-            if diecase:
-                (self.diecase_id, self.type_series, self.type_size,
-                 wedge_series, set_width,
-                 self.typeface_name, self.layout) = diecase
-                # Associated wedge
-                self.wedge = wedge_data.Wedge(wedge_series, set_width)
-        except exceptions.ReturnToMenu:
-            pass
-
     def show_layout(self):
         """Shows the diecase layout"""
         ui.display_diecase_layout(self)
@@ -195,11 +180,20 @@ class EmptyDiecase(object):
 
 
 class Diecase(EmptyDiecase):
-    """Empty diecase, used for initializing"""
+    """Initialize a diecase object with or without given ID.
+    If possible, choose automatically. If this fails, choose manually,
+    and if user chooses no diecase, an empty one will be initialized."""
     def __init__(self, diecase_id=None):
-        EmptyDiecase.__init__()
+        EmptyDiecase.__init__(self)
         # Diecases created with diecase_id will be set up automatically
-        self.setup(diecase_id)
+        temp_diecase = choose_diecase(diecase_id)
+        # Assign attributes to diecase we're initializing
+        self.diecase_id = temp_diecase.diecase_id
+        self.type_series = temp_diecase.type_series
+        self.type_size = temp_diecase.type_size
+        self.typeface_name = temp_diecase.typeface_name
+        self.layout = temp_diecase.layout
+        self.wedge = temp_diecase.wedge
 
 
 def diecase_operations():
@@ -266,30 +260,40 @@ def list_diecases():
 
 
 def choose_diecase(diecase_id=None):
-    """Lists diecases and lets the user choose one; returns the record."""
+    """Lists diecases and lets the user choose one;
+    returns the Diecase class object with all parameters set up."""
     # First try to get the diecase by ID:
-    if diecase_id:
-        try:
-            return DB.diecase_by_id(diecase_id)
-        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-            pass
-    # If this fails, choose manually
-    while True:
-        ui.display('Choose a matrix case:', end='\n\n')
-        available_diecases = list_diecases()
-        # Enter the diecase name
-        prompt = 'Number of a diecase or [Enter] to exit: '
-        choice = (ui.enter_data_or_blank(prompt) or
-                  exceptions.return_to_menu())
-        # Safeguards against entering a wrong number or non-numeric string
-        try:
-            diecase_id = available_diecases[choice]
-            return DB.diecase_by_id(diecase_id)
-        except (KeyError,
-                exceptions.NoMatchingData,
-                exceptions.DatabaseQueryError):
-            ui.confirm('Diecase number is incorrect!')
-            continue
+    try:
+        diecase_data = DB.diecase_by_id(diecase_id)
+    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+        # If this fails, choose manually
+        while True:
+            ui.display('Choose a matrix case:', end='\n\n')
+            available_diecases = list_diecases()
+            # Enter the diecase name
+            prompt = 'Number of a diecase or leave blank for an empty one: '
+            choice = ui.enter_data_or_blank(prompt)
+            if not choice:
+                return EmptyDiecase()
+            # Safeguards against entering a wrong number or non-numeric string
+            try:
+                diecase_id = available_diecases[choice]
+                diecase_data = DB.diecase_by_id(diecase_id)
+                break
+            except (KeyError,
+                    exceptions.NoMatchingData,
+                    exceptions.DatabaseQueryError):
+                ui.confirm('Diecase number is incorrect!')
+    (diecase_id, type_series, type_size, wedge_series, set_width,
+     typeface_name, layout) = diecase_data
+    diecase = EmptyDiecase()
+    diecase.diecase_id = diecase_id
+    diecase.type_series = type_series
+    diecase.type_size = type_size
+    diecase.typeface_name = typeface_name
+    diecase.layout = layout
+    diecase.wedge = wedge_data.Wedge(wedge_series, set_width)
+    return diecase
 
 
 def show_diecase(diecase_id):

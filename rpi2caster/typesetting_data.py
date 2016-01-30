@@ -20,7 +20,7 @@ DB = matrix_data.DB
 ui = matrix_data.ui
 
 
-class Ribbon(object):
+class EmptyRibbon(object):
     """Ribbon objects - no matter whether files or database entries.
 
     A ribbon has the following attributes:
@@ -43,16 +43,14 @@ class Ribbon(object):
         manually
 
     """
-    def __init__(self, diecase_id=None, filename=None, contents=()):
+    def __init__(self):
         self.author = None
         self.title = None
         self.customer = None
         self.unit_shift = False
-        self.filename = filename
+        self.filename = None
+        self.contents = ()
         self.diecase = matrix_data.EmptyDiecase()
-        # Start with empty or contents or what was passed on instantiation
-        self.contents = contents
-        self.setup(filename=filename)
 
     def set_author(self, author=None):
         """Manually sets the author"""
@@ -78,19 +76,6 @@ class Ribbon(object):
         """Chooses whether unit-shift is needed"""
         prompt = 'Is unit shift needed?'
         self.unit_shift = unit_shift or ui.yes_or_no(prompt) or self.unit_shift
-
-    def setup(self, ribbon_id=None, filename=None):
-        """Choose a ribbon from database or file.
-        If supplied ribbon_id, try to choose automatically.
-        If no ribbon_id or the above failed, choose the ribbon manually
-        from database or file.
-        """
-        # If called with a filename - select from file
-        # If called with ID - select automatically from database
-        # If no or wrong ID given - will select manually
-        # If this fails - will load from file
-        if filename or not self.get_from_db(ribbon_id):
-            self.read_from_file(filename)
 
     def display_data(self):
         """Displays all available data"""
@@ -210,16 +195,14 @@ class Ribbon(object):
                 ribbon_file.write(line)
 
 
-class EmptyRibbon(Ribbon):
+class Ribbon(EmptyRibbon):
     """A class for new/empty ribbons"""
-    def __init__(self):
-        self.author = None
-        self.title = None
-        self.customer = None
-        self.diecase = matrix_data.EmptyDiecase()
-        self.unit_shift = False
-        self.filename = None
-        self.contents = ()
+    def __init__(self, ribbon_id=None, filename=None):
+        EmptyRibbon.__init__(self)
+        self.filename = filename
+        self.ribbon_id = None
+        if filename or not self.get_from_db(ribbon_id):
+            self.read_from_file(filename)
 
 
 class Work(object):
