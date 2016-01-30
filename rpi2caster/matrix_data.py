@@ -48,9 +48,148 @@ class Diecase(object):
 
     def show_layout(self):
         """Shows the diecase layout"""
-        ui.display_diecase_layout(self.layout,
-                                  self.wedge.unit_arrangement)
+        ui.display_diecase_layout(self)
         ui.confirm()
+
+    def edit_layout(self):
+        """Edits a layout and asks if user wants to save changes"""
+        # Edit the layout
+        new_layout = ui.edit_diecase_layout(self.layout)
+        # Check if any changes were made - if so, ask if we want to keep them
+        if new_layout != self.layout and ui.yes_or_no('Save the changes?'):
+            self.layout = new_layout
+
+    def import_layout(self):
+        """Imports a layout from file"""
+        # Start with an empty layout
+        new_layout = generate_empty_layout()
+        # Load the layout from file
+        try:
+            submitted_layout = submit_layout_file()
+        except (TypeError, ValueError):
+            ui.confirm('File does not contain a proper layout!')
+            return
+        # Update the empty layout with characters read from file
+        # record = (char, styles, column, row, units)
+        try:
+            for position in new_layout:
+                for record in submitted_layout:
+                    if record[2] == position[2] and record[3] == position[3]:
+                        new_layout[new_layout.index(position)] = record
+        except (TypeError, ValueError):
+            ui.confirm('Cannot process the uploaded layout!')
+            return
+        # Other positions will be empty but defined
+        # Now display the layout - need to use a temporary diecase for that
+        temp_diecase = EmptyDiecase()
+        temp_diecase.layout = new_layout
+        temp_diecase.wedge = self.wedge
+        ui.display('\nSubmitted layout:\n')
+        ui.display_diecase_layout(temp_diecase)
+        # Ask for confirmation
+        if ui.yes_or_no('Save the changes?'):
+            self.layout = new_layout
+
+    def export_layout(self):
+        """Exports the matrix case layout to file."""
+        filename = os.path.expanduser('~') + '/%s.csv' % self.diecase_id
+        with io.open(filename, 'a') as output_file:
+            csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
+                                    quoting=csv.QUOTE_ALL)
+            for record in self.layout:
+                (char, styles, column, row, units) = record
+                csv_writer.writerow([char, ', '.join(styles),
+                                     column, row, units])
+        ui.confirm('File %s successfully saved.' % filename)
+
+    def clear_layout(self):
+        """Clears a layout for the diecase"""
+        layout = generate_empty_layout()
+        if ui.yes_or_no('Are you sure?'):
+            self.layout = layout
+
+    def show_parameters(self):
+        """Shows diecase's parameters"""
+        data = self.get_parameters()
+        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
+        for item in info:
+            ui.display(item)
+
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.diecase_id, 'Diecase ID'),
+                (self.typeface_name, 'Typeface'),
+                (self.type_series, 'Type series'),
+                (self.type_size, 'Type size'),
+                (self.wedge.series, 'Wedge series'),
+                (self.wedge.set_width, 'Set width of a wedge'),
+                (self.wedge.brit_pica, 'British pica (.1667") based wedge?'),
+                (' '.join([str(x) for x in self.wedge.unit_arrangement if x]),
+                 'Unit arrangement for this wedge')]
+        return data
+
+    def save_to_db(self):
+        """Stores the matrix case definition/layout in database"""
+        try:
+            DB.add_diecase(self)
+        except exceptions.DatabaseQueryError:
+            ui.confirm('Cannot save the diecase!')
+
+    def delete_from_db(self):
+        """Deletes a diecase from database"""
+        ans = ui.yes_or_no('Are you sure?')
+        if ans and DB.delete_diecase(self):
+            ui.display('Matrix case deleted successfully.')
+
+    def check_db(self):
+        """Checks if the diecase is registered in database"""
+        try:
+            DB.diecase_by_id(self.diecase_id)
+            return True
+        except (exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+            return False
+
+    def get_styles(self):
+        """Parses the diecase layout and gets available typeface styles.
+        Returns a list of them."""
+        try:
+            return list({style for mat in self.layout
+                         for style in mat[1] if style})
+        except TypeError:
+            return []
+
+    def manipulation_menu(self):
+        """A menu with all operations on a diecase"""
+        self.show_parameters()
+        message = ('Matrix case manipulation:\n'
+                   '[V]iew, [C]lear, [E]dit, [I]mport or e[X]port layout\n')
+        extra = []
+        # Menu
+        while True:
+            self.show_parameters()
+            options = {'E': self.edit_layout,
+                       'C': self.clear_layout,
+                       'V': self.show_layout,
+                       'I': self.import_layout,
+                       'X': self.export_layout,
+                       '': exceptions.menu_level_up}
+            # Save to database needs a complete set of metadata
+            missing = [x for x in (self.type_series, self.type_size,
+                                   self.typeface_name, self.diecase_id)
+                       if not x]
+            if missing:
+                extra.append('Some data is missing - cannot save to database.')
+            else:
+                options['R'] = self.save_to_db
+                extra.append('[R]egister / update diecase in database')
+            # Check if it's in the database
+            if self.check_db():
+                options['D'] = self.delete_from_db
+                extra.append('[D]elete diecase from database')
+            # Options constructed
+            message = (message + ', '.join(extra) +
+                       '\nLeave blank to exit. Your choice: ')
+            ui.simple_menu(message, options)()
 
 
 class EmptyDiecase(Diecase):
@@ -147,12 +286,8 @@ def show_diecase(diecase_id):
     """
     # First, get diecase data
     try:
-        (_, _, _, wedge_series, set_width,
-         _, layout) = DB.diecase_by_id(diecase_id)
-        # Process metadata
-        # Get wedge unit arrangement
-        unit_arr = wedge_data.get_unit_arrangement(wedge_series, set_width)
-        ui.display_diecase_layout(layout, unit_arr)
+        temp_diecase = Diecase(diecase_id)
+        ui.display_diecase_layout(temp_diecase)
     except exceptions.NoMatchingData:
         ui.display('Diecase layout not defined or cannot be displayed.')
 
@@ -257,7 +392,8 @@ def load_layout(diecase_id):
     # Other positions will be empty - like in a freshly generated null layout
     # Ask for confirmation
     ui.display('\nSubmitted layout:\n')
-    ui.display_diecase_layout(layout)
+    temp_diecase = Diecase(diecase_id)
+    ui.display_diecase_layout(temp_diecase)
     ans = ui.yes_or_no('Commit to the database?')
     if ans and DB.update_diecase_layout(diecase_id, layout):
         ui.display('Matrix case layout uploaded successfully.')

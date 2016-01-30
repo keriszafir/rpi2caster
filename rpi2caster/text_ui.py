@@ -268,7 +268,7 @@ def yes_or_no(question):
     return simple_menu('%s [Y / N]: ' % question, {'Y': True, 'N': False})
 
 
-def display_diecase_layout(diecase_layout, unit_arrangement=None):
+def display_diecase_layout(diecase):
     """display_diecase_layout:
 
     Shows a layout for a given diecase ID.
@@ -298,19 +298,10 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
         rows_set.add(row)
         # Finish
         return (character, styles, column, row, units)
-
-    # Do we have a layout at all?
-    if not diecase_layout:
-        print('No layout to display!')
-        return False
     # Initialize columns and rows sets
     cols_set = rows_set = set()
-    # We have a layout, we can go further... get the wedge to display
-    # row unit values next to the layout table
-    # Safeguard against an empty unit arrangement: use S5 unit arrangement
-    unit_arrangement = unit_arrangement or constants.S5
     # Build a list of all characters
-    all_mats = [process_matrix(mat) for mat in diecase_layout]
+    all_mats = [process_matrix(mat) for mat in diecase.layout]
     # Build rows and columns to iterate over
     cols_17 = 'NI' in cols_set or 'NL' in cols_set
     rows_16 = 16 in rows_set
@@ -333,8 +324,8 @@ def display_diecase_layout(diecase_layout, unit_arrangement=None):
     # Process each row
     for row_number in row_numbers:
         # Get unit width value of the wedge for this row
-        units = unit_arrangement[row_number] or ''
-        shifted_units = unit_arrangement[row_number-1] or ''
+        units = diecase.wedge.unit_arrangement[row_number] or ''
+        shifted_units = diecase.wedge.unit_arrangement[row_number-1] or ''
         # Start with row number...
         row = ['|' + str(row_number).center(3) + '|']
         # Add only characters and styles, center chars to 4

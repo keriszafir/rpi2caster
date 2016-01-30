@@ -32,72 +32,24 @@ class Wedge(object):
         (self.series, self.set_width, self.brit_pica,
          self.unit_arrangement) = choose_wedge(series, set_width)
 
+    def show_parameters(self):
+        """Shows diecase's parameters"""
+        data = self.get_parameters()
+        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
+        for item in info:
+            ui.display(item)
 
-class DefaultWedge(Wedge):
-    """Default S5-12E wedge"""
-    def __init__(self, series=None, set_width=None):
-        # Default wedge data - for S5-12E
-        self.series = '5'
-        self.set_width = 12
-        self.brit_pica = True
-        self.unit_arrangement = constants.S5
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.series, 'Wedge series'),
+                (self.set_width, 'Set width'),
+                (self.brit_pica, 'British pica (.1667") based wedge?'),
+                (' '.join([str(x) for x in self.unit_arrangement if x]),
+                 'Unit arrangement for this wedge')]
+        return data
 
-
-def add_wedge():
-    """add_wedge()
-
-    Used for adding wedges.
-
-    wedge_name - string - series name for a wedge (e.g. S5, S111)
-    set_width  - float - set width of a particular wedge (e.g. 9.75)
-    brit_pica - boolean - whether the wedge is based on British pica
-    (0.1667") or not (American pica - 0.1660")
-    True if the wedge is for European market ("E" after set width number)
-    steps - string with unit values for steps - e.g. '5,6,7,8,9,9,9...,16'
-
-    Start with defining the unit arrangements for some known wedges.
-    This data will be useful when adding a wedge. The setup program
-    will look up a wedge by its name, then get unit values.
-
-    The TPWR wedge is a special wedge, where all steps have
-    the same unit value of 9. It is used for casting constant-width
-    (monospace) type, like the typewriters have. You could even cast
-    from regular matrices, provided that you use 0005 and 0075 wedges
-    to add so many units that you can cast wide characters
-    like "M", "W" etc. without overhang. You'll get lots of spacing
-    between narrower characters, because they'll be cast on a body
-    wider than necessary.
-
-    In this program, all wedges have the "S" (for stopbar) letter
-    at the beginning of their designation. However, the user can enter
-    a designation with or without "S", so check if it's there, and
-    append if needed (only for numeric designations - not the "monospace"
-    or other text values!)
-
-    If no name is given, assume that the user means the S5 wedge, which is
-    very common and most casting workshops have a few of them.
-    """
-    # Start with a clear screen
-    ui.clear()
-    # Display an explanation once
-    ui.display('Adding a wedge:\n\n'
-               'To use a wedge/stopbar definition in rpi2caster, you must '
-               'add the wedge to the database. \n'
-               'Enter the wedge name  you can see on the wedge, and the '
-               'program will try to determine \n'
-               'its width and unit arrangement.\n'
-               'The set width will usually be a fractional number - you '
-               'must enter it \n'
-               'as a decimal fraction (e.g. 9 1/4 = 9.25), '
-               'with point or comma as delimiter.\n\n'
-               'Some special wedges are:\n'
-               '"setwidth AK" - it is a 5-series wedge,\n'
-               'typewriter wedges (monospace, uniform width) - enter '
-               '"tpwr setwidth" for those.')
-    while True:
-        # Repeat the procedure all over again, if necessary
-        # (can be exited by raising an exception)
-        # Enter the wedge name first:
+    def edit(self):
+        """Defines a wedge based on designation"""
         wedge_name = ''
         set_width = ''
         brit_pica = None
@@ -141,7 +93,7 @@ def add_wedge():
                 set_width = None
         # We now should have a wedge series and set width, as strings.
         # If user entered S in wedge name, throw it away
-        wedge_series = wedge_name.strip('sS')
+        series = wedge_name.strip('sS')
         # Convert the set width to float or enter it manually.
         try:
             # Should work...
@@ -156,57 +108,101 @@ def add_wedge():
         # (no need to enter the unit arrangement manually)
         try:
             # Look up the unit arrangement
-            unit_arrangement = wedge_arrangements.table[wedge_series]
+            unit_arrangement = wedge_arrangements.table[series]
         except KeyError:
-            # Unknown wedge
-            unit_arrangement = None
-            # Check if we have the values hardcoded already:
-            prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
-                      'separated by commas.\n')
-            unit_arrangement = ui.enter_data(prompt).split(',')
-        # Now we need to be sure that all whitespace is stripped,
-        # and the value written to database is a list of integers
-            unit_arrangement = [int(i.strip()) for i in unit_arrangement]
-        # Display warning if the number of steps is anything other than
-        # 15 or 16 (15 is most common, 16 was used for HMN and KMN systems).
-        # If length is correct, tell user it's OK.
-            warn_min = ('Warning: the wedge you entered has < 15 steps!'
-                        '\nThis is almost certainly a mistake.\n')
-            warn_max = ('Warning: the wedge you entered has > 16 steps!'
-                        '\nThis is almost certainly a mistake.\n')
-            ua_ok = ('The wedge has %i steps. That is OK.'
-                     % len(unit_arrangement))
-            if len(unit_arrangement) < 15:
-                ui.display(warn_min)
-            elif len(unit_arrangement) > 16:
-                ui.display(warn_max)
-            else:
-                ui.display(ua_ok)
-        # Display a summary with wedge's values:
-        user_info = []
-        user_info.append('Wedge: ' + str(wedge_series))
-        user_info.append('Set width: ' + str(set_width))
-        user_info.append('British pica wedge?: ' + str(brit_pica))
-        user_info.append('Unit arrangement for that wedge:')
-        rows_line = ''.join([str(i).ljust(5) for i in range(1, 16)])
-        unit_values_line = ''.join([str(u).ljust(5) for u in unit_arrangement])
-        data = ('Row:'.ljust(8) + rows_line + '\n' +
-                'Units:'.ljust(8) + unit_values_line + '\n')
-        user_info.append(data)
-        # Display the info
-        ui.display('\n'.join(user_info))
-        # Ask for confirmation
-        if ui.yes_or_no('Commit?') and DB.add_wedge(wedge_series, set_width,
-                                                    brit_pica,
-                                                    unit_arrangement):
-            ui.display('Wedge added successfully.')
+            while True:
+                # :
+                prompt = ('Enter the wedge unit values for rows 1...15 '
+                          'or 1...16, separated by commas.\n')
+                unit_arrangement = ui.enter_data(prompt).split(',')
+                # Now we need to be sure that all whitespace is stripped,
+                # and the value written to database is a list of integers
+                try:
+                    unit_arrangement = [int(i.strip())
+                                        for i in unit_arrangement]
+                except ValueError:
+                    ui.display('Incorrect value - enter the values again.')
+                    continue
+                # Display warning if the number of steps is not
+                # 15 or 16 (15 is most common, 16 was used for HMN and KMN).
+                # If length is correct, tell user it's OK and finish.
+                warn_min = ('Warning: the wedge you entered has < 15 steps!'
+                            '\nThis is almost certainly a mistake. '
+                            'Enter the values again.\n')
+                warn_max = ('Warning: the wedge you entered has > 16 steps!'
+                            '\nThis is almost certainly a mistake. '
+                            'Enter the values again.\n')
+                ua_ok = ('The wedge has %i steps. That is OK.'
+                         % len(unit_arrangement))
+                if len(unit_arrangement) < 15:
+                    ui.display(warn_min)
+                elif len(unit_arrangement) > 16:
+                    ui.display(warn_max)
+                else:
+                    ui.display(ua_ok)
+                    break
+        # Now we need to adjust the arrangement...
+        # Add 0 as the first item, extend the list to 17 values
+        unit_arrangement = [0].append(unit_arrangement)
+        while len(unit_arrangement) < 17:
+            unit_arrangement.append(unit_arrangement[-1])
+        # We now should have a correct arrangement...
+        temp_wedge = DefaultWedge()
+        temp_wedge.series = series
+        temp_wedge.set_width = set_width
+        temp_wedge.brit_pica = brit_pica
+        temp_wedge.unit_arrangement = unit_arrangement
+        ui.display('Showing the entered data...')
+        temp_wedge.show_parameters()
+        if ui.yes_or_no('Apply changes?'):
+            self.series = temp_wedge.series
+            self.set_width = temp_wedge.set_width
+            self.brit_pica = temp_wedge.brit_pica
+            self.unit_arrangement = temp_wedge.unit_arrangement
+            return True
+        else:
+            return False
+
+    def save_to_db(self):
+        """Stores the wedge definition in database"""
+        try:
+            DB.add_wedge(self)
+        except exceptions.DatabaseQueryError:
+            ui.confirm('Cannot save the wedge!')
+
+    def manipulation_menu(self):
+        """A menu with all operations on a wedge"""
+        self.show_parameters()
+        message = ('[E]dit wedge, [S]ave to database')
+        # Menu
+        while True:
+            self.show_parameters()
+            options = {'E': self.edit,
+                       'S': self.save_to_db,
+                       '': exceptions.menu_level_up}
+            if self.check_db():
+                options['D'] = self.delete_from_db
+                message += ', [D]elete from database'
+            # Options constructed
+            message += '\nLeave blank to exit. Your choice: '
+            ui.simple_menu(message, options)()
 
 
-def delete_wedge(wedge_series, set_width):
-    """Used for deleting a wedge from database."""
-    if ui.yes_or_no('Are you sure?'):
-        if DB.delete_wedge(wedge_series, set_width):
-            ui.display('Wedge deleted successfully.')
+class DefaultWedge(Wedge):
+    """Default S5-12E wedge"""
+    def __init__(self):
+        # Default wedge data - for S5-12E
+        self.series = '5'
+        self.set_width = 12
+        self.brit_pica = True
+        self.unit_arrangement = constants.S5
+
+
+def wedge_operations():
+    """Wedge operations menu for inventory management"""
+    while True:
+        wedge = choose_wedge()
+        wedge.manipulation_menu()
 
 
 def list_wedges():
@@ -235,12 +231,9 @@ def choose_wedge(wedge_series=None, set_width=None):
     """Tries to choose a wedge of given series and set width.
     If that fails, lists wedges and lets the user choose one;
     returns the wedge."""
-    # Do it only if we have diecases (depends on list_diecases retval)
+    # Select automatically
     try:
-        wedge = get_wedge(wedge_series, set_width)
-        (wedge_series, set_width, brit_pica, unit_arrangement) = wedge
-        return (wedge_series, set_width,
-                bool(brit_pica), tuple(unit_arrangement))
+        wedge = DB.get_wedge(wedge_series, set_width)
     except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
         pass
     # Select manually
@@ -249,76 +242,18 @@ def choose_wedge(wedge_series=None, set_width=None):
         ui.display('Choose a wedge:', end='\n\n')
         available_wedges = list_wedges()
         # Enter the diecase name
-        prompt = 'Number of a wedge or [Enter] to exit: '
-        choice = (ui.enter_data_or_blank(prompt) or
-                  exceptions.return_to_menu())
+        prompt = 'Number of a wedge or leave blank to exit: '
+        choice = ui.enter_data_or_blank(prompt)
+        if not choice:
+            return False
         # Safeguards against entering a wrong number or non-numeric string
         try:
-            # Return [series_number, set_width, brit_pica, unit_arrangement]
-            (wedge_series, set_width, brit_pica,
-             unit_arrangement) = available_wedges[choice]
-            return (wedge_series, set_width,
-                    bool(brit_pica), tuple(unit_arrangement))
+            wedge = available_wedges[choice]
         except KeyError:
             ui.confirm('Wedge number is incorrect!')
             continue
-
-
-def get_wedge(wedge_series, set_width):
-    """Wrapper for database function of the same name"""
-    return DB.get_wedge(wedge_series, set_width)
-
-
-def get_unit_arrangement(wedge_series, set_width):
-    """get_unit_arrangement(wedge_series, set_width):
-
-    Gets a unit arrangement for a given wedge.
-    Returns a 17-element tuple: (0, x, y...) so that unit values can be
-    addressed with row numbers (1, 2...16).
-    """
-    # We need to operate on lists here
-    unit_arrangement = []
-    try:
-        # Wedge's 4th field is unit arrangement
-        unit_arrangement = get_wedge(wedge_series, set_width)[3]
-    except exceptions.NoMatchingData:
-        # Wedge is probably not registered in database
-        # Look for a unit arrangement in known UAs
-        try:
-            unit_arrangement = list(wedge_arrangements.table[wedge_series])
-        except KeyError:
-            # Unit arrangement is not known - enter it manually
-            prompt = ('Enter the wedge unit values for rows 1...15 or 1...16, '
-                      'separated by commas.\n')
-            unit_arrangement = ui.enter_data(prompt).split(',')
-        # Now we have to prepend 0 as the first position (addressed by 0)
-        # This is necessary to address unit values with row numbers
-        # Some wedges may have 0 in the beginning, others may not
-        if unit_arrangement[0]:
-            unit_arrangement = [0] + unit_arrangement
-        # Some unit arrangements are for 16-step HMN or KMN wedges
-        # Most of them is for 15-step wedges though
-        # Fill until we have 0 + 16 values
-        while True:
-            try:
-                # If no exception, do nothing
-                if not unit_arrangement[16]:
-                    pass
-                break
-            except IndexError:
-                unit_arrangement.append(unit_arrangement[-1])
-    # All done
-    return tuple(unit_arrangement)
-
-
-def is_old_pica(wedge_series, set_width):
-    """is_old_pica:
-
-    Checks whether this wedge is based on old British pica (.1667") or not.
-    """
-    try:
-        wedge = get_wedge(wedge_series, set_width)
-        # British pica (1 or 0) is the fourth column
-        return bool(wedge[2])
-    except exceptions.NoMatchingData:
-        return ui.yes_or_no('Using an old British pica (.1667") wedge?')
+    temp_wedge = DefaultWedge()
+    (temp_wedge.series, temp_wedge.set_width, brit_pica,
+     temp_wedge.unit_arrangement) = wedge
+    temp_wedge.brit_pica = bool(brit_pica)
+    return temp_wedge

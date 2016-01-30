@@ -73,38 +73,18 @@ class Database(object):
     def __enter__(self):
         return self
 
-    def add_wedge(self, wedge_name, set_width, brit_pica, unit_arrangement):
+    def add_wedge(self, wedge):
         """add_wedge:
 
-        Registers a wedge in our database.
+        Registers a wedge (objecrt) in our database.
         Returns True if successful, False otherwise.
-
-        Arguments:
-        wedge_name - wedge number, e.g. S5 or 1160, str or int, not null.
-        set_width - set width of a wedge, e.g. 9.75. float, not null.
-        brit_pica - True if it's a British pica system (1pica = 0.1667")
-                    False if it's an American pica system (1pica = 0.1660")
-
-        If the wedge has "E" at the end of its number (e.g. 5-12E),
-        then it was made for European countries which used Didot points
-        and ciceros (1cicero = 0.1776"), but the unit calculations were all
-        based on the British pica.
-
-        unit_arrangement - a wedge's unit arrangement - list of unit values
-        for each of the wedge's steps (i.e. diecase rows). Not null.
-        Unit arrangements are stored in database as 15- or 16-element array
-        (json-encoded), in simmilar format to those stored in
-        wedge_arrangements.
-
-        An additional column, id, will be created and auto-incremented.
-        This will be an unique identifier of a wedge.
         """
 
         # data - a list with wedge parameters to be written,
         # boolean brit_pica must be converted to int,
         # a unit arrangement is a JSON-encoded list
-        data = [wedge_name, set_width, int(brit_pica),
-                json.dumps(unit_arrangement)]
+        data = [wedge.series, wedge.set_width, int(wedge.brit_pica),
+                json.dumps(wedge.unit_arrangement)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -176,26 +156,21 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def delete_wedge(self, wedge_series, set_width):
+    def delete_wedge(self, wedge):
         """delete_wedge:
 
-        Deletes a wedge with given unique ID from the database
+        Deletes a wedge from the database
         (useful in case we no longer have the wedge).
-
-        Returns True if successful, False otherwise.
-
-        First, the function checks if the wedge is in the database at all.
         """
         # Check if wedge is there (will raise an exception if not)
         # We don't care about the retval which is a list.
-        self.get_wedge(wedge_series, set_width)
         # Okay, proceed:
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute('DELETE FROM wedges '
                                'WHERE wedge_series = ? AND set_width = ?',
-                               [str(wedge_series), float(set_width)])
+                               [wedge.series, wedge.set_width])
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
@@ -249,38 +224,18 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def add_diecase(self, diecase_id, type_series, type_size,
-                    wedge_series, set_width, typeface_name, layout):
+    def add_diecase(self, diecase):
         """add_diecase:
 
         Registers a diecase in our database.
         Returns True if successful, False otherwise.
-
-        Arguments:
-        diecase_id - user-defined inventory diecase number
-        type_series - fount No (e.g. 327 for Times New Roman)
-        type_size - size with an optional sizing system indication
-                    (D for Didot, F for Fournier)
-        set_width - set width of a type
-        typeface_name - typeface's name
-        wedge_series - wedge series number, e.g. 5 (for stopbar S5 / wedge 5)
-        layout - a list, constructed as following:
-
-        layout = ((character, (style1, style2...), column, row, units), (...))
-        character = single character, double/triple character (for ligatures),
-        ' ' for low space and '_' for high space
-        style1, style2... - one or more styles a matrix belongs to,
-        this will enable a matrix to be used with specified text styles only
-        column - string (NI, NL, A...O)
-        row_number - int (1...15 or 16)
-        unit_width - int (unit width of a character) or 0 if not specified
         """
 
         # data - a list with diecase parameters to be written,
-        # layout is a JSON-encoded dictionary
-        layout = json.dumps(layout)
-        data = [diecase_id, type_series, type_size, wedge_series, set_width,
-                typeface_name, layout]
+        # layout is a JSON-dumped dictionary
+        data = [diecase.diecase_id, diecase.type_series, diecase.type_size,
+                diecase.wedge.series, diecase.wedge.set_width,
+                diecase.typeface_name, json.dumps(diecase.layout)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -405,25 +360,17 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def delete_diecase(self, diecase_id):
+    def delete_diecase(self, diecase):
         """delete_diecase:
 
         Deletes a diecase with given unique ID from the database
         (useful in case we no longer have the diecase).
-
-        Returns True if successful, False otherwise.
-
-        First, the function checks if the diecase is in the database at all.
         """
-        # Check if wedge is there (will raise an exception if not)
-        # We don't care about the retval which is a list.
-        self.diecase_by_id(diecase_id)
-        # Okay, proceed:
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 cursor.execute('DELETE FROM matrix_cases '
-                               'WHERE diecase_id = ?', [diecase_id])
+                               'WHERE diecase_id = ?', [diecase.diecase_id])
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
@@ -449,8 +396,7 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def add_ribbon(self, title, author, customer, diecase_id, unit_shift,
-                   contents):
+    def add_ribbon(self, ribbon):
         """add_ribbon:
 
         Registers a ribbon in our database.
@@ -464,9 +410,9 @@ class Database(object):
         contents - codes to send to the caster
         """
         # contents is a JSON-encoded list
-        contents = json.dumps(contents)
-        unit_shift = int(unit_shift)
-        data = [author, title, customer, diecase_id, unit_shift, contents]
+        contents = json.dumps(ribbon.contents)
+        data = [ribbon.author, ribbon.title, ribbon.customer,
+                ribbon.diecase.diecase_id, int(ribbon.unit_shift), contents]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -563,7 +509,7 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def add_work(self, work_id, title, author, contents):
+    def add_work(self, work):
         """add_work:
 
         Registers a work (unprocessed text) in our database.
@@ -576,8 +522,8 @@ class Database(object):
         contents - the text.
         """
         # contents is a JSON-encoded list
-        contents = json.dumps(contents)
-        data = [work_id, title, author, contents]
+        contents = json.dumps(work.contents)
+        data = [work.work_id, work.title, work.author, contents]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
