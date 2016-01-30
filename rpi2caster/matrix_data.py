@@ -19,17 +19,15 @@ DB = wedge_data.DB
 ui = wedge_data.ui
 
 
-class Diecase(object):
+class EmptyDiecase(object):
     """Diecase: matrix case attributes and operations"""
-    def __init__(self, diecase_id=None):
-        self.diecase_id = diecase_id
+    def __init__(self):
+        self.diecase_id = ''
         self.type_series = ''
         self.type_size = ''
         self.typeface_name = ''
         self.wedge = wedge_data.DefaultWedge()
         self.layout = generate_empty_layout(15, 17)
-        # Diecases created with diecase_id will be set up automatically
-        self.setup(diecase_id)
 
     def setup(self, diecase_id=None):
         """Sets attributes for the diecase object"""
@@ -54,10 +52,7 @@ class Diecase(object):
     def edit_layout(self):
         """Edits a layout and asks if user wants to save changes"""
         # Edit the layout
-        new_layout = ui.edit_diecase_layout(self.layout)
-        # Check if any changes were made - if so, ask if we want to keep them
-        if new_layout != self.layout and ui.yes_or_no('Save the changes?'):
-            self.layout = new_layout
+        ui.edit_diecase_layout(self)
 
     def import_layout(self):
         """Imports a layout from file"""
@@ -161,46 +156,64 @@ class Diecase(object):
     def manipulation_menu(self):
         """A menu with all operations on a diecase"""
         self.show_parameters()
-        message = ('Matrix case manipulation:\n'
-                   '[V]iew, [C]lear, [E]dit, [I]mport or e[X]port layout\n')
-        extra = []
+        messages = ['Matrix case manipulation:\n'
+                    '[V]iew, [C]lear, [E]dit, [I]mport or e[X]port layout\n']
         # Menu
-        while True:
-            self.show_parameters()
-            options = {'E': self.edit_layout,
-                       'C': self.clear_layout,
-                       'V': self.show_layout,
-                       'I': self.import_layout,
-                       'X': self.export_layout,
-                       '': exceptions.menu_level_up}
-            # Save to database needs a complete set of metadata
-            missing = [x for x in (self.type_series, self.type_size,
-                                   self.typeface_name, self.diecase_id)
-                       if not x]
-            if missing:
-                extra.append('Some data is missing - cannot save to database.')
-            else:
-                options['R'] = self.save_to_db
-                extra.append('[R]egister / update diecase in database')
-            # Check if it's in the database
-            if self.check_db():
-                options['D'] = self.delete_from_db
-                extra.append('[D]elete diecase from database')
-            # Options constructed
-            message = (message + ', '.join(extra) +
-                       '\nLeave blank to exit. Your choice: ')
-            ui.simple_menu(message, options)()
+        try:
+            while True:
+                self.show_parameters()
+                options = {'M': exceptions.return_to_menu,
+                           'E': self.edit_layout,
+                           'C': self.clear_layout,
+                           'V': self.show_layout,
+                           'I': self.import_layout,
+                           'X': self.export_layout,
+                           '': exceptions.menu_level_up}
+                # Save to database needs a complete set of metadata
+                missing = [x for x in (self.type_series, self.type_size,
+                                       self.typeface_name, self.diecase_id)
+                           if not x]
+                if missing:
+                    messages.append('Some data is missing - '
+                                    'cannot save to database.\n')
+                else:
+                    options['S'] = self.save_to_db
+                    messages.append('[S]ave diecase to database')
+                # Check if it's in the database
+                if self.check_db():
+                    options['D'] = self.delete_from_db
+                    messages.append(', [D]elete diecase from database')
+                # Options constructed
+                messages.append('\n[M] to exit to menu, or leave blank '
+                                'to choose/create another diecase.')
+                messages.append('\nYour choice: ')
+                message = ''.join(messages)
+                ui.simple_menu(message, options)()
+        except exceptions.MenuLevelUp:
+            # Exit matrix case manipulation menu
+            pass
 
 
-class EmptyDiecase(Diecase):
+class Diecase(EmptyDiecase):
     """Empty diecase, used for initializing"""
-    def __init__(self):
-        self.diecase_id = ''
-        self.type_series = ''
-        self.type_size = ''
-        self.typeface_name = ''
-        self.wedge = wedge_data.DefaultWedge()
-        self.layout = generate_empty_layout(15, 17)
+    def __init__(self, diecase_id=None):
+        EmptyDiecase.__init__()
+        # Diecases created with diecase_id will be set up automatically
+        self.setup(diecase_id)
+
+
+def diecase_operations():
+    """Matrix case operations menu for inventory management"""
+    try:
+        ui.display('Matrix case manipulation: '
+                   'choose a diecase or define a new one')
+        while True:
+            # Choose a wedge or initialize a new one
+            diecase = choose_diecase() or EmptyDiecase()
+            diecase.manipulation_menu()
+    except exceptions.ReturnToMenu:
+        # Exit wedge operations
+        pass
 
 
 def lookup_diecase(type_series, type_size):

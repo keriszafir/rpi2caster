@@ -334,8 +334,8 @@ def display_diecase_layout(diecase):
                     if mat[2] == column_number and mat[3] == row_number])
         row.append('|' + str(units).center(5) + '|')
         row.append(str(shifted_units).center(5) + '|')
-        row = ''.join(row)
-        displayed_layout.append(row)
+        displayed_row = ''.join(row)
+        displayed_layout.append(displayed_row)
         displayed_layout.append(empty_row)
     # Add the header at the bottom
     displayed_layout.extend([separator, header, separator])
@@ -349,15 +349,18 @@ def display_diecase_layout(diecase):
           sep='\n', end='\n\n')
 
 
-def edit_diecase_layout(layout, unit_arrangement=None):
-    """edit_diecase_layout(layout, unit_arrangement):
+def edit_diecase_layout(diecase):
+    """edit_diecase_layout(diecase):
 
     Edits a matrix case layout, row by row, matrix by matrix. Allows to enter
     a position to be edited.
     """
+    working_diecase = diecase
+
     def get_matrix(column, row):
         """Gets matrix data for given coordinates."""
-        mat = [m for m in layout if column == m[2] and row == m[3]][0]
+        mat = [m for m in working_diecase.layout
+               if column == m[2] and row == m[3]][0]
         return mat
 
     def display_matrix_details(mat):
@@ -400,12 +403,12 @@ def edit_diecase_layout(layout, unit_arrangement=None):
         (_, _, column, row, _) = mat
         # Get current matrix data
         old_mat = get_matrix(column, row)
-        mat_id = layout.index(old_mat)
+        mat_id = working_diecase.layout.index(old_mat)
         if yes_or_no('Save the matrix in layout?'):
-            layout[mat_id] = mat
+            working_diecase.layout[mat_id] = mat
 
     def edit_matrix(mat):
-        """Displays a matrix layout, asks for confirmation, edits the mat"""
+        """Displays a matrix info, asks for confirmation, edits the mat"""
         prompt = ('Edit this matrix: [Y]es / [N]o / '
                   '[F]inish editing? ')
         options = {'Y': True, 'N': False, 'F': 'exit'}
@@ -442,7 +445,7 @@ def edit_diecase_layout(layout, unit_arrangement=None):
     def all_rows_mode():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
         try:
-            for mat in layout:
+            for mat in working_diecase.layout:
                 edit_matrix(mat)
         except exceptions.MenuLevelUp:
             pass
@@ -450,12 +453,9 @@ def edit_diecase_layout(layout, unit_arrangement=None):
     def all_columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
         # Rearrange the layout so that it's read column by column
-        transposed_layout = [mat
-                             for col in constants.COLUMNS_17 for mat in layout
-                             if mat[2] == col]
         try:
-            for mat in transposed_layout:
-                edit_matrix(mat)
+            (_,) = [edit_matrix(mat) for col in constants.COLUMNS_17
+                    for mat in working_diecase.layout if mat[2] == col]
         except exceptions.MenuLevelUp:
             pass
 
@@ -467,9 +467,8 @@ def edit_diecase_layout(layout, unit_arrangement=None):
                 while row not in range(1, 17):
                     row = enter_data_spec_type_or_blank('Row (1 - 16)?: ', int)
                     row = row or exceptions.menu_level_up()
-                workset = [mat for mat in layout if mat[3] == row]
-                for mat in workset:
-                    edit_matrix(mat)
+                (_,) = [edit_matrix(mat) for mat in working_diecase.layout
+                        if mat[3] == row]
             except exceptions.MenuLevelUp:
                 break
 
@@ -482,17 +481,14 @@ def edit_diecase_layout(layout, unit_arrangement=None):
                 while column not in constants.COLUMNS_17:
                     column = enter_data_spec_type_or_blank(col_prompt, str)
                     column = column.upper() or exceptions.menu_level_up()
-                workset = [mat for mat in layout if mat[2] == column]
-                for mat in workset:
-                    edit_matrix(mat)
+                (_,) = [edit_matrix(mat) for mat in working_diecase.layout
+                        if mat[2] == column]
             except exceptions.MenuLevelUp:
                 break
     # Map unit values to rows
-    # Safeguard against an empty unit arrangement: use S5 unit arrangement
-    unit_arrangement = unit_arrangement or constants.S5
     # If the layout is empty, we need to initialize it
     print('\nCurrent diecase layout:\n')
-    display_diecase_layout(layout, unit_arrangement)
+    display_diecase_layout(working_diecase)
     prompt = ('\nChoose edit mode or press [Enter] to quit:\n'
               'AR - all matrices row by row,\n'
               'AC - all matrices column by column,\n'
@@ -510,9 +506,9 @@ def edit_diecase_layout(layout, unit_arrangement=None):
         try:
             simple_menu(prompt, options)()
         except exceptions.MenuLevelUp:
-            break
-    # After editing, pass the layout to whatever called this function
-    return layout
+            que = 'Save the changes?'
+            if working_diecase.layout != diecase.layout and yes_or_no(que):
+                diecase.layout = working_diecase.layout
 
 
 def exit_program():

@@ -15,15 +15,17 @@ def main_menu():
               '\n\nMain menu:\n')
     options = [(exceptions.exit_program, 'Exit',
                 'Exits the inventory management'),
-               (matrix_menu, 'Matrix manipulation...',
+               (matrix_data.diecase_operations, 'Matrix operations...',
                 'Work on matrix cases'),
-               (wedge_menu, 'Wedge manupulation...',
-                'List, add and remove wedge definitions')]
+               (wedge_data.wedge_operations, 'Wedge operations...',
+                'List, add and remove wedge definitions'),
+               (wedge_data.generate_wedge_collection,
+                'Generate S5 collection',
+                'Generates all definitions for S5 wedges for 5...14.75set')]
     while True:
         try:
             ui.menu(options, header=header, footer='')()
-            ui.confirm('Finished!', ui.MSG_MENU)
-        except exceptions.ReturnToMenu:
+        except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
             pass
         except exceptions.NoMatchingData:
             ui.confirm('No matching data found!', ui.MSG_MENU)
@@ -93,35 +95,3 @@ def matrix_menu():
                 exceptions.NoMatchingData,
                 exceptions.DatabaseQueryError):
             ui.display('Diecase number is incorrect!')
-
-
-def wedge_menu():
-    """Wedge manipulation functions - listing, adding, deleting"""
-
-    def delete_wedge():
-        """Lets user select and delete a wedge from database."""
-        prompt = 'Number of a wedge to delete? (leave blank to exit): '
-        choice = (ui.enter_data_or_blank(prompt) or
-                  exceptions.return_to_menu())
-        # Safeguards against entering a wrong number or non-numeric string
-        try:
-            (wedge_series, set_width, _, _) = available_wedges[choice]
-            wedge_data.delete_wedge(wedge_series, set_width)
-        except KeyError:
-            ui.display('Wedge number is incorrect!')
-        ui.confirm()
-
-    header = ('\nWedge manipulation menu:\n\n'
-              '[A]dd new wedge\n'
-              '[D]elete a wedge\n\n'
-              '[Enter] to return to main menu\n\n'
-              'Your choice? : ')
-    options = {'A': wedge_data.add_wedge,
-               'D': delete_wedge,
-               '': exceptions.return_to_menu}
-    while True:
-        available_wedges = wedge_data.list_wedges()
-        try:
-            ui.simple_menu(header, options)()
-        except exceptions.MenuLevelUp:
-            pass

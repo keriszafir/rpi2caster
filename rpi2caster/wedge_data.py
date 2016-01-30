@@ -20,17 +20,14 @@ from rpi2caster import database
 DB = database.Database()
 
 
-class Wedge(object):
-    """Wedge: wedge data"""
-    def __init__(self, series=None, set_width=None):
+class DefaultWedge(object):
+    """Default S5-12E wedge"""
+    def __init__(self):
         # Default wedge data - for S5-12E
         self.series = '5'
         self.set_width = 12
         self.brit_pica = True
         self.unit_arrangement = constants.S5
-        # Wedges will be setup automatically
-        (self.series, self.set_width, self.brit_pica,
-         self.unit_arrangement) = choose_wedge(series, set_width)
 
     def show_parameters(self):
         """Shows diecase's parameters"""
@@ -50,68 +47,56 @@ class Wedge(object):
 
     def edit(self):
         """Defines a wedge based on designation"""
-        wedge_name = ''
-        set_width = ''
-        brit_pica = None
-        unit_arrangement = None
-        while not wedge_name:
-            # Ask for wedge name and set width as it is written on the wedge
-            prompt = ('Wedge name or [Enter] to go back: ')
-            wedge_name = (ui.enter_data_or_blank(prompt) or
-                          exceptions.menu_level_up())
+        # Ask for wedge name and set width as it is written on the wedge
+        prompt = ('Wedge name or leave blank to abort: ')
         # For countries that use comma as decimal delimiter, convert to point:
-            wedge_name = wedge_name.replace(',', '.').upper()
-        if 'AK' in wedge_name:
+        wedge_name = ui.enter_data_or_blank(prompt).replace(',', '.').upper()
+        if not wedge_name:
+            return False
+        elif 'AK' in wedge_name:
             # For the old designation of 5-series wedges
-            set_width = float(wedge_name.replace('AK', '').strip())
+            set_width = wedge_name.replace('AK', '').strip()
             ui.display('This is a 5-series wedge, designated as "AK"')
-            wedge_name = '5'
+            series = '5'
         elif 'BO' in wedge_name:
             # For the old designation of 5-series wedges
-            set_width = float(wedge_name.replace('AK', '').strip())
+            set_width = wedge_name.replace('AK', '').strip()
             ui.display('This is a 221-series wedge, designated as "BO"')
-            wedge_name = '221'
+            series = '221'
         elif 'TPWR' in wedge_name:
             ui.display('This is a typewriter wedge.')
-            set_width = float(wedge_name.replace('TPWR', '').strip())
-            wedge_name = 'TPWR'
-        elif wedge_name.endswith('E'):
+            set_width = wedge_name.replace('TPWR', '').strip()
+            series = 'TPWR'
+        else:
+            (series, set_width) = wedge_name.strip('SE').split('-')
+        # Now get the set width
+        # We now should have a wedge series and set width, as strings.
+        # Convert the set width to float or enter it manually.
+        try:
+            set_width = float(set_width)
+        except ValueError:
+            # Will be set later
+            prompt = 'Enter the set width as a decimal fraction: '
+            set_width = ui.enter_data_spec_type(prompt, float)
+        # Check if it has a different pica as a base for unit calculations
+        if wedge_name.endswith('E'):
             # For wedges made for European countries that use the Didot system
             # (these wedges were based on the old British pica,
-            # i.e. 18unit 12set type was .1667" wide)
+            # i.e. 18units 12set type was .1667" wide)
             ui.display('The letter E at the end means that this wedge was '
                        'made for European market, and based on pica =.1667".')
             brit_pica = True
-            # Parse the input data to get the name and set width
-            (wedge_name, set_width) = wedge_name.strip('E').split('-')
         else:
-            # For wedges marked as "5-6.5" etc.
-            try:
-                (wedge_name, set_width) = wedge_name.split('-')
-            except ValueError:
-                # Will be set later
-                set_width = None
-        # We now should have a wedge series and set width, as strings.
-        # If user entered S in wedge name, throw it away
-        series = wedge_name.strip('sS')
-        # Convert the set width to float or enter it manually.
-        try:
-            # Should work...
-            set_width = float(set_width)
-        except (TypeError, ValueError):
-            # if not - enter the width manually
-            prompt = 'Enter the set width as a decimal fraction: '
-            set_width = ui.enter_data_spec_type(prompt, float)
-        prompt = 'Old British pica (0.1667") based wedge?'
-        brit_pica = brit_pica or ui.yes_or_no(prompt)
+            prompt = 'Old British pica (0.1667") based wedge?'
+            brit_pica = ui.yes_or_no(prompt)
         # We have the wedge name, so we can look the wedge up in known wedges
         # (no need to enter the unit arrangement manually)
         try:
             # Look up the unit arrangement
-            unit_arrangement = wedge_arrangements.table[series]
+            unit_arrangement = list(wedge_arrangements.table[series])
         except KeyError:
             while True:
-                # :
+                # Enter manually:
                 prompt = ('Enter the wedge unit values for rows 1...15 '
                           'or 1...16, separated by commas.\n')
                 unit_arrangement = ui.enter_data(prompt).split(',')
@@ -142,8 +127,9 @@ class Wedge(object):
                     ui.display(ua_ok)
                     break
         # Now we need to adjust the arrangement...
-        # Add 0 as the first item, extend the list to 17 values
-        unit_arrangement = [0].append(unit_arrangement)
+        # Add 0 as the first item
+        unit_arrangement = [0] + unit_arrangement
+        # Keep filling the list until we reach 16 non-zero steps
         while len(unit_arrangement) < 17:
             unit_arrangement.append(unit_arrangement[-1])
         # We now should have a correct arrangement...
@@ -163,6 +149,12 @@ class Wedge(object):
         else:
             return False
 
+    def delete_from_db(self):
+        """Deletes the wedge from database"""
+        ans = ui.yes_or_no('Are you sure?')
+        if ans and DB.delete_wedge(self):
+            ui.display('Wedge definition deleted successfully from database.')
+
     def save_to_db(self):
         """Stores the wedge definition in database"""
         try:
@@ -170,39 +162,75 @@ class Wedge(object):
         except exceptions.DatabaseQueryError:
             ui.confirm('Cannot save the wedge!')
 
+    def check_db(self):
+        """Checks if the wedge is in database"""
+        return DB.check_wedge(self)
+
     def manipulation_menu(self):
         """A menu with all operations on a wedge"""
-        self.show_parameters()
-        message = ('[E]dit wedge, [S]ave to database')
         # Menu
-        while True:
-            self.show_parameters()
-            options = {'E': self.edit,
-                       'S': self.save_to_db,
-                       '': exceptions.menu_level_up}
-            if self.check_db():
-                options['D'] = self.delete_from_db
-                message += ', [D]elete from database'
-            # Options constructed
-            message += '\nLeave blank to exit. Your choice: '
-            ui.simple_menu(message, options)()
+        try:
+            while True:
+                # Keep working on a chosen diecase
+                ui.display('\n')
+                self.show_parameters()
+                ui.display('\n')
+                messages = ['[E]dit wedge, [S]ave to database']
+                options = {'M': exceptions.return_to_menu,
+                           'E': self.edit,
+                           'S': self.save_to_db,
+                           '': exceptions.menu_level_up}
+                if self.check_db():
+                    options['D'] = self.delete_from_db
+                    messages.append(', [D]elete from database')
+                # Options constructed
+                messages.append('\n[M] to return to menu; leave blank to '
+                                'choose/create another wedge.')
+                messages.append('\nYour choice: ')
+                message = ''.join(messages)
+                ui.simple_menu(message, options)()
+        except exceptions.MenuLevelUp:
+            # Exit wedge manipulation menu
+            pass
 
 
-class DefaultWedge(Wedge):
-    """Default S5-12E wedge"""
-    def __init__(self):
-        # Default wedge data - for S5-12E
-        self.series = '5'
-        self.set_width = 12
-        self.brit_pica = True
-        self.unit_arrangement = constants.S5
+class Wedge(DefaultWedge):
+    """Wedge: wedge data"""
+    def __init__(self, series=None, set_width=None):
+        DefaultWedge.__init__()
+        # Wedges will be setup automatically
+        self = choose_wedge(series, set_width)
 
 
 def wedge_operations():
     """Wedge operations menu for inventory management"""
-    while True:
-        wedge = choose_wedge()
-        wedge.manipulation_menu()
+    try:
+        ui.display('Wedge manipulation: choose a wedge or define a new one')
+        while True:
+            # Choose a wedge or initialize a new one
+            wedge = choose_wedge()
+            wedge.manipulation_menu()
+    except exceptions.ReturnToMenu:
+        # Exit wedge operations
+        pass
+
+
+def generate_wedge_collection(series='5', brit_pica=True):
+    """Generates a collection of wedges for all set widths from 5.0 to 14.75
+    for a given series (S5 by default)"""
+    widths = [x + y for x in range(5, 15) for y in (0, 0.25, 0.5, 0.75)]
+    for set_width in widths:
+        wedge = DefaultWedge()
+        wedge.series = series
+        wedge.set_width = set_width
+        wedge.brit_pica = brit_pica
+        unit_arrangement = [0] + [x for x in wedge_arrangements.table[series]]
+        while len(unit_arrangement) < 17:
+            unit_arrangement.append(unit_arrangement[-1])
+        wedge.unit_arrangement = unit_arrangement
+        wedge.save_to_db()
+    list_wedges()
+    ui.confirm()
 
 
 def list_wedges():
@@ -217,17 +245,18 @@ def list_wedges():
                'Unit arrangement' +
                '\n')
     for index, wedge in enumerate(data, start=1):
-        index = str(index)
         # Save the wedge associated with the index
         results[index] = wedge
-        # Display only wedge parameters and not ID
-        number = [index.ljust(5)]
-        displayed_data = [str(field).ljust(10) for field in wedge]
-        ui.display(''.join(number + displayed_data))
+        # Modify the wedge data for display
+        unit_arrangement = wedge[-1]
+        # Display only wedge parameters and not unit arrangement
+        data_string = ''.join([str(field).ljust(10) for field in wedge[:-1]])
+        values_string = ' '.join([str(x) for x in unit_arrangement if x])
+        ui.display(str(index).ljust(5) + data_string + values_string)
     return results
 
 
-def choose_wedge(wedge_series=None, set_width=None):
+def choose_wedge(wedge_series='', set_width=0):
     """Tries to choose a wedge of given series and set width.
     If that fails, lists wedges and lets the user choose one;
     returns the wedge."""
@@ -238,17 +267,21 @@ def choose_wedge(wedge_series=None, set_width=None):
         pass
     # Select manually
     while True:
-        ui.clear()
-        ui.display('Choose a wedge:', end='\n\n')
-        available_wedges = list_wedges()
+        ui.display('\nChoose a wedge:', end='\n')
+        try:
+            available_wedges = list_wedges()
+        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+            ui.display('No wedges found in database. Using default S5-12E...')
+            return DefaultWedge()
         # Enter the diecase name
-        prompt = 'Number of a wedge or leave blank to exit: '
-        choice = ui.enter_data_or_blank(prompt)
+        prompt = 'Enter number (leave blank to work with default S5-12E): '
+        choice = ui.enter_data_spec_type_or_blank(prompt, int)
         if not choice:
-            return False
+            return DefaultWedge()
         # Safeguards against entering a wrong number or non-numeric string
         try:
             wedge = available_wedges[choice]
+            break
         except KeyError:
             ui.confirm('Wedge number is incorrect!')
             continue
