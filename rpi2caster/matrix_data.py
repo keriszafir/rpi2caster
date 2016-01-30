@@ -320,7 +320,7 @@ def add_diecase():
     wedge_series = ui.enter_data('Wedge/stopbar series for this typeface: ')
     # If we enter S5 etc. - save it as 5
     wedge_series = wedge_series.strip('sS')
-    set_width = ui.enter_data_spec_type('Set width (decimal): ', float)
+    set_width = ui.enter_data('Set width (decimal): ', float)
     typeface_name = ui.enter_data('Typeface name: ')
     # Ask if we want to enter a layout file from file
     if ui.yes_or_no('Add layout from file?'):

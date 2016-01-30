@@ -103,10 +103,10 @@ class Casting(object):
         ui.display('You can skip a number of lines so that you can e.g. start '
                    'a casting job aborted earlier.')
         prompt = 'How many lines to skip? (default: %s) : ' % lines_skipped
-        lines_skipped = (ui.enter_data_spec_type_or_blank(prompt, int) or
+        lines_skipped = (ui.enter_data_or_blank(prompt, int) or
                          lines_skipped)
         prompt = 'How many times do you want to cast this? (default: 1) : '
-        repetitions = ui.enter_data_spec_type_or_blank(prompt, int) or 1
+        repetitions = ui.enter_data_or_blank(prompt, int) or 1
         # For casting, we need to check the direction of ribbon
         if parsing.rewind_ribbon(self.ribbon.contents):
             ui.display('Ribbon starts with pump stop sequence - rewinding...')
@@ -329,7 +329,7 @@ class Casting(object):
             # Ask for row number
             while row not in range(1, 17):
                 try:
-                    row = ui.enter_data_spec_type_or_blank(prompt, int) or 5
+                    row = ui.enter_data_or_blank(prompt, int) or 5
                     row = abs(row)
                 except (TypeError, ValueError):
                     # Repeat loop and enter new one
@@ -351,7 +351,7 @@ class Casting(object):
             # Enter custom unit value (no points-based calculation yet)
             prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
             while not 2 < units < 25:
-                units = (ui.enter_data_spec_type_or_blank(prompt, float) or
+                units = (ui.enter_data_or_blank(prompt, float) or
                          row_units)
             # Calculate the unit width difference and apply justification
             diff = units - row_units
@@ -364,9 +364,9 @@ class Casting(object):
             signals += str(row)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts per line? (default: 10): '
-            sorts = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 10)
+            sorts = abs(ui.enter_data_or_blank(prompt, int) or 10)
             prompt = '\nHow many lines? (default: 1): '
-            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
+            lines = abs(ui.enter_data_or_blank(prompt, int) or 1)
             # Warn if we want to cast too many sorts from a single matrix
             warning = ('Warning: you want to cast a single character more than'
                        ' 10 times. This may lead to matrix overheating!\n')
@@ -406,7 +406,7 @@ class Casting(object):
         """
         # Ask about line length
         prompt = 'Galley line length? [pica or cicero] (default: 25) : '
-        line_length = ui.enter_data_spec_type_or_blank(prompt, int) or 25
+        line_length = ui.enter_data_or_blank(prompt, int) or 25
         line_length = abs(line_length)
         # Measurement system
         options = {'A': 0.1660,
@@ -441,7 +441,7 @@ class Casting(object):
             # Ask for row number
             while row not in range(1, 17):
                 try:
-                    row = ui.enter_data_spec_type_or_blank(prompt, int) or 2
+                    row = ui.enter_data_or_blank(prompt, int) or 2
                     row = abs(row)
                 except (TypeError, ValueError):
                     # Repeat loop and enter new one
@@ -460,7 +460,7 @@ class Casting(object):
             # Determine the unit width for a row
             row_units = wedge.unit_arrangement[row]
             prompt = '\nHow many lines? (default: 1): '
-            lines = abs(ui.enter_data_spec_type_or_blank(prompt, int) or 1)
+            lines = abs(ui.enter_data_or_blank(prompt, int) or 1)
             # Space width in points
             options = {'6': 1/6,
                        '4': 1/4,
@@ -475,7 +475,7 @@ class Casting(object):
             # Ask about custom value, then specify units
             while not 1 <= width <= 20:
                 prompt = 'Custom width in points (decimal, 1...20) ? : '
-                width = ui.enter_data_spec_type_or_blank(prompt, float)
+                width = ui.enter_data_or_blank(prompt, float)
             # We now have width in pica points
             # If we don't use an old British pica wedge, we must take
             # the pica difference into account

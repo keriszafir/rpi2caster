@@ -80,13 +80,13 @@ def menu(options, header='', footer='', no_debug=False):
         # Wait until user enters proper data
         your_choice = input('Your choice: ')
         try:
-            your_choice = int(your_choice)
+            choice_number = int(your_choice)
         except ValueError:
             # Entered anything non-digit - repeat
             your_choice = ''
     # At last, we have chosen a valid option...
     # Return a corresponding value - which is option[2]
-    return functions[your_choice]
+    return functions[choice_number]
 
 
 def clear():
@@ -122,20 +122,7 @@ def confirm(msg1='', msg2=MSG_CONTINUE):
     input(msg1 + '\n' + msg2)
 
 
-def enter_data_or_blank(prompt):
-    """Enter data or leave blank"""
-    return input(prompt)
-
-
-def enter_data(prompt):
-    """Let the user enter the data - blank not allowed"""
-    value = ''
-    while not value:
-        value = input(prompt)
-    return value
-
-
-def enter_data_spec_type(prompt, datatype):
+def enter_data(prompt, datatype=str):
     """Enter a value and convert it to the specific datatype"""
     value = ''
     while not value:
@@ -148,8 +135,8 @@ def enter_data_spec_type(prompt, datatype):
     return value
 
 
-def enter_data_spec_type_or_blank(prompt, datatype):
-    """enter_data_spec_type_or_blank:
+def enter_data_or_blank(prompt, datatype=str):
+    """enter_data_or_blank:
 
     Enter a value or leave blank, try to convert to the specified datatype
     """
@@ -305,14 +292,15 @@ def display_diecase_layout(diecase):
     # Build rows and columns to iterate over
     cols_17 = 'NI' in cols_set or 'NL' in cols_set
     rows_16 = 16 in rows_set
-    column_numbers = cols_17 and constants.COLUMNS_17 or constants.COLUMNS_15
+    column_numbers = ((rows_16 or cols_17) and constants.COLUMNS_17 or
+                      constants.COLUMNS_15)
     row_numbers = [x for x in range(1, rows_16 and 17 or 16)]
     # Arrange matrices for displaying
     # Generate a header with column numbers
-    header = ['|Row|']
-    header.extend([col.center(4) for col in column_numbers])
-    header.append('|Units|Shift|')
-    header = ''.join(header)
+    header_list = ['|Row|']
+    header_list.extend([col.center(4) for col in column_numbers])
+    header_list.append('|Units|Shift|')
+    header = ''.join(header_list)
     # "-----" line in the table
     separator = '—' * len(header)
     # A row with only spaces and vertical lines in it
@@ -378,7 +366,7 @@ def edit_diecase_layout(diecase):
         # Edit it?
         print('Enter character: " " for low space (typical), "_" for '
               'high space (less common), leave empty to exit...')
-        char = (enter_data_spec_type_or_blank('Character?: ', str) or
+        char = (enter_data_or_blank('Character?: ', str) or
                 exceptions.menu_level_up())
         available_styles = {'r': 'roman', 'b': 'bold',
                             'i': 'italic', 's': 'smallcaps',
@@ -389,12 +377,12 @@ def edit_diecase_layout(diecase):
               '[l]ower index (a.k.a. subscript, inferior), '
               '[u]pper index (a.k.a. superscript, superior).\n'
               'Leave blank for roman only.')
-        styles = enter_data_spec_type_or_blank('Styles?: ', str) or 'r'
+        styles = enter_data_or_blank('Styles?: ', str) or 'r'
         styles = [available_styles[char] for char in styles
                   if char in available_styles]
         print('How many units for this character? '
               'Leave blank for normal wedge step value')
-        units = enter_data_spec_type_or_blank('Units?: ', int) or 0
+        units = enter_data_or_blank('Units?: ', int) or 0
         # Matrix is defined, return the data
         return [char, styles, column, row, units]
 
@@ -433,10 +421,10 @@ def edit_diecase_layout(diecase):
                 column = ''
                 row = 0
                 while column not in constants.COLUMNS_17:
-                    column = enter_data_spec_type_or_blank(col_prompt, str)
+                    column = enter_data_or_blank(col_prompt, str)
                     column = column.upper() or exceptions.menu_level_up()
                 while row not in range(1, 17):
-                    row = enter_data_spec_type('Row (1 - 16)?: ', int)
+                    row = enter_data('Row (1 - 16)?: ', int)
                 mat = get_matrix(column, row)
                 edit_matrix(mat)
             except exceptions.MenuLevelUp:
@@ -465,7 +453,7 @@ def edit_diecase_layout(diecase):
             try:
                 row = 0
                 while row not in range(1, 17):
-                    row = enter_data_spec_type_or_blank('Row (1 - 16)?: ', int)
+                    row = enter_data_or_blank('Row (1 - 16)?: ', int)
                     row = row or exceptions.menu_level_up()
                 (_,) = [edit_matrix(mat) for mat in working_diecase.layout
                         if mat[3] == row]
@@ -479,7 +467,7 @@ def edit_diecase_layout(diecase):
             try:
                 column = ''
                 while column not in constants.COLUMNS_17:
-                    column = enter_data_spec_type_or_blank(col_prompt, str)
+                    column = enter_data_or_blank(col_prompt, str)
                     column = column.upper() or exceptions.menu_level_up()
                 (_,) = [edit_matrix(mat) for mat in working_diecase.layout
                         if mat[2] == column]

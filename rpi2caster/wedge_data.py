@@ -77,7 +77,7 @@ class DefaultWedge(object):
         except ValueError:
             # Will be set later
             prompt = 'Enter the set width as a decimal fraction: '
-            set_width = ui.enter_data_spec_type(prompt, float)
+            set_width = ui.enter_data(prompt, float)
         # Check if it has a different pica as a base for unit calculations
         if wedge_name.endswith('E'):
             # For wedges made for European countries that use the Didot system
@@ -275,7 +275,7 @@ def choose_wedge(wedge_series='', set_width=0):
             return DefaultWedge()
         # Enter the diecase name
         prompt = 'Enter number (leave blank to work with default S5-12E): '
-        choice = ui.enter_data_spec_type_or_blank(prompt, int)
+        choice = ui.enter_data_or_blank(prompt, int)
         if not choice:
             return DefaultWedge()
         # Safeguards against entering a wrong number or non-numeric string

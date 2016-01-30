@@ -271,7 +271,7 @@ class Typesetter(object):
         """Chooses the spaces that will be used in typesetting."""
         # To make lines shorter
         enter = ui.enter_data_or_blank
-        enter_type = ui.enter_data_spec_type_or_blank
+        enter_type = ui.enter_data_or_blank
         get_space_code = self._get_space_code
         y_n = ui.yes_or_no
         # List available spaces
@@ -370,7 +370,7 @@ class Typesetter(object):
             ui.display('Enter the position for character %s, style: %s'
                        % (char, self.current_style))
             row = ui.enter_data('Column? ').upper
-            column = ui.enter_data_spec_type('Row? ', int)
+            column = ui.enter_data('Row? ', int)
             matrix = [mat for mat in self.diecase_layout
                       if mat[2] == column and mat[3] == row]
         if len(matches) == 1:
@@ -437,7 +437,7 @@ class Typesetter(object):
         Asks user to enter line length and specify measurement units.
         Returns line length in inches for further calculations.
         """
-        line_length = ui.enter_data_spec_type('Line length? : ', float)
+        line_length = ui.enter_data('Line length? : ', float)
         # Choose the measurement unit - and its equivalent in inches
         options = {'A': 0.1660,
                    'B': 0.1667,
