@@ -96,6 +96,13 @@ class EmptyDiecase(object):
         prompt = 'Diecase ID? (leave blank to exit) : '
         diecase_id = (diecase_id or UI.enter_data_or_blank(prompt) or
                       self.diecase_id)
+        # Ask if we are sure we want to update this
+        # if self.diecase_id was set earlier
+        condition = (not self.diecase_id or diecase_id != self.diecase_id and
+                     UI.yes_or_no('Are you sure?'))
+        if condition:
+            self.diecase_id = diecase_id
+            return True
 
     def set_typeface(self, type_series=None, type_size=None,
                      typeface_name=None):
@@ -171,13 +178,13 @@ class EmptyDiecase(object):
 
     def manipulation_menu(self):
         """A menu with all operations on a diecase"""
-        self.show_parameters()
-        messages = ['Matrix case manipulation:\n'
-                    '[V]iew, [C]lear, [E]dit, [I]mport or e[X]port layout\n',
-                    '[A]ssign wedge, change [T]ypeface or diecase [ID]\n']
         # Menu
         try:
             while True:
+                messages = ['\nMatrix case manipulation:\n\n'
+                            '[V]iew, [C]lear, [E]dit, [I]mport '
+                            'or e[X]port layout\n [A]ssign wedge, '
+                            'change [T]ypeface or diecase [ID]\n']
                 self.show_parameters()
                 options = {'M': exceptions.return_to_menu,
                            'T': self.set_typeface,
