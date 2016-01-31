@@ -50,12 +50,13 @@ class DefaultWedge(object):
         """Copies itself and returns an independent object"""
         return deepcopy(self)
 
-    def edit(self):
+    def edit(self, wedge_name=None):
         """Defines a wedge based on designation"""
         # Ask for wedge name and set width as it is written on the wedge
         prompt = ('Wedge name or leave blank to abort: ')
         # For countries that use comma as decimal delimiter, convert to point:
-        wedge_name = UI.enter_data_or_blank(prompt).replace(',', '.').upper()
+        wedge_name = wedge_name or UI.enter_data_or_blank(prompt)
+        wedge_name = wedge_name.replace(',', '.').upper()
         if not wedge_name:
             return False
         elif 'AK' in wedge_name:

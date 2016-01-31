@@ -46,9 +46,8 @@ class EmptyDiecase(object):
         # Start with an empty layout
         new_layout = generate_empty_layout()
         # Load the layout from file
-        try:
-            submitted_layout = submit_layout_file()
-        except (TypeError, ValueError):
+        submitted_layout = submit_layout_file()
+        if not submitted_layout:
             UI.confirm('File does not contain a proper layout!')
             return
         # Update the empty layout with characters read from file
@@ -90,19 +89,22 @@ class EmptyDiecase(object):
         if UI.yes_or_no('Are you sure?'):
             self.layout = layout
 
-    def set_diecase_id(self):
+    def set_diecase_id(self, diecase_id=None):
         """Sets a diecase ID"""
         prompt = 'Diecase ID? (leave blank to exit) : '
-        self.diecase_id = UI.enter_data_or_blank(prompt) or self.diecase_id
+        diecase_id = (diecase_id or UI.enter_data_or_blank(prompt) or
+                      self.diecase_id)
 
-    def set_typeface(self):
+    def set_typeface(self, type_series=None, type_size=None,
+                     typeface_name=None):
         """Sets the type series, size and typeface name"""
-        prompt = 'Fount series (leave blank to abort): '
-        type_series = UI.enter_data_or_blank(prompt)
-        if not type_series:
-            return
-        type_size = UI.enter_data('Type size in points: ')
-        typeface_name = UI.enter_data('Typeface name: ')
+        prompt = 'Type series: '
+        type_series = (type_series or UI.enter_data_or_blank(prompt) or
+                       self.type_series)
+        type_size = (type_size or UI.enter_data('Type size in points: ') or
+                     self.type_size)
+        typeface_name = (typeface_name or UI.enter_data('Typeface name: ') or
+                         self.typeface_name)
         # Validate data
         current_data_not_set = not self.type_series and not self.type_size
         if current_data_not_set or UI.yes_or_no('Apply changes?'):
@@ -110,9 +112,9 @@ class EmptyDiecase(object):
             self.type_size = type_size
             self.typeface_name = typeface_name
 
-    def assign_wedge(self):
+    def assign_wedge(self, wedge_series=None, set_width=0):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
-        self.wedge = wedge_data.Wedge()
+        self.wedge = wedge_data.Wedge(wedge_series, set_width)
 
     def show_parameters(self):
         """Shows diecase's parameters"""
@@ -162,12 +164,6 @@ class EmptyDiecase(object):
     def copy(self):
         """Copies itself and returns an independent object"""
         return deepcopy(self)
-
-    def change_id(self):
-        """Checks if the diecase ID is in database (must be unique),
-        if not - changes it."""
-        while True:
-            self.check_db()
 
     def manipulation_menu(self):
         """A menu with all operations on a diecase"""
@@ -341,12 +337,9 @@ def submit_layout_file():
         return (char, styles, column, row, units)
 
     # Give us a file or end here
-    try:
-        filename = UI.enter_input_filename()
-    except exceptions.ReturnToMenu:
-        exceptions.menu_level_up()
+    filename = UI.enter_input_filename()
     if not filename:
-        exceptions.menu_level_up()
+        return False
     # Initialize the records list
     all_records = []
     # This will store the processed combinations - and whenever a duplicate
@@ -362,24 +355,27 @@ def submit_layout_file():
         if UI.yes_or_no('Is the 1st row a table header? '):
             all_records.pop(0)
     if not UI.yes_or_no('Proceed?'):
-        exceptions.menu_level_up()
-    # Process the records
-    processed_records = [process_record(record) for record in all_records]
-    # Determine the diecase size based on row and column
-    # Get columns and rows lists
-    columns = {record[2] for record in processed_records}
-    rows = sorted({record[3] for record in processed_records})
-    # Check if 17 columns (15x17, 16x17), else 15 columns (old 15x15)
-    if 'NI' in columns or 'NL' in columns or 16 in rows:
-        columns = constants.COLUMNS_17
-    else:
-        columns = constants.COLUMNS_15
-    # We now have completed uploading a layout and making a list out of it
-    layout = [record for row in rows for col in columns
-              for record in processed_records
-              if record[2] == col and record[3] == row]
-    # Show the uploaded layout
-    return layout
+        return False
+    try:
+        # Process the records
+        processed_records = [process_record(record) for record in all_records]
+        # Determine the diecase size based on row and column
+        # Get columns and rows lists
+        columns = {record[2] for record in processed_records}
+        rows = sorted({record[3] for record in processed_records})
+        # Check if 17 columns (15x17, 16x17), else 15 columns (old 15x15)
+        if 'NI' in columns or 'NL' in columns or 16 in rows:
+            columns = constants.COLUMNS_17
+        else:
+            columns = constants.COLUMNS_15
+        # We now have completed uploading a layout and making a list out of it
+        layout = [record for row in rows for col in columns
+                  for record in processed_records
+                  if record[2] == col and record[3] == row]
+        # Show the uploaded layout
+        return layout
+    except (KeyError, ValueError, IndexError):
+        return False
 
 
 def generate_empty_layout(rows=0, columns=0):

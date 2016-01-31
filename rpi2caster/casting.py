@@ -47,21 +47,10 @@ class Casting(object):
     """Casting:
 
     Methods related to operating the composition caster.
-    Requires configured:
-    -caster
-    -database
-    -UI.
-
-    These attributes need to be set up before casting anything.
-    Normally, you instantiate the Session class and it takes care of all
-    setup work.
-
-    Ribbon filename is also an object's attribute, but it's usually
-    set up via user interaction. You can also feed the filename
-    to class on init.
+    Requires configured caster.
 
     All methods related to operating a composition caster are here:
-    -casting composition and sorts,
+    -casting composition and sorts, punching composition,
     -calibrating the caster,
     -testing the interface,
     -sending an arbitrary combination of signals,

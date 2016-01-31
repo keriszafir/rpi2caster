@@ -199,9 +199,10 @@ def enter_input_filename():
     readline.set_completer(tab_complete)
     # Enter the input filename; check if the file is readable
     while True:
-        filename = (enter_data_or_blank('\nEnter the input file name '
-                                        '(leave blank to return to menu): ') or
-                    exceptions.return_to_menu())
+        prompt = '\nEnter the input file name (leave blank to abort): '
+        filename = enter_data_or_blank(prompt)
+        if not filename:
+            return False
         filename = os.path.realpath(filename)
         try:
             with io.open(filename, 'r'):
@@ -217,11 +218,12 @@ def enter_output_filename():
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the output filename; no check here
-    filename = (enter_data_or_blank('\n Enter the input file name '
-                                    '(leave blank to return to menu): ') or
-                exceptions.return_to_menu())
-    filename = os.path.realpath(filename)
-    return filename
+    prompt = '\nEnter the input file name (leave blank to abort): '
+    filename = enter_data_or_blank(prompt)
+    if filename:
+        return os.path.realpath(filename)
+    else:
+        return False
 
 
 def simple_menu(message, options):

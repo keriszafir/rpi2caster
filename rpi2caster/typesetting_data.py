@@ -69,7 +69,8 @@ class EmptyRibbon(object):
     def set_unit_shift(self, unit_shift=False):
         """Chooses whether unit-shift is needed"""
         prompt = 'Is unit shift needed?'
-        self.unit_shift = unit_shift or UI.yes_or_no(prompt) or self.unit_shift
+        self.unit_shift = (bool(unit_shift) or UI.yes_or_no(prompt) or
+                           self.unit_shift)
 
     def show_parameters(self):
         """Shows diecase's parameters"""
@@ -130,11 +131,8 @@ class EmptyRibbon(object):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
         # Ask, and stop here if answered no
         UI.display('Loading the ribbon from file...')
-        try:
-            filename = filename or UI.enter_input_filename()
-            if not filename:
-                return False
-        except exceptions.ReturnToMenu:
+        filename = filename or UI.enter_input_filename()
+        if not filename:
             return False
         # Initialize the contents
         with io.open(filename, mode='r') as ribbon_file:
@@ -165,17 +163,16 @@ class EmptyRibbon(object):
         # Choose diecase automatically
         self.set_diecase(diecase_id)
 
-    def export_to_file(self):
+    def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
         self.show_parameters()
         # Now enter filename for writing
-        filename = UI.enter_output_filename()
-        if not filename:
-            return False
-        # Write everything to the file
-        with io.open(filename, mode='w') as ribbon_file:
-            for line in self.contents:
-                ribbon_file.write(line)
+        filename = filename or UI.enter_output_filename()
+        if filename:
+            # Write everything to the file
+            with io.open(filename, mode='w') as ribbon_file:
+                for line in self.contents:
+                    ribbon_file.write(line)
 
 
 class Ribbon(EmptyRibbon):
@@ -223,29 +220,34 @@ class EmptyWork(object):
                 (self.typeface_name, 'Typeface name')]
         return data
 
-    def set_work_id(self):
+    def set_work_id(self, work_id=None):
         """Adds a work to the database."""
         prompt = 'Work name: '
-        self.work_id = UI.enter_data_or_blank(prompt) or self.work_id
+        self.work_id = (work_id or UI.enter_data_or_blank(prompt) or
+                        self.work_id)
 
-    def set_description(self):
+    def set_description(self, description=None):
         """Manually sets the work's description"""
         prompt = 'Enter the title: '
-        self.description = UI.enter_data_or_blank(prompt) or self.description
+        self.description = (description or UI.enter_data_or_blank(prompt) or
+                            self.description)
 
-    def set_customer(self):
+    def set_customer(self, customer=None):
         """Manually sets the customer"""
         prompt = 'Enter the customer\'s name for this work: '
-        self.customer = UI.enter_data_or_blank(prompt) or self.customer
+        self.customer = (customer or UI.enter_data_or_blank(prompt) or
+                         self.customer)
 
-    def set_typeface(self):
+    def set_typeface(self, type_series=None, type_size=None,
+                     typeface_name=None):
         """Sets the type series, size and typeface name"""
-        prompt = 'Fount series (leave blank to abort): '
-        type_series = UI.enter_data_or_blank(prompt)
-        if not type_series:
-            return
-        type_size = UI.enter_data('Type size in points: ')
-        typeface_name = UI.enter_data('Typeface name: ')
+        prompt = 'Type series: '
+        type_series = (type_series or UI.enter_data_or_blank(prompt) or
+                       self.type_series)
+        type_size = (type_size or UI.enter_data('Type size in points: ') or
+                     self.type_size)
+        typeface_name = (typeface_name or UI.enter_data('Typeface name: ') or
+                         self.typeface_name)
         # Validate data
         current_data_not_set = not self.type_series and not self.type_size
         if current_data_not_set or UI.yes_or_no('Apply changes?'):
@@ -261,10 +263,10 @@ class EmptyWork(object):
         """Copies itself and returns an independent object"""
         return deepcopy(self)
 
-    def read_from_file(self):
+    def read_from_file(self, filename=None):
         """Reads a text file and sets contents."""
         if not self.text or UI.yes_or_no('Overwrite current content?'):
-            filename = UI.enter_input_filename()
+            filename = filename or UI.enter_input_filename()
             if filename:
                 # Initialize the contents
                 with io.open(filename, mode='r') as work_file:
