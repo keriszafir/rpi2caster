@@ -1,6 +1,5 @@
 diecase 327-12-KS01
-title Hello World
-author Christophe Slychan
+description Hello World by Christophe Slychan
 unit-shift OFF
 customer Muzeum Książki Artystycznej
 0005       // Pump off

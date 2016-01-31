@@ -3,28 +3,26 @@
 
 Database operations for text and ribbon storing, retrieving and deleting.
 """
-# Operating system functions
-import os
 # File operations
 import io
+# Object copying
+from copy import deepcopy
 # Some functions raise custom exceptions
 from rpi2caster import exceptions
-# Ribbon metadata parsing needs this
-from rpi2caster import parsing
 # Constants for rpi2caster
 from rpi2caster import constants
 # Matrix data for diecases
 from rpi2caster import matrix_data
 # Use the same database backend and user interface that matrix_data uses
 DB = matrix_data.DB
-ui = matrix_data.ui
+UI = matrix_data.UI
 
 
 class EmptyRibbon(object):
     """Ribbon objects - no matter whether files or database entries.
 
     A ribbon has the following attributes:
-    author, title, customer - strings
+    description, customer - strings
     diecase_id (diecase is selected automatically on casting, so user can e.g.
                 view the layout or know which wedge to use)
     unit_shift - bool - stores whether this was coded for unit-shift or not
@@ -39,34 +37,30 @@ class EmptyRibbon(object):
     get_from_db - get data from database
     export_to_file - store the metadata and contents in text file
     store_in_db - store the metadata and contents in db
-    set_[author, title, customer, diecase_id, unit_shift] - set parameters
+    set_[description, customer, diecase_id, unit_shift] - set parameters
         manually
 
     """
     def __init__(self):
-        self.author = None
-        self.title = None
+        self.ribbon_id = None
+        self.description = None
         self.customer = None
         self.unit_shift = False
         self.filename = None
-        self.contents = ()
+        self.contents = []
         self.diecase = matrix_data.EmptyDiecase()
 
-    def set_author(self, author=None):
-        """Manually sets the author"""
-        prompt = 'Enter the author name for this ribbon: '
-        self.author = author or ui.enter_data_or_blank(prompt) or self.author
-
-    def set_title(self, title=None):
-        """Manually sets the title"""
+    def set_description(self, description=None):
+        """Manually sets the ribbon's description"""
         prompt = 'Enter the title: '
-        self.title = title or ui.enter_data_or_blank(prompt) or self.title
+        self.description = (description or
+                            UI.enter_data_or_blank(prompt) or self.description)
 
     def set_customer(self, customer=None):
         """Manually sets the customer"""
         prompt = 'Enter the customer\'s name for this ribbon: '
-        self.customer = (customer or ui.enter_data_or_blank(prompt) or
-                         self.customer)
+        self.customer = (customer or
+                         UI.enter_data_or_blank(prompt) or self.customer)
 
     def set_diecase(self, diecase_id=None):
         """Chooses the diecase for this ribbon"""
@@ -75,78 +69,69 @@ class EmptyRibbon(object):
     def set_unit_shift(self, unit_shift=False):
         """Chooses whether unit-shift is needed"""
         prompt = 'Is unit shift needed?'
-        self.unit_shift = unit_shift or ui.yes_or_no(prompt) or self.unit_shift
+        self.unit_shift = unit_shift or UI.yes_or_no(prompt) or self.unit_shift
 
-    def display_data(self):
-        """Displays all available data"""
-        if self.author:
-            ui.display('Author: %s' % self.author)
-        if self.title:
-            ui.display('Title: %s' % self.title)
-        if self.customer:
-            ui.display('Customer: %s' % self.customer)
-        if self.diecase.diecase_id:
-            ui.display('Matrix case ID: %s' % self.diecase.diecase_id)
-        if self.unit_shift:
-            ui.display('This ribbon was coded for casting WITH unit-shift.')
-        elif self.unit_shift is None:
-            ui.display('Unit shift status is not defined.')
-        else:
-            ui.display('This ribbon was coded for casting WITHOUT unit-shift.')
+    def show_parameters(self):
+        """Shows diecase's parameters"""
+        data = self.get_parameters()
+        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
+        for item in info:
+            UI.display(item)
+
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.filename, 'File name'),
+                (self.ribbon_id, 'Ribbon ID'),
+                (self.description, 'Description'),
+                (self.customer, 'Customer'),
+                (self.diecase.diecase_id, 'Matrix case ID'),
+                (self.unit_shift, 'Casting with unit-shift')]
+        return data
 
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
-        ui.display('Ribbon contents preview:\n')
+        UI.display('Ribbon contents preview:\n')
         contents_generator = (line for line in self.contents if line)
         try:
             while True:
-                ui.display(contents_generator.__next__())
-        except (StopIteration):
+                UI.display(contents_generator.__next__())
+        except StopIteration:
             # End of generator
-            ui.confirm('Finished', ui.MSG_MENU)
+            UI.confirm('Finished', UI.MSG_MENU)
         except (EOFError, KeyboardInterrupt):
             # Press ctrl-C to abort displaying long ribbons
-            ui.confirm('Aborted', ui.MSG_MENU)
+            UI.confirm('Aborted', UI.MSG_MENU)
+
+    def copy(self):
+        """Copies itself and returns an independent object"""
+        return deepcopy(self)
 
     def get_from_db(self, ribbon_id=None):
         """Gets the ribbon from database"""
-        # Check if we have any ribbons in the database at all... if not, exit
-        if not check_if_ribbons():
-            ui.display('No ribbons found in database.')
-            return False
-        # If id not supplied, choose a ribbon
-        question = 'Select ribbon from database?'
-        ribbon_id = ribbon_id or ui.yes_or_no(question) and choose_ribbon()
-        # Now get its parameters
-        try:
-            ribbon = DB.ribbon_by_id(ribbon_id)
-            # Set ribbon attributes
-            (self.author, self.title, diecase_id, self.customer,
-             self.unit_shift, self.contents) = ribbon
-            # Choose diecase automatically or manually
-            self.set_diecase(diecase_id)
-            return True
-        except (exceptions.DatabaseQueryError,
-                exceptions.NoMatchingData,
-                exceptions.ReturnToMenu):
-            return False
+        ribbon = choose_ribbon(ribbon_id or self.ribbon_id)
+        if UI.yes_or_no('Override current data?'):
+            self = ribbon
 
     def store_in_db(self):
         """Stores the ribbon in database"""
-        self.display_data()
+        self.show_parameters()
         # Ask for confirmation
-        if ui.yes_or_no('Commit to the database?'):
-            DB.add_ribbon(self.title, self.author, self.customer,
-                          self.diecase.diecase_id,
-                          self.unit_shift, self.contents)
-            ui.display('Data added successfully.')
+        if UI.yes_or_no('Commit to the database?'):
+            DB.add_ribbon(self)
+            UI.display('Data added successfully.')
+
+    def delete_from_db(self):
+        """Deletes a ribbon from database."""
+        if UI.yes_or_no('Are you sure?'):
+            DB.delete_ribbon(self)
+            UI.display('Ribbon deleted successfully.')
 
     def read_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
         # Ask, and stop here if answered no
-        ui.display('Loading the ribbon from file...')
+        UI.display('Loading the ribbon from file...')
         try:
-            filename = filename or ui.enter_input_filename()
+            filename = filename or UI.enter_input_filename()
             if not filename:
                 return False
         except exceptions.ReturnToMenu:
@@ -155,25 +140,23 @@ class EmptyRibbon(object):
         with io.open(filename, mode='r') as ribbon_file:
             contents = [x.strip() for x in ribbon_file if x.strip()]
         # Parse the file, get metadata
-        metadata = parsing.get_metadata(contents)
+        metadata = get_ribbon_metadata(contents)
         # Metadata parsing
-        self.author, self.title, self.customer = None, None, None
-        self.unit_shift, diecase_id, self.contents = False, 0, None
+        self.description, self.customer = None, None
+        self.unit_shift, diecase_id, self.contents = False, 0, []
         if 'diecase' in metadata:
             diecase_id = metadata['diecase']
         elif 'diecase_id' in metadata:
             diecase_id = metadata['diecase_id']
-        if 'author' in metadata:
-            self.author = metadata['author']
-        if 'title' in metadata:
-            self.title = metadata['title']
+        if 'description' in metadata:
+            self.description = metadata['description']
         if 'customer' in metadata:
             self.customer = metadata['customer']
         if ('unit-shift' in metadata and
                 metadata['unit-shift'].lower() in constants.TRUE_ALIASES):
             self.unit_shift = True
         elif ('unit-shift' in metadata and
-                metadata['unit-shift'].lower() in constants.FALSE_ALIASES):
+              metadata['unit-shift'].lower() in constants.FALSE_ALIASES):
             self.unit_shift = False
         # Add the whole contents as the attribute
         self.contents = contents
@@ -184,9 +167,9 @@ class EmptyRibbon(object):
 
     def export_to_file(self):
         """Exports the ribbon to a text file"""
-        self.display_data()
+        self.show_parameters()
         # Now enter filename for writing
-        filename = ui.enter_output_filename()
+        filename = UI.enter_output_filename()
         if not filename:
             return False
         # Write everything to the file
@@ -200,68 +183,121 @@ class Ribbon(EmptyRibbon):
     def __init__(self, ribbon_id=None, filename=None):
         EmptyRibbon.__init__(self)
         self.filename = filename
-        self.ribbon_id = None
+        self.ribbon_id = ribbon_id
         if filename or not self.get_from_db(ribbon_id):
             self.read_from_file(filename)
 
 
-class Work(object):
+class EmptyWork(object):
     """Work objects = input files (and input from editor).
 
     A work object has the following attributes:
     author, title,
     customer - to know for whom we are composing (for commercial workshops),
     contents - the unprocessed text, utf8-encoded, to be read by the
-                typesetting program."""
-    def __init__(self, contents=None):
+    typesetting program.
+    """
+    def __init__(self):
         self.work_id = None
-        self.title = None
-        self.author = None
+        self.description = None
         self.customer = None
-        self.contents = contents
+        self.type_size = None
+        self.type_series = None
+        self.typeface_name = None
+        self.text = ''
 
-    def display_data(self):
-        """Displays work's id, author and title"""
-        ui.display('ID: %s' % self.work_id)
-        ui.display('Title: %s' % self.title)
-        ui.display('Author: %s' % self.author)
-        ui.display('Customer: %s' % self.customer)
+    def show_parameters(self):
+        """Shows diecase's parameters"""
+        data = self.get_parameters()
+        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
+        for item in info:
+            UI.display(item)
 
-    def set_author(self):
-        """Manually sets the work's author"""
-        prompt = 'Enter the author name for this work: '
-        self.author = ui.enter_data_or_blank(prompt) or self.author
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.work_id, 'Work ID'),
+                (self.description, 'Description'),
+                (self.customer, 'Customer'),
+                (self.type_series, 'Monotype type series'),
+                (self.type_size, 'Type size'),
+                (self.typeface_name, 'Typeface name')]
+        return data
 
-    def set_title(self):
-        """Manually sets the work's title"""
+    def set_work_id(self):
+        """Adds a work to the database."""
+        prompt = 'Work name: '
+        self.work_id = UI.enter_data_or_blank(prompt) or self.work_id
+
+    def set_description(self):
+        """Manually sets the work's description"""
         prompt = 'Enter the title: '
-        self.title = ui.enter_data_or_blank(prompt) or self.title
+        self.description = UI.enter_data_or_blank(prompt) or self.description
 
     def set_customer(self):
         """Manually sets the customer"""
         prompt = 'Enter the customer\'s name for this work: '
-        self.customer = ui.enter_data_or_blank(prompt) or self.customer
+        self.customer = UI.enter_data_or_blank(prompt) or self.customer
 
-    def display_contents(self):
+    def set_typeface(self):
+        """Sets the type series, size and typeface name"""
+        prompt = 'Fount series (leave blank to abort): '
+        type_series = UI.enter_data_or_blank(prompt)
+        if not type_series:
+            return
+        type_size = UI.enter_data('Type size in points: ')
+        typeface_name = UI.enter_data('Typeface name: ')
+        # Validate data
+        current_data_not_set = not self.type_series and not self.type_size
+        if current_data_not_set or UI.yes_or_no('Apply changes?'):
+            self.type_series = type_series
+            self.type_size = type_size
+            self.typeface_name = typeface_name
+
+    def display_text(self):
         """Displays the contents"""
-        ui.display(self.contents)
+        UI.display(self.text)
+
+    def copy(self):
+        """Copies itself and returns an independent object"""
+        return deepcopy(self)
+
+    def read_from_file(self):
+        """Reads a text file and sets contents."""
+        if not self.text or UI.yes_or_no('Overwrite current content?'):
+            filename = UI.enter_input_filename()
+            if filename:
+                # Initialize the contents
+                with io.open(filename, mode='r') as work_file:
+                    self.text = [x for x in work_file]
+
+    def delete_from_db(self):
+        """Deletes a work from database."""
+        if UI.yes_or_no('Are you sure?'):
+            try:
+                DB.delete_work(self)
+                UI.display('Ribbon deleted successfully.')
+            except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+                UI.display('Cannot delete work from database!')
+
+    def store_in_db(self):
+        """Stores the work in database"""
+        if UI.confirm('Store the work in database?'):
+            DB.add_work(self)
+            UI.display('Data added successfully.')
 
 
-class EmptyWork(Work):
+class Work(EmptyWork):
     """A class for new/empty works (sources) for typesetting"""
-    def __init__(self):
-        self.work_id = None
-        self.title = None
-        self.author = None
-        self.customer = None
-        self.contents = ''
+    def __init__(self, work_id=None, text=None):
+        EmptyWork.__init__(self)
+        self.work_id = work_id
+        self.text = text
 
 
 def check_if_ribbons():
     """Checks if any ribbons are available in the database"""
     try:
-        DB.get_all_ribbons()
-        return True
+        return bool(DB.get_all_ribbons())
     except exceptions.DatabaseQueryError:
         return False
 
@@ -271,10 +307,10 @@ def list_ribbons():
     try:
         data = DB.get_all_ribbons()
     except exceptions.DatabaseQueryError:
-        ui.display('Cannot access ribbon database!')
+        UI.display('Cannot access ribbon database!')
         return None
     results = {}
-    ui.display('\n' +
+    UI.display('\n' +
                'Index'.ljust(7) +
                'Ribbon name'.ljust(30) +
                'Title'.ljust(30) +
@@ -285,59 +321,59 @@ def list_ribbons():
         # Collect ribbon parameters
         index = str(index)
         row = [index.ljust(7)]
-        # Add ribbon name, author, title, diecase ID
-        row.extend([str(field).ljust(30) for field in ribbon[1:4]])
+        # Add ribbon name, description, diecase ID
+        row.extend([str(field).ljust(30) for field in ribbon])
         # Add unit-shift
         row.append(str(ribbon[5]).ljust(15))
         # Display it all
-        ui.display(''.join(row))
+        UI.display(''.join(row))
         # Add number and ID to the result that will be returned
         results[index] = ribbon[0]
-    ui.display('\n\n')
+    UI.display('\n\n')
     # Now we can return the number - ribbon ID pairs
     return results
 
 
-def delete_ribbon(ribbon_id=None):
-    """Used for deleting a ribbon from database.
-
-    Lists ribbons, then allows user to choose ID.
-    """
-    while True:
-        ribbon_id = ribbon_id or choose_ribbon() or exceptions.return_to_menu()
-        ans = ui.yes_or_no('Are you sure?')
-        if ans and DB.delete_ribbon(ribbon_id):
-            ui.display('Ribbon deleted successfully.')
-
-
-def choose_ribbon():
+def choose_ribbon(ribbon_id=None):
     """Chooses a ribbon from database, returns ribbon id"""
-    while True:
-        ui.clear()
-        ui.display('Choose a ribbon:', end='\n\n')
-        available_ribbons = list_ribbons()
-        if not available_ribbons:
-            ui.confirm('No ribbons found.')
-            return None
-        # Enter the diecase name or raise an exception to break the loop
-        prompt = 'Number of a ribbon? (leave blank to exit): '
-        choice = (ui.enter_data_or_blank(prompt) or
-                  exceptions.return_to_menu())
-        # Safeguards against entering a wrong number
-        # or non-numeric string
-        try:
-            ribbon_id = available_ribbons[choice]
-            return ribbon_id
-        except KeyError:
-            ui.confirm('Ribbon number is incorrect!')
-            continue
+    try:
+        # Automatic choice
+        ribbon_data = DB.get_ribbon(ribbon_id)
+    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+        while True:
+            UI.clear()
+            UI.display('Choose a ribbon or leave blank to start a new one: ',
+                       end='\n\n')
+            available_ribbons = list_ribbons()
+            if not available_ribbons:
+                return EmptyRibbon()
+            # Enter the diecase name or raise an exception to break the loop
+            prompt = 'Number of a ribbon? (leave blank to exit): '
+            choice = (UI.enter_data_or_blank(prompt) or
+                      exceptions.return_to_menu())
+            # Safeguards against entering a wrong number
+            # or non-numeric string
+            try:
+                ribbon_id = available_ribbons[choice]
+                ribbon_data = DB.get_ribbon(ribbon_id)
+                break
+            except (KeyError,
+                    exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+                UI.confirm('Ribbon number is incorrect!')
+    # Construct a new ribbon object
+    ribbon = EmptyRibbon()
+    (ribbon.description, diecase_id, ribbon.customer,
+     ribbon.unit_shift, ribbon.contents) = ribbon_data
+    # Assign diecase to ribbon
+    ribbon.set_diecase(diecase_id)
+    return ribbon
 
 
 def list_works():
     """Lists all works in the database."""
     data = DB.get_all_works()
     results = {}
-    ui.display('\n' +
+    UI.display('\n' +
                'Index'.ljust(7) +
                'Work ID'.ljust(20) +
                'Title'.ljust(20) +
@@ -348,81 +384,70 @@ def list_works():
         row = [index.ljust(7)]
         row.extend([str(field).ljust(20) for field in work[:-2]])
         row.append(work[-2])
-        ui.display(''.join(row))
+        UI.display(''.join(row))
         # Add number and ID to the result that will be returned
         results[index] = work[0]
-    ui.display('\n\n')
+    UI.display('\n\n')
     # Now we can return the number - work ID pairs
     return results
 
 
-def choose_work():
+def choose_work(work_id=None):
     """Lets user choose a text file for typesetting."""
     # Do it only if we have diecases (depends on list_diecases retval)
-    while True:
-        ui.clear()
-        ui.display('Choose a text:', end='\n\n')
-        available_works = list_works()
-        # Enter the diecase name
-        prompt = 'Number of a work? (leave blank to exit): '
-        choice = (ui.enter_data_or_blank(prompt) or
-                  exceptions.return_to_menu())
-        # Safeguards against entering a wrong number or non-numeric string
-        try:
-            work_id = available_works[choice]
-            return work_id
-        except KeyError:
-            ui.confirm('Index number is incorrect!')
-            continue
+    try:
+        work_data = DB.get_ribbon(work_id)
+    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+        while True:
+            UI.clear()
+            UI.display('Choose a text:', end='\n\n')
+            available_works = list_works()
+            # Enter the diecase name
+            prompt = 'Number of a work? (leave blank to exit): '
+            choice = UI.enter_data_or_blank(prompt, int)
+            if not choice:
+                return EmptyWork()
+            # Safeguards against entering a wrong number or non-numeric string
+            try:
+                work_data = DB.get_work(available_works[choice])
+                break
+            except KeyError:
+                UI.confirm('Index number is incorrect!')
+    # Construct a new work object
+    work = EmptyWork()
+    (work.work_id, work.description, work.customer, work.type_series,
+     work.type_size, work.typeface_name, work.text) = work_data
+    return work
 
 
-def add_work(contents, title=None, author=None):
-    """add_work:
+def get_ribbon_metadata(content):
+    """get_metadata:
 
-    Adds a work to the database.
+    Catches the parameters included at the beginning of the ribbon.
+    These parameters are used for storing diecase ID, set width, title etc.
+    and serve mostly informational purposes, but can also be used for
+    controlling some aspects of the program (e.g. displaying characters
+    being cast).
+
+    The row is parsed if it starts with a parameter, then the assignment
+    operator is used for splitting the string in two (parameter and value),
+    and a dictionary with parsed parameters is returned.
     """
-    prompt = 'Work name: '
-    work_id = ui.enter_data_or_blank(prompt) or exceptions.return_to_menu()
-    title = title or ui.enter_data('Title: ')
-    prompt = 'Author? (default: %s) : ' % os.getlogin()
-    author = ui.enter_data_or_blank(prompt) or os.getlogin()
-    # Some info for the user
-    info = []
-    info.append('Work ID: %s' % work_id)
-    info.append('Title: %s' % title)
-    info.append('Autor: %s' % author)
-    for line in info:
-        ui.display(line)
-    # Ask for confirmation
-    if ui.yes_or_no('Commit to the database?'):
-        DB.add_work(work_id, title, author, contents)
-        ui.display('Data added successfully.')
-
-
-def delete_work(work_id=None):
-    """Used for deleting a ribbon from database.
-
-    Lists ribbons, then allows user to choose ID.
-    """
-    while True:
-        work_id = work_id or choose_work() or exceptions.return_to_menu()
-        ans = ui.yes_or_no('Are you sure?')
-        if ans and DB.delete_work(work_id):
-            ui.display('Ribbon deleted successfully.')
-
-
-def submit_work_file():
-    """submit_work_file:
-
-    Reads a text file and commits it to the database.
-    """
-    # Ask, and stop here if answered no
-    if not ui.yes_or_no('Add the work from file?'):
-        return False
-    filename = ui.enter_input_filename()
-    if not filename:
-        return False
-    # Initialize the contents
-    with io.open(filename, mode='r') as work_file:
-        contents = [x for x in work_file]
-    add_work(contents)
+    parameters = ['diecase', 'description', 'unit-shift', 'justification',
+                  'diecase_id', 'customer']
+    symbols = ['=', ':', ' ']
+    result = {}
+    # Work on an unmodified copy and delete lines from the sequence
+    for line in content[:]:
+        for parameter in parameters:
+            if line.startswith(parameter):
+                for symbol in symbols:
+                    members = line.split(symbol, 1)
+                    try:
+                        value = members[1].strip()
+                        result[parameter] = value
+                        break
+                    except (IndexError, ValueError):
+                        pass
+                content.remove(line)
+    return result

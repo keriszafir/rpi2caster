@@ -339,7 +339,8 @@ def edit_diecase_layout(diecase):
     Edits a matrix case layout, row by row, matrix by matrix. Allows to enter
     a position to be edited.
     """
-    working_diecase = diecase
+    # Deep-copy a diecase to create an independent object to work on
+    working_diecase = diecase.copy()
 
     def get_matrix(column, row):
         """Gets matrix data for given coordinates."""

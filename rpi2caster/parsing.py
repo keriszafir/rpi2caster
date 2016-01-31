@@ -30,39 +30,6 @@ def read_file(filename):
         return False
 
 
-def get_metadata(content):
-    """get_metadata:
-
-    Catches the parameters included at the beginning of the ribbon.
-    These parameters are used for storing diecase ID, set width, title etc.
-    and serve mostly informational purposes, but can also be used for
-    controlling some aspects of the program (e.g. displaying characters
-    being cast).
-
-    The row is parsed if it starts with a parameter, then the assignment
-    operator is used for splitting the string in two (parameter and value),
-    and a dictionary with parsed parameters is returned.
-    """
-    parameters = ['diecase', 'title', 'author', 'unit-shift', 'justification',
-                  'diecase_id', 'customer']
-    symbols = ['=', ':', ' ']
-    result = {}
-    # Work on an unmodified copy and delete lines from the sequence
-    for line in content[:]:
-        for parameter in parameters:
-            if line.startswith(parameter):
-                for symbol in symbols:
-                    members = line.split(symbol, 1)
-                    try:
-                        value = members[1].strip()
-                        result[parameter] = value
-                        break
-                    except (IndexError, ValueError):
-                        pass
-                content.remove(line)
-    return result
-
-
 def comments_parser(input_data):
     """comments_parser(input_data):
 

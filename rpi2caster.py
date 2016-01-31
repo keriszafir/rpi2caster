@@ -15,9 +15,9 @@ def cast(args):
     else:
         # Real caster
         from rpi2caster import monotype as caster_module
-    caster_module.ui.DEBUG_MODE = args.debug
+    caster_module.UI.DEBUG_MODE = args.debug
     job.caster = caster_module.Caster()
-    # Perforation mode if desired
+    # Perforation mode if desired or not depending on command line arguments
     job.caster.is_perforator = args.is_perforator
     job.main_menu()
 
@@ -26,14 +26,14 @@ def inventory(args):
     """Inventory management"""
     from rpi2caster import inventory
     # Pass the debug mode flag to the UI
-    inventory.ui.DEBUG_MODE = args.debug
+    inventory.UI.DEBUG_MODE = args.debug
     inventory.main_menu()
 
 
 def typesetting(args):
     """Text to ribbon translation and justification"""
     from rpi2caster import typesetter
-    typesetter.ui.DEBUG_MODE = args.debug
+    typesetter.UI.DEBUG_MODE = args.debug
     typesetter.main_menu()
 
 

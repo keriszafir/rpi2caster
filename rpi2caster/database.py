@@ -40,12 +40,10 @@ class Database(object):
     Methods here are for reading/writing data for diecases, matrices,
     wedges (and casters & interfaces) from/to designated sqlite3 database.
 
-    Default database path is ./database/monotype.db - but you can
+    Default database path is /var/lib/rpi2caster - but you can
     override it by instantiating this class with a different name
     passed as an argument. It is necessary that the user who's running
-    this program for setup has write access to the database file;
-    read access is enough for normal operation.
-    Usually you run setup with sudo.
+    this program for setup has write access to the database file.
     """
 
     def __init__(self):
@@ -74,12 +72,7 @@ class Database(object):
         return self
 
     def add_wedge(self, wedge):
-        """add_wedge:
-
-        Registers a wedge (objecrt) in our database.
-        Returns True if successful, False otherwise.
-        """
-
+        """Registers a wedge in our database."""
         # data - a list with wedge parameters to be written,
         # boolean brit_pica must be converted to int,
         # a unit arrangement is a JSON-encoded list
@@ -155,14 +148,7 @@ class Database(object):
                 raise exceptions.DatabaseQueryError
 
     def delete_wedge(self, wedge):
-        """delete_wedge:
-
-        Deletes a wedge from the database
-        (useful in case we no longer have the wedge).
-        """
-        # Check if wedge is there (will raise an exception if not)
-        # We don't care about the retval which is a list.
-        # Okay, proceed:
+        """Deletes a wedge from the database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -176,12 +162,7 @@ class Database(object):
                 raise exceptions.DatabaseQueryError
 
     def get_all_wedges(self):
-        """get_all_wedges:
-
-        Gets all wedges stored in database, with their step unit values.
-
-        Returns a list of all wedges found or raises an exception.
-        """
+        """Gets all wedges stored in database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -192,7 +173,6 @@ class Database(object):
                 if not all_wedges:
                     raise exceptions.NoMatchingData
                 for record in all_wedges:
-                    record = [x for x in record]
                     (wedge_series, set_width,
                      brit_pica, unit_arrangement) = record
                     record = [wedge_series, set_width, bool(brit_pica),
@@ -204,12 +184,7 @@ class Database(object):
                 raise exceptions.DatabaseQueryError
 
     def get_all_diecases(self):
-        """get_all_diecadses(self):
-
-        Gets all diecases stored in database, with their metadata.
-
-        Returns a list of all diecases found or raises an exception.
-        """
+        """Gets all diecases stored in database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -224,12 +199,7 @@ class Database(object):
                 raise exceptions.DatabaseQueryError
 
     def add_diecase(self, diecase):
-        """add_diecase:
-
-        Registers a diecase in our database.
-        Returns True if successful, False otherwise.
-        """
-
+        """Registers a diecase in our database."""
         # data - a list with diecase parameters to be written,
         # layout is a JSON-dumped dictionary
         data = [diecase.diecase_id, diecase.type_series, diecase.type_size,
@@ -249,8 +219,8 @@ class Database(object):
                                'layout TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT INTO matrix_cases ('
-                               'diecase_id,type_series,type_size,'
-                               'wedge_series,set_width,typeface_name,layout'
+                               'diecase_id, type_series, type_size,'
+                               'wedge_series, set_width, typeface_name, layout'
                                ') VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
@@ -258,13 +228,13 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def diecase_by_id(self, diecase_id):
+    def get_diecase(self, diecase_id):
         """Searches for diecase metadata, based on the unique diecase ID."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM matrix_cases '
-                               'WHERE diecase_id = ?', [diecase_id])
+                sql = 'SELECT * FROM matrix_cases WHERE diecase_id = ?'
+                cursor.execute(sql, [diecase_id])
                 # Return diecase if found:
                 diecase = list(cursor.fetchone())
                 # De-serialize the diecase layout, convert it back to a list
@@ -297,91 +267,20 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def diecase_by_series_and_size(self, type_series, type_size):
-        """diecase_by_series_and_size:
-
-        Looks up a diecase of a given type series (string e.g. 327) and size
-        (string e.g. 12D).
-        """
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM matrix_cases '
-                               'WHERE type_series = ? AND type_size = ?',
-                               [str(type_series), str(type_size)])
-                diecase = list(cursor.fetchone())
-                # De-serialize the diecase layout, convert it back to a list
-                raw_layout = json.loads(diecase.pop())
-                # Convert the layout
-                # Record is now 'character style1,style2... column row units'
-                # Make it a list
-                layout = []
-                for record in raw_layout:
-                    # Make a tuple of styles
-                    record[1] = tuple(record[1].split(','))
-                    # Convert the row number to int
-                    record[3] = int(record[3])
-                    # Last field - unit width - was not mandatory
-                    # Try to convert it to int
-                    # If no unit width is specified, use None instead
-                    try:
-                        record[4] = int(record[4])
-                    except (IndexError, ValueError):
-                        record.append(None)
-                    layout.append(record)
-                    # Record is now:
-                    # [character, (style1, style2...), column, row, units]
-                # Add the layout back to diecase and return the data
-                diecase.append(layout)
-                return diecase
-            except (TypeError, ValueError, IndexError):
-                # No data or cannot process it
-                raise exceptions.NoMatchingData
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Database failed
-                raise exceptions.DatabaseQueryError
-
-    def update_diecase_layout(self, diecase_id, layout):
-        """update_diecase_layout:
-
-        Changes the matrix case layout on an existing diecase.
-        If called with the diecase_id only - then clears the whole layout.
-        """
-        with self.db_connection:
-            try:
-                layout = json.dumps(layout)
-                cursor = self.db_connection.cursor()
-                cursor.execute('UPDATE matrix_cases '
-                               'SET layout = ? WHERE diecase_id = ?',
-                               [layout, diecase_id])
-                return True
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Database failed
-                raise exceptions.DatabaseQueryError
-
     def delete_diecase(self, diecase):
-        """delete_diecase:
-
-        Deletes a diecase with given unique ID from the database
-        (useful in case we no longer have the diecase).
-        """
+        """Deletes a diecase with given unique ID from the database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('DELETE FROM matrix_cases '
-                               'WHERE diecase_id = ?', [diecase.diecase_id])
+                cursor.execute('DELETE FROM matrix_cases WHERE diecase_id = ?',
+                               [diecase.diecase_id])
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
     def get_all_ribbons(self):
-        """get_all_ribbons:
-
-        Gets all ribbons stored in database, with their metadata.
-
-        Returns a list of all ribbons found or raises an exception.
-        """
+        """Gets all ribbons stored in database"""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -396,54 +295,37 @@ class Database(object):
                 raise exceptions.DatabaseQueryError
 
     def add_ribbon(self, ribbon):
-        """add_ribbon:
-
-        Registers a ribbon in our database.
-        Returns True if successful, raises an exception otherwise.
-
-        Arguments:
-        title - title of a work,
-        author - author's name,
-        customer - customer's name,
-        diecase_id - diecase used for casting the ribbon,
-        contents - codes to send to the caster
-        """
-        # contents is a JSON-encoded list
-        contents = json.dumps(ribbon.contents)
-        data = [ribbon.author, ribbon.title, ribbon.customer,
-                ribbon.diecase.diecase_id, int(ribbon.unit_shift), contents]
+        """Registers a ribbon in our database."""
+        data = [ribbon.description, ribbon.customer, ribbon.diecase.diecase_id,
+                int(ribbon.unit_shift), json.dumps(ribbon.contents)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS ribbons ('
                                'ribbon_id INTEGER PRIMARY KEY AUTOINCREMENT, '
-                               'title TEXT, '
-                               'author TEXT, '
+                               'description TEXT, '
                                'customer TEXT, '
                                'diecase_id TEXT NOT NULL, '
                                'unit_shift INTEGER NOT NULL, '
                                'contents TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT INTO ribbons ('
-                               'title,author,customer,diecase_id,contents'
-                               ') VALUES (?, ?, ?, ?, ?, ?)''', data)
+                               'title, author, customer, diecase_id, contents'
+                               ') VALUES (?, ?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def ribbon_by_id(self, ribbon_id):
-        """ribbon_by_id:
-
-        Searches for ribbon metadata, based on the unique ribbon ID.
-        """
+    def get_ribbon(self, ribbon_id):
+        """Searches for ribbon, based on the unique ribbon ID."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM ribbons '
-                               'WHERE ribbon_id = ?', [ribbon_id])
+                cursor.execute('SELECT * FROM ribbons WHERE ribbon_id = ?',
+                               [ribbon_id])
                 ribbon = list(cursor.fetchone())
                 # Take the last item which is contents
                 # De-serialize it, convert it back to a list
@@ -455,8 +337,8 @@ class Database(object):
                 ribbon.append(unit_shift)
                 # Add the contents
                 ribbon.append(raw_contents)
-                # Return the list apart from ID - not needed
-                return ribbon[1:]
+                # Return the list
+                return ribbon
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise exceptions.NoMatchingData
@@ -464,37 +346,21 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def delete_ribbon(self, ribbon_id):
-        """delete_ribbon:
-
-        Deletes a ribbon with given unique ID from the database
-        (in case it is no longer needed).
-
-        Returns True if successful, raises an exception otherwise.
-
-        First, the function checks if the ribbon is in the database at all.
-        """
-        # Check if wedge is there (will raise an exception if not)
-        # We don't care about the retval which is a list.
-        self.ribbon_by_id(ribbon_id)
+    def delete_ribbon(self, ribbon):
+        """Deletes a ribbon entry from database."""
         # Okay, proceed:
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('DELETE FROM ribbons '
-                               'WHERE ribbon_id = ?', [ribbon_id])
+                cursor.execute('DELETE FROM ribbons WHERE ribbon_id = ?',
+                               [ribbon.ribbon_id])
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
     def get_all_works(self):
-        """get_all_works:
-
-        Gets all works (source texts) stored in database, with their metadata.
-
-        Returns a list of all works found or raises an exception.
-        """
+        """Gets all works (source texts) stored in database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -509,50 +375,41 @@ class Database(object):
                 raise exceptions.DatabaseQueryError
 
     def add_work(self, work):
-        """add_work:
-
-        Registers a work (unprocessed text) in our database.
-        Returns True if successful, raises an exception otherwise.
-
-        Arguments:
-        work_id - user-defined unique work ID
-        title - title of a work,
-        author - author's name (or system login),
-        contents - the text.
-        """
-        # contents is a JSON-encoded list
-        contents = json.dumps(work.contents)
-        data = [work.work_id, work.title, work.author, contents]
+        """Registers a work (source text) in our database."""
+        data = [work.work_id, work.description, work.customer,
+                work.type_series, work.type_size, work.typeface_name,
+                work.text]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS works ('
                                'work_id TEXT UNIQUE PRIMARY KEY, '
-                               'title TEXT NOT NULL, '
-                               'author TEXT NOT NULL, '
-                               'contents TEXT NOT NULL)')
+                               'description TEXT NOT NULL, '
+                               'customer TEXT NOT NULL, '
+                               'type_series TEXT NOT NULL, '
+                               'type_size TEXT NOT NULL, '
+                               'typeface_name TEXT NOT NULL, '
+                               'text TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT INTO works ('
-                               'work_id,title,author,contents'
-                               ') VALUES (?, ?, ?, ?)''', data)
+                               'work_id, description, customer, type_series, '
+                               'type_size, typeface_name, text'
+                               ') VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def work_by_id(self, work_id):
-        """Searches for work metadata, based on the unique work ID."""
+    def get_work(self, work_id):
+        """Searches for work based on the unique work ID."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM works '
-                               'WHERE work_id = ?', [work_id])
+                cursor.execute('SELECT * FROM works WHERE work_id = ?',
+                               [work_id])
                 work = list(cursor.fetchone())
-                # De-serialize the contents
-                raw_contents = json.loads(work.pop())
-                work.append(raw_contents)
                 return work
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
@@ -561,25 +418,13 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def delete_work(self, work_id):
-        """delete_work:
-
-        Deletes a work with given unique ID from the database
-        (in case it is no longer needed).
-
-        Returns True if successful, raises an exception otherwise.
-
-        First, the function checks if the work is in the database at all.
-        """
-        # Check if wedge is there (will raise an exception if not)
-        # We don't care about the retval which is a list.
-        self.work_by_id(work_id)
-        # Okay, proceed:
+    def delete_work(self, work):
+        """Deletes a work with given unique ID from the database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('DELETE FROM works '
-                               'WHERE work_id = ?', [work_id])
+                cursor.execute('DELETE FROM works WHERE work_id = ?',
+                               [work.work_id])
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed

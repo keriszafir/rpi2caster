@@ -18,7 +18,7 @@ from rpi2caster import exceptions
 # Configuration parser functions
 from rpi2caster import cfg_parser
 # Default user interface
-from rpi2caster.global_settings import USER_INTERFACE as ui
+from rpi2caster.global_settings import USER_INTERFACE as UI
 # Caster prototype
 from rpi2caster import common_caster
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
@@ -75,12 +75,12 @@ class Caster(common_caster.Caster):
                 # for both rising and falling edge:
                 with io.open(gpio_edge_file, 'r') as edge_file:
                     if 'both' not in edge_file.read():
-                        ui.display('%s: file does not exist, cannot be read, '
+                        UI.display('%s: file does not exist, cannot be read, '
                                    'or the interrupt on GPIO %i is not set '
                                    'to "both". Check the system configuration.'
                                    % (gpio_edge_file, gpio))
             except (IOError, FileNotFoundError):
-                ui.display('%s : file does not exist or cannot be read. '
+                UI.display('%s : file does not exist or cannot be read. '
                            'You must export the GPIO no %s as input first!'
                            % (gpio_value_file, gpio))
             else:
@@ -92,7 +92,7 @@ class Caster(common_caster.Caster):
             (self.is_perforator, interface_id) = caster_settings
         except exceptions.NotConfigured:
             # Cannot read config? Use defaults:
-            ui.debug_info('Using hardcoded defaults for caster settings...')
+            UI.debug_info('Using hardcoded defaults for caster settings...')
             self.is_perforator = False
             interface_id = 0
 
@@ -103,7 +103,7 @@ class Caster(common_caster.Caster):
              pin_base, signals_arrangement) = out_settings
         except exceptions.NotConfigured:
             # Cannot read config? Use defaults:
-            ui.debug_info('Using hardcoded defaults for interface outputs...')
+            UI.debug_info('Using hardcoded defaults for interface outputs...')
             mcp0_address = constants.MCP0
             mcp1_address = constants.MCP1
             pin_base = constants.PIN_BASE
@@ -132,7 +132,7 @@ class Caster(common_caster.Caster):
                  sensor_gpio) = cfg_parser.get_input_settings(interface_id)
             except exceptions.NotConfigured:
                 # Cannot read config? Use defaults:
-                ui.display('Using hardcoded defaults for interface inputs...')
+                UI.display('Using hardcoded defaults for interface inputs...')
                 emergency_stop_gpio = constants.EMERGENCY_STOP_GPIO
                 sensor_gpio = constants.SENSOR_GPIO
             # Set up a sysfs interface for machine cycle sensor:
@@ -147,9 +147,9 @@ class Caster(common_caster.Caster):
 
         # Iterate over the collected data and print the output
         for parameter in info:
-            ui.debug_info(parameter)
+            UI.debug_info(parameter)
         # Wait for user confirmation if in debug mode
-        ui.debug_confirm('Caster configured.')
+        UI.debug_confirm('Caster configured.')
         # Assign wiringPi pin numbers on MCP23017s to the Monotype
         # control signals. Return the result.
         return dict(zip(signals_arrangement.split(','), pins))

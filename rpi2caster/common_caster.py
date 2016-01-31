@@ -5,7 +5,7 @@ import time
 # Custom exceptions module
 from rpi2caster import exceptions
 # Default user interface
-from rpi2caster.global_settings import USER_INTERFACE as ui
+from rpi2caster.global_settings import USER_INTERFACE as UI
 
 
 class Caster(object):
@@ -26,9 +26,9 @@ class Caster(object):
     def __enter__(self):
         """Lock the resource so that only one object can use it
         with context manager"""
-        ui.debug_info('Entering caster/interface context...')
+        UI.debug_info('Entering caster/interface context...')
         if self.lock:
-            ui.display('Caster %s is already busy!' % self.name)
+            UI.display('Caster %s is already busy!' % self.name)
         else:
             # Set default wedge positions
             self.current_0005 = '15'
@@ -99,18 +99,18 @@ class Caster(object):
             # Ask whether to cast or simulate machine stop
             prompt = ('[Enter] to cast, [S] to stop '
                       'or [A] to switch to automatic mode? ')
-            answer = self.manual_mode and ui.enter_data_or_blank(prompt)
+            answer = self.manual_mode and UI.enter_data_or_blank(prompt)
             if answer in ['s', 'S']:
-                ui.display('Simulating machine stop...')
+                UI.display('Simulating machine stop...')
                 raise exceptions.MachineStopped
             elif answer in ['a', 'A']:
-                ui.display('Running in automatic mode from now on...')
+                UI.display('Running in automatic mode from now on...')
                 self.manual_mode = False
-            ui.display('Turning the valves on...')
+            UI.display('Turning the valves on...')
             self.activate_valves(signals)
-            ui.display('Turning the valves off...')
+            UI.display('Turning the valves off...')
             self.deactivate_valves()
-            ui.display('Sequence cast successfully.\n')
+            UI.display('Sequence cast successfully.\n')
             return True
         except (KeyboardInterrupt, EOFError):
             # Let user decide if they want to continue / go to menu / exit
@@ -133,7 +133,7 @@ class Caster(object):
             Raise an exception to be caught by higher-level functions
             from the Casting class
             """
-            self._emergency_cleanup()
+            self.emergency_cleanup()
             raise exceptions.CastingAborted
 
         def with_cleanup_exit_program():
@@ -141,7 +141,7 @@ class Caster(object):
 
             Helper function - throws an exception to exit the program.
             Also makes sure the pump is turned off."""
-            self._emergency_cleanup()
+            self.emergency_cleanup()
             raise exceptions.ExitProgram
 
         # End of subroutine definitions
@@ -163,10 +163,10 @@ class Caster(object):
                        'E': exceptions.exit_program}
             message = ('Machine not running - you need to start it first.\n'
                        '[C]ontinue, return to [M]enu or [E]xit program? ')
-        ui.simple_menu(message, options)()
+        UI.simple_menu(message, options)()
 
-    def _emergency_cleanup(self):
-        """_emergency_cleanup:
+    def emergency_cleanup(self):
+        """emergency_cleanup:
 
         If the machine is stopped, we need to turn the pump off and then
         turn all the lines off. Otherwise, the machine will keep pumping
@@ -182,12 +182,12 @@ class Caster(object):
                 # Try stopping the pump until we succeed!
                 # Keep calling _send_signals_to_caster until it returns True
                 # (the machine receives and processes the pump stop signal)
-                ui.display('Stopping the pump...')
+                UI.display('Stopping the pump...')
                 self._send_signals_to_caster(stop_signal, 60)
             except exceptions.MachineStopped:
                 # Loop over
                 pass
-        ui.display('Pump is off. All valves off, just in case...')
+        UI.display('Pump is off. All valves off, just in case...')
         self.deactivate_valves()
         time.sleep(1)
         return True
@@ -198,11 +198,11 @@ class Caster(object):
             self.pump.check_working(signals)
             self.get_wedge_positions(signals)
             message = ('Activating valves: ' + ' '.join(signals))
-            ui.display(message)
+            UI.display(message)
 
     def deactivate_valves(self):
         """No need to do anything"""
-        ui.display('Valves deactivated.')
+        UI.display('Valves deactivated.')
 
     def get_wedge_positions(self, signals):
         """Gets current positions of 0005 and 0075 wedges"""
@@ -233,10 +233,10 @@ class Caster(object):
         Also ask whether user wants to confirm each sequence.
         """
         question = 'Manual mode (you need to confirm each sequence)?'
-        self.manual_mode = ui.yes_or_no(question)
+        self.manual_mode = UI.yes_or_no(question)
         while True:
             prompt = 'Is the machine running? [Enter] - yes, [N] - no: '
-            if ui.enter_data_or_blank(prompt) not in ['n', 'N']:
+            if UI.enter_data_or_blank(prompt) not in ['n', 'N']:
                 # The machine is turning
                 return True
             # Simulate machine stop
@@ -245,7 +245,7 @@ class Caster(object):
 
     def __exit__(self, *args):
         self.deactivate_valves()
-        ui.debug_info('Caster no longer in use.')
+        UI.debug_info('Caster no longer in use.')
         self.lock = False
 
 
@@ -271,6 +271,6 @@ class Pump(object):
     def status(self):
         """Displays info whether pump is working or not"""
         if self.is_working:
-            return('Pump is ON')
+            return 'Pump is ON'
         else:
-            return('Pump is OFF')
+            return 'Pump is OFF'

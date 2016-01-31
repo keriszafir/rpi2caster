@@ -31,7 +31,7 @@ from rpi2caster import typesetting_data
 matrix_data = typesetting_data.matrix_data
 wedge_data = matrix_data.wedge_data
 # User interface is the same as in typesetting_data
-ui = typesetting_data.ui
+UI = typesetting_data.UI
 
 
 def use_caster(func):
@@ -92,30 +92,30 @@ class Casting(object):
         (all_lines, all_chars) = parsing.count_lines_and_chars(
             self.ribbon.contents)
         # Show the numbers to the operator
-        ui.display('Lines found in ribbon: %i' % all_lines)
-        ui.display('Characters: %i' % all_chars)
+        UI.display('Lines found in ribbon: %i' % all_lines)
+        UI.display('Characters: %i' % all_chars)
         # Check the line previous job has been aborted on
         # Ask how many lines to skip; add two previous lines if possible
         # so that the mould temperature has a chance to stabilize
         lines_skipped = self.line_aborted - 2
         # This must be non-negative
         lines_skipped = max(lines_skipped, 0)
-        ui.display('You can skip a number of lines so that you can e.g. start '
+        UI.display('You can skip a number of lines so that you can e.g. start '
                    'a casting job aborted earlier.')
         prompt = 'How many lines to skip? (default: %s) : ' % lines_skipped
-        lines_skipped = (ui.enter_data_or_blank(prompt, int) or
+        lines_skipped = (UI.enter_data_or_blank(prompt, int) or
                          lines_skipped)
         prompt = 'How many times do you want to cast this? (default: 1) : '
-        repetitions = ui.enter_data_or_blank(prompt, int) or 1
+        repetitions = UI.enter_data_or_blank(prompt, int) or 1
         # For casting, we need to check the direction of ribbon
         if parsing.rewind_ribbon(self.ribbon.contents):
-            ui.display('Ribbon starts with pump stop sequence - rewinding...')
+            UI.display('Ribbon starts with pump stop sequence - rewinding...')
             queue = [line for line in reversed(self.ribbon.contents)]
         else:
-            ui.display('Ribbon starts with galley trip - not rewinding...')
+            UI.display('Ribbon starts with galley trip - not rewinding...')
             queue = [line for line in self.ribbon.contents]
         # Display a little explanation
-        ui.display('\nThe combinations of Monotype signals will be displayed '
+        UI.display('\nThe combinations of Monotype signals will be displayed '
                    'on screen while the machine casts the type.\n'
                    'Turn on the machine and the program will start.\n')
         # Start only after the machine is running
@@ -124,7 +124,7 @@ class Casting(object):
         current_run = 1
         # Repeat casting the whole sequence as many times as we would like
         while current_run <= repetitions:
-            ui.display('\n\nSTARTING THE CASTING RUN %d / %d (%d left)...\n\n'
+            UI.display('\n\nSTARTING THE CASTING RUN %d / %d (%d left)...\n\n'
                        % (current_run, repetitions, repetitions - current_run))
             current_run += 1
             # Characters already cast, lines done - start with zero
@@ -145,13 +145,14 @@ class Casting(object):
                 info_for_user = []
                 if parsing.check_newline(signals):
                     # Percent of all lines done:
-                    line_percent_done = 100 * lines_done / (all_lines - 1)
+                    line_percent_done = 100 * lines_done / all_lines
                     # Up the completed lines counter
                     lines_done += 1
                     # Display number of the working line,
                     # number of all remaining lines, percent done
                     if not current_line:
-                        info = 'All lines successfully cast. Stopping...\n'
+                        info = ('All lines successfully cast. '
+                                'Putting the last line to the galley...\n')
                         info_for_user.append(info)
                     else:
                         # Decrease the counter for each started new line
@@ -194,7 +195,7 @@ class Casting(object):
                 # Add comment
                 info_for_user.append(comment + '\n')
                 # Display the info
-                ui.display(''.join(info_for_user))
+                UI.display(''.join(info_for_user))
                 # Proceed with casting only if code is explicitly stated
                 # (i.e. O15 = cast, empty list = don't cast)
                 if signals:
@@ -207,11 +208,11 @@ class Casting(object):
                         # On failure - abort the whole job.
                         # Check the aborted line so we can get back to it.
                         self.line_aborted = current_line
-                        ui.confirm('\nCasting aborted on line %i.'
-                                   % self.line_aborted, ui.MSG_MENU)
+                        UI.confirm('\nCasting aborted on line %i.'
+                                   % self.line_aborted, UI.MSG_MENU)
                         return False
         # After casting is finished, notify the user
-        ui.confirm('Casting finished successfully!', ui.MSG_MENU)
+        UI.confirm('Casting finished successfully!', UI.MSG_MENU)
         return True
 
     @use_caster
@@ -225,9 +226,9 @@ class Casting(object):
         """
         # Count a number of combinations punched in ribbon
         all_combinations = parsing.count_combinations(self.ribbon.contents)
-        ui.display('Combinations in ribbon: %i' % all_combinations)
+        UI.display('Combinations in ribbon: %i' % all_combinations)
         # Wait until the operator confirms.
-        ui.confirm('\nThe combinations of Monotype signals will be displayed '
+        UI.confirm('\nThe combinations of Monotype signals will be displayed '
                    'on screen while the paper tower punches the ribbon.\n'
                    'Turn on the air and fit the tape on your paper tower.')
         for line in self.ribbon.contents:
@@ -235,7 +236,7 @@ class Casting(object):
             # Both can have zero or positive length.
             [signals, comment] = parsing.comments_parser(line)
             # A string with information for user: signals, comments, etc.
-            ui.display(' '.join(signals).ljust(20) + comment)
+            UI.display(' '.join(signals).ljust(20) + comment)
             # Send the signals
             if signals:
                 # In any case add O+15 (to put enough force on punches)
@@ -248,7 +249,7 @@ class Casting(object):
                 self.caster.deactivate_valves()
                 time.sleep(0.2)
         # After punching is finished, notify the user:"""
-        ui.confirm('\nPunching finished!', ui.MSG_MENU)
+        UI.confirm('\nPunching finished!', UI.MSG_MENU)
         return True
 
     @use_caster
@@ -256,14 +257,14 @@ class Casting(object):
         """Tests a sequence of signals specified on input"""
         try:
             for code in combinations:
-                ui.display(code)
+                UI.display(code)
                 code = parsing.signals_parser(code)
                 self.caster.process_signals(code, 120)
-        except exceptions.CastingAborted:
-            return False
+        except (exceptions.CastingAborted, EOFError, KeyboardInterrupt):
+            # If pump was working, ensure stopping it
+            self.caster.emergency_cleanup()
         else:
-            ui.confirm('\nTesting finished!', ui.MSG_MENU)
-            return True
+            UI.confirm('\nTesting finished!', UI.MSG_MENU)
 
     def test_front_pinblock(self):
         """test_front_pinblock():
@@ -274,7 +275,7 @@ class Casting(object):
         """
         intro = ('This will test the front pinblock - signals 1 towards 14. '
                  'At the end O+15 will be activated.')
-        ui.confirm(intro)
+        UI.confirm(intro)
         self.test_air_signals([str(n) for n in range(1, 15)])
 
     def test_rear_pinblock(self):
@@ -286,7 +287,7 @@ class Casting(object):
         """
         intro = ('This will test the front pinblock - signals NI, NL, A...N. '
                  'At the end O+15 will be activated.')
-        ui.confirm(intro)
+        UI.confirm(intro)
         self.test_air_signals(constants.COLUMNS_17)
 
     def test_all(self):
@@ -301,7 +302,7 @@ class Casting(object):
                  'At the end O+15 signal is tested.\n'
                  'MAKE SURE THE PUMP IS DISENGAGED.'
                  % ' '.join(constants.SIGNALS))
-        ui.confirm(intro)
+        UI.confirm(intro)
         self.test_air_signals(constants.SIGNALS)
 
     def cast_sorts(self):
@@ -314,14 +315,14 @@ class Casting(object):
         wedge = self.wedge or wedge_data.Wedge()
         while True:
             # Outer loop
-            ui.clear()
-            ui.display('Sorts casting by matrix coordinates\n\n')
+            UI.clear()
+            UI.display('Sorts casting by matrix coordinates\n\n')
             prompt = 'Column: NI, NL, A...O? (default: G): '
             # Got no signals? Use G5.
             column = ''
             column_symbols = ['NI', 'NL'] + [ltr for ltr in 'ABCDEFGHIJKLMNO']
             while column not in column_symbols:
-                column = ui.enter_data_or_blank(prompt).upper() or 'G'
+                column = UI.enter_data_or_blank(prompt).upper() or 'G'
             prompt = 'Row: 1...16? (default: 5): '
             # Initially set this to zero to enable the while loop
             row = 0
@@ -329,7 +330,7 @@ class Casting(object):
             # Ask for row number
             while row not in range(1, 17):
                 try:
-                    row = ui.enter_data_or_blank(prompt, int) or 5
+                    row = UI.enter_data_or_blank(prompt, int) or 5
                     row = abs(row)
                 except (TypeError, ValueError):
                     # Repeat loop and enter new one
@@ -337,9 +338,9 @@ class Casting(object):
             # If we want to cast from row 16, we need unit-shift
             # HMN or KMN systems are not supported yet
             question = 'Trying to access 16th row. Use unit shift?'
-            unit_shift = row == 16 and ui.yes_or_no(question)
+            unit_shift = row == 16 and UI.yes_or_no(question)
             if row == 16 and not unit_shift:
-                ui.confirm('Aborting.')
+                UI.confirm('Aborting.')
                 continue
             # Correct the column number if using unit shift
             if unit_shift:
@@ -351,7 +352,7 @@ class Casting(object):
             # Enter custom unit value (no points-based calculation yet)
             prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
             while not 2 < units < 25:
-                units = (ui.enter_data_or_blank(prompt, float) or
+                units = (UI.enter_data_or_blank(prompt, float) or
                          row_units)
             # Calculate the unit width difference and apply justification
             diff = units - row_units
@@ -364,14 +365,14 @@ class Casting(object):
             signals += str(row)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts per line? (default: 10): '
-            sorts = abs(ui.enter_data_or_blank(prompt, int) or 10)
+            sorts = abs(UI.enter_data_or_blank(prompt, int) or 10)
             prompt = '\nHow many lines? (default: 1): '
-            lines = abs(ui.enter_data_or_blank(prompt, int) or 1)
+            lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
             # Warn if we want to cast too many sorts from a single matrix
             warning = ('Warning: you want to cast a single character more than'
                        ' 10 times. This may lead to matrix overheating!\n')
             if sorts > 10:
-                ui.display(warning)
+                UI.display(warning)
             # After entering parameters, ask the operator if they're OK
             try:
                 while True:
@@ -381,7 +382,7 @@ class Casting(object):
                         """Cast the combination or go back to menu"""
                         if self.cast_from_matrix(signals, sorts, lines,
                                                  wedge_positions):
-                            ui.display('Casting finished successfully.')
+                            UI.display('Casting finished successfully.')
                         else:
                             raise exceptions.ReturnToMenu
                     # End of menu subroutines.
@@ -393,7 +394,7 @@ class Casting(object):
                                '[C]ast it, [D]ifferent code/quantity, '
                                '[M]enu or [E]xit? '
                                % (signals, lines, sorts))
-                    ui.simple_menu(message, options)()
+                    UI.simple_menu(message, options)()
             except exceptions.ChangeParameters:
                 # Skip the menu and casting altogether, repeat the outer loop
                 pass
@@ -406,7 +407,7 @@ class Casting(object):
         """
         # Ask about line length
         prompt = 'Galley line length? [pica or cicero] (default: 25) : '
-        line_length = ui.enter_data_or_blank(prompt, int) or 25
+        line_length = UI.enter_data_or_blank(prompt, int) or 25
         line_length = abs(line_length)
         # Measurement system
         options = {'A': 0.1660,
@@ -416,7 +417,7 @@ class Casting(object):
         message = ('Measurement? [A]merican Johnson pica = 0.166", '
                    '[B]ritish pica = 0.1667",\n [D]idot cicero = 0.1776", '
                    '[F]ournier cicero = 0.1629": ')
-        pica_def = ui.simple_menu(message, options)
+        pica_def = UI.simple_menu(message, options)
         # We need to choose a wedge unless we did it earlier
         wedge = self.wedge or wedge_data.Wedge()
         # Unit line length:
@@ -424,14 +425,14 @@ class Casting(object):
                                wedge.set_width / 12)
         # Now we can cast multiple different spaces
         while True:
-            ui.clear()
-            ui.display('Spaces / quads casting\n\n')
+            UI.clear()
+            UI.display('Spaces / quads casting\n\n')
             prompt = 'Column: NI, NL, A...O? (default: G): '
             # Got no signals? Use G5.
             column = ''
             column_symbols = ['NI', 'NL'] + [ltr for ltr in 'ABCDEFGHIJKLMNO']
             while column not in column_symbols:
-                column = ui.enter_data_or_blank(prompt).upper() or 'G'
+                column = UI.enter_data_or_blank(prompt).upper() or 'G'
             prompt = 'Row: 1...16? (default: 2): '
             # Initially set this to zero to enable the while loop
             row = 0
@@ -441,7 +442,7 @@ class Casting(object):
             # Ask for row number
             while row not in range(1, 17):
                 try:
-                    row = ui.enter_data_or_blank(prompt, int) or 2
+                    row = UI.enter_data_or_blank(prompt, int) or 2
                     row = abs(row)
                 except (TypeError, ValueError):
                     # Repeat loop and enter new one
@@ -449,9 +450,9 @@ class Casting(object):
             # If we want to cast from row 16, we need unit-shift
             # HMN or KMN systems are not supported yet
             question = 'Trying to access 16th row. Use unit shift?'
-            unit_shift = row == 16 and ui.yes_or_no(question)
+            unit_shift = row == 16 and UI.yes_or_no(question)
             if row == 16 and not unit_shift:
-                ui.confirm('Aborting.')
+                UI.confirm('Aborting.')
                 continue
             if unit_shift:
                 row = 15
@@ -460,7 +461,7 @@ class Casting(object):
             # Determine the unit width for a row
             row_units = wedge.unit_arrangement[row]
             prompt = '\nHow many lines? (default: 1): '
-            lines = abs(ui.enter_data_or_blank(prompt, int) or 1)
+            lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
             # Space width in points
             options = {'6': 1/6,
                        '4': 1/4,
@@ -471,11 +472,11 @@ class Casting(object):
             message = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
                        '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
             # Width in points
-            width = ui.simple_menu(message, options) * 12
+            width = UI.simple_menu(message, options) * 12
             # Ask about custom value, then specify units
             while not 1 <= width <= 20:
                 prompt = 'Custom width in points (decimal, 1...20) ? : '
-                width = ui.enter_data_or_blank(prompt, float)
+                width = UI.enter_data_or_blank(prompt, float)
             # We now have width in pica points
             # If we don't use an old British pica wedge, we must take
             # the pica difference into account
@@ -515,19 +516,19 @@ class Casting(object):
                         """Cast the combination or go back to menu"""
                         message = ('\nFirst, we cast a line of em-quads '
                                    'to heat up the mould. Discard them.\n')
-                        ui.display(message)
+                        UI.display(message)
                         self.cast_from_matrix('O15', quads_number)
                         for num in range(lines):
-                            ui.display('Now casting line %s' % str(num + 1))
-                            ui.display('\nFive quads before - discard them.\n')
+                            UI.display('Now casting line %s' % str(num + 1))
+                            UI.display('\nFive quads before - discard them.\n')
                             self.cast_from_matrix('O15', end_galley_trip=False,
                                                   machine_check=False)
-                            ui.display('\nSpaces of desired width...\n')
+                            UI.display('\nSpaces of desired width...\n')
                             self.cast_from_matrix(signals, sorts_number, 1,
                                                   wedge_positions,
                                                   end_galley_trip=False,
                                                   machine_check=False)
-                            ui.display('\nFive quads after - discard them.\n')
+                            UI.display('\nFive quads after - discard them.\n')
                             self.cast_from_matrix('O15', machine_check=False)
                     # End of menu subroutines.
                     options = {'C': cast_it,
@@ -545,10 +546,10 @@ class Casting(object):
                             'Number of sorts per line: %s' % sorts_number,
                             'Number of lines: %s' % lines]
                     for message in info:
-                        ui.display(message)
+                        UI.display(message)
                     message = ('[C]ast it, [D]ifferent parameters, '
                                '[M]enu or [E]xit? ')
-                    ui.simple_menu(message, options)()
+                    UI.simple_menu(message, options)()
             except exceptions.ChangeParameters:
                 # Skip the menu and casting altogether, repeat the outer loop
                 pass
@@ -588,7 +589,7 @@ class Casting(object):
         combination = parsing.signals_parser(signals)
         # Check if the machine is running first, end here if not
         if machine_check:
-            ui.display('Start the machine...')
+            UI.display('Start the machine...')
             self.caster.detect_rotation()
         # We're here because the machine is rotating. Start casting the job...
         for current_line in range(1, lines + 1):
@@ -597,38 +598,38 @@ class Casting(object):
             try:
                 # Cast the sorts: set wedges, turn pump on, cast, line out
                 # Set up the justification, turn the pump on
-                ui.display('Casting line %i of %i' % (current_line, lines))
-                ui.display('0005 wedge at ' + pos_0005)
-                ui.display('0075 wedge at ' + pos_0075)
+                UI.display('Casting line %i of %i' % (current_line, lines))
+                UI.display('0005 wedge at ' + pos_0005)
+                UI.display('0075 wedge at ' + pos_0075)
                 if start_galley_trip:
                     # Double justification
-                    ui.display('Putting the line out...')
+                    UI.display('Putting the line out...')
                     self.caster.process_signals(galley_trip)
                 else:
                     # Starting a job
                     self.caster.process_signals(set_0005)
-                ui.display('Starting the pump...')
+                UI.display('Starting the pump...')
                 self.caster.process_signals(set_0075)
                 # Start casting characters
-                ui.display('Casting characters...')
+                UI.display('Casting characters...')
                 # Cast n combinations of row & column, one by one
                 for i in range(1, num + 1):
                     info = ('%s - casting character %i of %i, %i%% done.'
                             % (' '.join(combination).ljust(20),
                                i, num, 100 * i / num))
-                    ui.display(info)
+                    UI.display(info)
                     combination = parsing.strip_o15(combination)
                     self.caster.process_signals(combination)
                 if end_galley_trip:
                     # If everything went normally, put the line to the galley
-                    ui.display('Putting line to the galley...')
+                    UI.display('Putting line to the galley...')
                     self.caster.process_signals(galley_trip)
                     # After casting sorts we need to stop the pump
-                ui.display('Stopping the pump...')
+                UI.display('Stopping the pump...')
                 self.caster.process_signals(set_0005)
             except exceptions.CastingAborted:
                 self.line_aborted = current_line
-                ui.display('Casting aborted on line %i' % self.line_aborted)
+                UI.display('Casting aborted on line %i' % self.line_aborted)
                 return False
         # We'll be here if casting ends successfully
         return True
@@ -645,7 +646,7 @@ class Casting(object):
             # You can enter new signals or exit
             prompt = ('Enter the signals to send to the caster, '
                       'or leave empty to return to menu: ')
-            signals = ui.enter_data_or_blank(prompt)
+            signals = UI.enter_data_or_blank(prompt)
             # Turn off any valves that were on (from previous combination)
             self.caster.deactivate_valves()
             if not signals:
@@ -655,7 +656,7 @@ class Casting(object):
             # by the parsing function)
             signals = parsing.signals_parser(signals)
             # Turn the valves on
-            ui.display(' '.join(signals))
+            UI.display(' '.join(signals))
             self.caster.activate_valves(signals)
             # Start over.
 
@@ -679,7 +680,7 @@ class Casting(object):
                  'S-needle. You then have to compare the length of these two '
                  'sets. \nIf they are identical, all is OK. '
                  'If not, you have to adjust the 52D space transfer wedge.')
-        ui.display(intro)
+        UI.display(intro)
         while True:
             # Subroutines for menu options
             def continue_aligning():
@@ -689,19 +690,19 @@ class Casting(object):
             options = {'C': continue_aligning,
                        'M': exceptions.return_to_menu,
                        'E': exceptions.exit_program}
-            ui.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
+            UI.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
             # Cast 10 spaces without correction.
             # End here if casting unsuccessful.
-            ui.display('Now casting with a normal wedge only.')
+            UI.display('Now casting with a normal wedge only.')
             if not self.cast_from_matrix(space_position, 5):
                 continue
             # Cast 10 spaces with the S-needle.
             # End here if casting unsuccessful.
-            ui.display('Now casting with justification wedges...')
+            UI.display('Now casting with justification wedges...')
             if not self.cast_from_matrix(space_position + 'S', 5):
                 continue
             # At the end of successful sequence, some info for the user:
-            ui.display('Done. Compare the lengths and adjust if needed.')
+            UI.display('Done. Compare the lengths and adjust if needed.')
 
     def align_mould(self):
         """align_mould:
@@ -712,7 +713,7 @@ class Casting(object):
         intro = ('Mould blade opening calibration:\n'
                  'Cast some 9-unit characters, then measure the width.\n'
                  'Adjust if needed.')
-        ui.display(intro)
+        UI.display(intro)
         # Use current wedge or select one
         wedge = self.wedge or wedge_data.Wedge()
         # Selected
@@ -722,8 +723,8 @@ class Casting(object):
             pica = 0.166
         # We calculate the width of double 9 units = 18 units, i.e. 1 pica em
         em_width = pica * wedge.set_width / 12
-        ui.display('Type 9 units (1en) width: %s' % round(em_width / 2, 4))
-        ui.display('Type 18 units (1em) width: %s' % round(em_width, 4))
+        UI.display('Type 9 units (1en) width: %s' % round(em_width / 2, 4))
+        UI.display('Type 18 units (1em) width: %s' % round(em_width, 4))
         while True:
             # Subroutines for menu options
             def continue_aligning():
@@ -733,14 +734,14 @@ class Casting(object):
             options = {'C': continue_aligning,
                        'M': exceptions.return_to_menu,
                        'E': exceptions.exit_program}
-            ui.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
+            UI.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
             # Cast 5 nine-unit quads
             # End here if casting unsuccessful.
-            ui.display('Now casting 9-units spaces')
+            UI.display('Now casting 9-units spaces')
             if not self.cast_from_matrix('G5', 7):
                 continue
             # At the end of successful sequence, some info for the user:
-            ui.display('Done. Compare the lengths and adjust if needed.')
+            UI.display('Done. Compare the lengths and adjust if needed.')
 
     def align_diecase(self):
         """align_diecase:
@@ -752,7 +753,7 @@ class Casting(object):
                  'Cast some en-dashes and/or lowercase "n" letters, '
                  'then check the position of the character relative to the '
                  'type body.\nAdjust if needed.')
-        ui.display(intro)
+        UI.display(intro)
         try:
             # Find the en-dash automatically
             dash_position = [mat[2] + str(mat[3])
@@ -760,7 +761,7 @@ class Casting(object):
                              if mat[0] == '–'][0]
         except (exceptions.MatrixNotFound, TypeError, IndexError):
             # Choose it manually
-            dash_position = ui.enter_data_or_blank('En dash (–) at: ').upper()
+            dash_position = UI.enter_data_or_blank('En dash (–) at: ').upper()
         try:
             # Find the "n" letter automatically
             lowercase_n_position = [mat[2] + str(mat[3])
@@ -768,7 +769,7 @@ class Casting(object):
                                     if mat[0] == 'n'][0]
         except (exceptions.MatrixNotFound, TypeError, IndexError):
             # Choose itmanually
-            lowercase_n_position = ui.enter_data_or_blank('"n" at: ').upper()
+            lowercase_n_position = UI.enter_data_or_blank('"n" at: ').upper()
         while True:
             # Subroutines for menu options
             def continue_aligning():
@@ -778,19 +779,19 @@ class Casting(object):
             options = {'C': continue_aligning,
                        'M': exceptions.return_to_menu,
                        'E': exceptions.exit_program}
-            ui.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
+            UI.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
             # Cast 5 nine-unit quads
             # End here if casting unsuccessful.
             if dash_position:
-                ui.display('Now casting en dash')
+                UI.display('Now casting en dash')
                 if not self.cast_from_matrix(dash_position, 7):
                     continue
             if lowercase_n_position:
-                ui.display('Now casting lowercase "n"')
+                UI.display('Now casting lowercase "n"')
                 if not self.cast_from_matrix(lowercase_n_position, 7):
                     continue
             # At the end of successful sequence, some info for the user:
-            ui.display('Done. Compare the lengths and adjust if needed.')
+            UI.display('Done. Compare the lengths and adjust if needed.')
 
     def line_casting(self):
         """line_casting:
@@ -809,16 +810,16 @@ class Casting(object):
         # TODO: refactor it to use the new diecase and wedge data model!
         typesetter.session_setup(self.diecase.diecase_id)
         # Enter text
-        text = ui.enter_data("Enter text to compose: ")
+        text = UI.enter_data("Enter text to compose: ")
         typesetter.text_source = typesetter.parse_and_generate(text)
         # Translate the text to Monotype signals
         typesetter.compose()
         self.ribbon.contents = typesetter.justify()
         # Ask whether to display buffer contents
-        if ui.yes_or_no('Show the codes?'):
+        if UI.yes_or_no('Show the codes?'):
             self.ribbon.display_contents()
         # We're casting
-        if ui.yes_or_no('Cast it?'):
+        if UI.yes_or_no('Cast it?'):
             try:
                 self.cast_composition()
             except exceptions.ReturnToMenu:
@@ -827,7 +828,7 @@ class Casting(object):
 
     def heatup(self):
         """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
-        ui.clear()
+        UI.clear()
         self.cast_from_matrix('O15', num=20, lines=2)
 
     def diagnostics_submenu(self):
@@ -841,7 +842,7 @@ class Casting(object):
                     (self.test_front_pinblock, 'Test the front pinblock',
                      'Tests the pins 1...14', not self.caster.is_perforator),
                     (self.test_rear_pinblock, 'Test the rear pinblock',
-                    'Tests the pins NI, NL, A...N one by one',
+                     'Tests the pins NI, NL, A...N one by one',
                      not self.caster.is_perforator),
                     (self.send_combination, 'Send specified signals',
                      'Sends the specified signal combination', True),
@@ -863,74 +864,63 @@ class Casting(object):
         while True:
             try:
                 # Catch "return to menu" and "exit program" exceptions here
-                ui.menu(menu_options(), header=header)()
+                UI.menu(menu_options(), header=header)()
             except exceptions.ReturnToMenu:
                 # Stay in the menu
                 pass
 
-    def choose_ribbon(self):
+    def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
         self.ribbon = typesetting_data.Ribbon()
         self.diecase = self.ribbon.diecase
         self.wedge = self.diecase.wedge
 
-    def choose_diecase(self):
+    def _choose_diecase(self):
         """Chooses a diecase from database"""
         self.diecase = matrix_data.Diecase()
         self.wedge = self.diecase.wedge
 
-    def choose_wedge(self):
+    def _choose_wedge(self):
         """Chooses a wedge from registered ones"""
         self.wedge = wedge_data.Wedge(0)
 
-    def display_additional_info(self):
+    def _display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
         data = [(self.caster.name, 'Caster name'),
-                (self.ribbon.filename, 'Ribbon filename'),
-                (self.ribbon.title, 'Ribbon title'),
-                (self.ribbon.author, 'Author'),
-                (self.ribbon.customer, 'Customer'),
-                (self.ribbon.unit_shift, 'Casting with unit-shift on?'),
-                (self.diecase.diecase_id, 'Diecase ID'),
-                (self.diecase.typeface_name, 'Typeface'),
-                (self.diecase.type_series, 'Type series'),
-                (self.diecase.type_size, 'Type size'),
-                (self.wedge.series, 'Wedge series'),
-                (self.wedge.set_width, 'Set width of a wedge'),
-                (self.wedge.brit_pica, 'British pica (.1667") based wedge?'),
-                (' '.join([str(x) for x in self.wedge.unit_arrangement if x]),
-                 'Unit arrangement for this wedge'),
                 (self.line_aborted, 'Last casting was aborted on line no')]
+        data.extend(self.ribbon.get_parameters())
+        data.extend(self.diecase.get_parameters())
+        data.extend(self.wedge.get_parameters())
         info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
         return '\n'.join(info)
 
-    def main_menu_options(self):
+    def _main_menu_options(self):
         """Build a list of options, adding an option if condition is met"""
         # Options are described with tuples: (function, description, condition)
         perforator = self.caster.is_perforator
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
         opts = [(exceptions.exit_program, 'Exit', 'Exits the program', True),
-                (self.choose_ribbon, 'Select ribbon',
+                (self._choose_ribbon, 'Select ribbon',
                  'Selects a ribbon from database or file', True),
-                (self.choose_diecase, 'Select diecase',
+                (self._choose_diecase, 'Select diecase',
                  'Selects a matrix case from database', True),
-                (self.choose_wedge, 'Select wedge',
+                (self._choose_wedge, 'Select wedge',
                  'Selects a wedge from database', True),
                 (self.ribbon.display_contents, 'View codes',
                  'Displays all sequences in a ribbon', ribbon),
                 (self.heatup, 'Heat the mould up',
-                'Casts some quads to heat up the mould', not perforator),
+                 'Casts some quads to heat up the mould', not perforator),
                 (self.punch_composition, 'Punch composition',
                  'Punches a ribbon using a perforator', ribbon and perforator),
                 (self.cast_composition, 'Cast composition',
                  'Casts type with a caster', ribbon and not perforator),
                 (self.diecase.show_layout, 'Show diecase layout',
-                'Views the matrix case layout', diecase_selected),
+                 'Views the matrix case layout', diecase_selected),
                 (self.line_casting, 'Ad-hoc typesetting',
-                'Compose and cast a line of text', diecase_selected),
+                 'Compose and cast a line of text', diecase_selected),
                 (self.cast_sorts, 'Cast sorts',
-                'Cast from matrix with given coordinates', not perforator),
+                 'Cast from matrix with given coordinates', not perforator),
                 (self.cast_spaces, 'Cast spaces or quads',
                  'Casts spaces or quads of a specified width', not perforator),
                 (self.diagnostics_submenu, 'Service...',
@@ -943,7 +933,7 @@ class Casting(object):
     def main_menu(self):
         """main_menu:
 
-        Calls ui.menu() with options, a header and a footer.
+        Calls UI.menu() with options, a header and a footer.
         Options: {option_name : description}
         Header: string displayed over menu
         Footer: string displayed under menu (all info will be added here).
@@ -956,8 +946,8 @@ class Casting(object):
         while True:
             # Catch any known exceptions here
             try:
-                ui.menu(self.main_menu_options(), header=header,
-                        footer=self.display_additional_info())()
+                UI.menu(self._main_menu_options(), header=header,
+                        footer=self._display_additional_info())()
             except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
                 # Will skip to the end of the loop, and start all over
                 pass
