@@ -131,11 +131,12 @@ class DefaultWedge(object):
         """Stores the wedge definition in database"""
         try:
             DB.add_wedge(self)
+            UI.confirm('Wedge saved successfully.')
             return True
         except exceptions.DatabaseQueryError:
             UI.display()
             self.show_parameters()
-            UI.display('Cannot save the wedge - check if it is already there.')
+            UI.confirm('Cannot save the wedge - check if it is already there.')
             UI.display()
             return False
 
@@ -243,7 +244,7 @@ def choose_wedge(wedge_series='', set_width=0):
     returns the wedge."""
     # Select automatically
     try:
-        wedge = DB.get_wedge(wedge_series, set_width)
+        wedge_parameters = DB.get_wedge(wedge_series, set_width)
     except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
         while True:
             UI.display('\nChoose a wedge:', end='\n')
@@ -260,13 +261,13 @@ def choose_wedge(wedge_series='', set_width=0):
                 return DefaultWedge()
             # Safeguards against entering a wrong number or non-numeric string
             try:
-                wedge = available_wedges[choice]
+                wedge_parameters = available_wedges[choice]
                 break
             except KeyError:
                 UI.confirm('Wedge number is incorrect!')
                 continue
-    temp_wedge = DefaultWedge()
-    (temp_wedge.series, temp_wedge.set_width, brit_pica,
-     temp_wedge.unit_arrangement) = wedge
-    temp_wedge.brit_pica = bool(brit_pica)
-    return temp_wedge
+    wedge = DefaultWedge()
+    (wedge.series, wedge.set_width, brit_pica,
+     wedge.unit_arrangement) = wedge_parameters
+    wedge.brit_pica = bool(brit_pica)
+    return wedge

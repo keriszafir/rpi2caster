@@ -99,7 +99,7 @@ class EmptyDiecase(object):
         # Ask if we are sure we want to update this
         # if self.diecase_id was set earlier
         condition = (not self.diecase_id or diecase_id != self.diecase_id and
-                     UI.yes_or_no('Are you sure?'))
+                     UI.yes_or_no('Are you sure to change diecase ID?'))
         if condition:
             self.diecase_id = diecase_id
             return True
@@ -123,7 +123,7 @@ class EmptyDiecase(object):
 
     def assign_wedge(self, wedge_series=None, set_width=0):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
-        self.wedge = wedge_data.Wedge(wedge_series, set_width)
+        self.wedge = wedge_data.choose_wedge(wedge_series, set_width)
 
     def show_parameters(self):
         """Shows diecase's parameters"""
@@ -144,6 +144,7 @@ class EmptyDiecase(object):
         """Stores the matrix case definition/layout in database"""
         try:
             DB.add_diecase(self)
+            UI.confirm('Data saved successfully.')
             return True
         except exceptions.DatabaseQueryError:
             UI.confirm('Cannot save the diecase!')
@@ -183,12 +184,13 @@ class EmptyDiecase(object):
             while True:
                 messages = ['\nMatrix case manipulation:\n\n'
                             '[V]iew, [C]lear, [E]dit, [I]mport '
-                            'or e[X]port layout\n [A]ssign wedge, '
+                            'or e[X]port layout\nAssign [W]edge, '
                             'change [T]ypeface or diecase [ID]\n']
                 self.show_parameters()
+                self.wedge.show_parameters()
                 options = {'M': exceptions.return_to_menu,
                            'T': self.set_typeface,
-                           'A': self.assign_wedge,
+                           'W': self.assign_wedge,
                            'ID': self.set_diecase_id,
                            'E': self.edit_layout,
                            'C': self.clear_layout,

@@ -50,6 +50,19 @@ class EmptyRibbon(object):
         self.contents = []
         self.diecase = matrix_data.EmptyDiecase()
 
+    def set_ribbon_id(self, ribbon_id=None):
+        """Sets the ribbon ID"""
+        prompt = 'Ribbon ID? (leave blank to exit) : '
+        ribbon_id = (ribbon_id or UI.enter_data_or_blank(prompt) or
+                     self.ribbon_id)
+        # Ask if we are sure we want to update this
+        # if self.ribbon_id was set earlier
+        condition = (not self.ribbon_id or ribbon_id != self.ribbon_id and
+                     UI.yes_or_no('Are you sure to change the ribbon ID?'))
+        if condition:
+            self.ribbon_id = ribbon_id
+            return True
+
     def set_description(self, description=None):
         """Manually sets the ribbon's description"""
         prompt = 'Enter the title: '
@@ -118,9 +131,13 @@ class EmptyRibbon(object):
         """Stores the ribbon in database"""
         self.show_parameters()
         # Ask for confirmation
-        if UI.yes_or_no('Commit to the database?'):
+        try:
             DB.add_ribbon(self)
-            UI.display('Data added successfully.')
+            UI.confirm('Ribbon added successfully.')
+            return True
+        except (exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+            UI.confirm('Cannot store ribbon in database!')
+            return False
 
     def delete_from_db(self):
         """Deletes a ribbon from database."""
@@ -227,10 +244,16 @@ class EmptyWork(object):
         return data
 
     def set_work_id(self, work_id=None):
-        """Adds a work to the database."""
-        prompt = 'Work name: '
-        self.work_id = (work_id or UI.enter_data_or_blank(prompt) or
-                        self.work_id)
+        """Sets the work ID"""
+        prompt = 'Work ID? (leave blank to exit) : '
+        work_id = work_id or UI.enter_data_or_blank(prompt) or self.work_id
+        # Ask if we are sure we want to update this
+        # if self.work_id was set earlier
+        condition = (not self.work_id or work_id != self.work_id and
+                     UI.yes_or_no('Are you sure to change the work ID?'))
+        if condition:
+            self.work_id = work_id
+            return True
 
     def set_description(self, description=None):
         """Manually sets the work's description"""
@@ -289,9 +312,12 @@ class EmptyWork(object):
 
     def store_in_db(self):
         """Stores the work in database"""
-        if UI.confirm('Store the work in database?'):
+        try:
             DB.add_work(self)
-            UI.display('Data added successfully.')
+            UI.confirm('Data added successfully.')
+            return True
+        except (exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+            UI.confirm('Cannot store work in database!')
 
 
 class Work(EmptyWork):
