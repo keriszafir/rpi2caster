@@ -112,6 +112,7 @@ class EmptyRibbon(object):
         ribbon = choose_ribbon(ribbon_id or self.ribbon_id)
         if UI.yes_or_no('Override current data?'):
             self = ribbon
+            return True
 
     def store_in_db(self):
         """Stores the ribbon in database"""
@@ -127,7 +128,7 @@ class EmptyRibbon(object):
             DB.delete_ribbon(self)
             UI.display('Ribbon deleted successfully.')
 
-    def read_from_file(self, filename=None):
+    def import_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
         # Ask, and stop here if answered no
         UI.display('Loading the ribbon from file...')
@@ -162,6 +163,7 @@ class EmptyRibbon(object):
         self.filename = filename
         # Choose diecase automatically
         self.set_diecase(diecase_id)
+        return True
 
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
@@ -181,8 +183,9 @@ class Ribbon(EmptyRibbon):
         EmptyRibbon.__init__(self)
         self.filename = filename
         self.ribbon_id = ribbon_id
-        if filename or not self.get_from_db(ribbon_id):
-            self.read_from_file(filename)
+        # Try to select ribbon file first
+        if not self.import_from_file(filename):
+            self.get_from_db(ribbon_id)
 
 
 class EmptyWork(object):
@@ -336,8 +339,10 @@ def list_ribbons():
     return results
 
 
-def choose_ribbon(ribbon_id=None):
-    """Chooses a ribbon from database, returns ribbon id"""
+def choose_ribbon(ribbon_id=None, filename=None):
+    """Tries to choose a ribbon from database.
+    If this fails, tries to choose a file instead."""
+    ribbon_data = []
     try:
         # Automatic choice
         ribbon_data = DB.get_ribbon(ribbon_id)
@@ -351,8 +356,9 @@ def choose_ribbon(ribbon_id=None):
                 return EmptyRibbon()
             # Enter the diecase name or raise an exception to break the loop
             prompt = 'Number of a ribbon? (leave blank to exit): '
-            choice = (UI.enter_data_or_blank(prompt) or
-                      exceptions.return_to_menu())
+            choice = UI.enter_data_or_blank(prompt, int)
+            if not choice:
+                break
             # Safeguards against entering a wrong number
             # or non-numeric string
             try:
@@ -364,10 +370,13 @@ def choose_ribbon(ribbon_id=None):
                 UI.confirm('Ribbon number is incorrect!')
     # Construct a new ribbon object
     ribbon = EmptyRibbon()
-    (ribbon.description, diecase_id, ribbon.customer,
-     ribbon.unit_shift, ribbon.contents) = ribbon_data
+    if ribbon_data:
+        (ribbon.ribbon_id, ribbon.description, diecase_id, ribbon.customer,
+         ribbon.unit_shift, ribbon.contents) = ribbon_data
+        ribbon.set_diecase(diecase_id)
+    else:
+        ribbon.import_from_file(filename)
     # Assign diecase to ribbon
-    ribbon.set_diecase(diecase_id)
     return ribbon
 
 

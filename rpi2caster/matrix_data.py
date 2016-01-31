@@ -49,7 +49,7 @@ class EmptyDiecase(object):
         submitted_layout = submit_layout_file()
         if not submitted_layout:
             UI.confirm('File does not contain a proper layout!')
-            return
+            return False
         # Update the empty layout with characters read from file
         # record = (char, styles, column, row, units)
         try:
@@ -59,7 +59,7 @@ class EmptyDiecase(object):
                         new_layout[new_layout.index(position)] = record
         except (TypeError, ValueError):
             UI.confirm('Cannot process the uploaded layout!')
-            return
+            return False
         # Other positions will be empty but defined
         # Now display the layout - need to use a temporary diecase for that
         temp_diecase = EmptyDiecase()
@@ -70,6 +70,7 @@ class EmptyDiecase(object):
         # Ask for confirmation
         if UI.yes_or_no('Save the changes?'):
             self.layout = new_layout
+            return True
 
     def export_layout(self):
         """Exports the matrix case layout to file."""
@@ -82,6 +83,7 @@ class EmptyDiecase(object):
                 csv_writer.writerow([char, ', '.join(styles),
                                      column, row, units])
         UI.confirm('File %s successfully saved.' % filename)
+        return True
 
     def clear_layout(self):
         """Clears a layout for the diecase"""
@@ -135,6 +137,7 @@ class EmptyDiecase(object):
         """Stores the matrix case definition/layout in database"""
         try:
             DB.add_diecase(self)
+            return True
         except exceptions.DatabaseQueryError:
             UI.confirm('Cannot save the diecase!')
 
@@ -143,6 +146,7 @@ class EmptyDiecase(object):
         ans = UI.yes_or_no('Are you sure?')
         if ans and DB.delete_diecase(self):
             UI.display('Matrix case deleted successfully.')
+            return True
 
     def check_db(self):
         """Checks if the diecase is registered in database"""
@@ -207,7 +211,7 @@ class EmptyDiecase(object):
                 UI.simple_menu(message, options)()
         except exceptions.MenuLevelUp:
             # Exit matrix case manipulation menu
-            pass
+            return True
 
 
 class Diecase(EmptyDiecase):
@@ -238,7 +242,7 @@ def diecase_operations():
             diecase.manipulation_menu()
     except exceptions.ReturnToMenu:
         # Exit wedge operations
-        pass
+        return True
 
 
 def list_diecases():

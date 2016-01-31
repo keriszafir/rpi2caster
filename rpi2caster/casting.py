@@ -860,7 +860,7 @@ class Casting(object):
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
-        self.ribbon = typesetting_data.choose_ribbon()
+        self.ribbon = typesetting_data.Ribbon()
         self.diecase = self.ribbon.diecase
         self.wedge = self.diecase.wedge
 

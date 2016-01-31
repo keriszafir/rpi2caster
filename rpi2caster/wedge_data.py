@@ -125,16 +125,19 @@ class DefaultWedge(object):
         ans = UI.yes_or_no('Are you sure?')
         if ans and DB.delete_wedge(self):
             UI.display('Wedge definition deleted successfully from database.')
+            return True
 
     def save_to_db(self):
         """Stores the wedge definition in database"""
         try:
             DB.add_wedge(self)
+            return True
         except exceptions.DatabaseQueryError:
             UI.display()
             self.show_parameters()
             UI.display('Cannot save the wedge - check if it is already there.')
             UI.display()
+            return False
 
     def check_db(self):
         """Checks if the wedge is in database"""
@@ -165,7 +168,7 @@ class DefaultWedge(object):
                 UI.simple_menu(message, options)()
         except exceptions.MenuLevelUp:
             # Exit wedge manipulation menu
-            pass
+            return True
 
 
 class Wedge(DefaultWedge):
@@ -190,7 +193,7 @@ def wedge_operations():
             wedge.manipulation_menu()
     except exceptions.ReturnToMenu:
         # Exit wedge operations
-        pass
+        return True
 
 
 def generate_wedge_collection(series='5', brit_pica=True):
