@@ -20,10 +20,10 @@ import time
 from rpi2caster import parsing
 # Custom exceptions
 from rpi2caster import exceptions
-# Typesetting functions module
-from rpi2caster import typesetting
 # Constants shared between modules
 from rpi2caster import constants
+# Typesetting functions module
+from rpi2caster import typesetting_funcs
 # Read ribbon files
 from rpi2caster import typesetting_data
 # Modules imported in the typesetting_data - matrix_data - wedge_data
@@ -345,7 +345,7 @@ class Casting(object):
                          row_units)
             # Calculate the unit width difference and apply justification
             diff = units - row_units
-            calc = typesetting.calculate_wedges
+            calc = typesetting_funcs.calculate_wedges
             wedge_positions = calc(diff, wedge.set_width, wedge.brit_pica)
             signals = column
             if diff:
@@ -488,7 +488,7 @@ class Casting(object):
             quads_number = int(unit_line_length // 18)
             # Check if the corrections are needed at all
             diff = sort_units - row_units
-            calc = typesetting.calculate_wedges
+            calc = typesetting_funcs.calculate_wedges
             wedge_positions = calc(diff, wedge.set_width, wedge.brit_pica)
             signals = column
             if diff:
@@ -794,7 +794,7 @@ class Casting(object):
         This allows for quick typesetting of short texts, like names etc.
         """
         # Initialize the typesetter for a chosen diecase
-        typesetter = typesetting.Typesetter()
+        typesetter = typesetting_funcs.Typesetter()
         # Supply the diecase id
         # TODO: refactor it to use the new diecase and wedge data model!
         typesetter.session_setup(self.diecase.diecase_id)
@@ -860,18 +860,18 @@ class Casting(object):
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
-        self.ribbon = typesetting_data.Ribbon()
+        self.ribbon = typesetting_data.choose_ribbon()
         self.diecase = self.ribbon.diecase
         self.wedge = self.diecase.wedge
 
     def _choose_diecase(self):
         """Chooses a diecase from database"""
-        self.diecase = matrix_data.Diecase()
+        self.diecase = matrix_data.choose_diecase()
         self.wedge = self.diecase.wedge
 
     def _choose_wedge(self):
         """Chooses a wedge from registered ones"""
-        self.wedge = wedge_data.Wedge(0)
+        self.wedge = wedge_data.choose_wedge()
 
     def _display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
