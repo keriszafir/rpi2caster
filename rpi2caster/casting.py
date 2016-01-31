@@ -61,7 +61,7 @@ class Casting(object):
         self.caster = None
         # Ribbon object, start with a default empty ribbon
         if ribbon_file:
-            self.ribbon = typesetting_data.Ribbon(filename=ribbon_file)
+            self.ribbon = typesetting_data.choose_ribbon(filename=ribbon_file)
         else:
             # Start with empty ribbon
             self.ribbon = typesetting_data.EmptyRibbon()
@@ -860,7 +860,7 @@ class Casting(object):
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
-        self.ribbon = typesetting_data.Ribbon()
+        self.ribbon = typesetting_data.choose_ribbon()
         self.diecase = self.ribbon.diecase
         self.wedge = self.diecase.wedge
 

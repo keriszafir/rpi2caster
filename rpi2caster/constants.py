@@ -17,6 +17,7 @@ SENSOR_GPIO = 17
 
 # For parsing lines in ribbon files
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
+ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
 
 # Config file locations
 DEFAULT_CONFIG_PATHS = ['/etc/rpi2caster.conf', 'data/rpi2caster.conf']
@@ -30,7 +31,7 @@ DEFAULT_DATABASE_PATHS = ['/var/rpi2caster/monotype.db',
                           'data/rpi2caster.db']
 
 # S5 wedge unit arrangement
-S5 = ('', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18)
+S5 = ['', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18]
 
 # Column numbers in 15x17 diecase
 COLUMNS_15 = [x for x in 'ABCDEFGHIJKLMNO']

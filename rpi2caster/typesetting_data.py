@@ -139,7 +139,9 @@ class EmptyRibbon(object):
         with io.open(filename, mode='r') as ribbon_file:
             contents = [x.strip() for x in ribbon_file if x.strip()]
         # Parse the file, get metadata
-        metadata = get_ribbon_metadata(contents)
+        parameters = ['diecase', 'description', 'unit-shift',
+                      'diecase_id', 'customer']
+        metadata = parse_ribbon_metadata(contents, parameters)
         # Metadata parsing
         self.description, self.customer = None, None
         self.unit_shift, diecase_id, self.contents = False, 0, []
@@ -178,7 +180,7 @@ class EmptyRibbon(object):
 
 
 class Ribbon(EmptyRibbon):
-    """A class for new/empty ribbons"""
+    """A class for ribbons chosen from database or file"""
     def __init__(self, ribbon_id=None, filename=None):
         EmptyRibbon.__init__(self)
         self.filename = filename
@@ -192,8 +194,9 @@ class EmptyWork(object):
     """Work objects = input files (and input from editor).
 
     A work object has the following attributes:
-    author, title,
+    description - e.g. author and title,
     customer - to know for whom we are composing (for commercial workshops),
+    type_series, type_size, typeface_name - font data,
     contents - the unprocessed text, utf8-encoded, to be read by the
     typesetting program.
     """
@@ -266,7 +269,7 @@ class EmptyWork(object):
         """Copies itself and returns an independent object"""
         return deepcopy(self)
 
-    def read_from_file(self, filename=None):
+    def import_from_file(self, filename=None):
         """Reads a text file and sets contents."""
         if not self.text or UI.yes_or_no('Overwrite current content?'):
             filename = filename or UI.enter_input_filename()
@@ -292,19 +295,17 @@ class EmptyWork(object):
 
 
 class Work(EmptyWork):
-    """A class for new/empty works (sources) for typesetting"""
-    def __init__(self, work_id=None, text=None):
+    """A class for works (sources) for typesetting from database or file"""
+    def __init__(self, work_id=None, filename=None):
         EmptyWork.__init__(self)
-        self.work_id = work_id
-        self.text = text
-
-
-def check_if_ribbons():
-    """Checks if any ribbons are available in the database"""
-    try:
-        return bool(DB.get_all_ribbons())
-    except exceptions.DatabaseQueryError:
-        return False
+        self.set_work_id(work_id)
+        self.import_from_file(filename)
+        self.set_description()
+        self.set_customer()
+        diecase = matrix_data.choose_diecase()
+        self.set_typeface(type_series=diecase.type_series,
+                          type_size=diecase.type_size,
+                          typeface_name=diecase.typeface_name)
 
 
 def list_ribbons():
@@ -348,12 +349,9 @@ def choose_ribbon(ribbon_id=None, filename=None):
         ribbon_data = DB.get_ribbon(ribbon_id)
     except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
         while True:
-            UI.clear()
-            UI.display('Choose a ribbon or leave blank to start a new one: ',
-                       end='\n\n')
             available_ribbons = list_ribbons()
-            if not available_ribbons:
-                return EmptyRibbon()
+            if filename or not available_ribbons:
+                break
             # Enter the diecase name or raise an exception to break the loop
             prompt = 'Number of a ribbon? (leave blank to exit): '
             choice = UI.enter_data_or_blank(prompt, int)
@@ -403,21 +401,22 @@ def list_works():
     return results
 
 
-def choose_work(work_id=None):
+def choose_work(work_id=None, filename=None):
     """Lets user choose a text file for typesetting."""
     # Do it only if we have diecases (depends on list_diecases retval)
+    work_data = []
     try:
         work_data = DB.get_ribbon(work_id)
     except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
         while True:
-            UI.clear()
-            UI.display('Choose a text:', end='\n\n')
             available_works = list_works()
+            if filename or not available_works:
+                break
             # Enter the diecase name
             prompt = 'Number of a work? (leave blank to exit): '
             choice = UI.enter_data_or_blank(prompt, int)
             if not choice:
-                return EmptyWork()
+                break
             # Safeguards against entering a wrong number or non-numeric string
             try:
                 work_data = DB.get_work(available_works[choice])
@@ -426,15 +425,20 @@ def choose_work(work_id=None):
                 UI.confirm('Index number is incorrect!')
     # Construct a new work object
     work = EmptyWork()
-    (work.work_id, work.description, work.customer, work.type_series,
-     work.type_size, work.typeface_name, work.text) = work_data
+    if work_data:
+        (work.work_id, work.description, work.customer, work.type_series,
+         work.type_size, work.typeface_name, work.text) = work_data
+    else:
+        work.import_from_file(filename)
+        diecase = matrix_data.choose_diecase()
+        work.type_series = diecase.type_series
+        work.type_size = diecase.type_size
+        work.typeface_name = diecase.typeface_name
     return work
 
 
-def get_ribbon_metadata(content):
-    """get_metadata:
-
-    Catches the parameters included at the beginning of the ribbon.
+def parse_ribbon_metadata(content, parameters):
+    """Catches the parameters included at the beginning of the ribbon.
     These parameters are used for storing diecase ID, set width, title etc.
     and serve mostly informational purposes, but can also be used for
     controlling some aspects of the program (e.g. displaying characters
@@ -444,15 +448,12 @@ def get_ribbon_metadata(content):
     operator is used for splitting the string in two (parameter and value),
     and a dictionary with parsed parameters is returned.
     """
-    parameters = ['diecase', 'description', 'unit-shift', 'justification',
-                  'diecase_id', 'customer']
-    symbols = ['=', ':', ' ']
     result = {}
     # Work on an unmodified copy and delete lines from the sequence
     for line in content[:]:
         for parameter in parameters:
             if line.startswith(parameter):
-                for symbol in symbols:
+                for symbol in constants.ASSIGNMENT_SYMBOLS:
                     members = line.split(symbol, 1)
                     try:
                         value = members[1].strip()
