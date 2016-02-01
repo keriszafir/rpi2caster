@@ -1,14 +1,15 @@
 Enter:
-./rpi2caster.py [c, i]* [-dsh]** [RIBBON_FILE]***
+./rpi2caster.py [c, i]* [-dsp]** [RIBBON_FILE]***
 
 * c = cast, i = inventory management
-** -d = debug mode, -s = casting simulation (no caster required), -h = help
+** -d = debug mode, -s = casting simulation (no caster required), -p = punching
 *** ribbon file path for casting, relative or absolute, case-sensitive
 
 example:
-./rpi2caster.py c -s /home/monotype/ribbons/rib1.txt 	(simulate casting a file)
-./rpi2caster.py c	 ../ribbons/rib1.txt (cast with a real caster)
-./rpi2caster.py c 	(cast with a real caster but choose file from menu)
+./rpi2caster.py c -s tests/helloworld 	(simulate casting a file)
+./rpi2caster.py c tests/helloworld	 (cast with a real caster)
+./rpi2caster.py c 	(cast with a real caster but choose ribbon from menu)
+./rpi2caster c -p tests/helloworld	(punch ribbon)
 ./rpi2caster.py i 	(inventory management)
 
 HINT: Use shell auto-completion (e.g. "./ca[TAB]").
