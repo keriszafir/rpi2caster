@@ -42,6 +42,6 @@ setup(name='rpi2caster',
                    'Operating System :: POSIX :: Linux',
                    'Programming Language :: Python :: 3 :: Only',
                    'Topic :: Artistic Software'],
-      keywords=['Monotype', 'typography', 'typesetting', 'typecasting', 'Raspberry Pi'],
+      keywords=['Monotype', 'typography', 'printing', 'letterpress', 'typesetting', 'typecasting', 'Raspberry Pi'],
       packages=find_packages(exclude=['tests']),
-      entry_points={'console_scripts':['cast=cast:main', 'inventory=inventory:main', 'simulate=simulate:main']})
+      entry_points={'console_scripts':['rpi2caster:main']})

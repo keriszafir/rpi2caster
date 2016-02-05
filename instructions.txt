@@ -12,7 +12,8 @@ example:
 ./rpi2caster c -p tests/helloworld	(punch ribbon)
 ./rpi2caster.py i 	(inventory management)
 
-HINT: Use shell auto-completion (e.g. "./ca[TAB]").
+HINT: Use shell auto-completion (e.g. "te[TAB]/hel[TAB]").
+Filenames are case-sensitive!
 
 Have a nice day!
 
