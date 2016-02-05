@@ -25,7 +25,7 @@ The workflow is as follows:
 """
 
 setup(name='rpi2caster',
-      version='0.1dev1',
+      version='0.1dev4',
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
@@ -44,4 +44,4 @@ setup(name='rpi2caster',
                    'Topic :: Artistic Software'],
       keywords=['Monotype', 'typography', 'printing', 'letterpress', 'typesetting', 'typecasting', 'Raspberry Pi'],
       packages=find_packages(exclude=['tests']),
-      entry_points={'console_scripts':['rpi2caster = rpi2caster.py:main']})
+      entry_points={'console_scripts':['rpi2caster = rpi2caster:main']})
