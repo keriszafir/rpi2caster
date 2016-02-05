@@ -49,7 +49,6 @@ def main():
     # Initialize the main arguments parser
     # Create the update optoin for easy update
     main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
-    main_parser.set_defaults(job=None, update=False)
     main_parser.add_argument('-u', '--update', help='Update the software',
                              action="store_true")
     #
@@ -112,18 +111,19 @@ def main():
     comp_parser.set_defaults(job=translate)
     args = main_parser.parse_args()
     # Parsers defined
-    # Upgrade routine
-    if args.update and yes_or_no('Update the software?'):
-        print('Entering your password may be necessary.')
-        system('sudo pip3 install --pre --upgrade rpi2caster')
-    elif args.job:
-        try:
+    try:
+        # Upgrade routine
+        if args.update:
+            if yes_or_no('Update the software?'):
+                print('Entering your password may be necessary.')
+                system('sudo pip3 install --pre --upgrade rpi2caster')
+        elif args.job:
             args.job(args)
-        except exceptions.ExitProgram:
-            print('Goodbye!')
-        except (KeyboardInterrupt, EOFError):
-            print('\nInterrupted by user.')
-    else:
+    except exceptions.ExitProgram:
+        print('Goodbye!')
+    except (KeyboardInterrupt, EOFError):
+        print('\nInterrupted by user.')
+    except AttributeError:
         main_parser.print_help()
 
 

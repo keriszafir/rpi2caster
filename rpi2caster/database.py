@@ -16,10 +16,7 @@ from rpi2caster import global_settings
 from rpi2caster import constants
 # this module uses sqlite3 database for storing caster, interface,
 # wedge, diecase & matrix parameters:
-try:
-    import sqlite3
-except ImportError:
-    raise exceptions.MissingDependency('Missing dependency: sqlite3')
+import sqlite3
 
 
 class Database(object):

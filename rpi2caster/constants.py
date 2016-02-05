@@ -26,8 +26,8 @@ TRUE_ALIASES = ['true', 'on', 'yes']
 FALSE_ALIASES = ['false', 'off', 'no']
 
 # Database file locations
-DEFAULT_DATABASE_PATHS = ['/var/rpi2caster/monotype.db',
-                          '/var/rpi2caster/rpi2caster.db',
+DEFAULT_DATABASE_PATHS = ['/var/local/rpi2caster/monotype.db',
+                          '/var/local/rpi2caster/rpi2caster.db',
                           'data/rpi2caster.db']
 
 # S5 wedge unit arrangement
