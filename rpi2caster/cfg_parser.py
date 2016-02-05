@@ -86,56 +86,6 @@ def determine(value):
     return value
 
 
-def get_caster_settings(caster_name):
-    """get_caster_settings():
-
-    Reads the settings for a caster with caster_name
-    from the config file (where it is represented by a section, whose
-    name is the same as the caster's).
-
-    Returns perforator flag and interface ID.
-    """
-    is_perforator = get_config(caster_name, 'is_perforator')
-    interface_id = get_config(caster_name, 'interface_id')
-    # Caster correctly configured
-    return (is_perforator, interface_id)
-
-
-def get_output_settings(interface_id):
-    """get_interface_output_settings:
-
-    Reads a configuration file and gets interface output parameters.
-    Used for perforators as well as casters.
-    """
-    interface_name = 'Interface' + str(interface_id)
-    # Set up MCP23017 interface parameters
-    mcp0_address = get_config(interface_name, 'mcp0_address')
-    mcp1_address = get_config(interface_name, 'mcp1_address')
-    pin_base = get_config(interface_name, 'pin_base')
-    # Check which signals arrangement the interface uses...
-    signals_arr = get_config(interface_name, 'signals_arrangement')
-    # ...and get the signals order for it:
-    signals_arrangement = get_config('SignalsArrangements', signals_arr)
-    signals_arrangement = str(signals_arrangement).upper()
-    # Interface configured successfully - return a tuple with parameters
-    return (int(mcp0_address), int(mcp1_address),
-            pin_base, signals_arrangement)
-
-
-def get_input_settings(interface_id):
-    """get_input_settings:
-
-    Reads settings for inputs (emergency stop and machine cycle sensor)
-    from the conffile. Used for casters only.
-    """
-    interface_name = 'Interface' + str(interface_id)
-    # Emergency stop and sensor are valid only for casters,
-    # perforators do not have them
-    emergency_stop_gpio = get_config(interface_name, 'emergency_stop_gpio')
-    sensor_gpio = get_config(interface_name, 'sensor_gpio')
-    return (emergency_stop_gpio, sensor_gpio)
-
-
 def section_not_found(section_name):
     """section_not_found:
 

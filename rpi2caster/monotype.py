@@ -15,7 +15,7 @@ import select
 from rpi2caster import constants
 # Custom exceptions
 from rpi2caster import exceptions
-# Configuration parser functions
+# Configuration parser
 from rpi2caster import cfg_parser
 # Default user interface
 from rpi2caster.global_settings import USER_INTERFACE as UI
@@ -39,7 +39,7 @@ class Caster(common_caster.Caster):
         """Creates a caster object for a given caster name
         """
         self.name = 'Monotype'
-        self.is_perforator = None
+        self.is_perforator = False
         self.lock = None
         self.sensor_gpio_edge_file = None
         self.sensor_gpio_value_file = None
@@ -87,26 +87,14 @@ class Caster(common_caster.Caster):
                 return (gpio_value_file, gpio_edge_file)
 
         # Configure the caster settings
+        mcp0_address = constants.MCP0
+        mcp1_address = constants.MCP1
+        pin_base = constants.PIN_BASE
+        # Signals arrangement - try to get it from conffile first...
         try:
-            caster_settings = cfg_parser.get_caster_settings(self.name)
-            (self.is_perforator, interface_id) = caster_settings
+            signals_arrangement = cfg_parser.get_config('SignalsArrangements',
+                                                        'signals_arrangement')
         except exceptions.NotConfigured:
-            # Cannot read config? Use defaults:
-            UI.debug_info('Using hardcoded defaults for caster settings...')
-            self.is_perforator = False
-            interface_id = 0
-
-        # Now configure interface outputs
-        try:
-            out_settings = cfg_parser.get_output_settings(interface_id)
-            (mcp0_address, mcp1_address,
-             pin_base, signals_arrangement) = out_settings
-        except exceptions.NotConfigured:
-            # Cannot read config? Use defaults:
-            UI.debug_info('Using hardcoded defaults for interface outputs...')
-            mcp0_address = constants.MCP0
-            mcp1_address = constants.MCP1
-            pin_base = constants.PIN_BASE
             signals_arrangement = constants.ALNUM_ARR
         # Setup the wiringPi MCP23017 chips for valve outputs
         wiringpi.mcp23017Setup(pin_base, mcp0_address)
@@ -119,7 +107,6 @@ class Caster(common_caster.Caster):
         # When debugging, display all caster info:
         info = ['Using caster name: ' + self.name,
                 'Is a perforator? ' + str(self.is_perforator),
-                'Interface ID: ' + str(interface_id),
                 '1st MCP23017 I2C address: ' + hex(mcp0_address),
                 '2nd MCP23017 I2C address: ' + hex(mcp1_address),
                 'MCP23017 pin base for GPIO numbering: ' + str(pin_base),
@@ -127,14 +114,8 @@ class Caster(common_caster.Caster):
 
         # Configure inputs for casters - perforators don't need them
         if not self.is_perforator:
-            try:
-                (emergency_stop_gpio,
-                 sensor_gpio) = cfg_parser.get_input_settings(interface_id)
-            except exceptions.NotConfigured:
-                # Cannot read config? Use defaults:
-                UI.display('Using hardcoded defaults for interface inputs...')
-                emergency_stop_gpio = constants.EMERGENCY_STOP_GPIO
-                sensor_gpio = constants.SENSOR_GPIO
+            emergency_stop_gpio = constants.EMERGENCY_STOP_GPIO
+            sensor_gpio = constants.SENSOR_GPIO
             # Set up a sysfs interface for machine cycle sensor:
             sensor = configure_sysfs_interface(sensor_gpio)
             (self.sensor_gpio_value_file, self.sensor_gpio_edge_file) = sensor
