@@ -115,7 +115,7 @@ def main():
         if args.update:
             if yes_or_no('Update the software?'):
                 print('Entering your password may be necessary.')
-                system('sudo pip3 install_lib install_scripts --pre --upgrade rpi2caster')
+                system('sudo pip3 install --install-option="--install-data=/dev/null" --upgrade rpi2caster')
         elif args.job:
             args.job(args)
     except exceptions.ExitProgram:
