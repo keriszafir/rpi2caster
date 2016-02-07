@@ -11,6 +11,11 @@ The Caster
 import io
 # Essential for polling the sensor for state change:
 import select
+# WiringPi2 Python bindings: essential for controlling the MCP23017!
+try:
+    import wiringpi2 as wiringpi
+except ImportError:
+    print('You must install wiringpi2!')
 # Constants shared between modules
 from rpi2caster import constants
 # Custom exceptions
@@ -21,11 +26,6 @@ from rpi2caster import cfg_parser
 from rpi2caster.global_settings import USER_INTERFACE as UI
 # Caster prototype
 from rpi2caster import common_caster
-# WiringPi2 Python bindings: essential for controlling the MCP23017!
-try:
-    import wiringpi2 as wiringpi
-except ImportError:
-    raise exceptions.MissingDependency('You must install wiringpi2!')
 
 
 class Caster(common_caster.Caster):
@@ -38,17 +38,14 @@ class Caster(common_caster.Caster):
     def __init__(self):
         """Creates a caster object for a given caster name
         """
-        self.name = 'Monotype'
-        self.is_perforator = False
-        self.lock = None
+        common_caster.Caster.__init__(self)
+        self.name = 'Monotype Composition Caster'
         self.sensor_gpio_edge_file = None
         self.sensor_gpio_value_file = None
         self.emerg_gpio_edge_file = None
         self.emerg_gpio_value_file = None
         # Configure the caster
         self.interface_pin_number = self.caster_setup()
-        # Add a pump
-        self.pump = common_caster.Pump()
         # Set default wedge positions
         self.current_0005 = '15'
         self.current_0075 = '15'
@@ -148,7 +145,7 @@ class Caster(common_caster.Caster):
         time_max = 30
         # Reset the cycle counter and input state on each iteration
         cycles = 0
-        prev_state = False
+        prev_state = 0
         while cycles <= cycles_max:
             # Keep checking until timeout or max cycles reached
             with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
