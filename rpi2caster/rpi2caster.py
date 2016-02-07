@@ -114,8 +114,8 @@ def main():
         # Upgrade routine
         if args.update and yes_or_no('Update the software?'):
             pre = yes_or_no('OK to install the unstable version?') and '--pre' or ''
-                print('Entering your password may be necessary.')
-                system('sudo pip3 install %s --upgrade rpi2caster' % pre)
+            print('Entering your password may be necessary.')
+            system('sudo pip3 install %s --upgrade rpi2caster' % pre)
         elif args.job:
             args.job(args)
     except exceptions.ExitProgram:
