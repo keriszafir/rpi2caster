@@ -4,7 +4,7 @@ with open('README.rst', 'r') as readme_file:
     long_description = readme_file.read()
 
 setup(name='rpi2caster',
-      version='0.1.dev12',
+      version='0.1.dev13',
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
@@ -13,7 +13,7 @@ setup(name='rpi2caster',
       license='GPLv3',
       zip_safe=True,
       include_package_data=True,
-      data_files=[('/var/local/rpi2caster', ['data/rpi2caster.db']), ('/etc', ['data/rpi2caster.conf'])],
+      data_files=[('database', ['data/rpi2caster.db']), ('config', ['data/rpi2caster.conf'])],
       #tests.suite='nose.collector',
       #tests.require=['nose'],
       classifiers=['Development Status :: 2 - Pre-Alpha',
