@@ -52,37 +52,6 @@ class Caster(common_caster.Caster):
 
     def caster_setup(self):
         """Sets up initial default parameters for caster & interface."""
-        # Inputs are represented as files in kernel's sysfs interface
-        def configure_sysfs_interface(gpio):
-            """configure_sysfs_interface(gpio):
-
-            Sets up the sysfs interface for reading events from GPIO
-            (general purpose input/output). Checks if path/file is readable.
-            Returns the value and edge filenames for this GPIO.
-            """
-            # Set up an input polling file for machine cycle sensor:
-            gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % gpio
-            gpio_value_file = gpio_sysfs_path + 'value'
-            gpio_edge_file = gpio_sysfs_path + 'edge'
-            # Check if the GPIO has been configured - file is readable:
-            try:
-                with io.open(gpio_value_file, 'r'):
-                    pass
-                # Ensure that the interrupts are generated for sensor GPIO
-                # for both rising and falling edge:
-                with io.open(gpio_edge_file, 'r') as edge_file:
-                    if 'both' not in edge_file.read():
-                        UI.display('%s: file does not exist, cannot be read, '
-                                   'or the interrupt on GPIO %i is not set '
-                                   'to "both". Check the system configuration.'
-                                   % (gpio_edge_file, gpio))
-            except (IOError, FileNotFoundError):
-                UI.display('%s : file does not exist or cannot be read. '
-                           'You must export the GPIO no %s as input first!'
-                           % (gpio_value_file, gpio))
-            else:
-                return (gpio_value_file, gpio_edge_file)
-
         # Configure the caster settings
         mcp0_address = constants.MCP0
         mcp1_address = constants.MCP1
@@ -233,3 +202,46 @@ class Caster(common_caster.Caster):
         """
         for pin in self.interface_pin_number.values():
             wiringpi.digitalWrite(pin, 0)
+
+
+class Sensor(object):
+    """Optical cycle sensor"""
+    def __init__(self, gpio=constants.SENSOR_GPIO):
+        (self.value_file, self.edge_file) = configure_sysfs_interface(gpio)
+
+    def __enter__(self):
+        with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
+            sensor_signals = select.epoll()
+            sensor_signals.register(gpiostate, select.POLLPRI)
+            return self
+
+
+def configure_sysfs_interface(gpio):
+    """configure_sysfs_interface(gpio):
+
+    Sets up the sysfs interface for reading events from GPIO
+    (general purpose input/output). Checks if path/file is readable.
+    Returns the value and edge filenames for this GPIO.
+    """
+    # Set up an input polling file for machine cycle sensor:
+    gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % gpio
+    gpio_value_file = gpio_sysfs_path + 'value'
+    gpio_edge_file = gpio_sysfs_path + 'edge'
+    # Check if the GPIO has been configured - file is readable:
+    try:
+        with io.open(gpio_value_file, 'r'):
+            pass
+        # Ensure that the interrupts are generated for sensor GPIO
+        # for both rising and falling edge:
+        with io.open(gpio_edge_file, 'r') as edge_file:
+            if 'both' not in edge_file.read():
+                UI.display('%s: file does not exist, cannot be read, '
+                           'or the interrupt on GPIO %i is not set '
+                           'to "both". Check the system configuration.'
+                           % (gpio_edge_file, gpio))
+    except (IOError, FileNotFoundError):
+        UI.display('%s : file does not exist or cannot be read. '
+                   'You must export the GPIO no %s as input first!'
+                   % (gpio_value_file, gpio))
+    else:
+        return (gpio_value_file, gpio_edge_file)
