@@ -101,8 +101,16 @@ class MonotypeCaster(object):
                 return True
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up and ask what to do
+                pump_was_working = self.pump.is_working
+                last_0005 = self.current_0005
+                last_0075 = self.current_0075
                 self.force_pump_stop()
                 stop_menu()
+                # Now we need to re-activate the pump if it was previously on
+                # to cast something at all...
+                if pump_was_working:
+                    self.process_signals(['N', 'J', '0005', 'S', last_0005])
+                    self.process_signals(['N', 'K', '0075', 'S', last_0075])
 
     def force_pump_stop(self):
         """Forces pump stop - won't end until it is turned off"""
@@ -305,6 +313,6 @@ def stop_menu():
     options = {'C': continue_casting,
                'M': exceptions.return_to_menu,
                'E': exceptions.exit_program}
-    message = ('Machine not running - you need to start it first.\n'
+    message = ('Machine is not running!\n'
                '[C]ontinue, return to [M]enu or [E]xit program? ')
     UI.simple_menu(message, options)()
