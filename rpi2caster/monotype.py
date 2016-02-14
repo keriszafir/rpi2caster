@@ -1,247 +1,310 @@
 # -*- coding: utf-8 -*-
-"""
-Monotype:
-
-This module contains low- and mid-level caster control routines for
-a physical Monotype composition caster, linked via pneumatic valves
-and MCP23017 IC's to the Raspberry Pi.
-
-The Caster
-"""
-import io
-# Essential for polling the sensor for state change:
-import select
-# WiringPi2 Python bindings: essential for controlling the MCP23017!
-try:
-    import wiringpi2 as wiringpi
-except ImportError:
-    print('You must install wiringpi2!')
-# Constants shared between modules
-from . import constants
-# Custom exceptions
+"""Drivers for generic Monotype caster """
+# Built-in time module
+from time import time
+# Custom exceptions module
 from . import exceptions
-# Configuration parser
-from . import cfg_parser
 # Default user interface
 from .global_settings import USER_INTERFACE as UI
-# Caster prototype
-from . import common_caster
+# Alphanumeric arrangement
+from .constants import PIN_BASE, ALNUM_ARR
 
 
-class Caster(common_caster.Caster):
-    """Caster(name):
-
-    A class which stores all hardware-layer methods, related to caster control.
-    This class requires a caster name, and a database object.
-    """
-
+class MonotypeCaster(object):
+    """Methods common for Caster classes, used for instantiating
+    caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
-        """Creates a caster object for a given caster name
-        """
-        common_caster.Caster.__init__(self)
-        self.name = 'Monotype Composition Caster'
-        self.sensor_gpio_edge_file = None
-        self.sensor_gpio_value_file = None
-        self.emerg_gpio_edge_file = None
-        self.emerg_gpio_value_file = None
-        # Configure the caster
-        self.interface_pin_number = self.caster_setup()
+        self.name = 'Monotype composition caster (mockup)'
+        self.is_perforator = False
+        self.sensor = Sensor()
+        self.stop = EmergencyStop()
+        self.output_driver = OutputDriver()
+        self.lock = False
+        # Attach a pump
+        self.pump = Pump()
         # Set default wedge positions
         self.current_0005 = '15'
         self.current_0075 = '15'
 
-    def caster_setup(self):
-        """Sets up initial default parameters for caster & interface."""
-        # Configure the caster settings
-        mcp0_address = constants.MCP0
-        mcp1_address = constants.MCP1
-        pin_base = constants.PIN_BASE
-        # Signals arrangement - try to get it from conffile first...
-        try:
-            signals_arrangement = cfg_parser.get_config('SignalsArrangements',
-                                                        'signals_arrangement')
-        except exceptions.NotConfigured:
-            signals_arrangement = constants.ALNUM_ARR
-        # Setup the wiringPi MCP23017 chips for valve outputs
-        wiringpi.mcp23017Setup(pin_base, mcp0_address)
-        wiringpi.mcp23017Setup(pin_base + 16, mcp1_address)
-        pins = [pin for pin in range(pin_base, pin_base + 32)]
-        # Set all I/O lines on MCP23017s as outputs - mode=1
-        for pin in pins:
-            wiringpi.pinMode(pin, 1)
+    def __enter__(self):
+        """Lock the resource so that only one object can use it
+        with context manager"""
+        UI.debug_info('Entering caster/interface context...')
+        self.sensor.manual_mode = True
+        if self.lock:
+            UI.display('Caster %s is already busy!' % self.name)
+        else:
+            # Set default wedge positions
+            self.current_0005 = '15'
+            self.current_0075 = '15'
+            self.lock = True
+            return self
 
-        # When debugging, display all caster info:
-        info = ['Using caster name: ' + self.name,
-                'Is a perforator? ' + str(self.is_perforator),
-                '1st MCP23017 I2C address: ' + hex(mcp0_address),
-                '2nd MCP23017 I2C address: ' + hex(mcp1_address),
-                'MCP23017 pin base for GPIO numbering: ' + str(pin_base),
-                'Signals arrangement: ' + signals_arrangement]
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.name, 'Caster name'),
+                (self.is_perforator, 'Is a perforator?')]
+        # Collect data from I/O drivers
+        data.append(self.sensor.get_parameters())
+        data.append(self.stop.get_parameters())
+        data.append(self.output_driver.get_parameters())
+        return data
 
-        # Configure inputs for casters - perforators don't need them
-        if not self.is_perforator:
-            emergency_stop_gpio = constants.EMERGENCY_STOP_GPIO
-            sensor_gpio = constants.SENSOR_GPIO
-            # Set up a sysfs interface for machine cycle sensor:
-            sensor = configure_sysfs_interface(sensor_gpio)
-            (self.sensor_gpio_value_file, self.sensor_gpio_edge_file) = sensor
-            # Now the same for the emergency stop button input:
-            emerg = configure_sysfs_interface(emergency_stop_gpio)
-            (self.emerg_gpio_value_file, self.emerg_gpio_edge_file) = emerg
-            # Display this info only for casters and not perforators:
-            info.append('Emergency stop GPIO: ' + str(emergency_stop_gpio))
-            info.append('Sensor GPIO: ' + str(sensor_gpio))
+    def process_signals(self, signals, timeout=5):
+        """process_signals(signals, timeout):
 
-        # Iterate over the collected data and print the output
-        for parameter in info:
-            UI.debug_info(parameter)
-        # Wait for user confirmation if in debug mode
-        UI.debug_confirm('Caster configured.')
-        # Assign wiringPi pin numbers on MCP23017s to the Monotype
-        # control signals. Return the result.
-        return dict(zip(signals_arrangement.split(','), pins))
+        Checks for the machine's rotation, sends the signals (activates
+        solenoid valves) after the caster is in the "air bar down" position.
 
-    def detect_rotation(self):
-        """detect_rotation():
+        If no machine rotation is detected (sensor input doesn't change
+        its state) during cycle_timeout, calls a function to ask user
+        what to do (can be useful for resuming casting after manually
+        stopping the machine for a short time - not recommended as the
+        mould cools down and type quality can deteriorate).
 
-        Checks if the machine is running by counting pulses on a sensor
-        input. One pass of a while loop is a single cycle. If cycles_max
-        value is exceeded in a time <= time_max, the program assumes that
-        the caster is rotating and it can start controlling the machine.
+        If the operator decides to go on with casting, the aborted sequence
+        will be re-cast so as to avoid missing characters in the composition.
+
+        Safety measure: this function will call "emergency_cleanup" routine
+        whenever the operator decides to go back to menu or exit program
+        after the machine stops rotating during casting. This is to ensure
+        that the pump will not stay on afterwards, leading to lead squirts
+        or any other unwanted effects.
+
+        When casting, the pace is dictated by the caster and its RPM. Thus,
+        we can't arbitrarily set the intervals between valve ON and OFF
+        signals. We need to get feedback from the machine, and we can use
+        contact switch (unreliable in the long run), magnet & reed switch
+        (not precise enough) or a photocell sensor + LED (very precise).
+        We can use a paper tower's operating lever for obscuring the sensor
+        (like John Cornelisse did), or we can use a partially obscured disc
+        attached to the caster's shaft (like Bill Welliver did).
+        Both ways are comparable; the former can be integrated with the
+        valve block assembly, and the latter allows for very precise tweaking
+        of duty cycle (bright/dark area ratio) and phase shift (disc's position
+        relative to 0 degrees caster position).
         """
-        # Let's count up to 3 cycles, max 30s before stop menu is called
-        cycles_max = 3
-        time_max = 30
-        # Reset the cycle counter and input state on each iteration
-        cycles = 0
-        prev_state = 0
-        while cycles <= cycles_max:
-            # Keep checking until timeout or max cycles reached
-            with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
-                sensor_signals = select.epoll()
-                sensor_signals.register(gpiostate, select.POLLPRI)
-                # Check if the sensor changes state at all
-                if sensor_signals.poll(time_max):
-                    gpiostate.seek(0)
-                    sensor_state = int(gpiostate.read())
-                    # Increment the number of passed machine cycles
-                    if sensor_state and not prev_state:
-                        cycles += 1
-                    prev_state = sensor_state
-                else:
-                    # Timeout with no signals = go to stop menu
-                    self._stop_menu(casting=False)
-                    # Start counting cycles all over again
-                    cycles = 0
-        # Max cycles exceeded = machine is running
-        return True
+        while True:
+            # Escape this only by returning True on success,
+            # or raising exceptions.CastingAborted, exceptions.ExitProgram
+            # (which will be handled by the methods of the Casting class)
+            try:
+                # Casting cycle
+                # (sensor on - valves on - sensor off - valves off)
+                with self.sensor:
+                    self.sensor.wait_for(new_state=True, timeout=timeout)
+                    self.activate_valves(signals)
+                    self.sensor.wait_for(new_state=False, timeout=timeout)
+                    self.deactivate_valves()
+                # self._send_signals_to_caster(signals, cycle_timeout)
+                # Successful ending - the combination has been cast
+                return True
+            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
+                # Machine stopped during casting - clean up and ask what to do
+                self.force_pump_stop()
+                stop_menu()
 
-    def _send_signals_to_caster(self, signals, timeout):
-        """_send_signals_to_caster:
-
-        Sends a combination of signals passed in function's arguments
-        to the caster. This function also checks if the machine cycle
-        sensor changes its state, and decides whether it's an "air on"
-        phase (turn on the valves) or "air off" phase (turn off the valves,
-        end function, return True to signal the success).
-        If no signals are detected within a given timeout - returns False
-        (to signal the casting failure).
-        """
-        try:
-            with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
-                sensor_signals = select.epoll()
-                sensor_signals.register(gpiostate, select.POLLPRI)
-                prev_state = 0
-                while True:
-                    # Polling the interrupt file
-                    if sensor_signals.poll(timeout):
-                        # Normal control flow when the machine is working
-                        # (cycle sensor generates events)
-                        gpiostate.seek(0)
-                        sensor_state = int(gpiostate.read())
-                        if sensor_state == 1 and prev_state == 0:
-                            # Now, the air bar on paper tower would go down -
-                            # we got signal from sensor to let the air in
-                            self.activate_valves(signals)
-                            prev_state = 1
-                        elif sensor_state == 0 and prev_state == 1:
-                            # Air bar on paper tower goes back up -
-                            # end of "air in" phase, turn off the valves
-                            self.deactivate_valves()
-                            prev_state = 0
-                            # Signals sent to the caster - successful ending
-                            return True
-                    else:
-                        # Timeout with no signals - failed ending
-                        raise exceptions.MachineStopped
-        except (KeyboardInterrupt, EOFError):
-            # Let user decide if they want to continue / go to menu / exit
-            self._stop_menu()
+    def force_pump_stop(self):
+        """Forces pump stop - won't end until it is turned off"""
+        stop_combination = ['N', 'J', 'S', '0005']
+        self.deactivate_valves()
+        while self.pump.is_working:
+            try:
+                # Run a full machine cycle to turn the pump off
+                with self.sensor:
+                    self.sensor.wait_for(new_state=True, force_cycle=True)
+                    self.activate_valves(stop_combination)
+                    self.sensor.wait_for(new_state=False)
+                    self.deactivate_valves()
+                return True
+            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
+                pass
+        self.deactivate_valves()
 
     def activate_valves(self, signals):
-        """activate_valves(signals):
-
-        Activates the solenoid valves connected with interface's outputs,
-        as specified in the "signals" parameter (tuple or list).
-        The input array "signals" contains strings, either
-        lowercase (a, b, g, s...) or uppercase (A, B, G, S...).
-        Do nothing if the function receives an empty sequence, which will
-        occur if we cast with the matrix found at position O15.
-        """
+        """If there are any signals, print them out"""
         self.pump.check_working(signals)
-        pins = [self.interface_pin_number[sig] for sig in signals]
-        for pin in pins:
-            wiringpi.digitalWrite(pin, 1)
+        self.get_wedge_positions(signals)
+        self.output_driver.valves_on(signals)
 
     def deactivate_valves(self):
-        """deactivate_valves():
+        """No need to do anything"""
+        self.output_driver.valves_off()
 
-        Turn all valves off after casting/punching any character.
-        Call this function to avoid outputs staying turned on if something
-        goes wrong, esp. in case of abnormal program termination.
-        """
-        for pin in self.interface_pin_number.values():
-            wiringpi.digitalWrite(pin, 0)
+    def get_wedge_positions(self, signals):
+        """Gets current positions of 0005 and 0075 wedges"""
+        # Check 0005
+        if '0005' in signals or {'N', 'J'}.issubset(signals):
+            pos_0005 = [x for x in range(15) if str(x) in signals]
+            if pos_0005:
+                # One or more signals detected
+                self.current_0005 = str(min(pos_0005))
+            else:
+                # 0005 with no signal = wedge at 15
+                self.current_0005 = '15'
+        # Check 0075
+        if '0075' in signals or {'N', 'K'}.issubset(signals):
+            pos_0075 = [x for x in range(15) if str(x) in signals]
+            if pos_0075:
+                # One or more signals detected
+                self.current_0075 = str(min(pos_0075))
+            else:
+                # 0005 with no signal = wedge at 15
+                self.current_0075 = '15'
+
+    def detect_rotation(self):
+        """Detect machine cycles and alert if it's not working"""
+        UI.display('Now checking if the machine is running...')
+        while True:
+            try:
+                self.sensor.detect_rotation()
+                return True
+            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
+                stop_menu()
+
+    def __exit__(self, *args):
+        self.deactivate_valves()
+        UI.debug_info('Caster no longer in use.')
+        self.lock = False
+
+
+class Pump(object):
+    """Pump class for storing the pump working/non-working status."""
+    def __init__(self):
+        self.last_state = False
+        self.is_working = False
+
+    def check_working(self, signals):
+        """Checks if pump is working based on signals in sequence"""
+        # 0075 / NK is satisfactory to turn the pump on...
+        if '0075' in signals or set(['N', 'K']).issubset(signals):
+            self.is_working = False
+            self.last_state = True
+        # No 0075 / NK; then 0005 / NJ turns the pump off
+        elif '0005' in signals or set(['N', 'J']).issubset(signals):
+            self.is_working = False
+            self.last_state = False
+        else:
+            self.is_working = self.last_state
+
+    def status(self):
+        """Displays info whether pump is working or not"""
+        if self.is_working:
+            return 'Pump is ON'
+        else:
+            return 'Pump is OFF'
 
 
 class Sensor(object):
-    """Optical cycle sensor"""
-    def __init__(self, gpio=constants.SENSOR_GPIO):
-        (self.value_file, self.edge_file) = configure_sysfs_interface(gpio)
+    """Mockup for a machine cycle sensor"""
+    def __init__(self):
+        self.manual_mode = True
+        self.last_state = False
+        self.name = 'Mockup machine cycle sensor'
 
     def __enter__(self):
-        with io.open(self.sensor_gpio_value_file, 'r') as gpiostate:
-            sensor_signals = select.epoll()
-            sensor_signals.register(gpiostate, select.POLLPRI)
-            return self
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.name, 'Sensor driver')]
+        return data
+
+    def wait_for(self, new_state, timeout=5, force_cycle=False):
+        """Waits for a keypress to emulate machine cycle"""
+        if new_state:
+            UI.display('The sensor will go ON')
+        else:
+            UI.display('The sensor will go OFF')
+        if self.manual_mode or force_cycle:
+            start_time = time()
+            # Ask whether to cast or simulate machine stop
+            prompt = ('[Enter] to continue, [S] to stop '
+                      'or [A] to switch to automatic mode? ')
+            answer = UI.enter_data_or_blank(prompt) or ' '
+            if answer in 'aA':
+                self.manual_mode = False
+            elif answer in 'sS':
+                raise exceptions.MachineStopped
+            elif time() - start_time > timeout:
+                UI.display('Timeout - you answered after %ds' % timeout)
+                raise exceptions.MachineStopped
+
+    def detect_rotation(self, max_cycles=3, max_time=30):
+        """Ends normally if there are x cycles in a given time.
+        Otherwise raises MachineStopped exception"""
+        cycles = 0
+        while cycles <= max_cycles:
+            # Run a new cycle
+            self.wait_for(new_state=True, timeout=max_time)
+            cycles += 1
 
 
-def configure_sysfs_interface(gpio):
-    """configure_sysfs_interface(gpio):
+class EmergencyStop(object):
+    """Mockup for an emergency stop button"""
+    def __init__(self, gpio=None):
+        self.gpio = gpio
+        self.name = 'Mockup emergency stop button'
+        self.signals, self.value_file, self.edge_file = None, None, None
 
-    Sets up the sysfs interface for reading events from GPIO
-    (general purpose input/output). Checks if path/file is readable.
-    Returns the value and edge filenames for this GPIO.
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.name, 'Emergency stop button driver')]
+        return data
+
+
+class OutputDriver(object):
+    """Mockup for a driver for 32 pneumatic outputs"""
+    def __init__(self, pin_base=PIN_BASE, sig_arr=ALNUM_ARR):
+        pins = [pin for pin in range(pin_base, pin_base + 32)]
+        self.driver_type = 'Mockup output driver for simulation'
+        self.signals_arrangement = sig_arr.split(',')
+        self.pin_numbers = dict(zip(self.signals_arrangement, pins))
+
+    def get_parameters(self):
+        """Gets a list of parameters"""
+        data = [(self.driver_type, 'Output driver'),
+                (self.signals_arrangement, 'Signals arrangement')]
+        return data
+
+    def one_on(self, sig):
+        """Looks a signal up in arrangement and turns it on"""
+        try:
+            UI.debug_info(sig + ' on')
+        except KeyError:
+            raise exceptions.WrongConfiguration('Signal %s not defined!' % sig)
+
+    def one_off(self, sig):
+        """Looks a signal up in arrangement and turns it on"""
+        try:
+            UI.debug_info(sig + ' off')
+        except KeyError:
+            raise exceptions.WrongConfiguration('Signal %s not defined!' % sig)
+
+    def valves_on(self, signals_list):
+        """Turns on multiple valves"""
+        for sig in signals_list:
+            self.one_on(sig)
+
+    def valves_off(self):
+        """Turns off all the valves"""
+        for sig in self.signals_arrangement:
+            self.one_off(sig)
+
+
+def stop_menu():
+    """This allows us to choose whether we want to continue,
+    return to menu or exit if the machine is stopped during casting.
     """
-    # Set up an input polling file for machine cycle sensor:
-    gpio_sysfs_path = '/sys/class/gpio/gpio%s/' % gpio
-    gpio_value_file = gpio_sysfs_path + 'value'
-    gpio_edge_file = gpio_sysfs_path + 'edge'
-    # Check if the GPIO has been configured - file is readable:
-    try:
-        with io.open(gpio_value_file, 'r'):
-            pass
-        # Ensure that the interrupts are generated for sensor GPIO
-        # for both rising and falling edge:
-        with io.open(gpio_edge_file, 'r') as edge_file:
-            if 'both' not in edge_file.read():
-                UI.display('%s: file does not exist, cannot be read, '
-                           'or the interrupt on GPIO %i is not set '
-                           'to "both". Check the system configuration.'
-                           % (gpio_edge_file, gpio))
-    except (IOError, FileNotFoundError):
-        UI.display('%s : file does not exist or cannot be read. '
-                   'You must export the GPIO no %s as input first!'
-                   % (gpio_value_file, gpio))
-    else:
-        return (gpio_value_file, gpio_edge_file)
+    def continue_casting():
+        """Helper function - continue casting."""
+        return True
+    options = {'C': continue_casting,
+               'M': exceptions.return_to_menu,
+               'E': exceptions.exit_program}
+    message = ('Machine not running - you need to start it first.\n'
+               '[C]ontinue, return to [M]enu or [E]xit program? ')
+    UI.simple_menu(message, options)()

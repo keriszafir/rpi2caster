@@ -8,18 +8,18 @@ from .text_ui import yes_or_no
 
 def cast(args):
     """Casting on an actual caster or simulation"""
-    from rpi2caster import casting
+    from . import casting, monotype
     job = casting.Casting(args.ribbon_file)
-    if args.simulate:
-        # Simulation mockup caster
-        from rpi2caster import common_caster as caster_module
-    else:
-        # Real caster
-        from rpi2caster import monotype as caster_module
-    caster_module.UI.DEBUG_MODE = args.debug
-    job.caster = caster_module.Caster()
-    # Perforation mode if desired or not depending on command line arguments
+    job.caster = monotype.MonotypeCaster()
     job.caster.is_perforator = args.is_perforator
+    if not args.simulate:
+        from .input_driver_sysfs import SysfsSensor as Sensor
+        from .output_driver_wiringpi import MCP23017Interface as OutputDriver
+        job.caster.sensor = Sensor()
+        job.caster.output_driver = OutputDriver()
+        job.caster.name = 'Monotype Composition Caster'
+    job.caster.UI = casting.UI
+    casting.UI.DEBUG_MODE = args.debug
     job.main_menu()
 
 

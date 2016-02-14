@@ -248,7 +248,7 @@ class Casting(object):
             for code in combinations:
                 UI.display(code)
                 code = parsing.signals_parser(code)
-                self.caster.process_signals(code, 120)
+                self.caster.process_signals(code, timeout=120)
         except (exceptions.CastingAborted, EOFError, KeyboardInterrupt):
             # If pump was working, ensure stopping it
             self.caster.emergency_cleanup()
