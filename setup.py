@@ -4,7 +4,7 @@ with open('README.rst', 'r') as readme_file:
     long_description = readme_file.read()
 
 setup(name='rpi2caster',
-      version='0.1.dev16',
+      version='0.1.dev17',
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
@@ -24,7 +24,8 @@ setup(name='rpi2caster',
                    'Operating System :: POSIX :: Linux',
                    'Programming Language :: Python :: 3 :: Only',
                    'Topic :: Artistic Software'],
+      extras_require={'output-driver-wiringpi': ['wiringpi2 >= 1.1'],
+                      'database-postgresql': ['psycopg2 >= 2.6']},
       keywords=['Monotype', 'typography', 'printing', 'letterpress', 'typesetting', 'typecasting', 'Raspberry Pi'],
       packages=find_packages(exclude=['data', 'docs', 'tests']),
-      entry_points={'console_scripts':['rpi2caster = rpi2caster.__main__:main']},
-      install_requires=['wiringpi2 >= 1.1'])
+      entry_points={'console_scripts':['rpi2caster = rpi2caster.__main__:main']})
