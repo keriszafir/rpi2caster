@@ -160,12 +160,16 @@ class MonotypeCaster(object):
                 # 0005 with no signal = wedge at 15
                 self.current_0075 = '15'
 
-    def detect_rotation(self):
+    def detect_rotation(self, max_cycles=3, max_time=30):
         """Detect machine cycles and alert if it's not working"""
         UI.display('Now checking if the machine is running...')
         while True:
             try:
-                self.sensor.detect_rotation()
+                cycles = 0
+                while cycles <= max_cycles:
+                    # Run a new cycle
+                    self.sensor.wait_for(new_state=True, timeout=max_time)
+                    cycles += 1
                 return True
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
                 stop_menu()
@@ -240,15 +244,6 @@ class Sensor(object):
             elif time() - start_time > timeout:
                 UI.display('Timeout - you answered after %ds' % timeout)
                 raise exceptions.MachineStopped
-
-    def detect_rotation(self, max_cycles=3, max_time=30):
-        """Ends normally if there are x cycles in a given time.
-        Otherwise raises MachineStopped exception"""
-        cycles = 0
-        while cycles <= max_cycles:
-            # Run a new cycle
-            self.wait_for(new_state=True, timeout=max_time)
-            cycles += 1
 
 
 class EmergencyStop(object):
