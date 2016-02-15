@@ -227,15 +227,7 @@ class Casting(object):
             UI.display(' '.join(signals).ljust(20) + comment)
             # Send the signals
             if signals:
-                # In any case add O+15 (to put enough force on punches)
-                if 'O15' not in signals:
-                    signals.append('O15')
-                # Punch it!
-                self.caster.activate_valves(signals)
-                # The pace is arbitrary, let's set it to 200ms/200ms
-                time.sleep(0.2)
-                self.caster.deactivate_valves()
-                time.sleep(0.2)
+                self.caster.process_signals(signals)
         # After punching is finished, notify the user:"""
         UI.confirm('\nPunching finished!', UI.MSG_MENU)
         return True

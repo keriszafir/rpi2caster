@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Drivers for generic Monotype caster """
 # Built-in time module
-from time import time
+from time import time, sleep
 # Custom exceptions module
 from . import exceptions
 # Default user interface
@@ -25,6 +25,12 @@ class MonotypeCaster(object):
         # Set default wedge positions
         self.current_0005 = '15'
         self.current_0075 = '15'
+
+    def __setattr__(self, name, value):
+        self.__dict__[name] = value
+        if name == 'is_perforator' and value is True:
+            self.name = 'Ribbon perforator'
+            self.sensor = PerforatorSensor()
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
@@ -108,7 +114,11 @@ class MonotypeCaster(object):
                 try:
                     stop_menu()
                 except exceptions.ReturnToMenu:
-                    raise exceptions.CastingAborted
+                    # Punching: go to menu; casting: abort
+                    if self.is_perforator:
+                        raise
+                    else:
+                        raise exceptions.CastingAborted
                 # Now we need to re-activate the pump if it was previously on
                 # to cast something at all...
                 if pump_was_working:
@@ -137,16 +147,21 @@ class MonotypeCaster(object):
 
     def activate_valves(self, signals):
         """If there are any signals, print them out"""
-        self.pump.check_working(signals)
-        self.get_wedge_positions(signals)
         UI.display('Combination: %s' % ' '.join(signals))
-        # Always activate O+15 for perforating, deactivate for casting
         if self.is_perforator and 'O15' not in signals:
+            # Always activate O+15 for perforating
             signals.append('O15')
             UI.display('Punching mode - activating additional O15')
-        elif not self.is_perforator and signals == ['O15']:
-            signals.remove('O15')
-            UI.display('Casting mode, O15 only - no signals sent.')
+        elif not self.is_perforator:
+            # Casters update the pump and wedge status and don't use O15
+            self.pump.check_working(signals)
+            self.get_wedge_positions(signals)
+            try:
+                signals.remove('O15')
+                UI.display('Casting mode, O15 only - no signals sent.')
+            except ValueError:
+                pass
+        # Activate the valves with O15 (punching) or no O15 (casting)
         self.output_driver.valves_on(signals)
 
     def deactivate_valves(self):
@@ -232,15 +247,15 @@ class Sensor(object):
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Sensor driver')]
+        data = [(self.name, 'Sensor driver'),
+                (self.manual_mode, 'Manual mode')]
         return data
 
     def wait_for(self, new_state, timeout=5, force_cycle=False):
-        """Waits for a keypress to emulate machine cycle"""
-        if new_state:
-            UI.display('The sensor will go ON')
-        else:
-            UI.display('The sensor will go OFF')
+        """Waits for a keypress to emulate machine cycle, unless user
+        switches to auto mode, where all combinations are processed in batch"""
+        status = {True: 'ON', False: 'OFF'}
+        UI.display('The sensor is going %s' % status[new_state])
         if self.manual_mode or force_cycle:
             start_time = time()
             # Ask whether to cast or simulate machine stop
@@ -254,6 +269,41 @@ class Sensor(object):
             elif time() - start_time > timeout:
                 UI.display('Timeout - you answered after %ds' % timeout)
                 raise exceptions.MachineStopped
+        else:
+            sleep(0.1)
+
+
+class PerforatorSensor(Sensor):
+    """A special sensor class for perforators"""
+    def __init__(self):
+        Sensor.__init__(self)
+        self.name = 'Timer-driven or manual advance for perforator'
+
+    def wait_for(self, new_state, timeout=30, force_cycle=False):
+        """Waits for user keypress before toggling the output state.
+        After switching to auto mode on/off timings are fixed and the process
+        continues without user intervention."""
+        status = {True: 'UP', False: 'DOWN'}
+        UI.display('Punches going %s' % status[new_state])
+        if self.manual_mode or force_cycle:
+            start_time = time()
+            # Ask whether to cast or simulate machine stop
+            prompt = ('[Enter] to continue, [S] to stop '
+                      'or [A] to switch to automatic mode? ')
+            answer = UI.enter_data_or_blank(prompt) or ' '
+            if answer in 'aA':
+                self.manual_mode = False
+            elif answer in 'sS':
+                raise exceptions.MachineStopped
+            elif time() - start_time > timeout:
+                UI.display('Timeout - you answered after %ds' % timeout)
+                raise exceptions.MachineStopped
+        elif new_state:
+            # Time needed for all punches to go down
+            sleep(0.4)
+        else:
+            # Time needed for all punches to go up
+            sleep(0.25)
 
 
 class EmergencyStop(object):

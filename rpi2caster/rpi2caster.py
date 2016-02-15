@@ -124,7 +124,10 @@ def main():
     except (KeyboardInterrupt, EOFError):
         print('\nInterrupted by user.')
     except AttributeError:
-        main_parser.print_help()
+        if args.debug:
+            raise
+        else:
+            main_parser.print_help()
 
 
 if __name__ == '__main__':
