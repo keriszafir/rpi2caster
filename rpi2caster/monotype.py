@@ -179,16 +179,18 @@ class MonotypeCaster(object):
     def detect_rotation(self, max_cycles=3, max_time=30):
         """Detect machine cycles and alert if it's not working"""
         UI.display('Now checking if the machine is running...')
-        while True:
-            try:
-                cycles = 0
-                while cycles <= max_cycles:
-                    # Run a new cycle
-                    self.sensor.wait_for(new_state=True, timeout=max_time)
-                    cycles += 1
-                return True
-            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
-                stop_menu()
+        with self.sensor:
+            while True:
+                try:
+                    cycles = 0
+                    while cycles <= max_cycles:
+                        # Run a new cycle
+                        self.sensor.wait_for(new_state=True, timeout=max_time)
+                        cycles += 1
+                    return True
+                except (exceptions.MachineStopped,
+                        KeyboardInterrupt, EOFError):
+                    stop_menu()
 
     def __exit__(self, *args):
         self.deactivate_valves()
