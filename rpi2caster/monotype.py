@@ -182,7 +182,8 @@ class MonotypeCaster(object):
                 cycles = 0
                 while cycles <= max_cycles:
                     # Run a new cycle
-                    self.sensor.wait_for(new_state=True, timeout=max_time)
+                    self.sensor.wait_for(new_state=True, timeout=max_time,
+                                         force_cycle=True)
                     cycles += 1
                 return True
             except (exceptions.MachineStopped,
