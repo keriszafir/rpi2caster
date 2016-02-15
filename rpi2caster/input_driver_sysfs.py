@@ -32,12 +32,6 @@ class SysfsSensor(Sensor):
             self.value_file = '/dev/null'
             self.edge_file = '/dev/null'
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args, **kwargs):
-        pass
-
     def get_parameters(self):
         """Gets a list of parameters"""
         data = [(self.name, 'Sensor driver'),
@@ -67,7 +61,7 @@ class SysfsSensor(Sensor):
                     gpiostate.seek(0)
                     # Strip whitespace from string read from file,
                     # convert to boolean
-                    state = {'0': True, '1': False}[gpiostate.read().strip()]
+                    state = bool(int([gpiostate.read().strip()]))
                     if time() - debounce > 0.05:
                         self.last_state = state
                     debounce = time()

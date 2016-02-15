@@ -91,11 +91,10 @@ class MonotypeCaster(object):
             try:
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
-                with self.sensor:
-                    self.sensor.wait_for(new_state=True, timeout=timeout)
-                    self.activate_valves(signals)
-                    self.sensor.wait_for(new_state=False, timeout=timeout)
-                    self.deactivate_valves()
+                self.sensor.wait_for(new_state=True, timeout=timeout)
+                self.activate_valves(signals)
+                self.sensor.wait_for(new_state=False, timeout=timeout)
+                self.deactivate_valves()
                 # self._send_signals_to_caster(signals, cycle_timeout)
                 # Successful ending - the combination has been cast
                 return True
@@ -127,11 +126,10 @@ class MonotypeCaster(object):
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
-                with self.sensor:
-                    self.sensor.wait_for(new_state=True, force_cycle=True)
-                    self.activate_valves(stop_combination)
-                    self.sensor.wait_for(new_state=False)
-                    self.deactivate_valves()
+                self.sensor.wait_for(new_state=True, force_cycle=True)
+                self.activate_valves(stop_combination)
+                self.sensor.wait_for(new_state=False)
+                self.deactivate_valves()
                 UI.display('Pump is now off.')
                 return True
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
@@ -179,18 +177,17 @@ class MonotypeCaster(object):
     def detect_rotation(self, max_cycles=3, max_time=30):
         """Detect machine cycles and alert if it's not working"""
         UI.display('Now checking if the machine is running...')
-        with self.sensor:
-            while True:
-                try:
-                    cycles = 0
-                    while cycles <= max_cycles:
-                        # Run a new cycle
-                        self.sensor.wait_for(new_state=True, timeout=max_time)
-                        cycles += 1
-                    return True
-                except (exceptions.MachineStopped,
-                        KeyboardInterrupt, EOFError):
-                    stop_menu()
+        while True:
+            try:
+                cycles = 0
+                while cycles <= max_cycles:
+                    # Run a new cycle
+                    self.sensor.wait_for(new_state=True, timeout=max_time)
+                    cycles += 1
+                return True
+            except (exceptions.MachineStopped,
+                    KeyboardInterrupt, EOFError):
+                stop_menu()
 
     def __exit__(self, *args):
         self.deactivate_valves()
@@ -231,12 +228,6 @@ class Sensor(object):
         self.manual_mode = True
         self.last_state = False
         self.name = 'Mockup machine cycle sensor'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
 
     def get_parameters(self):
         """Gets a list of parameters"""
