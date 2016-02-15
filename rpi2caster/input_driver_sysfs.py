@@ -56,7 +56,7 @@ class SysfsSensor(Sensor):
         Uses software debouncing set at 50ms
         """
         current_state = self.last_state
-        debounce_time = time()
+        debounce = time()
         # Prevent sudden exit
         if force_cycle and self.last_state == new_state:
             self.last_state = not new_state
@@ -65,20 +65,19 @@ class SysfsSensor(Sensor):
             signals.register(gpiostate, select.POLLPRI)
             while self.last_state != new_state:
                 if signals.poll(timeout):
+                    debounce = time()
                     gpiostate.seek(0)
                     # Strip whitespace from string read from file,
                     # convert to boolean
                     result = gpiostate.read().strip()
                     state = {'0': True, '1': False}[result]
-                    # Change occurred = set debounce timer to now
-                    if state != current_state:
-                        debounce_time = time()
-                        current_state = state
-                    if (current_state != self.last_state and
-                            time() - debounce_time > 0.05):
-                        self.last_state = current_state
                 else:
                     raise MachineStopped
+            # Change occurred = set debounce timer to now
+            if state != current_state:
+                debounce = time()
+            if (current_state != self.last_state and time() - debounce > 0.05):
+                self.last_state = current_state
 
 
 class SysfsEmergencyStop(EmergencyStop):
