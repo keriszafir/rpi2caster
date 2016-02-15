@@ -33,15 +33,10 @@ class SysfsSensor(Sensor):
             self.edge_file = '/dev/null'
 
     def __enter__(self):
-        self.value_file_obj = io.open(self.value_file, 'r')
-        with self.value_file_obj:
-            self.signals = select.epoll()
-            self.signals.register(self.value_file_obj, select.POLLPRI)
-            return self
+        return self
 
     def __exit__(self, *args, **kwargs):
-        self.value_file_obj = None
-        self.signals = None
+        pass
 
     def get_parameters(self):
         """Gets a list of parameters"""
@@ -65,22 +60,25 @@ class SysfsSensor(Sensor):
         # Prevent sudden exit
         if force_cycle and self.last_state == new_state:
             self.last_state = not new_state
-        while self.last_state != new_state:
-            if self.signals.poll(timeout):
-                self.value_file_obj.seek(0)
-                # Strip whitespace from string read from file,
-                # convert to boolean
-                result = self.value_file_obj.read().strip()
-                state = {'0': True, '1': False}[result]
-                # Change occurred = set debounce timer to now
-                if state != current_state:
-                    debounce_time = time()
-                    current_state = state
-                if (current_state != self.last_state and
-                        time() - debounce_time > 0.05):
-                    self.last_state = current_state
-            else:
-                raise MachineStopped
+        with io.open(self.value_file, 'r') as gpiostate:
+            signals = select.epoll()
+            signals.register(gpiostate, select.POLLPRI)
+            while self.last_state != new_state:
+                if signals.poll(timeout):
+                    gpiostate.seek(0)
+                    # Strip whitespace from string read from file,
+                    # convert to boolean
+                    result = gpiostate.read().strip()
+                    state = {'0': True, '1': False}[result]
+                    # Change occurred = set debounce timer to now
+                    if state != current_state:
+                        debounce_time = time()
+                        current_state = state
+                    if (current_state != self.last_state and
+                            time() - debounce_time > 0.05):
+                        self.last_state = current_state
+                else:
+                    raise MachineStopped
 
 
 class SysfsEmergencyStop(EmergencyStop):
