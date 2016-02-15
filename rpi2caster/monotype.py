@@ -105,18 +105,26 @@ class MonotypeCaster(object):
                 last_0005 = self.current_0005
                 last_0075 = self.current_0075
                 self.force_pump_stop()
-                stop_menu()
+                # Redirect flow by changing exception
+                try:
+                    stop_menu()
+                except exceptions.ReturnToMenu:
+                    raise exceptions.CastingAborted
                 # Now we need to re-activate the pump if it was previously on
                 # to cast something at all...
                 if pump_was_working:
+                    UI.display('Resuming pump action...')
                     self.process_signals(['N', 'J', '0005', 'S', last_0005])
                     self.process_signals(['N', 'K', '0075', 'S', last_0075])
+                    UI.display('Pump action resumed.')
 
     def force_pump_stop(self):
         """Forces pump stop - won't end until it is turned off"""
         stop_combination = ['N', 'J', 'S', '0005']
+        UI.display('Turning all valves off - just in case...')
         self.deactivate_valves()
         while self.pump.is_working:
+            UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
                 with self.sensor:
@@ -124,15 +132,23 @@ class MonotypeCaster(object):
                     self.activate_valves(stop_combination)
                     self.sensor.wait_for(new_state=False)
                     self.deactivate_valves()
+                UI.display('Pump is now off.')
                 return True
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
                 pass
-        self.deactivate_valves()
 
     def activate_valves(self, signals):
         """If there are any signals, print them out"""
         self.pump.check_working(signals)
         self.get_wedge_positions(signals)
+        UI.display('Combination: %s' % ' '.join(signals))
+        # Always activate O+15 for perforating, deactivate for casting
+        if self.is_perforator and 'O15' not in signals:
+            signals.append('O15')
+            UI.display('Punching mode - activating additional O15')
+        elif not self.is_perforator and signals == ['O15']:
+            signals.remove('O15')
+            UI.display('Casting mode, O15 only - no signals sent.')
         self.output_driver.valves_on(signals)
 
     def deactivate_valves(self):

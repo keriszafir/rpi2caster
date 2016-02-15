@@ -71,15 +71,17 @@ class Casting(object):
         self.line_aborted = 0
 
     @use_caster
-    def cast_composition(self):
+    def cast_composition(self, casting_queue=None):
         """cast_composition()
 
         Composition casting routine. The input file is read backwards -
         last characters are cast first, after setting the justification.
         """
+        # Casting queue - if not defined, use self.ribbon.contents
+        casting_queue = casting_queue or self.ribbon.contents
         # Count all characters and lines in the ribbon
         (all_lines, all_chars) = parsing.count_lines_and_chars(
-            self.ribbon.contents)
+            casting_queue)
         # Show the numbers to the operator
         UI.display('Lines found in ribbon: %i' % all_lines)
         UI.display('Characters: %i' % all_chars)
@@ -97,12 +99,12 @@ class Casting(object):
         prompt = 'How many times do you want to cast this? (default: 1) : '
         repetitions = UI.enter_data_or_blank(prompt, int) or 1
         # For casting, we need to check the direction of ribbon
-        if parsing.rewind_ribbon(self.ribbon.contents):
+        if parsing.rewind_ribbon(casting_queue):
             UI.display('Ribbon starts with pump stop sequence - rewinding...')
-            queue = [line for line in reversed(self.ribbon.contents)]
+            queue = [line for line in reversed(casting_queue)]
         else:
             UI.display('Ribbon starts with galley trip - not rewinding...')
-            queue = [line for line in self.ribbon.contents]
+            queue = [line for line in casting_queue]
         # Display a little explanation
         UI.display('\nThe combinations of Monotype signals will be displayed '
                    'on screen while the machine casts the type.\n'
@@ -179,8 +181,6 @@ class Casting(object):
                 # Got to check before we display info
                 self.caster.pump.check_working(signals)
                 info_for_user.append(self.caster.pump.status() + '\n')
-                # Append signals to be cast
-                info_for_user.append(' '.join(signals).ljust(15))
                 # Add comment
                 info_for_user.append(comment + '\n')
                 # Display the info
@@ -188,9 +188,6 @@ class Casting(object):
                 # Proceed with casting only if code is explicitly stated
                 # (i.e. O15 = cast, empty list = don't cast)
                 if signals:
-                    # First strip the unneeded O15
-                    signals = parsing.strip_o15(signals)
-                    # Cast the sequence (even if empty)
                     try:
                         self.caster.process_signals(signals)
                     except exceptions.CastingAborted:
@@ -205,7 +202,7 @@ class Casting(object):
         return True
 
     @use_caster
-    def punch_composition(self):
+    def punch_composition(self, punching_queue=None):
         """punch_composition():
 
         When punching, the input file is read forwards. An additional line
@@ -213,14 +210,16 @@ class Casting(object):
         force to drive the punches and advance the ribbon.
         This mode uses arbitrary timings for air on / off phases.
         """
+        # Punching queue - if not defined, use self.ribbon.contents
+        punching_queue = punching_queue or self.ribbon.contents
         # Count a number of combinations punched in ribbon
-        all_combinations = parsing.count_combinations(self.ribbon.contents)
+        all_combinations = parsing.count_combinations(punching_queue)
         UI.display('Combinations in ribbon: %i' % all_combinations)
         # Wait until the operator confirms.
         UI.confirm('\nThe combinations of Monotype signals will be displayed '
                    'on screen while the paper tower punches the ribbon.\n'
                    'Turn on the air and fit the tape on your paper tower.')
-        for line in self.ribbon.contents:
+        for line in punching_queue:
             # Parse the row, return a list of signals and a comment.
             # Both can have zero or positive length.
             [signals, comment] = parsing.comments_parser(line)
@@ -244,16 +243,11 @@ class Casting(object):
     @use_caster
     def test_air_signals(self, combinations):
         """Tests a sequence of signals specified on input"""
-        try:
-            for code in combinations:
-                UI.display(code)
-                code = parsing.signals_parser(code)
-                self.caster.process_signals(code, timeout=120)
-        except (exceptions.CastingAborted, EOFError, KeyboardInterrupt):
-            # If pump was working, ensure stopping it
-            self.caster.emergency_cleanup()
-        else:
-            UI.confirm('\nTesting finished!', UI.MSG_MENU)
+        for code in combinations:
+            UI.display(code)
+            code = parsing.signals_parser(code)
+            self.caster.process_signals(code, timeout=120)
+        UI.confirm('\nTesting finished!', UI.MSG_MENU)
 
     def test_front_pinblock(self):
         """test_front_pinblock():
@@ -824,26 +818,27 @@ class Casting(object):
         """Settings and alignment menu for servicing the caster"""
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
+            perforator = self.caster.is_perforator
             opts = [(exceptions.menu_level_up, 'Back',
                      'Returns to main menu', True),
                     (self.test_all, 'Test outputs',
                      'Tests all the air outputs one by one', True),
                     (self.test_front_pinblock, 'Test the front pinblock',
-                     'Tests the pins 1...14', not self.caster.is_perforator),
+                     'Tests the pins 1...14', not perforator),
                     (self.test_rear_pinblock, 'Test the rear pinblock',
                      'Tests the pins NI, NL, A...N one by one',
-                     not self.caster.is_perforator),
+                     not perforator),
                     (self.send_combination, 'Send specified signals',
                      'Sends the specified signal combination', True),
                     (self.align_wedges, 'Adjust the 52D wedge',
                      'Calibrate the space transfer wedge for correct width',
-                     not self.caster.is_perforator),
+                     not perforator),
                     (self.align_mould, 'Calibrate mould opening',
                      'Casts 9-unit characters to adjust the type width',
-                     not self.caster.is_perforator),
+                     not perforator),
                     (self.align_diecase, 'Calibrate matrix X-Y',
                      'Calibrate the character-to-body positioning',
-                     not self.caster.is_perforator)]
+                     not perforator)]
             return [(function, description, long_description) for
                     (function, description, long_description, condition)
                     in opts if condition]
