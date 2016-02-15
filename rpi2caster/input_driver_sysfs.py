@@ -61,7 +61,7 @@ class SysfsSensor(Sensor):
                     gpiostate.seek(0)
                     # Strip whitespace from string read from file,
                     # convert to boolean
-                    state = bool(int([gpiostate.read().strip()]))
+                    state = bool(int(gpiostate.read().strip()))
                     if time() - debounce > 0.05:
                         self.last_state = state
                     debounce = time()
