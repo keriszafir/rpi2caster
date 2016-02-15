@@ -12,7 +12,7 @@ PIN_BASE = 65
 ALNUM_ARR = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
              '0075,A,B,C,D,E,F,G,H,I,J,K,L,M,N,S,O15')
 # Inputs for the casting interface
-EMERGENCY_STOP_GPIO = 24
+EMERGENCY_STOP_GPIO = 22
 SENSOR_GPIO = 17
 
 # For parsing lines in ribbon files
