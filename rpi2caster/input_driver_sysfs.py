@@ -67,14 +67,12 @@ class SysfsSensor(Sensor):
                     gpiostate.seek(0)
                     # Strip whitespace from string read from file,
                     # convert to boolean
-                    result = gpiostate.read().strip()
-                    last_state = {'0': True, '1': False}[result]
+                    state = {'0': True, '1': False}[gpiostate.read().strip()]
+                    if time() - debounce > 0.05:
+                        self.last_state = state
+                    debounce = time()
                 else:
                     raise MachineStopped
-                if last_state != self.last_state:
-                    debounce = time()
-                if time() - debounce > 0.05:
-                    self.last_state = last_state
 
 
 class SysfsEmergencyStop(EmergencyStop):
