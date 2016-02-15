@@ -68,8 +68,10 @@ class SysfsSensor(Sensor):
         while self.last_state != new_state:
             if self.signals.poll(timeout):
                 self.value_file_obj.seek(0)
-                # Convert string read from file to boolean
-                state = {'0': True, '1': False}[self.value_file_obj.read()]
+                # Strip whitespace from string read from file,
+                # convert to boolean
+                result = self.value_file_obj.read().strip()
+                state = {'0': True, '1': False}[result]
                 # Change occurred = set debounce timer to now
                 if state != current_state:
                     debounce_time = time()
