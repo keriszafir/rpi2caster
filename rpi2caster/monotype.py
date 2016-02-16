@@ -16,9 +16,10 @@ class MonotypeCaster(object):
     def __init__(self):
         self.name = 'Monotype composition caster (mockup)'
         self.is_perforator = False
-        self.sensor = Sensor()
+        self.simulation_mode = False
+        self.sensor = None
+        self.output_driver = None
         self.stop = EmergencyStop()
-        self.output_driver = OutputDriver()
         self.lock = False
         # Attach a pump
         self.pump = Pump()
@@ -337,13 +338,22 @@ class OutputDriver(object):
     """Mockup for a driver for 32 pneumatic outputs"""
     def __init__(self, pin_base=PIN_BASE, sig_arr=ALNUM_ARR):
         pins = [pin for pin in range(pin_base, pin_base + 32)]
-        self.driver_type = 'Mockup output driver for simulation'
+        self.lock = False
+        self.name = 'Mockup output driver for simulation'
         self.signals_arrangement = sig_arr.split(',')
         self.pin_numbers = dict(zip(self.signals_arrangement, pins))
 
+    def __enter__(self):
+        if not self.lock:
+            self.lock = True
+            return self
+
+    def __exit__(self, *_, **__):
+        self.lock = False
+
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.driver_type, 'Output driver'),
+        data = [(self.name, 'Output driver'),
                 (self.signals_arrangement, 'Signals arrangement')]
         return data
 

@@ -50,8 +50,21 @@ def change_sensor(func):
         if self.caster.is_perforator:
             sensor = monotype.PerforatorSensor()
         else:
-            sensor = self.caster.sensor
+            sensor = self.caster.sensor or monotype.Sensor()
         with sensor as self.caster.sensor:
+            return func(self, *args, **kwargs)
+    return func_wrapper
+
+
+def set_output_driver(func):
+    """Method decorator for using perforator sensor when punching ribbon"""
+    def func_wrapper(self, *args, **kwargs):
+        """Sets the perforator sensor"""
+        if not self.caster.simulation_mode:
+            driver = monotype.wiringpi_output_driver()
+        else:
+            driver = self.caster.output_driver or monotype.OutputDriver()
+        with driver as self.caster.output_driver:
             return func(self, *args, **kwargs)
     return func_wrapper
 
@@ -82,8 +95,8 @@ class Casting(object):
     -casting spaces to heat up the mould."""
 
     def __init__(self, ribbon_file=''):
-        # Caster - this will be set up later
-        self.caster = None
+        # Caster for this job
+        self.caster = monotype.MonotypeCaster()
         # Ribbon object, start with a default empty ribbon
         if ribbon_file:
             self.ribbon = typesetting_data.choose_ribbon(filename=ribbon_file)
@@ -95,6 +108,8 @@ class Casting(object):
         # Indicates which line the last casting was aborted on
         self.line_aborted = 0
 
+    @change_sensor
+    @set_output_driver
     @use_caster
     def cast_composition(self, casting_queue=None):
         """cast_composition()
@@ -227,6 +242,7 @@ class Casting(object):
         return True
 
     @use_caster
+    @set_output_driver
     @change_sensor
     def punch_composition(self, punching_queue=None):
         """punch_composition():

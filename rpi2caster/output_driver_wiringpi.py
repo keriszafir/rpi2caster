@@ -17,7 +17,8 @@ from . import cfg_parser
 
 # Read configuration
 try:
-    SIGS = cfg_parser.get_config('SignalsArrangements', 'signals_arrangement')
+    SIGS = cfg_parser.get_config('SignalsArrangements',
+                                 'signals_arrangement').upper()
 except NotConfigured:
     SIGS = ALNUM_ARR
 
@@ -34,12 +35,6 @@ class MCP23017Interface(OutputDriver):
         # Set all I/O lines on MCP23017s as outputs - mode=1
         for pin in self.pin_numbers.values():
             wiringpi.pinMode(pin, 1)
-
-    def get_parameters(self):
-        """Gets a list of parameters"""
-        data = [(self.name, 'Output driver'),
-                (self.signals_arrangement, 'Signals arrangement')]
-        return data
 
     def one_on(self, sig):
         """Looks a signal up in arrangement and turns it on"""

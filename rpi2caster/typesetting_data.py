@@ -153,9 +153,13 @@ class EmptyRibbon(object):
         if not filename:
             return False
         # Initialize the contents
-        with io.open(filename, mode='r') as ribbon_file:
-            contents = [x.strip() for x in ribbon_file if x.strip()]
-        # Parse the file, get metadata
+        try:
+            with io.open(filename, mode='r') as ribbon_file:
+                contents = [x.strip() for x in ribbon_file if x.strip()]
+            # Parse the file, get metadata
+        except (FileNotFoundError, IOError):
+            UI.confirm('Cannot open ribbon file %s' % filename)
+            return False
         parameters = ['diecase', 'description', 'unit-shift',
                       'diecase_id', 'customer']
         metadata = parse_ribbon_metadata(contents, parameters)

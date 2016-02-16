@@ -8,18 +8,15 @@ from .text_ui import yes_or_no
 
 def cast(args):
     """Casting on an actual caster or simulation"""
-    from . import casting, monotype
-    job = casting.Casting(args.ribbon_file)
-    job.caster = monotype.MonotypeCaster()
+    from . import casting_session
+    session = casting_session.Casting(args.ribbon_file)
+    session.caster.simulation_mode = args.simulate
+    session.caster.is_perforator = args.is_perforator
     if not args.simulate:
-        # Use sysfs sensor interface
-        job.caster.sensor = monotype.sysfs_sensor()
-        job.caster.output_driver = monotype.wiringpi_output_driver()
-        job.caster.name = 'Monotype Composition Caster'
-    job.caster.is_perforator = args.is_perforator
-    job.caster.UI = casting.UI
-    casting.UI.DEBUG_MODE = args.debug
-    job.main_menu()
+        session.caster.name = 'Monotype Composition Caster'
+    session.caster.UI = casting_session.UI
+    casting_session.UI.DEBUG_MODE = args.debug
+    session.main_menu()
 
 
 def inv(args):
