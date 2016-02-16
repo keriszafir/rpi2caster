@@ -26,17 +26,9 @@ class MonotypeCaster(object):
         self.current_0005 = '15'
         self.current_0075 = '15'
 
-    def __setattr__(self, name, value):
-        self.__dict__[name] = value
-        if name == 'is_perforator' and value is True:
-            self.name = 'Ribbon perforator'
-            self.sensor = PerforatorSensor()
-
     def __enter__(self):
         """Lock the resource so that only one object can use it
         with context manager"""
-        UI.debug_info('Entering caster/interface context...')
-        self.sensor.manual_mode = True
         if self.lock:
             UI.display('Caster %s is already busy!' % self.name)
         else:
@@ -241,9 +233,18 @@ class Pump(object):
 class Sensor(object):
     """Mockup for a machine cycle sensor"""
     def __init__(self):
+        self.lock = False
         self.manual_mode = True
         self.last_state = False
         self.name = 'Mockup machine cycle sensor'
+
+    def __enter__(self):
+        if not self.lock:
+            self.lock = True
+            return self
+
+    def __exit__(self, *_):
+        self.lock = False
 
     def get_parameters(self):
         """Gets a list of parameters"""
@@ -304,6 +305,19 @@ class PerforatorSensor(Sensor):
         else:
             # Time needed for all punches to go up
             sleep(0.25)
+
+
+class InputTestSensor(Sensor):
+    """A keyboard-operated "sensor" for testing inputs.
+    No automatic mode is supported."""
+    def __init__(self):
+        Sensor.__init__(self)
+        self.name = 'Timer-driven or manual advance for perforator'
+
+    def wait_for(self, new_state, *_, **__):
+        """Waits for keypress before turning the line off"""
+        if not new_state:
+            UI.confirm('Next combination?')
 
 
 class EmergencyStop(object):
@@ -371,3 +385,16 @@ def stop_menu():
     message = ('Machine is not running!\n'
                '[C]ontinue, return to [M]enu or [E]xit program? ')
     UI.simple_menu(message, options)()
+
+
+# Hardware control modules
+def sysfs_sensor():
+    """Loads and instantiates the SysFS sensor"""
+    from . import input_driver_sysfs
+    return input_driver_sysfs.SysfsSensor()
+
+
+def wiringpi_output_driver():
+    """Loads and instantiates the wiringPi2 driver for MCP23017"""
+    from . import output_driver_wiringpi
+    return output_driver_wiringpi.MCP23017Interface()

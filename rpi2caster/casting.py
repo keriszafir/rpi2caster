@@ -14,8 +14,6 @@ A module for everything related to working on a Monotype composition caster:
 """
 
 # IMPORTS:
-# Built-in time library
-import time
 # Signals parsing methods for rpi2caster
 from . import parsing
 # Custom exceptions
@@ -26,6 +24,8 @@ from . import constants
 from . import typesetting_funcs
 # Read ribbon files
 from . import typesetting_data
+# Caster backend
+from . import monotype
 # Modules imported in the typesetting_data - matrix_data - wedge_data
 # No need to import them again - just point to them
 matrix_data = typesetting_data.matrix_data
@@ -40,6 +40,31 @@ def use_caster(func):
         """Wrapper function"""
         with self.caster:
             return func(self, *args, **kwargs)
+    return func_wrapper
+
+
+def change_sensor(func):
+    """Method decorator for using perforator sensor when punching ribbon"""
+    def func_wrapper(self, *args, **kwargs):
+        """Sets the perforator sensor"""
+        if self.caster.is_perforator:
+            sensor = monotype.PerforatorSensor()
+        else:
+            sensor = self.caster.sensor
+        with sensor as self.caster.sensor:
+            return func(self, *args, **kwargs)
+    return func_wrapper
+
+
+def cast_result(func):
+    """After finished, ask for confirmation and cast the resulting ribbon"""
+    def func_wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        ribbon = func(self, *args, **kwargs)
+        if UI.yes_or_no('Cast it?'):
+            return self.cast_composition(ribbon)
+        else:
+            return False
     return func_wrapper
 
 
@@ -202,6 +227,7 @@ class Casting(object):
         return True
 
     @use_caster
+    @change_sensor
     def punch_composition(self, punching_queue=None):
         """punch_composition():
 

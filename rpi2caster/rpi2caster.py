@@ -11,13 +11,12 @@ def cast(args):
     from . import casting, monotype
     job = casting.Casting(args.ribbon_file)
     job.caster = monotype.MonotypeCaster()
-    job.caster.is_perforator = args.is_perforator
     if not args.simulate:
-        from .input_driver_sysfs import SysfsSensor as Sensor
-        from .output_driver_wiringpi import MCP23017Interface as OutputDriver
-        job.caster.sensor = Sensor()
-        job.caster.output_driver = OutputDriver()
+        # Use sysfs sensor interface
+        job.caster.sensor = monotype.sysfs_sensor()
+        job.caster.output_driver = monotype.wiringpi_output_driver()
         job.caster.name = 'Monotype Composition Caster'
+    job.caster.is_perforator = args.is_perforator
     job.caster.UI = casting.UI
     casting.UI.DEBUG_MODE = args.debug
     job.main_menu()
