@@ -32,7 +32,6 @@ matrix_data = typesetting_data.matrix_data
 wedge_data = matrix_data.wedge_data
 # User interface is the same as in typesetting_data
 UI = typesetting_data.UI
-parsing = p
 
 
 def use_caster(func):
@@ -119,11 +118,11 @@ def cast_result(func):
     """Ask for confirmation and cast the resulting ribbon"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        if UI.yes_or_no('Cast it?'):
-            with Value(func(self, *args, **kwargs)) as self.ribbon.contents:
+        with Value(func(self, *args, **kwargs)) as self.ribbon.contents:
+            if UI.yes_or_no('Cast it?'):
                 return self.cast_composition()
-        else:
-            return False
+            else:
+                return False
     return wrapper
 
 
@@ -321,16 +320,15 @@ class Casting(object):
             if sorts > 10:
                 UI.display(warning)
             # Add 'S' if there is width difference
-            signals = column + diff and 'S' or '' + str(row)
+            signals = column + (diff and 'S' or '') + str(row)
             signals_list = p.parse_signals_string(signals)
             # Ask for confirmation
             prompt = 'Casting %s lines of %s%s. OK?' % (lines, column, row)
             if UI.yes_or_no(prompt):
-                line_codes = ([c.GALLEY_TRIP + [str(pos_0005)],
-                               c.PUMP_START + [str(pos_0075)]] +
-                              [signals_list for i in range(sorts)])
-                for i in lines:
-                    queue.extend(line_codes)
+                line_codes = [c.GALLEY_TRIP + [str(pos_0005)],
+                              c.PUMP_START + [str(pos_0075)]]
+                line_codes.extend([signals_list] * sorts)
+                queue.extend(line_codes * lines)
             if not UI.yes_or_no('Another combination?'):
                 # Finished gathering data
                 break
@@ -414,24 +412,23 @@ class Casting(object):
             # We add 2 em-quads at O15 before and after the proper spaces
             # We need 64 additional units for that - need to subtract
             allowance = unit_line_length - 64
-            sorts_number = int(allowance // space_units)
+            sorts = int(allowance // space_units)
             # Check if the corrections are needed at all
             diff = space_units - row_units
             calc = typesetting_funcs.calculate_wedges
             (pos_0075, pos_0005) = calc(diff, self.wedge.set_width,
                                         self.wedge.brit_pica)
             # Add 'S' if there is width difference
-            signals = column + diff and 'S' or '' + str(row)
+            signals = column + (diff and 'S' or '') + str(row)
             signals_list = p.parse_signals_string(signals)
             # Ask for confirmation
             prompt = ('Casting %s lines of %s-point spaces from %s%s. OK?' %
                       (lines, width, column, row))
             if UI.yes_or_no(prompt):
-                line_codes = ([c.GALLEY_TRIP + [str(pos_0005)],
-                               c.PUMP_START + [str(pos_0075)]] +
-                              [signals_list for i in range(sorts_number)])
-                for i in lines:
-                    queue.extend(line_codes)
+                line_codes = [c.GALLEY_TRIP + [str(pos_0005)],
+                              c.PUMP_START + [str(pos_0075)]]
+                line_codes.extend([signals_list] * sorts)
+                queue.extend(line_codes * lines)
             if not UI.yes_or_no('Another combination?'):
                 # Finished gathering data
                 break
