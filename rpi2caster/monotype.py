@@ -21,7 +21,6 @@ class MonotypeCaster(object):
         self.lock = False
         # Attach a pump
         self.pump = Pump(self)
-        # Set default wedge positions
         self.current_0005 = '15'
         self.current_0075 = '15'
 
@@ -97,50 +96,15 @@ class MonotypeCaster(object):
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up and ask what to do
                 # Save the current wedge positions to resume them if need be
-                pump_was_working = self.pump.is_working
+                pump_needs_resume = self.pump.is_working
                 last_0005 = self.current_0005
                 last_0075 = self.current_0075
                 self.pump.stop()
                 stop_menu()
                 # Now we need to re-activate the pump if it was previously on
                 # to cast something at all...
-                if pump_was_working:
+                if pump_needs_resume:
                     self.pump.start(last_0005, last_0075)
-
-    def activate_valves(self, signals):
-        """If there are any signals, print them out"""
-        UI.display('Combination: %s' % ' '.join(signals))
-        if self.is_perforator and 'O15' not in signals:
-            # Always activate O+15 for perforating
-            signals.append('O15')
-            UI.display('Punching mode - activating additional O15')
-        elif not self.is_perforator:
-            # Casters update the pump and wedge status and don't use O15
-            self.pump.check_working(signals)
-            self.get_wedge_positions(signals)
-            try:
-                signals.remove('O15')
-                UI.display('Casting mode, O15 only - no signals sent.')
-            except ValueError:
-                pass
-        # Activate the valves with O15 (punching) or no O15 (casting)
-        self.output_driver.valves_on(signals)
-
-    def detect_rotation(self, max_cycles=3, max_time=30):
-        """Detect machine cycles and alert if it's not working"""
-        UI.display('Now checking if the machine is running...')
-        while True:
-            try:
-                cycles = 0
-                while cycles <= max_cycles:
-                    # Run a new cycle
-                    self.sensor.wait_for(new_state=True, timeout=max_time,
-                                         force_cycle=True)
-                    cycles += 1
-                return True
-            except (exceptions.MachineStopped,
-                    KeyboardInterrupt, EOFError):
-                stop_menu()
 
     def __exit__(self, *_):
         self.output_driver.valves_off()
@@ -152,7 +116,6 @@ class Pump(object):
     """Pump class for storing the pump working/non-working status."""
     def __init__(self, caster):
         self.caster = caster
-        self.last_state = False
         self.is_working = False
 
     def __enter__(self):
@@ -165,7 +128,7 @@ class Pump(object):
         """Forces pump stop - won't end until it is turned off"""
         UI.display('Turning all valves off - just in case...')
         self.caster.output_driver.valves_off()
-        while self.pump.is_working:
+        while self.is_working:
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
@@ -185,40 +148,6 @@ class Pump(object):
         self.caster.process_signals(['N', 'J', '0005', 'S', pos_0005])
         self.caster.process_signals(['N', 'K', '0075', 'S', pos_0075])
         UI.display('Pump action resumed.')
-
-    def check_working(self, signals):
-        """Checks if pump is working based on signals in sequence"""
-        # 0075 / NK is satisfactory to turn the pump on...
-        if '0075' in signals or set(['N', 'K']).issubset(signals):
-            self.is_working = False
-            self.last_state = True
-        # No 0075 / NK; then 0005 / NJ turns the pump off
-        elif '0005' in signals or set(['N', 'J']).issubset(signals):
-            self.is_working = False
-            self.last_state = False
-        else:
-            self.is_working = self.last_state
-
-    def status(self):
-        """Displays info whether pump is working or not"""
-        if self.is_working:
-            return 'Pump is ON'
-        else:
-            return 'Pump is OFF'
-
-
-class PerforationPump(Pump):
-    """No pump = for perforation"""
-    def __init__(self, *args, **kwargs):
-        super().__init__(self, *args, **kwargs)
-
-    def check_working(self, *_):
-        """Perforation "pump" is not working"""
-        return False
-
-    def status(self):
-        """Perforation "pump" is not working"""
-        return ''
 
 
 class Sensor(object):
@@ -242,6 +171,22 @@ class Sensor(object):
         data = [(self.name, 'Sensor driver'),
                 (self.manual_mode, 'Manual mode')]
         return data
+
+    def detect_rotation(self, cycles=3, max_time=30):
+        """Detect machine cycles and alert if it's not working"""
+        UI.display('Now checking if the machine is running...')
+        while True:
+            try:
+                while cycles:
+                    # Run a new cycle
+                    UI.display(cycles)
+                    self.sensor.wait_for(new_state=True, timeout=max_time,
+                                         force_cycle=True)
+                    cycles -= 1
+                return True
+            except (exceptions.MachineStopped,
+                    KeyboardInterrupt, EOFError):
+                stop_menu()
 
     def wait_for(self, new_state, timeout=5, force_cycle=False):
         """Waits for a keypress to emulate machine cycle, unless user
@@ -268,8 +213,12 @@ class Sensor(object):
 class PerforatorSensor(Sensor):
     """A special sensor class for perforators"""
     def __init__(self):
-        Sensor.__init__(self)
+        super().__init__(self)
         self.name = 'Timer-driven or manual advance for perforator'
+
+    def detect_rotation(self):
+        """Ask for user confirmation before punching"""
+        UI.confirm()
 
     def wait_for(self, new_state, timeout=30, force_cycle=False):
         """Waits for user keypress before toggling the output state.
@@ -302,8 +251,12 @@ class InputTestSensor(Sensor):
     """A keyboard-operated "sensor" for testing inputs.
     No automatic mode is supported."""
     def __init__(self):
-        Sensor.__init__(self)
+        super().__init__(self)
         self.name = 'Timer-driven or manual advance for perforator'
+
+    def detect_rotation(self):
+        """Don't hold the process"""
+        pass
 
     def wait_for(self, new_state, *_, **__):
         """Waits for keypress before turning the line off"""

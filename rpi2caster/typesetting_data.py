@@ -203,7 +203,7 @@ class EmptyRibbon(object):
 class Ribbon(EmptyRibbon):
     """A class for ribbons chosen from database or file"""
     def __init__(self, ribbon_id=None, filename=None):
-        EmptyRibbon.__init__(self)
+        super().__init__(self)
         self.filename = filename
         self.ribbon_id = ribbon_id
         # Try to select ribbon file first
@@ -327,7 +327,7 @@ class EmptyWork(object):
 class Work(EmptyWork):
     """A class for works (sources) for typesetting from database or file"""
     def __init__(self, work_id=None, filename=None):
-        EmptyWork.__init__(self)
+        super().__init__(self)
         self.set_work_id(work_id)
         self.import_from_file(filename)
         self.set_description()

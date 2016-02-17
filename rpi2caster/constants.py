@@ -36,3 +36,8 @@ S5 = ['', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18]
 # Column numbers in 15x17 diecase
 COLUMNS_15 = [x for x in 'ABCDEFGHIJKLMNO']
 COLUMNS_17 = ['NI', 'NL'] + COLUMNS_15
+
+# Control codes
+PUMP_STOP = ['N', 'J', '0005', 'S']
+PUMP_START = ['N', 'K', '0075', 'S']
+GALLEY_TRIP = ['N', 'K', 'J', '0005', '0075', 'S']

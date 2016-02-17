@@ -30,8 +30,8 @@ def read_file(filename):
         return False
 
 
-def comments_parser(input_data):
-    """comments_parser(input_data):
+def parse_record(input_data):
+    """parse_record(input_data):
 
     Parses an input string, and returns a list with two elements:
     -the Monotype signals (unprocessed),
@@ -71,7 +71,7 @@ def comments_parser(input_data):
             [raw_signals, comment] = input_data.split(symbol, 1)
             break
     # Parse the signals part here
-    signals = signals_parser(raw_signals.strip().upper())
+    signals = parse_signals_string(raw_signals.strip().upper())
     # Return a list with processed signals and comment
     return [signals, comment.strip()]
 
@@ -84,9 +84,8 @@ def count_lines_and_chars(contents):
     all_chars = 0
     for line in contents:
         # Strip comments
-        signals = comments_parser(line)[0]
+        signals = parse_record(line)[0]
         # Parse the signals part of the line
-        signals = signals_parser(signals)
         if check_character(signals):
             all_chars += 1
         elif check_newline(signals):
@@ -103,17 +102,15 @@ def count_combinations(contents):
     This is usually called when pre-processing the file for punching."""
     all_combinations = 0
     for line in contents:
-        # Strip comments
-        signals = comments_parser(line)[0]
-        # If there are signals, increment the combinations counter
-        if signals_parser(signals):
+        # Get signals list. Increase counter if we have signals.
+        if parse_record(line)[0]:
             all_combinations += 1
     # Return the number
     return all_combinations
 
 
-def rewind_ribbon(contents):
-    """rewind_ribbon:
+def rewind_needed(contents):
+    """rewind_needed:
 
     Detects ribbon direction so that we can use the ribbons generated
     with different software and still cast them in correct order.
@@ -124,8 +121,7 @@ def rewind_ribbon(contents):
     newline_found = False
     for line in contents:
         # Get the signals part of a line
-        signals_string = comments_parser(line)[0]
-        signals = signals_parser(signals_string)
+        signals = parse_record(line)[0]
         # Toggle this to True if newline combinations are found
         newline_found = newline_found or check_newline(signals)
         # Determine the result the first time pump stop combination is found
@@ -138,8 +134,8 @@ def rewind_ribbon(contents):
             return False
 
 
-def signals_parser(raw_signals):
-    """signals_parser(raw_signals):
+def parse_signals_string(raw_signals):
+    """parse_signals_string(raw_signals):
 
     Parses a string with Monotype signals on input.
     Skips all but the "useful" signals: A...O, 1...15, 0005, S, 0075.
@@ -177,9 +173,34 @@ def signals_parser(raw_signals):
     return [x for x in constants.SIGNALS if x in signals]
 
 
-def strip_o15(input_signals):
-    """Strip O15 signals from input sequence, we don't cast them"""
-    return [s for s in input_signals if s not in ['O15']]
+def get_column(signals):
+    """Gets the lowest column number from the signals list."""
+    decoded_signals = ({'N', 'I'}.issubset(signals) and 'NI' or
+                       {'N', 'L'}.issubset(signals) and 'NL' or signals)
+    generator = (x for x in constants.COLUMNS_17 if x in decoded_signals)
+    try:
+        return next(generator)
+    except StopIteration:
+        return 'O'
+
+
+def get_row(signals):
+    """Gets the lowest row number from the signal list. Returns int."""
+    generator = (row for row in range(17) if str(row) in signals)
+    try:
+        return next(generator)
+    except StopIteration:
+        return 15
+
+
+def check_0075(signals):
+    """Checks if signals contain 0075 or NK."""
+    return '0075' in signals or {'N', 'K'}.issubset(signals)
+
+
+def check_0005(signals):
+    """Checks if signals contain 0005 or NJ."""
+    return '0005' in signals or {'N', 'J'}.issubset(signals)
 
 
 def check_newline(signals):
@@ -189,27 +210,21 @@ def check_newline(signals):
     This is called for each new line when parsing the ribbon file
     during casting.
     """
-    return (set(['0005', '0075']).issubset(signals) or
-            set(['N', 'K', 'J']).issubset(signals))
+    return check_0075(signals) and check_0005(signals)
 
 
 def check_pump_stop(signals):
-    """check_pump_stop(signals):
+    """Checks if the signals will stop the pump"""
+    return check_0005(signals) and not check_0075(signals)
 
-    Checks if the pump stop signal (0005 or NJ and not 0075 or NK) is present.
-    This is called to determine the ribbon direction.
-    """
-    return (('0005' in signals or set(['N', 'J']).issubset(signals)) and
-            '0075' not in signals and not
-            set(['N', 'K']).issubset(signals))
+
+def check_pump_start(signals):
+    """Checks if the signals will stop the pump"""
+    return check_0075(signals)
 
 
 def check_wedge_positions(signals):
-    """check_pump_stop(signals):
-
-    Checks if the pump stop signal (0005 or NJ and not 0075 or NK) is present.
-    This is called to determine the ribbon direction.
-    """
+    """Check the wedge positions, deprecated"""
     working_signals = signals[:]
     for signal in ['0005', '0075'] + [s for s in 'ABCDEFGHIJKLMNOS']:
         try:
