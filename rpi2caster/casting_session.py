@@ -35,7 +35,7 @@ UI = typesetting_data.UI
 
 
 def use_caster(func):
-    """Method decorator for requiring the caster context"""
+    """Decorator for requiring the caster context (i.e. lock the resource)"""
     def func_wrapper(self, *args, **kwargs):
         """Wrapper function"""
         with self.caster:
@@ -43,34 +43,71 @@ def use_caster(func):
     return func_wrapper
 
 
-def change_sensor(func):
-    """Method decorator for using perforator sensor when punching ribbon"""
+def check_simulation(func):
+    """Decorator for using mockup sensor and output driver simulation mode"""
     def func_wrapper(self, *args, **kwargs):
-        """Sets the perforator sensor"""
-        if self.caster.is_perforator:
-            sensor = monotype.PerforatorSensor()
+        """Wrapper function"""
+        if self.simulation:
+            with monotype.Sensor() as self.caster.sensor:
+                with monotype.OutputDriver() as self.caster.driver:
+                    return func(self, *args, **kwargs)
         else:
-            sensor = self.caster.sensor or monotype.Sensor()
-        with sensor as self.caster.sensor:
+            # Use real hardware sensor - might change it in the future!
+            with monotype.sysfs_sensor() as self.caster.sensor:
+                with monotype.wiringpi_output_driver() as self.caster.driver:
+                    return func(self, *args, **kwargs)
+    return func_wrapper
+
+
+def check_perforation(func):
+    """Decorator for changing sensor and pump for perforation mode"""
+    def func_wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        if self.perforation:
+            # Use semi-automatic sensor, suppress pump and statistics
+            with monotype.PerforatorSensor() as self.caster.sensor:
+                with monotype.PerforationPump() as self.caster.pump:
+                    with BriefStats(self) as self.stats:
+                        return func(self, *args, **kwargs)
+        else:
             return func(self, *args, **kwargs)
     return func_wrapper
 
 
-def set_output_driver(func):
-    """Method decorator for using perforator sensor when punching ribbon"""
+def check_testing(func):
+    """Decorator for changing sensor to user input in testing mode"""
     def func_wrapper(self, *args, **kwargs):
-        """Sets the perforator sensor"""
-        if not self.caster.simulation_mode:
-            driver = monotype.wiringpi_output_driver()
+        """Wrapper function"""
+        if self.testing:
+            # Use manual sensor progression and suppress statistics
+            with monotype.InputTestSensor() as self.caster.sensor:
+                with BriefStats(self) as self.stats:
+                    return func(self, *args, **kwargs)
         else:
-            driver = self.caster.output_driver or monotype.OutputDriver()
-        with driver as self.caster.output_driver:
+            return self
+    return func_wrapper
+
+
+def testing_mode(func):
+    """Decorator for setting the testing mode for certain functions"""
+    def func_wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        with Testing() as self.testing:
+            return func(self, *args, **kwargs)
+    return func_wrapper
+
+
+def repeat(func):
+    """Decorator for repeating all over"""
+    def func_wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        while True:
             return func(self, *args, **kwargs)
     return func_wrapper
 
 
 def cast_result(func):
-    """After finished, ask for confirmation and cast the resulting ribbon"""
+    """Ask for confirmation and cast the resulting ribbon"""
     def func_wrapper(self, *args, **kwargs):
         """Wrapper function"""
         ribbon = func(self, *args, **kwargs)
@@ -79,6 +116,16 @@ def cast_result(func):
         else:
             return False
     return func_wrapper
+
+
+def stringify(func):
+    """Converts the list of tuples to a newline-separated string"""
+    def wrapper(self):
+        """Wrapper function"""
+        data = func(self)
+        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
+        return '\n'.join(info)
+    return wrapper
 
 
 class Casting(object):
@@ -97,6 +144,10 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
+        self.simulation = False
+        self.perforation = False
+        self.testing = False
+        self.stats = Stats(self)
         # Ribbon object, start with a default empty ribbon
         if ribbon_file:
             self.ribbon = typesetting_data.choose_ribbon(filename=ribbon_file)
@@ -108,9 +159,9 @@ class Casting(object):
         # Indicates which line the last casting was aborted on
         self.line_aborted = 0
 
-    @change_sensor
-    @set_output_driver
-    @use_caster
+    @check_testing
+    @check_perforation
+    @check_simulation
     def cast_composition(self, casting_queue=None):
         """cast_composition()
 
@@ -227,23 +278,25 @@ class Casting(object):
                 UI.display(''.join(info_for_user))
                 # Proceed with casting only if code is explicitly stated
                 # (i.e. O15 = cast, empty list = don't cast)
-                if signals:
-                    try:
-                        self.caster.process_signals(signals)
-                    except exceptions.CastingAborted:
-                        # On failure - abort the whole job.
-                        # Check the aborted line so we can get back to it.
-                        self.line_aborted = current_line
-                        UI.confirm('\nCasting aborted on line %i.'
-                                   % self.line_aborted, UI.MSG_MENU)
-                        return False
+                if not signals:
+                    continue
+                signals = [x for x in signals if x is not 'O15']
+                try:
+                    self.caster.process_signals(signals)
+                except exceptions.CastingAborted:
+                    # On failure - abort the whole job.
+                    # Check the aborted line so we can get back to it.
+                    self.line_aborted = current_line
+                    UI.confirm('\nCasting aborted on line %i.'
+                               % self.line_aborted, UI.MSG_MENU)
+                    return False
         # After casting is finished, notify the user
         UI.confirm('Casting finished successfully!', UI.MSG_MENU)
         return True
 
-    @use_caster
-    @set_output_driver
-    @change_sensor
+    @check_testing
+    @check_perforation
+    @check_simulation
     def punch_composition(self, punching_queue=None):
         """punch_composition():
 
@@ -453,7 +506,7 @@ class Casting(object):
             prompt = 'Row: 1...16? (default: 2): '
             # Initially set this to zero to enable the while loop
             row = 0
-            width = 0
+            width = 0.0
             # Not using unit shift by default
             unit_shift = False
             # Ask for row number
@@ -489,7 +542,7 @@ class Casting(object):
             message = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
                        '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
             # Width in points
-            width = UI.simple_menu(message, options) * 12
+            width = UI.simple_menu(message, options) * 12.0
             # Ask about custom value, then specify units
             while not 1 <= width <= 20:
                 prompt = 'Custom width in points (decimal, 1...20) ? : '
@@ -852,7 +905,7 @@ class Casting(object):
         """Settings and alignment menu for servicing the caster"""
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
-            perforator = self.caster.is_perforator
+            perforator = self.perforation
             opts = [(exceptions.menu_level_up, 'Back',
                      'Returns to main menu', True),
                     (self.test_all, 'Test outputs',
@@ -902,6 +955,7 @@ class Casting(object):
         """Chooses a wedge from registered ones"""
         self.wedge = wedge_data.choose_wedge()
 
+    @stringify
     def _display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
         data = [(self.caster.name, 'Caster name'),
@@ -909,13 +963,12 @@ class Casting(object):
         data.extend(self.ribbon.get_parameters())
         data.extend(self.diecase.get_parameters())
         data.extend(self.wedge.get_parameters())
-        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        return '\n'.join(info)
+        return data
 
     def _main_menu_options(self):
         """Build a list of options, adding an option if condition is met"""
         # Options are described with tuples: (function, description, condition)
-        perforator = self.caster.is_perforator
+        perforator = self.perforation
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
         opts = [(exceptions.exit_program, 'Exit', 'Exits the program', True),
@@ -969,3 +1022,78 @@ class Casting(object):
             except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
                 # Will skip to the end of the loop, and start all over
                 pass
+
+
+class Testing(object):
+    """Context manager for testing mode"""
+    def __init__(self):
+        pass
+
+    def __enter__(self):
+        return True
+
+    def __exit__(self, *_):
+        pass
+
+
+class Stats(object):
+    """Casting statistics gathering and displaying functions"""
+    def __init__(self, session):
+        self.current = {'combination': [], '0075': '15', '0005': '15'}
+        self.current_signals = []
+        self.current_0005 = '15'
+        self.current_0075 = '15'
+        self.session = session
+
+    def __enter__(self):
+        self.__init__()
+        return self
+
+    def __exit__(self, *_):
+        pass
+
+    def display(self):
+        """Displays the current stats depending on session parameters"""
+        if self.session.perforation or self.session.testing:
+            return self.display_brief_stats()
+        else:
+            return self.display_full_stats()
+
+    @stringify
+    def display_brief_stats(self):
+        """Displays brief statistics: current combination, comment,
+        number of all combinations, percent done"""
+        data = [(self.current['combination'], 'Current combination')]
+        return data
+
+    def get_wedge_positions(self):
+        """Gets current positions of 0005 and 0075 wedges"""
+        signals = self.current_signals
+        # Check 0005
+        if '0005' in signals or {'N', 'J'}.issubset(signals):
+            pos_0005 = [x for x in range(15) if str(x) in signals]
+            if pos_0005:
+                # One or more signals detected
+                self.current_0005 = str(min(pos_0005))
+            else:
+                # 0005 with no signal = wedge at 15
+                self.current_0005 = '15'
+        # Check 0075
+        if '0075' in signals or {'N', 'K'}.issubset(signals):
+            pos_0075 = [x for x in range(15) if str(x) in signals]
+            if pos_0075:
+                # One or more signals detected
+                self.current_0075 = str(min(pos_0075))
+            else:
+                # 0005 with no signal = wedge at 15
+                self.current_0075 = '15'
+
+
+class BriefStats(Stats):
+    """Suppress statistics but use the normal stats interface"""
+    def __init__(self, *args, **kwargs):
+        Stats.__init__(self, *args, **kwargs)
+
+    def display(self):
+        """Display only current code combination and percentage"""
+        pass

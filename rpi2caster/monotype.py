@@ -15,14 +15,12 @@ class MonotypeCaster(object):
     caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
         self.name = 'Monotype composition caster (mockup)'
-        self.is_perforator = False
-        self.simulation_mode = False
         self.sensor = None
         self.output_driver = None
         self.stop = EmergencyStop()
         self.lock = False
         # Attach a pump
-        self.pump = Pump()
+        self.pump = Pump(self)
         # Set default wedge positions
         self.current_0005 = '15'
         self.current_0075 = '15'
@@ -41,8 +39,7 @@ class MonotypeCaster(object):
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Caster name'),
-                (self.is_perforator, 'Is a perforator?')]
+        data = [(self.name, 'Caster name')]
         # Collect data from I/O drivers
         data.append(self.sensor.get_parameters())
         data.append(self.stop.get_parameters())
@@ -91,52 +88,24 @@ class MonotypeCaster(object):
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
                 self.sensor.wait_for(new_state=True, timeout=timeout)
-                self.activate_valves(signals)
+                self.output_driver.valves_on(signals)
                 self.sensor.wait_for(new_state=False, timeout=timeout)
-                self.deactivate_valves()
+                self.output_driver.valves_off()
                 # self._send_signals_to_caster(signals, cycle_timeout)
                 # Successful ending - the combination has been cast
                 return True
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up and ask what to do
+                # Save the current wedge positions to resume them if need be
                 pump_was_working = self.pump.is_working
                 last_0005 = self.current_0005
                 last_0075 = self.current_0075
-                self.force_pump_stop()
-                # Redirect flow by changing exception
-                try:
-                    stop_menu()
-                except exceptions.ReturnToMenu:
-                    # Punching: go to menu; casting: abort
-                    if self.is_perforator:
-                        raise
-                    else:
-                        raise exceptions.CastingAborted
+                self.pump.stop()
+                stop_menu()
                 # Now we need to re-activate the pump if it was previously on
                 # to cast something at all...
                 if pump_was_working:
-                    UI.display('Resuming pump action...')
-                    self.process_signals(['N', 'J', '0005', 'S', last_0005])
-                    self.process_signals(['N', 'K', '0075', 'S', last_0075])
-                    UI.display('Pump action resumed.')
-
-    def force_pump_stop(self):
-        """Forces pump stop - won't end until it is turned off"""
-        stop_combination = ['N', 'J', 'S', '0005']
-        UI.display('Turning all valves off - just in case...')
-        self.deactivate_valves()
-        while self.pump.is_working:
-            UI.display('The pump is still working - turning it off...')
-            try:
-                # Run a full machine cycle to turn the pump off
-                self.sensor.wait_for(new_state=True, force_cycle=True)
-                self.activate_valves(stop_combination)
-                self.sensor.wait_for(new_state=False)
-                self.deactivate_valves()
-                UI.display('Pump is now off.')
-                return True
-            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
-                pass
+                    self.pump.start(last_0005, last_0075)
 
     def activate_valves(self, signals):
         """If there are any signals, print them out"""
@@ -157,31 +126,6 @@ class MonotypeCaster(object):
         # Activate the valves with O15 (punching) or no O15 (casting)
         self.output_driver.valves_on(signals)
 
-    def deactivate_valves(self):
-        """No need to do anything"""
-        self.output_driver.valves_off()
-
-    def get_wedge_positions(self, signals):
-        """Gets current positions of 0005 and 0075 wedges"""
-        # Check 0005
-        if '0005' in signals or {'N', 'J'}.issubset(signals):
-            pos_0005 = [x for x in range(15) if str(x) in signals]
-            if pos_0005:
-                # One or more signals detected
-                self.current_0005 = str(min(pos_0005))
-            else:
-                # 0005 with no signal = wedge at 15
-                self.current_0005 = '15'
-        # Check 0075
-        if '0075' in signals or {'N', 'K'}.issubset(signals):
-            pos_0075 = [x for x in range(15) if str(x) in signals]
-            if pos_0075:
-                # One or more signals detected
-                self.current_0075 = str(min(pos_0075))
-            else:
-                # 0005 with no signal = wedge at 15
-                self.current_0075 = '15'
-
     def detect_rotation(self, max_cycles=3, max_time=30):
         """Detect machine cycles and alert if it's not working"""
         UI.display('Now checking if the machine is running...')
@@ -198,17 +142,49 @@ class MonotypeCaster(object):
                     KeyboardInterrupt, EOFError):
                 stop_menu()
 
-    def __exit__(self, *args):
-        self.deactivate_valves()
+    def __exit__(self, *_):
+        self.output_driver.valves_off()
         UI.debug_info('Caster no longer in use.')
         self.lock = False
 
 
 class Pump(object):
     """Pump class for storing the pump working/non-working status."""
-    def __init__(self):
+    def __init__(self, caster):
+        self.caster = caster
         self.last_state = False
         self.is_working = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        pass
+
+    def stop(self):
+        """Forces pump stop - won't end until it is turned off"""
+        UI.display('Turning all valves off - just in case...')
+        self.caster.output_driver.valves_off()
+        while self.pump.is_working:
+            UI.display('The pump is still working - turning it off...')
+            try:
+                # Run a full machine cycle to turn the pump off
+                self.caster.sensor.wait_for(new_state=True, force_cycle=True)
+                self.caster.output_driver.valves_on(['N', 'J', 'S', '0005'])
+                self.caster.sensor.wait_for(new_state=False)
+                self.caster.output_driver.valves_off()
+                UI.display('Pump is now off.')
+                return True
+            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
+                pass
+
+    def start(self, pos_0005, pos_0075):
+        """Starts the pump with given wedge positions"""
+        UI.display('Resuming pump action...')
+        # Set the wedge positions from before stop
+        self.caster.process_signals(['N', 'J', '0005', 'S', pos_0005])
+        self.caster.process_signals(['N', 'K', '0075', 'S', pos_0075])
+        UI.display('Pump action resumed.')
 
     def check_working(self, signals):
         """Checks if pump is working based on signals in sequence"""
@@ -229,6 +205,20 @@ class Pump(object):
             return 'Pump is ON'
         else:
             return 'Pump is OFF'
+
+
+class PerforationPump(Pump):
+    """No pump = for perforation"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
+
+    def check_working(self, *_):
+        """Perforation "pump" is not working"""
+        return False
+
+    def status(self):
+        """Perforation "pump" is not working"""
+        return ''
 
 
 class Sensor(object):
@@ -348,7 +338,7 @@ class OutputDriver(object):
             self.lock = True
             return self
 
-    def __exit__(self, *_, **__):
+    def __exit__(self, *_):
         self.lock = False
 
     def get_parameters(self):
@@ -390,10 +380,10 @@ def stop_menu():
         """Helper function - continue casting."""
         return True
     options = {'C': continue_casting,
-               'M': exceptions.return_to_menu,
+               'A': exceptions.abort_casting,
                'E': exceptions.exit_program}
     message = ('Machine is not running!\n'
-               '[C]ontinue, return to [M]enu or [E]xit program? ')
+               '[C]ontinue, [A]bort or [E]xit program? ')
     UI.simple_menu(message, options)()
 
 

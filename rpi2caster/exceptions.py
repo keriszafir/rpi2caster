@@ -95,6 +95,11 @@ def return_to_menu():
     raise ReturnToMenu
 
 
+def abort_casting():
+    """Wrapper for raising CastingAborted where a function is needed"""
+    raise CastingAborted
+
+
 def menu_level_up():
     """Wrapper for raising MenuLevelUp where a function is needed"""
     raise MenuLevelUp

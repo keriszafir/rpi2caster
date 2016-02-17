@@ -10,9 +10,9 @@ def cast(args):
     """Casting on an actual caster or simulation"""
     from . import casting_session
     session = casting_session.Casting(args.ribbon_file)
-    session.caster.simulation_mode = args.simulate
-    session.caster.is_perforator = args.is_perforator
-    if not args.simulate:
+    session.simulation = args.simulation
+    session.perforation = args.perforation
+    if not args.simulation:
         session.caster.name = 'Monotype Composition Caster'
     session.caster.UI = casting_session.UI
     casting_session.UI.DEBUG_MODE = args.debug
@@ -66,11 +66,11 @@ def main():
                                   parents=[gen_parser], add_help=False,
                                   help=('Casting with a Monotype caster '
                                         'or mockup caster for testing'))
-    cast_parser.add_argument('-s', '--simulate', action='store_true',
+    cast_parser.add_argument('-s', '--simulation', action='store_true',
                              help='Simulate casting instead of real casting')
-    cast_parser.add_argument('-p', '--perforate', action='store_true',
-                             dest='is_perforator',
-                             help='Ribbon perforation mode')
+    cast_parser.add_argument('-p', '--punch', action='store_true',
+                             dest='perforation',
+                             help='Ribbon punching (perforation) mode')
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='Ribbon file name')
     cast_parser.set_defaults(job=cast, ribbon_file=None)
