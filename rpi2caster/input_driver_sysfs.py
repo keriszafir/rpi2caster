@@ -20,7 +20,7 @@ from .monotype import Sensor, EmergencyStop
 class SysfsSensor(Sensor):
     """Optical cycle sensor using kernel sysfs interface"""
     def __init__(self, gpio=SENSOR_GPIO):
-        super().__init__(self)
+        super().__init__()
         self.gpio = gpio
         self.signals = None
         self.last_state = False
@@ -72,7 +72,7 @@ class SysfsSensor(Sensor):
 class SysfsEmergencyStop(EmergencyStop):
     """Emergency stop button using kernel sysfs interface"""
     def __init__(self, gpio=EMERGENCY_STOP_GPIO):
-        super().__init__(self)
+        super().__init__()
         self.gpio = gpio
         self.name = 'Kernel SysFS interface for emergency stop button GPIO'
         (self.value_file, self.edge_file) = configure_sysfs_interface(gpio)

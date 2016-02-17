@@ -16,7 +16,7 @@ class GenericDBConnection(object):
 class SQLiteConnection(GenericDBConnection):
     """SQLite3 connection - local database on a file"""
     def __init__(self, db_path):
-        super().__init__(self)
+        super().__init__()
         import sqlite3
         try:
             self.db_conn = sqlite3.connect(db_path)
@@ -28,7 +28,7 @@ class PostgresConnection(GenericDBConnection):
     """PostgreSQL connection without SSH tunnelling or SSL security"""
     def __init__(self, db_name, db_host='localhost', db_port=5432,
                  db_username='postgres', db_password='postgres'):
-        super().__init__(self)
+        super().__init__()
         import psycopg2
         try:
             self.db_conn = psycopg2.connect(database=db_name,
@@ -46,7 +46,7 @@ class SSLTunnelPostgresConnection(GenericDBConnection):
                  ssh_username=getpass.getuser(), ssh_password='',
                  db_username='postgres',
                  db_password='postgres'):
-        super().__init__(self)
+        super().__init__()
         import psycopg2
         from sshtunnel import SSHTunnelForwarder
         # Connect over SSH tunnel

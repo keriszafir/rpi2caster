@@ -82,7 +82,7 @@ def check_testing(func):
             with monotype.InputTestSensor() as self.caster.sensor:
                 return func(self, *args, **kwargs)
         else:
-            return self
+            return func(self, *args, **kwargs)
     return wrapper
 
 
@@ -276,91 +276,67 @@ class Casting(object):
         Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
         """
+        queue = []
         # Outer loop
-        UI.clear()
-        UI.display('Sorts casting by matrix coordinates\n\n')
-        prompt = 'Column: NI, NL, A...O? (default: G): '
-        # Got no signals? Use G5.
-        column = ''
-        column_symbols = ['NI', 'NL'] + [ltr for ltr in 'ABCDEFGHIJKLMNO']
-        while column not in column_symbols:
-            column = UI.enter_data_or_blank(prompt).upper() or 'G'
-        prompt = 'Row: 1...16? (default: 5): '
-        # Initially set this to zero to enable the while loop
-        row = 0
-        units = 0
-        # Ask for row number
-        while row not in range(1, 17):
-            try:
-                row = UI.enter_data_or_blank(prompt, int) or 5
-                row = abs(row)
-            except (TypeError, ValueError):
-                # Repeat loop and enter new one
-                row = 0
-        # If we want to cast from row 16, we need unit-shift
-        # HMN or KMN systems are not supported yet
-        question = 'Trying to access 16th row. Use unit shift?'
-        unit_shift = row == 16 and UI.yes_or_no(question)
-        if row == 16 and not unit_shift:
-            UI.confirm('Aborting.')
-            continue
-        # Correct the column number if using unit shift
-        if unit_shift:
-            row = 15
-            column = column.replace('D', 'E F')
-            column += ' D'
-        # Determine the unit width for a row
-        row_units = self.wedge.unit_arrangement[row]
-        # Enter custom unit value (no points-based calculation yet)
-        prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
-        while not 2 < units < 25:
-            units = (UI.enter_data_or_blank(prompt, float) or
-                     row_units)
-        # Calculate the unit width difference and apply justification
-        diff = units - row_units
-        calc = typesetting_funcs.calculate_wedges
-        (pos_0075, pos_0005) = calc(diff, self.wedge.set_width,
-                                    self.wedge.brit_pica)
-        signals = column
-        if diff:
-            # If we need to correct the width - cast with the S needle
-            signals += ' S '
-        signals += str(row)
-        # Ask for number of sorts and lines, no negative numbers here
-        prompt = '\nHow many sorts per line? (default: 10): '
-        sorts = abs(UI.enter_data_or_blank(prompt, int) or 10)
-        prompt = '\nHow many lines? (default: 1): '
-        lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
-        # Warn if we want to cast too many sorts from a single matrix
-        warning = ('Warning: you want to cast a single character more than'
-                   ' 10 times. This may lead to matrix overheating!\n')
-        if sorts > 10:
-            UI.display(warning)
-        # After entering parameters, ask the operator if they're OK
-        try:
-            while True:
-                # Inner loop
-                # Menu subroutines
-                def cast_it():
-                    """Cast the combination or go back to menu"""
-                    if self.cast_from_matrix(signals, sorts, lines,
-                                             wedge_positions):
-                        UI.display('Casting finished successfully.')
-                    else:
-                        raise exceptions.ReturnToMenu
-                # End of menu subroutines.
-                options = {'C': cast_it,
-                           'D': exceptions.change_parameters,
-                           'M': exceptions.return_to_menu,
-                           'E': exceptions.exit_program}
-                message = ('Casting %s, %i lines of %i sorts.\n'
-                           '[C]ast it, [D]ifferent code/quantity, '
-                           '[M]enu or [E]xit? '
-                           % (signals, lines, sorts))
-                UI.simple_menu(message, options)()
-        except exceptions.ChangeParameters:
-            # Skip the menu and casting altogether, repeat the outer loop
-            pass
+        while True:
+            UI.clear()
+            UI.display('Sorts casting by matrix coordinates\n\n')
+            prompt = 'Combination? (default: G5): '
+            code_string = UI.enter_data_or_blank(prompt).upper() or 'G5'
+            combination = p.parse_signals_string(code_string)
+            row = p.get_row(combination)
+            column = p.get_column(combination)
+            units = 0
+            # If we want to cast from row 16, we need unit-shift
+            # HMN or KMN systems are not supported yet
+            question = 'Trying to access 16th row. Use unit shift?'
+
+            unit_shift = row == 16 and UI.yes_or_no(question)
+            if row == 16 and not unit_shift:
+                UI.confirm('Aborting.')
+                continue
+            elif unit_shift:
+                row -= 1
+                column = (column is 'D' and 'EF' or column) + 'D'
+            # Determine the unit width for a row
+            row_units = self.wedge.unit_arrangement[row]
+            # Enter custom unit value (no points-based calculation yet)
+            prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
+            while not 4 < units < 25:
+                units = (UI.enter_data_or_blank(prompt, float) or
+                         row_units)
+            # Calculate the unit width difference and apply justification
+            diff = units - row_units
+            calc = typesetting_funcs.calculate_wedges
+            (pos_0075, pos_0005) = calc(diff, self.wedge.set_width,
+                                        self.wedge.brit_pica)
+            # Ask for number of sorts and lines, no negative numbers here
+            prompt = '\nHow many sorts per line? (default: 10): '
+            sorts = abs(UI.enter_data_or_blank(prompt, int) or 10)
+            prompt = '\nHow many lines? (default: 1): '
+            lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
+            # Warn if we want to cast too many sorts from a single matrix
+            warning = ('Warning: you want to cast a single character more than'
+                       ' 10 times. This may lead to matrix overheating!\n')
+            if sorts > 10:
+                UI.display(warning)
+            # Add 'S' if there is width difference
+            signals = column + diff and 'S' or '' + str(row)
+            signals_list = p.parse_signals_string(signals)
+            # Ask for confirmation
+            prompt = 'Casting %s lines of %s%s. OK?' % (lines, column, row)
+            if UI.yes_or_no(prompt):
+                line_codes = ([c.GALLEY_TRIP + [str(pos_0005)],
+                               c.PUMP_START + [str(pos_0075)]] +
+                              [signals_list for i in range(sorts)])
+                for i in lines:
+                    queue.extend(line_codes)
+            if not UI.yes_or_no('Another combination?'):
+                # Finished gathering data
+                break
+        queue.append(c.GALLEY_TRIP)
+        queue.append(c.PUMP_STOP)
+        return queue
 
     @cast_result
     def cast_spaces(self):
@@ -384,11 +360,9 @@ class Casting(object):
                    '[B]ritish pica = 0.1667",\n [D]idot cicero = 0.1776", '
                    '[F]ournier cicero = 0.1629": ')
         pica_def = UI.simple_menu(message, options)
-        # We need to choose a wedge unless we did it earlier
-        wedge = self.wedge or wedge_data.Wedge()
         # Unit line length:
         unit_line_length = int(18 * pica_def / 0.1667 * line_length *
-                               wedge.set_width / 12)
+                               self.wedge.set_width / 12)
         # Now we can cast multiple different spaces
         while True:
             prompt = 'Combination? (default: G5): '
@@ -407,7 +381,7 @@ class Casting(object):
                 row -= 1
                 column = (column is 'D' and 'EF' or column) + 'D'
             # Determine the unit width for a row
-            row_units = wedge.unit_arrangement[row]
+            row_units = self.wedge.unit_arrangement[row]
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
             # Space width in points
@@ -435,7 +409,7 @@ class Casting(object):
             # units = points * set_width/12 * 1 / 12 * 18
             # 18 / (12*12) = 0.125, hence division by 8
             factor = pica_def / 0.1667
-            space_units = round(width * factor * wedge.set_width / 8, 2)
+            space_units = round(width * factor * self.wedge.set_width / 8, 2)
             # How many spaces will fit in a line? Calculate it...
             # We add 2 em-quads at O15 before and after the proper spaces
             # We need 64 additional units for that - need to subtract
@@ -456,7 +430,8 @@ class Casting(object):
                 line_codes = ([c.GALLEY_TRIP + [str(pos_0005)],
                                c.PUMP_START + [str(pos_0075)]] +
                               [signals_list for i in range(sorts_number)])
-                queue.extend(line_codes)
+                for i in lines:
+                    queue.extend(line_codes)
             if not UI.yes_or_no('Another combination?'):
                 # Finished gathering data
                 break

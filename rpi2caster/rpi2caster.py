@@ -10,8 +10,8 @@ def cast(args):
     """Casting on an actual caster or simulation"""
     from . import casting_session
     session = casting_session.Casting(args.ribbon_file)
-    session.simulation = args.simulation
-    session.perforation = args.perforation
+    session.simulation_mode = args.simulation
+    session.perforation_mode = args.perforation
     if not args.simulation:
         session.caster.name = 'Monotype Composition Caster'
     session.caster.UI = casting_session.UI

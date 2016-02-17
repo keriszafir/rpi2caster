@@ -228,7 +228,7 @@ class Diecase(EmptyDiecase):
     If possible, choose automatically. If this fails, choose manually,
     and if user chooses no diecase, an empty one will be initialized."""
     def __init__(self, diecase_id=None):
-        super().__init__(self)
+        super().__init__()
         # Diecases created with diecase_id will be set up automatically
         temp_diecase = choose_diecase(diecase_id)
         # Assign attributes to diecase we're initializing

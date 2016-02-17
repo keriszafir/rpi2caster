@@ -175,7 +175,7 @@ class DefaultWedge(object):
 class Wedge(DefaultWedge):
     """Wedge: wedge data"""
     def __init__(self, series='', set_width=0):
-        super().__init__(self)
+        super().__init__()
         # Wedges will be setup automatically
         temp_wedge = choose_wedge(series, set_width)
         self.series = temp_wedge.series

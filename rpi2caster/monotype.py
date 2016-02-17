@@ -107,7 +107,6 @@ class MonotypeCaster(object):
                     self.pump.start(last_0005, last_0075)
 
     def __exit__(self, *_):
-        self.output_driver.valves_off()
         UI.debug_info('Caster no longer in use.')
         self.lock = False
 
@@ -213,7 +212,7 @@ class Sensor(object):
 class PerforatorSensor(Sensor):
     """A special sensor class for perforators"""
     def __init__(self):
-        super().__init__(self)
+        super().__init__()
         self.name = 'Timer-driven or manual advance for perforator'
 
     def detect_rotation(self):
@@ -251,7 +250,7 @@ class InputTestSensor(Sensor):
     """A keyboard-operated "sensor" for testing inputs.
     No automatic mode is supported."""
     def __init__(self):
-        super().__init__(self)
+        super().__init__()
         self.name = 'Timer-driven or manual advance for perforator'
 
     def detect_rotation(self):
@@ -292,6 +291,7 @@ class OutputDriver(object):
             return self
 
     def __exit__(self, *_):
+        self.valves_off()
         self.lock = False
 
     def get_parameters(self):
