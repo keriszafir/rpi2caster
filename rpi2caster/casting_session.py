@@ -116,8 +116,10 @@ def temporary_stats(func):
     """Uses brand new stats object for the job"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        with Stats(self) as self.stats:
-            return func(self, *args, **kwargs)
+        old_stats, self.stats = self.stats, Stats(self)
+        retval = func(self, *args, **kwargs)
+        self.stats = old_stats
+        return retval
     return wrapper
 
 
@@ -140,15 +142,12 @@ class Casting(object):
         self.simulation_mode = False
         self.perforation_mode = False
         self.testing = False
-        # Ribbon object, start with a default empty ribbon
-        if ribbon_file:
-            self.ribbon = typesetting_data.Ribbon(filename=ribbon_file)
-        else:
-            # Start with empty ribbon
-            self.ribbon = typesetting_data.EmptyRibbon()
-        self.diecase = self.ribbon.diecase
-        self.wedge = self.diecase.wedge
-        self.stats = Stats(self)
+        # Ribbon object, start with a default empty ribbon if no file
+        self._ribbon, self._diecase, self._wedge = None, None, None
+        self._stats = None
+        self.ribbon = (ribbon_file and
+                       typesetting_data.choose_ribbon(filename=ribbon_file) or
+                       typesetting_data.EmptyRibbon())
 
     @check_modes
     def cast(self):
@@ -189,7 +188,7 @@ class Casting(object):
                 self.caster.process_signals(signals)
             jobs -= 1
             if jobs:
-                UI.confirm('%s more job(s) remain')
+                UI.confirm('%s more job(s) remaining' % jobs)
         # This is the end
         UI.confirm('Finished!')
 
@@ -323,8 +322,7 @@ class Casting(object):
         queue = []
         # Ask about line length
         prompt = 'Galley line length? [pica or cicero] (default: 25) : '
-        line_length = UI.enter_data_or_blank(prompt, int) or 25
-        line_length = abs(line_length)
+        line_length = abs(UI.enter_data_or_blank(prompt, int) or 25)
         # Measurement system
         options = {'A': 0.1660,
                    'B': 0.1667,
@@ -591,17 +589,58 @@ class Casting(object):
                 # Stay in the menu
                 pass
 
+    @property
+    def stats(self):
+        """Ribbon/job statistics"""
+        return self._stats
+
+    @stats.setter
+    def stats(self, stats):
+        """Parse the stats to get the ribbon data"""
+        self._stats = stats
+        self._stats.update_ribbon_info()
+
+    @property
+    def ribbon(self):
+        """Ribbon for the casting session"""
+        return self._ribbon
+
+    @ribbon.setter
+    def ribbon(self, ribbon):
+        """Ribbon setter"""
+        self._ribbon = ribbon
+        self.diecase = self._ribbon.diecase
+        # New stats after choosing a different ribbon
+        self.stats = Stats(self)
+
+    @property
+    def diecase(self):
+        """Ribbon for the casting session"""
+        return self._diecase
+
+    @diecase.setter
+    def diecase(self, diecase):
+        """Ribbon setter"""
+        self._diecase = diecase
+        self.wedge = self._diecase.wedge
+
+    @property
+    def wedge(self):
+        """Ribbon for the casting session"""
+        return self._wedge
+
+    @wedge.setter
+    def wedge(self, wedge):
+        """Ribbon setter"""
+        self._wedge = wedge
+
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
         self.ribbon = typesetting_data.choose_ribbon()
-        self.diecase = self.ribbon.diecase
-        self.wedge = self.diecase.wedge
-        self.stats = Stats(self)
 
     def _choose_diecase(self):
         """Chooses a diecase from database"""
         self.diecase = matrix_data.choose_diecase()
-        self.wedge = self.diecase.wedge
 
     def _choose_wedge(self):
         """Chooses a wedge from registered ones"""
@@ -614,6 +653,7 @@ class Casting(object):
         data.extend(self.ribbon.get_parameters())
         data.extend(self.diecase.get_parameters())
         data.extend(self.wedge.get_parameters())
+        data.extend(self.stats.get_parameters())
         return data
 
     def _main_menu_options(self):
@@ -681,13 +721,6 @@ class Stats(object):
         self.previous = self.current
         self.session = session
 
-    def __enter__(self):
-        self.update_ribbon_info()
-        return self
-
-    def __exit__(self, *_):
-        pass
-
     def display(self):
         """Displays the current stats depending on session parameters"""
         if self.session.perforation_mode or self.session.testing:
@@ -715,7 +748,13 @@ class Stats(object):
         """Gets ribbon parameters"""
         return [(self.ribbon_data['job_codes'], 'Combinations in ribbon'),
                 (self.ribbon_data['job_lines'], 'Lines to cast'),
-                (self.ribbon_data['job_chars'], 'Characters')]
+                (self.ribbon_data['job_chars'], 'Characters incl. spaces')]
+
+    def get_parameters(self):
+        """Gets ribbon parameters"""
+        return [(self.ribbon_data['job_codes'], 'Combinations in ribbon'),
+                (self.ribbon_data['job_lines'], 'Lines to cast'),
+                (self.ribbon_data['job_chars'], 'Characters incl. spaces')]
 
     @stringify
     def _brief_info(self):
@@ -756,6 +795,7 @@ class Stats(object):
                 self.ribbon_data['job_lines'] += 1
             elif p.check_character(combination):
                 self.ribbon_data['job_chars'] += 1
+        UI.confirm('Parsed the ribbon')
 
     def _set_current(self, combination):
         """Gets the current combination and updates casting statistics"""
