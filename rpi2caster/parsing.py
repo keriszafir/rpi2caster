@@ -145,16 +145,15 @@ def parse_signals_string(raw_signals):
     Filter out all non-alphanumeric characters and whitespace.
     Convert to uppercase.
     """
+    if not raw_signals:
+        return []
     raw_signals = ''.join([x for x in raw_signals if x.isalnum()]).upper()
     # Build a list of justification signals
     justification = [sig for sig in ['0005', '0075'] if sig in raw_signals]
     # Remove these signals from the input string
-    for sig in justification:
+    for sig in justification + [str(i) for i in range(100, 14, -1)]:
         # We operate on a string, so cannot remove the item...
         raw_signals = raw_signals.replace(sig, '')
-    # Look for any numbers between 16 and 100, remove them
-    for number in range(100, 14, -1):
-        raw_signals = raw_signals.replace(str(number), '')
     # From remaining numbers, determine row numbers.
     # The highest number will be removed from the raw_signals to avoid
     # erroneously adding its digits as signals.

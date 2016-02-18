@@ -153,17 +153,17 @@ class Casting(object):
         self.line_aborted = 0
 
     @check_modes
-    def cast(self, ribbon=None):
+    def cast(self):
         """Casts the sequence of codes in self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
         # Check mode
         casting_mode = not self.perforation_mode and not self.testing
-        source = ribbon or self.ribbon.contents
+        source = self.ribbon.contents
         # Casting mode: cast backwards
         # 0005 at the beginning signals that the ribbon needs rewind
         if p.rewind_needed(source) and casting_mode:
-            source = reversed(source)
+            source = [x for x in reversed(source)]
         # Ask how many times to repeat this
         prompt = 'How many repetitions? (default: 1) : '
         jobs = casting_mode and UI.enter_data_or_blank(prompt, int) or 1
@@ -178,14 +178,19 @@ class Casting(object):
             # Now process the queue
             generator = (p.parse_record(record) for record in source)
             for (signals, comment) in generator:
-                comment and UI.display(comment)
-                if signals:
-                    # First strip O15 in casting mode, then cast it
-                    not self.perforation_mode and signals.remove('O15')
-                    self.stats.update(signals)
-                    self.stats.display()
-                    self.caster.process_signals(signals)
+                comment = comment and UI.display(comment)
+                if not signals:
+                    # No signals (comment only)- go to the next combination
+                    continue
+                elif not self.perforation_mode:
+                    # Use O15 only in punching mode
+                    signals = [sig for sig in signals if sig is not 'O15']
+                self.stats.update(signals)
+                self.stats.display()
+                self.caster.process_signals(signals)
             jobs -= 1
+        else:
+            UI.confirm('Finished!')
 
     @repeat_or_exit
     @testing_mode
@@ -511,6 +516,7 @@ class Casting(object):
             # At the end of successful sequence, some info for the user:
             UI.display('Done. Compare the lengths and adjust if needed.')
 
+    @cast_result
     @temporary_stats
     def line_casting(self):
         """line_casting:
@@ -533,9 +539,11 @@ class Casting(object):
         # Translate the text to Monotype signals
         typesetter.compose()
         queue = typesetter.justify()
-        with Value(queue) as self.ribbon.contents:
-            UI.yes_or_no('Show the codes?') and self.ribbon.display_contents()
-            UI.yes_or_no('Cast it?') and self.cast()
+        self.ribbon.contents, old_ribbon = queue, self.ribbon.contents
+        if UI.yes_or_no('Show the codes?'):
+            self.ribbon.display_contents()
+        self.ribbon.contents = old_ribbon
+        return queue
 
     def heatup(self):
         """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
