@@ -60,8 +60,10 @@ def testing_mode(func):
     """Decorator for setting the testing mode for certain functions"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        with Value(True) as self.testing:
-            return func(self, *args, **kwargs)
+        self.testing = True
+        retval = func(self, *args, **kwargs)
+        self.testing = False
+        return retval
     return wrapper
 
 
@@ -89,9 +91,12 @@ def cast_result(func):
     """Ask for confirmation and cast the resulting ribbon"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        ribbon = func(self, *args, **kwargs)
+        new_ribbon = func(self, *args, **kwargs)
         if self.testing or UI.yes_or_no('Cast it?'):
-            return self.cast(ribbon)
+            self.ribbon.contents, old_ribbon = new_ribbon, self.ribbon.contents
+            retval = self.cast()
+            self.ribbon.contents = old_ribbon
+            return retval
         else:
             return False
     return wrapper
@@ -183,9 +188,9 @@ class Casting(object):
             jobs -= 1
 
     @repeat_or_exit
+    @testing_mode
     @cast_result
     @temporary_stats
-    @testing_mode
     def test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
         intro = 'Testing the front pinblock - signals 1 towards 14.'
@@ -193,9 +198,9 @@ class Casting(object):
         return [str(n) for n in range(1, 15)]
 
     @repeat_or_exit
+    @testing_mode
     @cast_result
     @temporary_stats
-    @testing_mode
     def test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
         intro = ('This will test the front pinblock - signals NI, NL, A...N. ')
@@ -203,9 +208,9 @@ class Casting(object):
         return [x for x in c.COLUMNS_17]
 
     @repeat_or_exit
+    @testing_mode
     @cast_result
     @temporary_stats
-    @testing_mode
     def test_all(self):
         """Tests all valves and composition caster's inputs in original
         Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
@@ -217,9 +222,9 @@ class Casting(object):
         return [x for x in c.SIGNALS]
 
     @repeat
+    @testing_mode
     @cast_result
     @temporary_stats
-    @testing_mode
     def send_combination(self):
         """Send a specified combination to the caster, repeat"""
         # You can enter new signals or exit
