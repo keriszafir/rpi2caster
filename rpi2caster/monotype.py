@@ -16,7 +16,7 @@ class MonotypeCaster(object):
     def __init__(self):
         self.name = 'Monotype composition caster (mockup)'
         self.sensor = None
-        self.output_driver = None
+        self.output = None
         self.stop = EmergencyStop()
         self.lock = False
         # Attach a pump
@@ -42,7 +42,7 @@ class MonotypeCaster(object):
         # Collect data from I/O drivers
         data.append(self.sensor.get_parameters())
         data.append(self.stop.get_parameters())
-        data.append(self.output_driver.get_parameters())
+        data.append(self.output.get_parameters())
         return data
 
     def process_signals(self, signals, timeout=5):
@@ -87,9 +87,9 @@ class MonotypeCaster(object):
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
                 self.sensor.wait_for(new_state=True, timeout=timeout)
-                self.output_driver.valves_on(signals)
+                self.output.valves_on(signals)
                 self.sensor.wait_for(new_state=False, timeout=timeout)
-                self.output_driver.valves_off()
+                self.output.valves_off()
                 # self._send_signals_to_caster(signals, cycle_timeout)
                 # Successful ending - the combination has been cast
                 return True
@@ -126,15 +126,15 @@ class Pump(object):
     def stop(self):
         """Forces pump stop - won't end until it is turned off"""
         UI.display('Turning all valves off - just in case...')
-        self.caster.output_driver.valves_off()
+        self.caster.output.valves_off()
         while self.is_working:
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
                 self.caster.sensor.wait_for(new_state=True, force_cycle=True)
-                self.caster.output_driver.valves_on(['N', 'J', 'S', '0005'])
+                self.caster.output.valves_on(['N', 'J', 'S', '0005'])
                 self.caster.sensor.wait_for(new_state=False)
-                self.caster.output_driver.valves_off()
+                self.caster.output.valves_off()
                 UI.display('Pump is now off.')
                 return True
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
@@ -171,16 +171,16 @@ class Sensor(object):
                 (self.manual_mode, 'Manual mode')]
         return data
 
-    def detect_rotation(self, cycles=3, max_time=30):
+    def detect_rotation(self):
         """Detect machine cycles and alert if it's not working"""
         UI.display('Now checking if the machine is running...')
+        cycles = 3
         while True:
             try:
                 while cycles:
                     # Run a new cycle
                     UI.display(cycles)
-                    self.sensor.wait_for(new_state=True, timeout=max_time,
-                                         force_cycle=True)
+                    self.wait_for(new_state=True, timeout=30, force_cycle=True)
                     cycles -= 1
                 return True
             except (exceptions.MachineStopped,
@@ -192,7 +192,7 @@ class Sensor(object):
         switches to auto mode, where all combinations are processed in batch"""
         status = {True: 'ON', False: 'OFF'}
         UI.display('The sensor is going %s' % status[new_state])
-        if self.manual_mode or force_cycle:
+        if self.manual_mode:
             start_time = time()
             # Ask whether to cast or simulate machine stop
             prompt = ('[Enter] to continue, [S] to stop '
@@ -347,7 +347,37 @@ def sysfs_sensor():
     return input_driver_sysfs.SysfsSensor()
 
 
-def wiringpi_output_driver():
+def hardware_sensor():
+    """Actual hardware sensor"""
+    return sysfs_sensor()
+
+
+def simulation_sensor():
+    """Sensor for simulation"""
+    return Sensor()
+
+
+def perforation_sensor():
+    """Sensor for punching"""
+    return PerforatorSensor()
+
+
+def test_sensor():
+    """Sensor for testing"""
+    return InputTestSensor()
+
+
+def simulation_output():
+    """Mockup valve driver for simulation"""
+    return OutputDriver()
+
+
+def wiringpi_output():
     """Loads and instantiates the wiringPi2 driver for MCP23017"""
     from . import output_driver_wiringpi
     return output_driver_wiringpi.MCP23017Interface()
+
+
+def hardware_output():
+    """Actual hardware output driver"""
+    return wiringpi_output()

@@ -43,18 +43,39 @@ def use_caster(func):
     return wrapper
 
 
+def check_modes(func):
+    """Checks current modes (simulation, perforation, testing)"""
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        # Use hardware by default, don't instantiate
+        sensor = monotype.hardware_sensor
+        output = monotype.hardware_output
+        # Based on modes, choose different sensor and/or output driver
+        if self.simulation_mode:
+            sensor = monotype.simulation_sensor
+            output = monotype.simulation_output
+        if self.perforation_mode:
+            sensor = monotype.perforation_sensor
+        if self.testing:
+            sensor = monotype.test_sensor
+        # Instantiate and enter context
+        with sensor() as self.caster.sensor, output() as self.caster.output:
+            return func(self, *args, **kwargs)
+    return wrapper
+
+
 def check_simulation(func):
     """Decorator for using mockup sensor and output driver simulation mode"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         if self.simulation_mode:
             with monotype.Sensor() as self.caster.sensor:
-                with monotype.OutputDriver() as self.caster.driver:
+                with monotype.OutputDriver() as self.caster.output:
                     return func(self, *args, **kwargs)
         else:
             # Use real hardware sensor - might change it in the future!
             with monotype.sysfs_sensor() as self.caster.sensor:
-                with monotype.wiringpi_output_driver() as self.caster.driver:
+                with monotype.wiringpi_output_driver() as self.caster.output:
                     return func(self, *args, **kwargs)
     return wrapper
 
@@ -119,8 +140,8 @@ def cast_result(func):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         with Value(func(self, *args, **kwargs)) as self.ribbon.contents:
-            if UI.yes_or_no('Cast it?'):
-                return self.cast_composition()
+            if self.testing or UI.yes_or_no('Cast it?'):
+                return self.cast()
             else:
                 return False
     return wrapper
@@ -177,21 +198,21 @@ class Casting(object):
         self.line_aborted = 0
 
     @use_caster
-    @check_testing
-    @check_perforation
-    @check_simulation
+    @check_modes
     def cast(self):
         """Casts the sequence of codes in self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
+        # Check mode
+        casting_mode = not self.perforation_mode and not self.testing
         source = self.ribbon.contents
         # Casting mode: cast backwards
         # 0005 at the beginning signals that the ribbon needs rewind
-        if not self.perforation_mode and p.rewind_needed(source):
+        if casting_mode and p.rewind_needed(source):
             source = reversed(source)
         # Ask how many times to repeat this
         prompt = 'How many repetitions? (default: 1) : '
-        jobs = UI.enter_data_or_blank(prompt, int) or 1
+        jobs = casting_mode and UI.enter_data_or_blank(prompt, int) or 1
         self.stats.ribbon_data['all_jobs'] = jobs
         # Get the ribbon statistics
         self.stats.parse_ribbon()
@@ -199,7 +220,7 @@ class Casting(object):
         # Wait for machine to start
         self.caster.sensor.detect_rotation()
         # Cast/punch it a given number of times
-        for job in range(jobs):
+        while jobs:
             self.stats.ribbon_data['current_job'] += 1
             # Now process the queue
             generator = (p.parse_record(record) for record in source)
@@ -209,14 +230,7 @@ class Casting(object):
                 self.stats.display()
                 # Send it to the caster and let it do the job
                 self.caster.process_signals(signals)
-
-    def cast_composition(self):
-        """Casts the composition - interface method"""
-        self.cast()
-
-    def punch_composition(self):
-        """Punches the composition - interface method"""
-        self.cast()
+            jobs -= 1
 
     @repeat_or_exit
     @cast_result
@@ -266,6 +280,18 @@ class Casting(object):
         UI.confirm(intro)
         return [x for x in c.SIGNALS]
 
+    @repeat
+    @testing_mode
+    @cast_result
+    def send_combination(self):
+        """Send a specified combination to the caster, repeat"""
+        # You can enter new signals or exit
+        prompt = ('Enter the signals to send to the caster, '
+                  'or leave empty to return to menu: ')
+        signals = (UI.enter_data_or_blank(prompt) or
+                   exceptions.return_to_menu)
+        return [signals]
+
     @repeat_or_exit
     @cast_result
     # TODO: Selection from diecase by character
@@ -281,8 +307,8 @@ class Casting(object):
             UI.clear()
             UI.display('Sorts casting by matrix coordinates\n\n')
             prompt = 'Combination? (default: G5): '
-            code_string = UI.enter_data_or_blank(prompt).upper() or 'G5'
-            combination = p.parse_signals_string(code_string)
+            user_code = UI.enter_data_or_blank(prompt).upper() or 'G5'
+            combination = p.parse_signals_string(user_code)
             row = p.get_row(combination)
             column = p.get_column(combination)
             units = 0
@@ -296,7 +322,8 @@ class Casting(object):
                 continue
             elif unit_shift:
                 row -= 1
-                column = (column is 'D' and 'EF' or column) + 'D'
+                # Turn on D. Replace D with EF.
+                column_code = (column is 'D' and 'EF' or column) + 'D'
             # Determine the unit width for a row
             row_units = self.wedge.unit_arrangement[row]
             # Enter custom unit value (no points-based calculation yet)
@@ -320,20 +347,19 @@ class Casting(object):
             if sorts > 10:
                 UI.display(warning)
             # Add 'S' if there is width difference
-            signals = column + (diff and 'S' or '') + str(row)
-            signals_list = p.parse_signals_string(signals)
+            signals = column_code + (diff and 'S' or '') + str(row)
             # Ask for confirmation
             prompt = 'Casting %s lines of %s%s. OK?' % (lines, column, row)
             if UI.yes_or_no(prompt):
-                line_codes = [c.GALLEY_TRIP + [str(pos_0005)],
-                              c.PUMP_START + [str(pos_0075)]]
-                line_codes.extend([signals_list] * sorts)
+                line_codes = ['NKJS 0005 0075' + str(pos_0005),
+                              'NKS 0075' + str(pos_0075)]
+                line_codes.extend([signals] * sorts)
                 queue.extend(line_codes * lines)
             if not UI.yes_or_no('Another combination?'):
                 # Finished gathering data
                 break
-        queue.append(c.GALLEY_TRIP)
-        queue.append(c.PUMP_STOP)
+        queue.append('NKJS 0005 0075')
+        queue.append('NJS 0005')
         return queue
 
     @cast_result
@@ -420,39 +446,19 @@ class Casting(object):
                                         self.wedge.brit_pica)
             # Add 'S' if there is width difference
             signals = column + (diff and 'S' or '') + str(row)
-            signals_list = p.parse_signals_string(signals)
             # Ask for confirmation
             prompt = ('Casting %s lines of %s-point spaces from %s%s. OK?' %
                       (lines, width, column, row))
             if UI.yes_or_no(prompt):
-                line_codes = [c.GALLEY_TRIP + [str(pos_0005)],
-                              c.PUMP_START + [str(pos_0075)]]
-                line_codes.extend([signals_list] * sorts)
+                line_codes = ['NKJS 0005 0075' + str(pos_0005),
+                              'NKS 0075' + str(pos_0075)]
+                line_codes.extend([signals] * sorts)
                 queue.extend(line_codes * lines)
             if not UI.yes_or_no('Another combination?'):
                 # Finished gathering data
                 break
-        queue.append(c.GALLEY_TRIP)
-        queue.append(c.PUMP_STOP)
+        queue.extend(['NKJS 0005 0075', 'NJS 0005'])
         return queue
-
-    @repeat
-    @testing_mode
-    @cast_result
-    def send_combination(self):
-        """send_combination():
-
-        This function allows us to give the program a specific combination
-        of Monotype codes, and will keep the valves on until we press return
-        (useful for calibration). It also checks the signals' validity.
-        """
-        # You can enter new signals or exit
-        prompt = ('Enter the signals to send to the caster, '
-                  'or leave empty to return to menu: ')
-        signals = (UI.enter_data_or_blank(prompt) or
-                   exceptions.return_to_menu)
-        (signals, _) = p.parse_record(signals)
-        return [signals]
 
     @repeat_or_exit
     @cast_result
@@ -474,11 +480,10 @@ class Casting(object):
                  'Adjust the 52D space transfer wedge '
                  'until the lengths are the same.')
         UI.display(intro)
-        signals = ['G', '5']
-        queue = [c.GALLEY_TRIP, c.PUMP_START] + [signals for i in range(7)]
-        queue.extend([c.GALLEY_TRIP + ['8'], c.PUMP_START + ['3']])
-        queue.extend([signals + ['S'] for i in range(7)])
-        queue.extend([c.GALLEY_TRIP, c.PUMP_STOP])
+        signals = 'G5'
+        queue = ['NKJS 0005 0075'] + [signals] * 7
+        queue.extend(['NKJS 0005 0075 8', 'NKS 0075 3'] + [signals + 'S'] * 7)
+        queue.extend(['NKJS 0005 0075', 'NJS 0005'])
         return queue
 
     @repeat_or_exit
@@ -501,8 +506,9 @@ class Casting(object):
         em_width = pica * self.wedge.set_width / 12.0
         UI.display('9 units (1en) is %s wide' % round(em_width / 2, 4))
         UI.display('18 units (1em) is %s wide' % round(em_width, 4))
-        queue = [c.GALLEY_TRIP, c.PUMP_START] + [['G', '5'] for i in range(7)]
-        queue.extend([c.GALLEY_TRIP, c.PUMP_STOP])
+        signals = 'G5'
+        queue = ['NKJS 0005 0075'] + [signals] * 7
+        queue.extend(['NKJS 0005 0075', 'NJS 0005'])
         return queue
 
     @repeat_or_exit
@@ -581,7 +587,7 @@ class Casting(object):
         queue = typesetter.justify()
         with Value(queue) as self.ribbon.contents:
             UI.yes_or_no('Show the codes?') and self.ribbon.display_contents()
-            UI.yes_or_no('Cast it?') and self.cast_composition()
+            UI.yes_or_no('Cast it?') and self.cast()
 
     def heatup(self):
         """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
@@ -660,6 +666,8 @@ class Casting(object):
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
         opts = [(exceptions.exit_program, 'Exit', 'Exits the program', True),
+                (self.cast, 'Cast or punch composition',
+                 'Casts type or punch a ribbon', ribbon),
                 (self._choose_ribbon, 'Select ribbon',
                  'Selects a ribbon from database or file', True),
                 (self._choose_diecase, 'Select diecase',
@@ -668,10 +676,6 @@ class Casting(object):
                  'Selects a wedge from database', True),
                 (self.ribbon.display_contents, 'View codes',
                  'Displays all sequences in a ribbon', ribbon),
-                (self.punch_composition, 'Punch composition',
-                 'Punches a ribbon using a perforator', ribbon and perforator),
-                (self.cast_composition, 'Cast composition',
-                 'Casts type with a caster', ribbon and not perforator),
                 (self.diecase.show_layout, 'Show diecase layout',
                  'Views the matrix case layout', diecase_selected),
                 (self.line_casting, 'Ad-hoc typesetting',
@@ -746,16 +750,21 @@ class Stats(object):
         else:
             UI.display(self.full_info())
 
+    def display_ribbon_info(self):
+        """Displays the ribbon data"""
+
     @stringify
     def brief_info(self):
         """Brief info: current combination, comment, combinations done,
         all combinations, percent done"""
-        info = [(self.current['combination'], 'Current combination')]
+        info = [(' '.join(self.current['combination']), 'Current combination')]
         return info
 
     @stringify
     def full_info(self):
         """Full statistics: all from brief info and wedge positions"""
+        info = [(' '.join(self.current['combination']), 'Current combination')]
+        return info
 
     def update(self, combination):
         """Updates the stats based on current combination"""
