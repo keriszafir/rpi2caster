@@ -153,24 +153,20 @@ def parse_signals_string(raw_signals):
         # We operate on a string, so cannot remove the item...
         raw_signals = raw_signals.replace(sig, '')
     # Look for any numbers between 16 and 100, remove them
-    for number in range(100, 15, -1):
+    for number in range(100, 14, -1):
         raw_signals = raw_signals.replace(str(number), '')
     # From remaining numbers, determine row numbers.
     # The highest number will be removed from the raw_signals to avoid
     # erroneously adding its digits as signals.
     rows = []
-    for number in range(15, 0, -1):
+    for number in range(14, 0, -1):
         if str(number) in raw_signals:
             raw_signals = raw_signals.replace(str(number), '')
             rows.append(str(number))
     # Columns + S justification signal
-    columns = [s for s in 'ABCDEFGHIJKLMNOS' if s in raw_signals]
-    # Return a list containing all signals
-    signals = columns + rows + justification
-    if 'O' in signals or '15' in signals:
-        signals.append('O15')
-    # Arrange it a bit and end here
-    return [x for x in constants.SIGNALS if x in signals]
+    columns = [s for s in 'ABCDEFGHIJKLMNS' if s in raw_signals]
+    # Return a list containing all signals and default O15
+    return columns + justification + rows + ['O15']
 
 
 def get_column(signals):

@@ -217,7 +217,8 @@ class PerforatorSensor(Sensor):
 
     def detect_rotation(self):
         """Ask for user confirmation before punching"""
-        UI.confirm()
+        UI.confirm('\nRibbon punching: \n'
+                   'Put the ribbon on the perforator and turn on the air.')
 
     def wait_for(self, new_state, timeout=30, force_cycle=False):
         """Waits for user keypress before toggling the output state.

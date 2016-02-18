@@ -89,11 +89,11 @@ def cast_result(func):
     """Ask for confirmation and cast the resulting ribbon"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        with Value(func(self, *args, **kwargs)) as self.ribbon.contents:
-            if self.testing or UI.yes_or_no('Cast it?'):
-                return self.cast()
-            else:
-                return False
+        ribbon = func(self, *args, **kwargs)
+        if self.testing or UI.yes_or_no('Cast it?'):
+            return self.cast(ribbon)
+        else:
+            return False
     return wrapper
 
 
@@ -148,16 +148,16 @@ class Casting(object):
         self.line_aborted = 0
 
     @check_modes
-    def cast(self):
+    def cast(self, ribbon=None):
         """Casts the sequence of codes in self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
         # Check mode
         casting_mode = not self.perforation_mode and not self.testing
-        source = self.ribbon.contents
+        source = ribbon or self.ribbon.contents
         # Casting mode: cast backwards
         # 0005 at the beginning signals that the ribbon needs rewind
-        if casting_mode and p.rewind_needed(source):
+        if p.rewind_needed(source) and casting_mode:
             source = reversed(source)
         # Ask how many times to repeat this
         prompt = 'How many repetitions? (default: 1) : '
@@ -175,13 +175,10 @@ class Casting(object):
             for (signals, comment) in generator:
                 comment and UI.display(comment)
                 if signals:
+                    # First strip O15 in casting mode, then cast it
+                    not self.perforation_mode and signals.remove('O15')
                     self.stats.update(signals)
                     self.stats.display()
-                    # First strip O15...
-                    signals = [x for x in signals if x is not 'O15']
-                    # Add O15 in punching mode
-                    self.perforation_mode and signals.append('O15')
-                    # Send it to the caster and let it do the job
                     self.caster.process_signals(signals)
             jobs -= 1
 
@@ -190,14 +187,8 @@ class Casting(object):
     @temporary_stats
     @testing_mode
     def test_front_pinblock(self):
-        """test_front_pinblock():
-
-        Tests all valves and composition caster's inputs on the front pinblock
-        to check if everything works and is properly connected.
-        Signals will be tested in order: 1 towards 14.
-        """
-        intro = ('This will test the front pinblock - signals 1 towards 14. '
-                 'At the end O+15 will be activated.')
+        """Sends signals 1...14, one by one"""
+        intro = 'Testing the front pinblock - signals 1 towards 14.'
         UI.confirm(intro)
         return [str(n) for n in range(1, 15)]
 
@@ -206,14 +197,8 @@ class Casting(object):
     @temporary_stats
     @testing_mode
     def test_rear_pinblock(self):
-        """test_rear_pinblock():
-
-        Tests all valves and composition caster's inputs on the rear pinblock
-        to check if everything works and is properly connected.
-        Signals will be tested in order: NI, NL, A...N, O+15.
-        """
-        intro = ('This will test the front pinblock - signals NI, NL, A...N. '
-                 'At the end O+15 will be activated.')
+        """Sends NI, NL, A...N"""
+        intro = ('This will test the front pinblock - signals NI, NL, A...N. ')
         UI.confirm(intro)
         return [x for x in c.COLUMNS_17]
 
@@ -222,31 +207,26 @@ class Casting(object):
     @temporary_stats
     @testing_mode
     def test_all(self):
-        """test_all():
-
-        Tests all valves and composition caster's inputs in original
+        """Tests all valves and composition caster's inputs in original
         Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
-        At the end O+15 signal is tested also.
         """
         intro = ('This will test all the air lines in the same order '
                  'as the holes on the paper tower: \n%s\n'
-                 'At the end O+15 signal is tested.\n'
-                 'MAKE SURE THE PUMP IS DISENGAGED.'
-                 % ' '.join(c.SIGNALS))
+                 'MAKE SURE THE PUMP IS DISENGAGED.' % ' '.join(c.SIGNALS))
         UI.confirm(intro)
         return [x for x in c.SIGNALS]
 
     @repeat
-    @testing_mode
-    @temporary_stats
     @cast_result
+    @temporary_stats
+    @testing_mode
     def send_combination(self):
         """Send a specified combination to the caster, repeat"""
         # You can enter new signals or exit
         prompt = ('Enter the signals to send to the caster, '
                   'or leave empty to return to menu: ')
         signals = (UI.enter_data_or_blank(prompt) or
-                   exceptions.return_to_menu)
+                   exceptions.return_to_menu())
         return [signals]
 
     @repeat_or_exit
@@ -751,7 +731,7 @@ class Stats(object):
 
     def set_current(self, combination):
         """Gets the current combination and updates casting statistics"""
-        self.current['combination'] = combination
+        self.current['combination'] = combination or ['O15']
         self.update_wedge_positions(combination)
 
     def check_pump(self):
