@@ -34,15 +34,6 @@ wedge_data = matrix_data.wedge_data
 UI = typesetting_data.UI
 
 
-def use_caster(func):
-    """Decorator for requiring the caster context (i.e. lock the resource)"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        with self.caster:
-            return func(self, *args, **kwargs)
-    return wrapper
-
-
 def check_modes(func):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
@@ -60,49 +51,8 @@ def check_modes(func):
             sensor = monotype.test_sensor
         # Instantiate and enter context
         with sensor() as self.caster.sensor, output() as self.caster.output:
-            return func(self, *args, **kwargs)
-    return wrapper
-
-
-def check_simulation(func):
-    """Decorator for using mockup sensor and output driver simulation mode"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        if self.simulation_mode:
-            with monotype.Sensor() as self.caster.sensor:
-                with monotype.OutputDriver() as self.caster.output:
-                    return func(self, *args, **kwargs)
-        else:
-            # Use real hardware sensor - might change it in the future!
-            with monotype.sysfs_sensor() as self.caster.sensor:
-                with monotype.wiringpi_output_driver() as self.caster.output:
-                    return func(self, *args, **kwargs)
-    return wrapper
-
-
-def check_perforation(func):
-    """Decorator for changing sensor and pump for perforation mode"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        if self.perforation_mode:
-            # Use semi-automatic sensor, suppress pump and statistics
-            with monotype.PerforatorSensor() as self.caster.sensor:
+            with self.caster:
                 return func(self, *args, **kwargs)
-        else:
-            return func(self, *args, **kwargs)
-    return wrapper
-
-
-def check_testing(func):
-    """Decorator for changing sensor to user input in testing mode"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        if self.testing:
-            # Use manual sensor progression and suppress statistics
-            with monotype.InputTestSensor() as self.caster.sensor:
-                return func(self, *args, **kwargs)
-        else:
-            return func(self, *args, **kwargs)
     return wrapper
 
 
@@ -197,7 +147,6 @@ class Casting(object):
         # Indicates which line the last casting was aborted on
         self.line_aborted = 0
 
-    @use_caster
     @check_modes
     def cast(self):
         """Casts the sequence of codes in self.ribbon.contents,
@@ -215,7 +164,6 @@ class Casting(object):
         jobs = casting_mode and UI.enter_data_or_blank(prompt, int) or 1
         self.stats.ribbon_data['all_jobs'] = jobs
         # Get the ribbon statistics
-        self.stats.parse_ribbon()
         self.stats.display_ribbon_info()
         # Wait for machine to start
         self.caster.sensor.detect_rotation()
@@ -225,15 +173,21 @@ class Casting(object):
             # Now process the queue
             generator = (p.parse_record(record) for record in source)
             for (signals, comment) in generator:
-                self.stats.update(signals)
-                UI.display(comment)
-                self.stats.display()
-                # Send it to the caster and let it do the job
-                self.caster.process_signals(signals)
+                comment and UI.display(comment)
+                if signals:
+                    self.stats.update(signals)
+                    self.stats.display()
+                    # First strip O15...
+                    signals = [x for x in signals if x is not 'O15']
+                    # Add O15 in punching mode
+                    self.perforation_mode and signals.append('O15')
+                    # Send it to the caster and let it do the job
+                    self.caster.process_signals(signals)
             jobs -= 1
 
     @repeat_or_exit
     @cast_result
+    @temporary_stats
     @testing_mode
     def test_front_pinblock(self):
         """test_front_pinblock():
@@ -249,6 +203,7 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
+    @temporary_stats
     @testing_mode
     def test_rear_pinblock(self):
         """test_rear_pinblock():
@@ -264,6 +219,7 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
+    @temporary_stats
     @testing_mode
     def test_all(self):
         """test_all():
@@ -282,6 +238,7 @@ class Casting(object):
 
     @repeat
     @testing_mode
+    @temporary_stats
     @cast_result
     def send_combination(self):
         """Send a specified combination to the caster, repeat"""
@@ -293,6 +250,7 @@ class Casting(object):
         return [signals]
 
     @repeat_or_exit
+    @temporary_stats
     @cast_result
     # TODO: Selection from diecase by character
     def cast_sorts(self):
@@ -363,6 +321,7 @@ class Casting(object):
         return queue
 
     @cast_result
+    @temporary_stats
     def cast_spaces(self):
         """cast_spaces():
 
@@ -462,6 +421,7 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
+    @temporary_stats
     def align_wedges(self):
         """Allows to align the justification wedges so that when you're
         casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -488,6 +448,7 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
+    @temporary_stats
     def align_mould(self):
         """align_mould:
 
@@ -513,6 +474,7 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
+    @temporary_stats
     def align_diecase(self):
         # TODO: REFACTOR
         """align_diecase:
@@ -564,6 +526,7 @@ class Casting(object):
             # At the end of successful sequence, some info for the user:
             UI.display('Done. Compare the lengths and adjust if needed.')
 
+    @temporary_stats
     def line_casting(self):
         """line_casting:
 
@@ -591,8 +554,8 @@ class Casting(object):
 
     def heatup(self):
         """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
-        queue = ([c.GALLEY_TRIP] + [['O15'] for i in range(20)] +
-                 [c.GALLEY_TRIP, c.PUMP_STOP])
+        queue = (['NKJS 0005 0075'] + ['O15'] * 20 +
+                 ['NKJS 0005 0075'] + ['NJS 0005'])
         return queue
 
     def diagnostics_submenu(self):
@@ -752,6 +715,16 @@ class Stats(object):
 
     def display_ribbon_info(self):
         """Displays the ribbon data"""
+        UI.display(self.get_parameters())
+
+    @stringify
+    def get_parameters(self):
+        """Gets ribbon parameters"""
+        self.parse_ribbon()
+        info = [(self.ribbon_data['combinations'], 'Combinations in ribbon'),
+                (self.ribbon_data['job_lines'], 'Lines to cast'),
+                (self.ribbon_data['job_chars'], 'Characters')]
+        return info
 
     @stringify
     def brief_info(self):
