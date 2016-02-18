@@ -108,7 +108,7 @@ def stringify(func):
         """Wrapper function"""
         data = func(self)
         info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        return '\n'.join(info)
+        return '\n'.join(info) + '\n'
     return wrapper
 
 
@@ -140,17 +140,15 @@ class Casting(object):
         self.simulation_mode = False
         self.perforation_mode = False
         self.testing = False
-        self.stats = Stats(self)
         # Ribbon object, start with a default empty ribbon
         if ribbon_file:
-            self.ribbon = typesetting_data.choose_ribbon(filename=ribbon_file)
+            self.ribbon = typesetting_data.Ribbon(filename=ribbon_file)
         else:
             # Start with empty ribbon
             self.ribbon = typesetting_data.EmptyRibbon()
         self.diecase = self.ribbon.diecase
         self.wedge = self.diecase.wedge
-        # Indicates which line the last casting was aborted on
-        self.line_aborted = 0
+        self.stats = Stats(self)
 
     @check_modes
     def cast(self):
@@ -174,7 +172,8 @@ class Casting(object):
         self.caster.sensor.detect_rotation()
         # Cast/punch it a given number of times
         while jobs:
-            self.stats.ribbon_data['current_job'] += 1
+            self.stats.update_job_info()
+            self.stats.display_job_info()
             # Now process the queue
             generator = (p.parse_record(record) for record in source)
             for (signals, comment) in generator:
@@ -189,8 +188,10 @@ class Casting(object):
                 self.stats.display()
                 self.caster.process_signals(signals)
             jobs -= 1
-        else:
-            UI.confirm('Finished!')
+            if jobs:
+                UI.confirm('%s more job(s) remain')
+        # This is the end
+        UI.confirm('Finished!')
 
     @repeat_or_exit
     @testing_mode
@@ -595,6 +596,7 @@ class Casting(object):
         self.ribbon = typesetting_data.choose_ribbon()
         self.diecase = self.ribbon.diecase
         self.wedge = self.diecase.wedge
+        self.stats = Stats(self)
 
     def _choose_diecase(self):
         """Chooses a diecase from database"""
@@ -608,8 +610,7 @@ class Casting(object):
     @stringify
     def _display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
-        data = [(self.caster.name, 'Caster name'),
-                (self.line_aborted, 'Last casting was aborted on line no')]
+        data = self.caster.get_parameters()
         data.extend(self.ribbon.get_parameters())
         data.extend(self.diecase.get_parameters())
         data.extend(self.wedge.get_parameters())
@@ -670,30 +671,18 @@ class Casting(object):
                 pass
 
 
-class Value(object):
-    """Context manager for passing any value"""
-    def __init__(self, value=True):
-        self.value = value
-
-    def __enter__(self):
-        return self.value
-
-    def __exit__(self, *_):
-        pass
-
-
 class Stats(object):
     """Casting statistics gathering and displaying functions"""
     def __init__(self, session):
         self.ribbon_data = {'lines_done': 0, 'all_lines': 0, 'current_job': 0,
                             'all_jobs': 0, 'job_lines': 0, 'job_chars': 0,
-                            'combinations': 0, 'all_chars': 0}
+                            'job_codes': 0, 'all_chars': 0}
         self.current = {'combination': [], '0075': '15', '0005': '15'}
         self.previous = self.current
         self.session = session
 
     def __enter__(self):
-        self.__init__(self.session)
+        self.update_ribbon_info()
         return self
 
     def __exit__(self, *_):
@@ -702,52 +691,78 @@ class Stats(object):
     def display(self):
         """Displays the current stats depending on session parameters"""
         if self.session.perforation_mode or self.session.testing:
-            UI.display(self.brief_info())
+            UI.display(self._brief_info())
         else:
-            UI.display(self.full_info())
+            UI.display(self._full_info())
 
     def display_ribbon_info(self):
         """Displays the ribbon data"""
-        UI.display(self.get_parameters())
+        UI.display(self._get_ribbon_info())
+
+    def display_job_info(self):
+        """Displays info at the beginning of the job"""
+        UI.display(self._get_job_info() + self._get_ribbon_info())
 
     @stringify
-    def get_parameters(self):
+    def _get_job_info(self):
+        """Gets info about current job"""
+        return [(self.ribbon_data['current_job'], 'Current job'),
+                (self.ribbon_data['all_jobs'] -
+                 self.ribbon_data['current_job'], 'Jobs remaining')]
+
+    @stringify
+    def _get_ribbon_info(self):
         """Gets ribbon parameters"""
-        self.parse_ribbon()
-        info = [(self.ribbon_data['combinations'], 'Combinations in ribbon'),
+        return [(self.ribbon_data['job_codes'], 'Combinations in ribbon'),
                 (self.ribbon_data['job_lines'], 'Lines to cast'),
                 (self.ribbon_data['job_chars'], 'Characters')]
-        return info
 
     @stringify
-    def brief_info(self):
+    def _brief_info(self):
         """Brief info: current combination, comment, combinations done,
         all combinations, percent done"""
-        info = [(' '.join(self.current['combination']), 'Current combination')]
-        return info
+        return [(' '.join(self.current['combination']), 'Current combination')]
 
     @stringify
-    def full_info(self):
+    def _full_info(self):
         """Full statistics: all from brief info and wedge positions"""
-        info = [(' '.join(self.current['combination']), 'Current combination')]
-        return info
+        return [(' '.join(self.current['combination']), 'Current combination')]
 
     def update(self, combination):
         """Updates the stats based on current combination"""
         # Remember the previous state
         self.previous = self.current
         # Update line info
-        self.set_current(combination)
+        self._set_current(combination)
         # Check the pump working/non-working status in the casting mode
         if not self.session.perforation_mode and not self.session.testing:
-            self.check_pump()
+            self._check_pump()
 
-    def set_current(self, combination):
+    def update_job_info(self):
+        """Updates the info on starting the new job"""
+        self.update_ribbon_info()
+
+    def update_ribbon_info(self):
+        """Parses the ribbon, counts combinations, lines and characters"""
+        self.ribbon_data['job_codes'] = 0
+        self.ribbon_data['job_lines'] = 0
+        self.ribbon_data['job_chars'] = 0
+        generator = (p.parse_record(x) for x in self.session.ribbon.contents)
+        for (combination, _) in generator:
+            if combination:
+                # Guards against empty combination i.e. line with comment only
+                self.ribbon_data['job_codes'] += 1
+            if p.check_newline(combination):
+                self.ribbon_data['job_lines'] += 1
+            elif p.check_character(combination):
+                self.ribbon_data['job_chars'] += 1
+
+    def _set_current(self, combination):
         """Gets the current combination and updates casting statistics"""
         self.current['combination'] = combination or ['O15']
-        self.update_wedge_positions(combination)
+        self._update_wedge_positions(combination)
 
-    def check_pump(self):
+    def _check_pump(self):
         """Checks pump based on current and previous combination"""
         previous = self.previous['combination']
         current = self.current['combination']
@@ -764,7 +779,7 @@ class Stats(object):
         # Feed it back to pump object
         self.session.caster.pump.is_working = pump_status
 
-    def update_wedge_positions(self, combination):
+    def _update_wedge_positions(self, combination):
         """Gets current positions of 0005 and 0075 wedges"""
         # Check 0005
         if p.check_0005(combination):
@@ -774,16 +789,3 @@ class Stats(object):
         if p.check_0075(combination):
             candidates = [x for x in range(15) if str(x) in combination]
             self.current['0075'] = candidates and str(min(candidates)) or '15'
-
-    def parse_ribbon(self):
-        """Parses the ribbon, counts combinations, lines and characters"""
-        generator = (p.parse_record(x) for x in self.session.ribbon.contents)
-        for (combination, _) in generator:
-            if combination:
-                # Guards against empty combination i.e. line with comment only
-                self.ribbon_data['combinations'] += 1
-            if p.check_newline(combination):
-                self.ribbon_data['job_lines'] += 1
-            elif p.check_character(combination):
-                self.ribbon_data['job_chars'] += 1
-        # Multiply by number of jobs

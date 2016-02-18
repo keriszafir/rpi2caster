@@ -15,8 +15,8 @@ class MonotypeCaster(object):
     caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
         self.name = 'Monotype composition caster (mockup)'
-        self.sensor = None
-        self.output = None
+        self.sensor = Sensor()
+        self.output = OutputDriver()
         self.stop = EmergencyStop()
         self.lock = False
         # Attach a pump
@@ -40,9 +40,9 @@ class MonotypeCaster(object):
         """Gets a list of parameters"""
         data = [(self.name, 'Caster name')]
         # Collect data from I/O drivers
-        data.append(self.sensor.get_parameters())
-        data.append(self.stop.get_parameters())
-        data.append(self.output.get_parameters())
+        data.extend(self.sensor.get_parameters())
+        data.extend(self.stop.get_parameters())
+        data.extend(self.output.get_parameters())
         return data
 
     def process_signals(self, signals, timeout=5):
@@ -273,8 +273,7 @@ class EmergencyStop(object):
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Emergency stop button driver')]
-        return data
+        return [(self.name, 'Emergency stop button driver')]
 
 
 class OutputDriver(object):
@@ -283,7 +282,7 @@ class OutputDriver(object):
         pins = [pin for pin in range(pin_base, pin_base + 32)]
         self.lock = False
         self.name = 'Mockup output driver for simulation'
-        self.signals_arrangement = sig_arr.split(',')
+        self.signals_arrangement = sig_arr
         self.pin_numbers = dict(zip(self.signals_arrangement, pins))
 
     def __enter__(self):
