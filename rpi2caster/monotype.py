@@ -7,7 +7,7 @@ from . import exceptions
 # Default user interface
 from .global_settings import USER_INTERFACE as UI
 # Alphanumeric arrangement
-from .constants import PIN_BASE, ALNUM_ARR
+from .constants import PIN_BASE, ALNUM_ARR, PUMP_STOP, PUMP_START
 
 
 class MonotypeCaster(object):
@@ -21,8 +21,6 @@ class MonotypeCaster(object):
         self.lock = False
         # Attach a pump
         self.pump = Pump(self)
-        self.current_0005 = '15'
-        self.current_0075 = '15'
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
@@ -31,8 +29,6 @@ class MonotypeCaster(object):
             UI.display('Caster %s is already busy!' % self.name)
         else:
             # Set default wedge positions
-            self.current_0005 = '15'
-            self.current_0075 = '15'
             self.lock = True
             return self
 
@@ -95,16 +91,10 @@ class MonotypeCaster(object):
                 return True
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up and ask what to do
-                # Save the current wedge positions to resume them if need be
-                pump_needs_resume = self.pump.is_working
-                last_0005 = self.current_0005
-                last_0075 = self.current_0075
                 self.pump.stop()
                 stop_menu()
-                # Now we need to re-activate the pump if it was previously on
-                # to cast something at all...
-                if pump_needs_resume:
-                    self.pump.start(last_0005, last_0075)
+                # If user continues, pump will be restarted if it was working
+                self.pump.start()
 
     def __exit__(self, *_):
         UI.debug_info('Caster no longer in use.')
@@ -115,7 +105,10 @@ class Pump(object):
     """Pump class for storing the pump working/non-working status."""
     def __init__(self, caster):
         self.caster = caster
-        self.is_working = False
+        self.is_working = self.was_working = False
+        # Remember wedge positions on resume
+        self.current_0005 = self.last_0005 = '15'
+        self.current_0075 = self.last_0075 = '15'
 
     def __enter__(self):
         return self
@@ -127,12 +120,14 @@ class Pump(object):
         """Forces pump stop - won't end until it is turned off"""
         UI.display('Turning all valves off - just in case...')
         self.caster.output.valves_off()
+        self.last_0075, self.last_0005 = self.current_0075, self.current_0005
+        self.was_working = self.is_working
         while self.is_working:
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
                 self.caster.sensor.wait_for(new_state=True, force_cycle=True)
-                self.caster.output.valves_on(['N', 'J', 'S', '0005'])
+                self.caster.output.valves_on(PUMP_STOP)
                 self.caster.sensor.wait_for(new_state=False)
                 self.caster.output.valves_off()
                 UI.display('Pump is now off.')
@@ -140,13 +135,14 @@ class Pump(object):
             except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
                 pass
 
-    def start(self, pos_0005, pos_0075):
+    def start(self):
         """Starts the pump with given wedge positions"""
-        UI.display('Resuming pump action...')
-        # Set the wedge positions from before stop
-        self.caster.process_signals(['N', 'J', '0005', 'S', pos_0005])
-        self.caster.process_signals(['N', 'K', '0075', 'S', pos_0075])
-        UI.display('Pump action resumed.')
+        if self.was_working:
+            UI.display('Resuming pump action...')
+            # Set the wedge positions from before stop
+            self.caster.process_signals(PUMP_STOP + [self.last_0005])
+            self.caster.process_signals(PUMP_START + [self.last_0075])
+            UI.display('Pump action resumed.')
 
 
 class Sensor(object):
@@ -338,6 +334,65 @@ def stop_menu():
     message = ('Machine is not running!\n'
                '[C]ontinue, [A]bort or [E]xit program? ')
     UI.simple_menu(message, options)()
+
+
+class Mode(object):
+    """Session mode: casting / simulation / perforation"""
+    def __init__(self):
+        self.simulation = False
+        self.punching = False
+        self.testing = False
+
+    @property
+    def simulation(self):
+        """Simulation mode"""
+        return self.__dict__['simulation'] and True or False
+
+    @simulation.setter
+    def simulation(self, value):
+        """Set the simulation mode"""
+        self.__dict__['simulation'] = value
+
+    @property
+    def punching(self):
+        """Punching mode"""
+        return self.__dict__['punching'] and True or False
+
+    @punching.setter
+    def punching(self, value):
+        """Set the punching mode"""
+        self.__dict__['punching'] = value
+
+    @property
+    def testing(self):
+        """Testing mode"""
+        return self.__dict__['testing'] and True or False
+
+    @testing.setter
+    def testing(self, value):
+        """Set the testing mode"""
+        self.__dict__['testing'] = value
+
+    @property
+    def casting(self):
+        """Check if the machine is casting"""
+        return not self.punching and not self.testing
+
+    @property
+    def sensor(self):
+        """Chooses a proper sensor"""
+        sensor = (self.testing and test_sensor or
+                  self.punching and punching_sensor or
+                  self.simulation and simulation_sensor or
+                  hardware_sensor)
+        return sensor()
+
+    @property
+    def output(self):
+        """Chooses a simulation or hardware output driver"""
+        output = (self.simulation and simulation_output or
+                  hardware_output)
+        return output()
 
 
 # Hardware control modules

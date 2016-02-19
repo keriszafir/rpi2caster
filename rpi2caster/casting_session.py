@@ -130,7 +130,7 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
-        self.mode = Mode()
+        self.mode = monotype.Mode()
         self.ribbon = (ribbon_file and
                        typesetting_data.choose_ribbon(filename=ribbon_file) or
                        typesetting_data.EmptyRibbon())
@@ -798,8 +798,11 @@ class Stats(object):
         on_hold = p.check_0005(current) or p.check_0075(current)
         # Determine the current status
         pump_status = (running or started) and not stopped and not on_hold
+        self.current['pump_status'] = pump_status
         # Feed it back to pump object
-        self.session.caster.pump.is_working = pump_status
+        self.session.caster.pump.is_working = self.current['pump_status']
+        self.session.caster.pump.current_0005 = self.current['0005']
+        self.session.caster.pump.current_0075 = self.current['0075']
 
     def _update_wedge_positions(self, combination):
         """Gets current positions of 0005 and 0075 wedges"""
@@ -811,62 +814,3 @@ class Stats(object):
         if p.check_0075(combination):
             candidates = [x for x in range(15) if str(x) in combination]
             self.current['0075'] = candidates and str(min(candidates)) or '15'
-
-
-class Mode(object):
-    """Session mode: casting / simulation / perforation"""
-    def __init__(self):
-        self.simulation = False
-        self.punching = False
-        self.testing = False
-
-    @property
-    def simulation(self):
-        """Simulation mode"""
-        return self.__dict__['simulation'] and True or False
-
-    @simulation.setter
-    def simulation(self, value):
-        """Set the simulation mode"""
-        self.__dict__['simulation'] = value
-
-    @property
-    def punching(self):
-        """Punching mode"""
-        return self.__dict__['punching'] and True or False
-
-    @punching.setter
-    def punching(self, value):
-        """Set the punching mode"""
-        self.__dict__['punching'] = value
-
-    @property
-    def testing(self):
-        """Testing mode"""
-        return self.__dict__['testing'] and True or False
-
-    @testing.setter
-    def testing(self, value):
-        """Set the testing mode"""
-        self.__dict__['testing'] = value
-
-    @property
-    def casting(self):
-        """Check if the machine is casting"""
-        return not self.punching and not self.testing
-
-    @property
-    def sensor(self):
-        """Chooses a proper sensor"""
-        sensor = (self.testing and monotype.test_sensor or
-                  self.punching and monotype.punching_sensor or
-                  self.simulation and monotype.simulation_sensor or
-                  monotype.hardware_sensor)
-        return sensor()
-
-    @property
-    def output(self):
-        """Chooses a simulation or hardware output driver"""
-        output = (self.simulation and monotype.simulation_output or
-                  monotype.hardware_output)
-        return output()
