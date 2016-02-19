@@ -496,6 +496,7 @@ def edit_diecase_layout(diecase):
             que = 'Save the changes?'
             if working_diecase.layout != diecase.layout and yes_or_no(que):
                 diecase.layout = working_diecase.layout
+            break
 
 
 def exit_program():
