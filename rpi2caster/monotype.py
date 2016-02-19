@@ -335,54 +335,6 @@ class OutputDriver(object):
             self.one_off(sig)
 
 
-class WiringPi2OutputDriver(OutputDriver):
-    """A 32-channel control interface based on two MCP23017 chips,
-    using wiringPi2 library"""
-    def __init__(self, mcp0_address=c.MCP0, mcp1_address=c.MCP1,
-                 pin_base=c.PIN_BASE, sig_arr=SIGNALS):
-        super().__init__(pin_base=pin_base, sig_arr=sig_arr)
-        self.name = 'MCP23017 driver using wiringPi2-Python library'
-        UI.debug_info('Creating a %s' % self.name)
-        # Set up an output interface on two MCP23017 chips
-        wiringpi2.mcp23017Setup(pin_base, mcp0_address)
-        wiringpi2.mcp23017Setup(pin_base + 16, mcp1_address)
-        # Set all I/O lines on MCP23017s as outputs - mode=1
-        for pin in self.pin_numbers.values():
-            wiringpi2.pinMode(pin, 1)
-        UI.debug_info('Successfully created the %s' % self.name)
-
-    def one_on(self, sig):
-        """Looks a signal up in arrangement and turns it on"""
-        try:
-            wiringpi2.digitalWrite(self.pin_numbers[sig], 1)
-        except KeyError:
-            raise e.WrongConfiguration('Signal %s not defined!' % sig)
-
-    def one_off(self, sig):
-        """Looks a signal up in arrangement and turns it off"""
-        try:
-            wiringpi2.digitalWrite(self.pin_numbers[sig], 0)
-        except KeyError:
-            msg = ('Signal %s not defined! Signals arrangement: %s\n'
-                   % (sig, self.signals_arrangement))
-            raise e.WrongConfiguration(msg)
-
-
-def stop_menu():
-    """This allows us to choose whether we want to continue,
-    return to menu or exit if the machine is stopped during casting.
-    """
-    def continue_casting():
-        """Helper function - continue casting."""
-        return True
-    options = {'C': continue_casting,
-               'A': e.abort_casting,
-               'E': e.exit_program}
-    message = ('Machine is not running!\n'
-               '[C]ontinue, [A]bort or [E]xit program? ')
-    UI.simple_menu(message, options)()
-
-
 class Mode(object):
     """Session mode: casting / simulation / perforation"""
     def __init__(self):
@@ -430,26 +382,48 @@ class Mode(object):
         """Chooses a proper sensor"""
         sensor = (self.testing and TestSensor or
                   self.punching and PunchingSensor or
-                  self.simulation and SimulationSensor or
-                  HardwareSensor)
+                  self.simulation and simulation_sensor or
+                  hardware_sensor)
         return sensor
 
     @property
     def output(self):
         """Chooses a simulation or hardware output driver"""
-        output = (self.simulation and SimulationOutput or
-                  HardwareOutput)
+        output = (self.simulation and simulation_output or
+                  hardware_output)
         return output
 
 
 # Hardware control modules
 def sysfs_sensor():
     """Loads and instantiates the SysFS sensor"""
-    from . import input_driver_sysfs
-    return input_driver_sysfs.SysfsSensor
+    from .input_driver_sysfs import SysfsSensor
+    return SysfsSensor()
 
 
-SimulationSensor = Sensor
-SimulationOutput = OutputDriver
-HardwareOutput = WiringPi2OutputDriver
-HardwareSensor = sysfs_sensor()
+def wiringpi_output():
+    """Loads and instantiates the wiringPi2 output driver"""
+    from .output_driver_wiringpi import WiringPiOutputDriver
+    return WiringPiOutputDriver()
+
+
+def stop_menu():
+    """This allows us to choose whether we want to continue,
+    return to menu or exit if the machine is stopped during casting.
+    """
+    def continue_casting():
+        """Helper function - continue casting."""
+        return True
+    options = {'C': continue_casting,
+               'A': e.abort_casting,
+               'E': e.exit_program}
+    message = ('Machine is not running!\n'
+               '[C]ontinue, [A]bort or [E]xit program? ')
+    UI.simple_menu(message, options)()
+
+
+# Link class definitions
+simulation_sensor = Sensor
+simulation_output = OutputDriver
+hardware_sensor = sysfs_sensor
+hardware_output = wiringpi_output

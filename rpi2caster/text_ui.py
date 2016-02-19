@@ -114,7 +114,7 @@ def debug_enter_data(prompt):
 def debug_confirm(msg1='', msg2=MSG_CONTINUE):
     """For debug confirmations"""
     if DEBUG_MODE:
-        input('DEBUG: ' + msg1 + '\n' + msg2)
+        input('DEBUG: ' + msg1 + ' - ' + msg2)
 
 
 def confirm(msg1='', msg2=MSG_CONTINUE):
