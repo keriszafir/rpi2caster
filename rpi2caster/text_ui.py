@@ -119,7 +119,7 @@ def debug_confirm(msg1='', msg2=MSG_CONTINUE):
 
 def confirm(msg1='', msg2=MSG_CONTINUE):
     """Waits until user presses return"""
-    input('DEBUG: ' + msg1 + '\n' + msg2)
+    input(msg1 + '\n' + msg2)
 
 
 def enter_data(prompt, datatype=str):
