@@ -2,12 +2,24 @@
 """Drivers for generic Monotype caster """
 # Built-in time module
 from time import time, sleep
+# wiringPi2 backend for MCP23017 setup
+try:
+    import wiringpi2
+except ImportError:
+    pass
 # Custom exceptions module
-from . import exceptions
+from . import exceptions as e
+# Constants module
+from . import constants as c
 # Default user interface
 from .global_settings import USER_INTERFACE as UI
-# Alphanumeric arrangement
-from .constants import PIN_BASE, ALNUM_ARR, PUMP_STOP, PUMP_START
+# Configuration parsing
+from . import cfg_parser
+try:
+    SIGNALS = (str(cfg_parser.get_config('SignalsArrangements',
+                                         'signals_arrangement')).upper())
+except e.NotConfigured:
+    SIGNALS = c.ALNUM_ARR
 
 
 class MonotypeCaster(object):
@@ -89,7 +101,7 @@ class MonotypeCaster(object):
                 # self._send_signals_to_caster(signals, cycle_timeout)
                 # Successful ending - the combination has been cast
                 return True
-            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
+            except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up and ask what to do
                 self.pump.stop()
                 stop_menu()
@@ -127,12 +139,12 @@ class Pump(object):
             try:
                 # Run a full machine cycle to turn the pump off
                 self.caster.sensor.wait_for(new_state=True, force_cycle=True)
-                self.caster.output.valves_on(PUMP_STOP)
+                self.caster.output.valves_on(c.PUMP_STOP)
                 self.caster.sensor.wait_for(new_state=False)
                 self.caster.output.valves_off()
                 UI.display('Pump is now off.')
                 return True
-            except (exceptions.MachineStopped, KeyboardInterrupt, EOFError):
+            except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 pass
 
     def start(self):
@@ -140,8 +152,8 @@ class Pump(object):
         if self.was_working:
             UI.display('Resuming pump action...')
             # Set the wedge positions from before stop
-            self.caster.process_signals(PUMP_STOP + [self.last_0005])
-            self.caster.process_signals(PUMP_START + [self.last_0075])
+            self.caster.process_signals(c.PUMP_STOP + [self.last_0005])
+            self.caster.process_signals(c.PUMP_START + [self.last_0075])
             UI.display('Pump action resumed.')
 
 
@@ -179,7 +191,7 @@ class Sensor(object):
                     self.wait_for(new_state=True, timeout=30, force_cycle=True)
                     cycles -= 1
                 return True
-            except (exceptions.MachineStopped,
+            except (e.MachineStopped,
                     KeyboardInterrupt, EOFError):
                 stop_menu()
 
@@ -197,15 +209,15 @@ class Sensor(object):
             if answer in 'aA':
                 self.manual_mode = False
             elif answer in 'sS':
-                raise exceptions.MachineStopped
+                raise e.MachineStopped
             elif time() - start_time > timeout:
                 UI.display('Timeout - you answered after %ds' % timeout)
-                raise exceptions.MachineStopped
+                raise e.MachineStopped
         else:
             sleep(0.1)
 
 
-class PerforatorSensor(Sensor):
+class PunchingSensor(Sensor):
     """A special sensor class for perforators"""
     def __init__(self):
         super().__init__()
@@ -231,10 +243,10 @@ class PerforatorSensor(Sensor):
             if answer in 'aA':
                 self.manual_mode = False
             elif answer in 'sS':
-                raise exceptions.MachineStopped
+                raise e.MachineStopped
             elif time() - start_time > timeout:
                 UI.display('Timeout - you answered after %ds' % timeout)
-                raise exceptions.MachineStopped
+                raise e.MachineStopped
         elif new_state:
             # Time needed for all punches to go down
             sleep(0.4)
@@ -243,7 +255,7 @@ class PerforatorSensor(Sensor):
             sleep(0.25)
 
 
-class InputTestSensor(Sensor):
+class TestSensor(Sensor):
     """A keyboard-operated "sensor" for testing inputs.
     No automatic mode is supported."""
     def __init__(self):
@@ -274,7 +286,7 @@ class EmergencyStop(object):
 
 class OutputDriver(object):
     """Mockup for a driver for 32 pneumatic outputs"""
-    def __init__(self, pin_base=PIN_BASE, sig_arr=ALNUM_ARR):
+    def __init__(self, pin_base=c.PIN_BASE, sig_arr=SIGNALS):
         pins = [pin for pin in range(pin_base, pin_base + 32)]
         self.lock = False
         self.name = 'Mockup output driver for simulation'
@@ -301,14 +313,14 @@ class OutputDriver(object):
         try:
             UI.debug_info(sig + ' on')
         except KeyError:
-            raise exceptions.WrongConfiguration('Signal %s not defined!' % sig)
+            raise e.WrongConfiguration('Signal %s not defined!' % sig)
 
     def one_off(self, sig):
         """Looks a signal up in arrangement and turns it on"""
         try:
             UI.debug_info(sig + ' off')
         except KeyError:
-            raise exceptions.WrongConfiguration('Signal %s not defined!' % sig)
+            raise e.WrongConfiguration('Signal %s not defined!' % sig)
 
     def valves_on(self, signals_list):
         """Turns on multiple valves"""
@@ -321,6 +333,35 @@ class OutputDriver(object):
             self.one_off(sig)
 
 
+class WiringPi2OutputDriver(OutputDriver):
+    """A 32-channel control interface based on two MCP23017 chips,
+    using wiringPi2 library"""
+    def __init__(self, mcp0_address=c.MCP0, mcp1_address=c.MCP1,
+                 pin_base=c.PIN_BASE, sig_arr=SIGNALS):
+        super().__init__(pin_base=pin_base, sig_arr=sig_arr)
+        self.name = 'MCP23017 driver using wiringPi2-Python library'
+        # Set up an output interface on two MCP23017 chips
+        wiringpi2.mcp23017Setup(pin_base, mcp0_address)
+        wiringpi2.mcp23017Setup(pin_base + 16, mcp1_address)
+        # Set all I/O lines on MCP23017s as outputs - mode=1
+        for pin in self.pin_numbers.values():
+            wiringpi2.pinMode(pin, 1)
+
+    def one_on(self, sig):
+        """Looks a signal up in arrangement and turns it on"""
+        try:
+            wiringpi2.digitalWrite(self.pin_numbers[sig], 1)
+        except KeyError:
+            raise e.WrongConfiguration('Signal %s not defined!' % sig)
+
+    def one_off(self, sig):
+        """Looks a signal up in arrangement and turns it off"""
+        try:
+            wiringpi2.digitalWrite(self.pin_numbers[sig], 0)
+        except KeyError:
+            raise e.WrongConfiguration('Signal %s not defined!' % sig)
+
+
 def stop_menu():
     """This allows us to choose whether we want to continue,
     return to menu or exit if the machine is stopped during casting.
@@ -329,8 +370,8 @@ def stop_menu():
         """Helper function - continue casting."""
         return True
     options = {'C': continue_casting,
-               'A': exceptions.abort_casting,
-               'E': exceptions.exit_program}
+               'A': e.abort_casting,
+               'E': e.exit_program}
     message = ('Machine is not running!\n'
                '[C]ontinue, [A]bort or [E]xit program? ')
     UI.simple_menu(message, options)()
@@ -381,17 +422,17 @@ class Mode(object):
     @property
     def sensor(self):
         """Chooses a proper sensor"""
-        sensor = (self.testing and test_sensor or
-                  self.punching and punching_sensor or
-                  self.simulation and simulation_sensor or
-                  hardware_sensor)
+        sensor = (self.testing and TestSensor or
+                  self.punching and PunchingSensor or
+                  self.simulation and SimulationSensor or
+                  HardwareSensor)
         return sensor()
 
     @property
     def output(self):
         """Chooses a simulation or hardware output driver"""
-        output = (self.simulation and simulation_output or
-                  hardware_output)
+        output = (self.simulation and SimulationOutput or
+                  HardwareOutput)
         return output()
 
 
@@ -399,40 +440,10 @@ class Mode(object):
 def sysfs_sensor():
     """Loads and instantiates the SysFS sensor"""
     from . import input_driver_sysfs
-    return input_driver_sysfs.SysfsSensor()
+    return input_driver_sysfs.SysfsSensor
 
 
-def hardware_sensor():
-    """Actual hardware sensor"""
-    return sysfs_sensor()
-
-
-def simulation_sensor():
-    """Sensor for simulation"""
-    return Sensor()
-
-
-def punching_sensor():
-    """Sensor for punching"""
-    return PerforatorSensor()
-
-
-def test_sensor():
-    """Sensor for testing"""
-    return InputTestSensor()
-
-
-def simulation_output():
-    """Mockup valve driver for simulation"""
-    return OutputDriver()
-
-
-def wiringpi_output():
-    """Loads and instantiates the wiringPi2 driver for MCP23017"""
-    from . import output_driver_wiringpi
-    return output_driver_wiringpi.MCP23017Interface()
-
-
-def hardware_output():
-    """Actual hardware output driver"""
-    return wiringpi_output()
+SimulationSensor = Sensor
+SimulationOutput = OutputDriver
+HardwareOutput = WiringPi2OutputDriver
+HardwareSensor = sysfs_sensor()
