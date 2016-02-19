@@ -8,6 +8,10 @@ from . import exceptions as e
 from . import constants as c
 # Default user interface
 from .global_settings import USER_INTERFACE as UI
+# Hardware sensor
+from .input_driver_sysfs import SysfsSensor as HardwareSensor
+# Hardware driver
+from .output_driver_wiringpi import WiringPiOutputDriver as HardwareOutput
 # Configuration parsing
 from . import cfg_parser
 try:
@@ -22,8 +26,8 @@ class MonotypeCaster(object):
     caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
         self.name = 'Monotype composition caster (mockup)'
-        self.sensor = Sensor()
-        self.output = OutputDriver()
+        self.sensor = SimulationSensor()
+        self.output = SimulationOutput()
         self.stop = EmergencyStop()
         self.lock = False
         # Attach a pump
@@ -147,7 +151,7 @@ class Pump(object):
             UI.display('Pump action resumed.')
 
 
-class Sensor(object):
+class SimulationSensor(object):
     """Mockup for a machine cycle sensor"""
     def __init__(self):
         self.lock = False
@@ -209,7 +213,7 @@ class Sensor(object):
             sleep(0.1)
 
 
-class PunchingSensor(Sensor):
+class PunchingSensor(SimulationSensor):
     """A special sensor class for perforators"""
     def __init__(self):
         super().__init__()
@@ -247,7 +251,7 @@ class PunchingSensor(Sensor):
             sleep(0.25)
 
 
-class TestSensor(Sensor):
+class TestSensor(SimulationSensor):
     """A keyboard-operated "sensor" for testing inputs.
     No automatic mode is supported."""
     def __init__(self):
@@ -276,7 +280,7 @@ class EmergencyStop(object):
         return [(self.name, 'Emergency stop button driver')]
 
 
-class OutputDriver(object):
+class SimulationOutput(object):
     """Mockup for a driver for 32 pneumatic outputs"""
     def __init__(self, sig_arr=SIGNALS):
         self.lock = False
@@ -375,29 +379,16 @@ class Mode(object):
         """Chooses a proper sensor"""
         sensor = (self.testing and TestSensor or
                   self.punching and PunchingSensor or
-                  self.simulation and simulation_sensor or
-                  hardware_sensor)
+                  self.simulation and SimulationSensor or
+                  HardwareSensor)
         return sensor
 
     @property
     def output(self):
         """Chooses a simulation or hardware output driver"""
-        output = (self.simulation and simulation_output or
-                  hardware_output)
+        output = (self.simulation and SimulationOutput or
+                  HardwareOutput)
         return output
-
-
-# Hardware control modules
-def sysfs_sensor():
-    """Loads and instantiates the SysFS sensor"""
-    from .input_driver_sysfs import SysfsSensor
-    return SysfsSensor()
-
-
-def wiringpi_output():
-    """Loads and instantiates the wiringPi2 output driver"""
-    from .output_driver_wiringpi import WiringPiOutputDriver
-    return WiringPiOutputDriver()
 
 
 def stop_menu():
@@ -413,10 +404,3 @@ def stop_menu():
     message = ('Machine is not running!\n'
                '[C]ontinue, [A]bort or [E]xit program? ')
     UI.simple_menu(message, options)()
-
-
-# Link class definitions
-simulation_sensor = Sensor
-simulation_output = OutputDriver
-hardware_sensor = sysfs_sensor
-hardware_output = wiringpi_output

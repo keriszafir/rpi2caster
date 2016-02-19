@@ -14,10 +14,10 @@ from .exceptions import MachineStopped
 # Default user interface
 from .global_settings import USER_INTERFACE as UI
 # Caster prototype
-from .monotype import Sensor, EmergencyStop
+from .monotype import SimulationSensor, EmergencyStop
 
 
-class SysfsSensor(Sensor):
+class SysfsSensor(SimulationSensor):
     """Optical cycle sensor using kernel sysfs interface"""
     def __init__(self, gpio=SENSOR_GPIO):
         super().__init__()
