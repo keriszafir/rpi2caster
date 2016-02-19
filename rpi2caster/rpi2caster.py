@@ -3,7 +3,7 @@
 from os import system
 import argparse
 from . import exceptions
-from .text_ui import yes_or_no
+from .text_ui import yes_or_no, menu, exit_program
 
 
 def cast(args):
@@ -16,7 +16,11 @@ def cast(args):
         session.caster.name = 'Monotype Composition Caster'
     session.caster.UI = casting_session.UI
     casting_session.UI.DEBUG_MODE = args.debug
-    session.main_menu()
+    # Skip menu if casting directly
+    if args.direct and args.ribbon_file:
+        session.cast()
+    else:
+        session.main_menu()
 
 
 def inv(args):
@@ -34,6 +38,62 @@ def translate(args):
     typesetting.main_menu()
 
 
+def update(args):
+    """Updates the software"""
+    # Upgrade routine
+    if yes_or_no('Update the software?'):
+        pre = args.unstable and '--pre' or ''
+        print('You may be asked for the admin password...')
+        system('sudo pip3 install %s --upgrade rpi2caster' % pre)
+
+
+def change_punching(args):
+    """Switch between punching and casting modes"""
+    args.punching = not args.punching
+
+
+def change_simulation(args):
+    """Switch between simulation and casting/punching modes"""
+    args.simulation = not args.simulation
+
+
+def main_menu(args):
+    """Main menu - choose the module"""
+    header = ('rpi2caster - computer aided type casting for Monotype'
+              '\n\nMain menu:\n')
+    while True:
+        options = [(exit_program, 'Exit',
+                    'Exits the rpi2caster suite'),
+                   (cast, {True: 'Punch ribbon...',
+                           False: 'Cast type...'}[args.punching],
+                    {True: 'Punch a ribbon with a keyboard\'s paper tower',
+                     False: ('Cast composition, sorts or spaces; '
+                             'test the machine')}[args.punching]),
+                   (inv, 'Inventory management...',
+                    'List, add and remove diecase or wedge definitions'),
+                   (translate, 'Typesetting...',
+                    'Compose text for casting'),
+                   (update, 'Update the program',
+                    'Check whether new version is available and update'),
+                   (change_punching, 'Switch to %s mode'
+                    % {True: 'casting',
+                       False: 'ribbon punching'}[args.punching],
+                    ('The casting program has different functionality '
+                     'in casting and punching modes.')),
+                   (change_simulation, 'Switch to %s mode'
+                    % {True: 'casting or ribbon punching',
+                       False: 'simulation'}[args.simulation],
+                    {True: 'Use a real machine',
+                     False: 'Use a mockup for testing'}[args.simulation])]
+        try:
+            menu(options, header=header, footer='')(args)
+        except (exceptions.ReturnToMenu, exceptions.MenuLevelUp,
+                exceptions.ExitProgram):
+            pass
+        except (KeyboardInterrupt, EOFError):
+            exit_program()
+
+
 def main():
     """Main function
 
@@ -42,16 +102,11 @@ def main():
     desc = 'rpi2caster - Raspberry Pi controls a Monotype composition caster.'
     epi = 'Typesetting is not ready yet.'
     # Initialize the main arguments parser
-    # Create the update optoin for easy update
     main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
-    main_parser.add_argument('-u', '--update', help='Update the software',
-                             action="store_true")
-    #
-    # General options parser - for all sub-programs
-    #
-    gen_parser = argparse.ArgumentParser(description='General options')
-    gen_parser.add_argument('-d', '--debug', help='Debug mode',
-                            action="store_true")
+    main_parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
+                             source=None, simulation=False, punching=False,
+                             unstable=False, manual=False, diecase=False,
+                             direct=False)
     #
     # Define commands
     #
@@ -63,9 +118,12 @@ def main():
     # Casting subparser
     #
     cast_parser = jobs.add_parser('cast', aliases=['c'],
-                                  parents=[gen_parser], add_help=False,
                                   help=('Casting with a Monotype caster '
                                         'or mockup caster for testing'))
+    cast_parser.add_argument('-d', '--debug', help='Debug mode',
+                             action="store_true")
+    cast_parser.add_argument('-D', '--direct', help='Direct casting - no menu',
+                             action="store_true")
     cast_parser.add_argument('-s', '--simulation', action='store_true',
                              help='Simulate casting instead of real casting')
     cast_parser.add_argument('-p', '--punch', action='store_true',
@@ -78,15 +136,32 @@ def main():
     # Inventory management subparser
     #
     inv_parser = jobs.add_parser('inventory', aliases=['i', 'inv'],
-                                 parents=[gen_parser], add_help=False,
                                  help='Wedge and matrix case management')
+    inv_parser.add_argument('-d', '--debug', help='Debug mode',
+                            action="store_true")
     inv_parser.set_defaults(job=inv)
+    #
+    # Software update subparser
+    #
+    upd_parser = jobs.add_parser('update', aliases=['u', 'upd'],
+                                 help='Update the software')
+    upd_parser.add_argument('-u', '--unstable', action='store_true',
+                            help='Use unstable (development) version')
+    upd_parser.set_defaults(job=update)
     #
     # Composition (typesetting) program subparser
     #
     comp_parser = jobs.add_parser('translate', aliases=['t', 'set'],
-                                  parents=[gen_parser], add_help=False,
                                   help='Typesetting program')
+    # Manual mode option - more control for user
+    comp_parser.add_argument('-m', '--manual', help='use manual mode',
+                             action='store_true')
+    # Choose diecase layout
+    comp_parser.add_argument('-D', '--diecase', dest='diecase_id',
+                             help='diecase ID for typesetting',
+                             metavar='ID')
+    comp_parser.add_argument('-d', '--debug', help='Debug mode',
+                             action="store_true")
     # Input filename option
     comp_parser.add_argument('source', help='source (text) file to translate',
                              metavar='text_file', nargs='?',
@@ -95,26 +170,13 @@ def main():
     comp_parser.add_argument('ribbon', help='ribbon file to generate',
                              metavar='ribbon_file', nargs='?',
                              type=argparse.FileType('w', encoding='UTF-8'))
-    # Manual mode option - more control for user
-    comp_parser.add_argument('-m', '--manual', help='use manual mode',
-                             action='store_true')
-    # Choose diecase layout
-    comp_parser.add_argument('-D', '--diecase', dest='diecase_id',
-                             help='diecase ID for typesetting',
-                             metavar='ID')
     # Default action
     comp_parser.set_defaults(job=translate)
     args = main_parser.parse_args()
+    print(args)
     # Parsers defined
     try:
-        # Upgrade routine
-        if args.update and yes_or_no('Update the software?'):
-            pre = (yes_or_no('OK to install the unstable version?') and
-                   '--pre' or '')
-            print('Entering your password may be necessary.')
-            system('sudo pip3 install %s --upgrade rpi2caster' % pre)
-        elif args.job:
-            args.job(args)
+        args.job(args)
     except exceptions.ExitProgram:
         print('Goodbye!')
     except (KeyboardInterrupt, EOFError):

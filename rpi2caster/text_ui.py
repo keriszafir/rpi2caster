@@ -499,7 +499,7 @@ def edit_diecase_layout(diecase):
             break
 
 
-def exit_program():
+def exit_program(*_):
     """Exit program:
 
     All objects call this method whenever they want to exit program.
