@@ -290,7 +290,7 @@ class OutputDriver(object):
         pins = [pin for pin in range(pin_base, pin_base + 32)]
         self.lock = False
         self.name = 'Mockup output driver for simulation'
-        self.signals_arrangement = sig_arr
+        self.signals_arrangement = [str(x).upper() for x in sig_arr.split(',')]
         self.pin_numbers = dict(zip(self.signals_arrangement, pins))
 
     def __enter__(self):
@@ -305,7 +305,7 @@ class OutputDriver(object):
     def get_parameters(self):
         """Gets a list of parameters"""
         data = [(self.name, 'Output driver'),
-                (self.signals_arrangement, 'Signals arrangement')]
+                (' '.join(self.signals_arrangement), 'Signals arrangement')]
         return data
 
     def one_on(self, sig):
@@ -359,9 +359,9 @@ class WiringPi2OutputDriver(OutputDriver):
         try:
             wiringpi2.digitalWrite(self.pin_numbers[sig], 0)
         except KeyError:
-            raise e.WrongConfiguration('Signal %s not defined! '
-                                       'Signals arrangement: %s'
-                                       % (sig, self.pin_numbers))
+            msg = ('Signal %s not defined! Signals arrangement: %s\n'
+                   % (sig, self.signals_arrangement))
+            raise e.WrongConfiguration(msg)
 
 
 def stop_menu():
