@@ -38,10 +38,13 @@ def check_modes(func):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
+        # Release (delete) current sensors
+        self.caster.sensor = self.caster.output = None
         # Use hardware by default, don't instantiate yet
+        UI.debug_confirm('Getting sensor and output driver classes')
         sensor = self.mode.sensor
         output = self.mode.output
-        UI.debug_info('About to cast, punch or test')
+        UI.debug_confirm('About to cast, punch or test')
         # Instantiate and enter context
         with sensor() as self.caster.sensor, output() as self.caster.output:
             with self.caster:

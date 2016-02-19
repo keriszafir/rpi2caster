@@ -42,6 +42,7 @@ class MonotypeCaster(object):
         else:
             # Set default wedge positions
             self.lock = True
+            UI.debug_confirm('Entering the %s caster context...' % self.name)
             return self
 
     def get_parameters(self):
@@ -109,7 +110,7 @@ class MonotypeCaster(object):
                 self.pump.start()
 
     def __exit__(self, *_):
-        UI.debug_info('Caster no longer in use.')
+        UI.debug_confirm('Caster %s no longer in use.' % self.name)
         self.lock = False
 
 
@@ -121,12 +122,6 @@ class Pump(object):
         # Remember wedge positions on resume
         self.current_0005 = self.last_0005 = '15'
         self.current_0075 = self.last_0075 = '15'
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        pass
 
     def stop(self):
         """Forces pump stop - won't end until it is turned off"""
@@ -163,14 +158,16 @@ class Sensor(object):
         self.lock = False
         self.manual_mode = True
         self.last_state = False
-        self.name = 'Mockup machine cycle sensor'
+        self.name = 'mockup machine cycle sensor'
 
     def __enter__(self):
         if not self.lock:
             self.lock = True
+            UI.debug_confirm('Using a %s for machine feedback' % self.name)
             return self
 
     def __exit__(self, *_):
+        UI.debug_confirm('The %s is no longer in use' % self.name)
         self.lock = False
 
     def get_parameters(self):
@@ -289,17 +286,22 @@ class OutputDriver(object):
     def __init__(self, pin_base=c.PIN_BASE, sig_arr=SIGNALS):
         pins = [pin for pin in range(pin_base, pin_base + 32)]
         self.lock = False
-        self.name = 'Mockup output driver for simulation'
+        self.name = 'mockup output driver for simulation'
         self.signals_arrangement = [str(x).upper() for x in sig_arr.split(',')]
         self.pin_numbers = dict(zip(self.signals_arrangement, pins))
+
+    def __del__(self):
+        UI.debug_confirm('Deleting the %s' % self.name)
 
     def __enter__(self):
         if not self.lock:
             self.lock = True
+            UI.debug_confirm('Using the %s for sending signals...' % self.name)
             return self
 
     def __exit__(self, *_):
         self.valves_off()
+        UI.debug_confirm('Driver for %s no longer in use.' % self.name)
         self.lock = False
 
     def get_parameters(self):
@@ -340,17 +342,14 @@ class WiringPi2OutputDriver(OutputDriver):
                  pin_base=c.PIN_BASE, sig_arr=SIGNALS):
         super().__init__(pin_base=pin_base, sig_arr=sig_arr)
         self.name = 'MCP23017 driver using wiringPi2-Python library'
-        UI.debug_info('Creating a hardware sensor')
+        UI.debug_info('Creating a %s' % self.name)
         # Set up an output interface on two MCP23017 chips
         wiringpi2.mcp23017Setup(pin_base, mcp0_address)
         wiringpi2.mcp23017Setup(pin_base + 16, mcp1_address)
         # Set all I/O lines on MCP23017s as outputs - mode=1
         for pin in self.pin_numbers.values():
             wiringpi2.pinMode(pin, 1)
-        UI.debug_info('Successfully created a hardware sensor')
-
-    def __del__(self):
-        UI.debug_confirm('Deleting the hardware sensor')
+        UI.debug_info('Successfully created the %s' % self.name)
 
     def one_on(self, sig):
         """Looks a signal up in arrangement and turns it on"""
