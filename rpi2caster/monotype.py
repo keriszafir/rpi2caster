@@ -8,10 +8,6 @@ from . import exceptions as e
 from . import constants as c
 # Default user interface
 from .global_settings import USER_INTERFACE as UI
-# Hardware sensor
-from .input_driver_sysfs import SysfsSensor as HardwareSensor
-# Hardware driver
-from .output_driver_wiringpi import WiringPiOutputDriver as HardwareOutput
 # Configuration parsing
 from . import cfg_parser
 try:
@@ -380,14 +376,14 @@ class Mode(object):
         sensor = (self.testing and TestSensor or
                   self.punching and PunchingSensor or
                   self.simulation and SimulationSensor or
-                  HardwareSensor)
+                  hardware_sensor)
         return sensor
 
     @property
     def output(self):
         """Chooses a simulation or hardware output driver"""
         output = (self.simulation and SimulationOutput or
-                  HardwareOutput)
+                  hardware_output)
         return output
 
 
@@ -404,3 +400,15 @@ def stop_menu():
     message = ('Machine is not running!\n'
                '[C]ontinue, [A]bort or [E]xit program? ')
     UI.simple_menu(message, options)()
+
+
+def hardware_sensor():
+    """Gets hardware sensor - prevents import loop"""
+    from .input_driver_sysfs import SysfsSensor
+    return SysfsSensor()
+
+
+def hardware_output():
+    """Gets hardware output - prevents import loop"""
+    from .output_driver_wiringpi import WiringPiOutputDriver
+    return WiringPiOutputDriver()
