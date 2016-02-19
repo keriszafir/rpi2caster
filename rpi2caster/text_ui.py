@@ -102,24 +102,24 @@ def display(*args, **kwargs):
 def debug_info(*args, **kwargs):
     """Prints debug messages to screen if in debug mode"""
     if DEBUG_MODE:
-        print(*args, **kwargs)
+        print('DEBUG: ', *args, **kwargs)
 
 
 def debug_enter_data(prompt):
     """For debug-specific data"""
     if DEBUG_MODE:
-        return input(prompt)
+        return input('DEBUG: ' + prompt)
 
 
 def debug_confirm(msg1='', msg2=MSG_CONTINUE):
     """For debug confirmations"""
     if DEBUG_MODE:
-        input(msg1 + '\n' + msg2)
+        input('DEBUG: ' + msg1 + '\n' + msg2)
 
 
 def confirm(msg1='', msg2=MSG_CONTINUE):
     """Waits until user presses return"""
-    input(msg1 + '\n' + msg2)
+    input('DEBUG: ' + msg1 + '\n' + msg2)
 
 
 def enter_data(prompt, datatype=str):

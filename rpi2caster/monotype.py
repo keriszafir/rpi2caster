@@ -340,12 +340,17 @@ class WiringPi2OutputDriver(OutputDriver):
                  pin_base=c.PIN_BASE, sig_arr=SIGNALS):
         super().__init__(pin_base=pin_base, sig_arr=sig_arr)
         self.name = 'MCP23017 driver using wiringPi2-Python library'
+        UI.debug_info('Creating a hardware sensor')
         # Set up an output interface on two MCP23017 chips
         wiringpi2.mcp23017Setup(pin_base, mcp0_address)
         wiringpi2.mcp23017Setup(pin_base + 16, mcp1_address)
         # Set all I/O lines on MCP23017s as outputs - mode=1
         for pin in self.pin_numbers.values():
             wiringpi2.pinMode(pin, 1)
+        UI.debug_info('Successfully created a hardware sensor')
+
+    def __del__(self):
+        UI.debug_confirm('Deleting the hardware sensor')
 
     def one_on(self, sig):
         """Looks a signal up in arrangement and turns it on"""
