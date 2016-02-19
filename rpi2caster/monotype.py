@@ -359,7 +359,9 @@ class WiringPi2OutputDriver(OutputDriver):
         try:
             wiringpi2.digitalWrite(self.pin_numbers[sig], 0)
         except KeyError:
-            raise e.WrongConfiguration('Signal %s not defined!' % sig)
+            raise e.WrongConfiguration('Signal %s not defined! '
+                                       'Signals arrangement: %s'
+                                       % (sig, self.pin_numbers))
 
 
 def stop_menu():
