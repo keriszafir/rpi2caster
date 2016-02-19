@@ -39,18 +39,9 @@ def check_modes(func):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         # Use hardware by default, don't instantiate
-        sensor = monotype.hardware_sensor
-        output = monotype.hardware_output
-        # Based on modes, choose different sensor and/or output driver
-        if self.simulation_mode:
-            sensor = monotype.simulation_sensor
-            output = monotype.simulation_output
-        if self.perforation_mode:
-            sensor = monotype.perforation_sensor
-        if self.testing:
-            sensor = monotype.test_sensor
-        # Instantiate and enter context
-        with sensor() as self.caster.sensor, output() as self.caster.output:
+        sensor = self.mode.sensor
+        output = self.mode.output
+        with sensor as self.caster.sensor, output as self.caster.output:
             with self.caster:
                 return func(self, *args, **kwargs)
     return wrapper
@@ -60,9 +51,9 @@ def testing_mode(func):
     """Decorator for setting the testing mode for certain functions"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        self.testing = True
+        self.mode.testing = True
         retval = func(self, *args, **kwargs)
-        self.testing = False
+        self.mode.testing = False
         return retval
     return wrapper
 
@@ -92,7 +83,7 @@ def cast_result(func):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         new_ribbon = func(self, *args, **kwargs)
-        if self.testing or UI.yes_or_no('Cast it?'):
+        if self.mode.testing or UI.yes_or_no('Cast it?'):
             self.ribbon.contents, old_ribbon = new_ribbon, self.ribbon.contents
             retval = self.cast()
             self.ribbon.contents = old_ribbon
@@ -139,12 +130,7 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
-        self.simulation_mode = False
-        self.perforation_mode = False
-        self.testing = False
-        # Ribbon object, start with a default empty ribbon if no file
-        self._ribbon, self._diecase, self._wedge = None, None, None
-        self._stats = None
+        self.mode = Mode()
         self.ribbon = (ribbon_file and
                        typesetting_data.choose_ribbon(filename=ribbon_file) or
                        typesetting_data.EmptyRibbon())
@@ -154,16 +140,14 @@ class Casting(object):
         """Casts the sequence of codes in self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
-        # Check mode
-        casting_mode = not self.perforation_mode and not self.testing
         source = self.ribbon.contents
         # Casting mode: cast backwards
         # 0005 at the beginning signals that the ribbon needs rewind
-        if p.rewind_needed(source) and casting_mode:
+        if p.rewind_needed(source) and self.mode.casting:
             source = [x for x in reversed(source)]
         # Ask how many times to repeat this
         prompt = 'How many repetitions? (default: 1) : '
-        jobs = casting_mode and UI.enter_data_or_blank(prompt, int) or 1
+        jobs = self.mode.casting and UI.enter_data_or_blank(prompt, int) or 1
         self.stats.ribbon_data['all_jobs'] = jobs
         # Get the ribbon statistics
         self.stats.display_ribbon_info()
@@ -180,7 +164,7 @@ class Casting(object):
                 if not signals:
                     # No signals (comment only)- go to the next combination
                     continue
-                elif not self.perforation_mode:
+                elif not self.mode.punching:
                     # Use O15 only in punching mode
                     signals = [sig for sig in signals if sig is not 'O15']
                 self.stats.update(signals)
@@ -466,11 +450,8 @@ class Casting(object):
     @temporary_stats
     def align_diecase(self):
         # TODO: REFACTOR
-        """align_diecase:
-
-        Casts the "en dash" characters for calibrating the character X-Y
-        relative to type body.
-        """
+        """Casts the "en dash" characters for calibrating the character X-Y
+        relative to type body."""
         intro = ('X-Y character calibration:\n'
                  'Cast some en-dashes and/or lowercase "n" letters, '
                  'then check the position of the character relative to the '
@@ -554,7 +535,7 @@ class Casting(object):
         """Settings and alignment menu for servicing the caster"""
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
-            perforator = self.perforation_mode
+            perforator = self.mode.punching
             opts = [(exceptions.menu_level_up, 'Back',
                      'Returns to main menu', True),
                     (self.test_all, 'Test outputs',
@@ -592,47 +573,47 @@ class Casting(object):
     @property
     def stats(self):
         """Ribbon/job statistics"""
-        return self._stats
+        return self.__dict__['stats']
 
     @stats.setter
     def stats(self, stats):
         """Parse the stats to get the ribbon data"""
-        self._stats = stats
-        self._stats.update_ribbon_info()
+        self.__dict__['stats'] = stats
+        self.__dict__['stats'].update_ribbon_info()
 
     @property
     def ribbon(self):
         """Ribbon for the casting session"""
-        return self._ribbon
+        return self.__dict__['ribbon']
 
     @ribbon.setter
     def ribbon(self, ribbon):
         """Ribbon setter"""
-        self._ribbon = ribbon
-        self.diecase = self._ribbon.diecase
+        self.__dict__['ribbon'] = ribbon
+        self.diecase = self.__dict__['ribbon'].diecase
         # New stats after choosing a different ribbon
         self.stats = Stats(self)
 
     @property
     def diecase(self):
         """Ribbon for the casting session"""
-        return self._diecase
+        return self.__dict__['diecase']
 
     @diecase.setter
     def diecase(self, diecase):
         """Ribbon setter"""
-        self._diecase = diecase
-        self.wedge = self._diecase.wedge
+        self.__dict__['diecase'] = diecase
+        self.wedge = self.__dict__['diecase'].wedge
 
     @property
     def wedge(self):
         """Ribbon for the casting session"""
-        return self._wedge
+        return self.__dict__['wedge']
 
     @wedge.setter
     def wedge(self, wedge):
         """Ribbon setter"""
-        self._wedge = wedge
+        self.__dict__['wedge'] = wedge
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
@@ -659,7 +640,7 @@ class Casting(object):
     def _main_menu_options(self):
         """Build a list of options, adding an option if condition is met"""
         # Options are described with tuples: (function, description, condition)
-        perforator = self.perforation_mode
+        perforator = self.mode.punching
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
         opts = [(exceptions.exit_program, 'Exit', 'Exits the program', True),
@@ -723,10 +704,12 @@ class Stats(object):
 
     def display(self):
         """Displays the current stats depending on session parameters"""
-        if self.session.perforation_mode or self.session.testing:
-            UI.display(self._brief_info())
-        else:
+        if self.session.mode.casting:
             UI.display(self._full_info())
+        elif self.session.mode.punching:
+            UI.display(self._brief_info())
+        elif self.session.mode.testing:
+            UI.display(self._brief_info())
 
     def display_ribbon_info(self):
         """Displays the ribbon data"""
@@ -774,12 +757,12 @@ class Stats(object):
         # Update line info
         self._set_current(combination)
         # Check the pump working/non-working status in the casting mode
-        if not self.session.perforation_mode and not self.session.testing:
+        if self.session.mode.casting:
             self._check_pump()
 
     def update_job_info(self):
         """Updates the info on starting the new job"""
-        self.update_ribbon_info()
+        pass
 
     def update_ribbon_info(self):
         """Parses the ribbon, counts combinations, lines and characters"""
@@ -795,7 +778,6 @@ class Stats(object):
                 self.ribbon_data['job_lines'] += 1
             elif p.check_character(combination):
                 self.ribbon_data['job_chars'] += 1
-        UI.confirm('Parsed the ribbon')
 
     def _set_current(self, combination):
         """Gets the current combination and updates casting statistics"""
@@ -829,3 +811,62 @@ class Stats(object):
         if p.check_0075(combination):
             candidates = [x for x in range(15) if str(x) in combination]
             self.current['0075'] = candidates and str(min(candidates)) or '15'
+
+
+class Mode(object):
+    """Session mode: casting / simulation / perforation"""
+    def __init__(self):
+        self.simulation = False
+        self.punching = False
+        self.testing = False
+
+    @property
+    def simulation(self):
+        """Simulation mode"""
+        return self.__dict__['simulation'] and True or False
+
+    @simulation.setter
+    def simulation(self, value):
+        """Set the simulation mode"""
+        self.__dict__['simulation'] = value
+
+    @property
+    def punching(self):
+        """Punching mode"""
+        return self.__dict__['punching'] and True or False
+
+    @punching.setter
+    def punching(self, value):
+        """Set the punching mode"""
+        self.__dict__['punching'] = value
+
+    @property
+    def testing(self):
+        """Testing mode"""
+        return self.__dict__['testing'] and True or False
+
+    @testing.setter
+    def testing(self, value):
+        """Set the testing mode"""
+        self.__dict__['testing'] = value
+
+    @property
+    def casting(self):
+        """Check if the machine is casting"""
+        return not self.punching and not self.testing
+
+    @property
+    def sensor(self):
+        """Chooses a proper sensor"""
+        sensor = (self.testing and monotype.test_sensor or
+                  self.punching and monotype.punching_sensor or
+                  self.simulation and monotype.simulation_sensor or
+                  monotype.hardware_sensor)
+        return sensor()
+
+    @property
+    def output(self):
+        """Chooses a simulation or hardware output driver"""
+        output = (self.simulation and monotype.simulation_output or
+                  monotype.hardware_output)
+        return output()

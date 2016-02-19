@@ -357,7 +357,7 @@ def simulation_sensor():
     return Sensor()
 
 
-def perforation_sensor():
+def punching_sensor():
     """Sensor for punching"""
     return PerforatorSensor()
 
