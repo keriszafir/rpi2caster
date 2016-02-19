@@ -428,14 +428,14 @@ class Mode(object):
                   self.punching and PunchingSensor or
                   self.simulation and SimulationSensor or
                   HardwareSensor)
-        return sensor()
+        return sensor
 
     @property
     def output(self):
         """Chooses a simulation or hardware output driver"""
         output = (self.simulation and SimulationOutput or
                   HardwareOutput)
-        return output()
+        return output
 
 
 # Hardware control modules

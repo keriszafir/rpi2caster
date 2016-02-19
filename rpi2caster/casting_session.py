@@ -41,7 +41,7 @@ def check_modes(func):
         # Use hardware by default, don't instantiate
         sensor = self.mode.sensor
         output = self.mode.output
-        with sensor as self.caster.sensor, output as self.caster.output:
+        with sensor() as self.caster.sensor, output() as self.caster.output:
             with self.caster:
                 return func(self, *args, **kwargs)
     return wrapper
