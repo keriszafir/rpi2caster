@@ -2,11 +2,6 @@
 """Drivers for generic Monotype caster """
 # Built-in time module
 from time import time, sleep
-# wiringPi2 backend for MCP23017 setup
-try:
-    import wiringpi2
-except ImportError:
-    pass
 # Custom exceptions module
 from . import exceptions as e
 # Constants module
@@ -283,12 +278,10 @@ class EmergencyStop(object):
 
 class OutputDriver(object):
     """Mockup for a driver for 32 pneumatic outputs"""
-    def __init__(self, pin_base=c.PIN_BASE, sig_arr=SIGNALS):
-        pins = [pin for pin in range(pin_base, pin_base + 32)]
+    def __init__(self, sig_arr=SIGNALS):
         self.lock = False
         self.name = 'mockup output driver for simulation'
         self.signals_arrangement = [str(x).upper() for x in sig_arr.split(',')]
-        self.pin_numbers = dict(zip(self.signals_arrangement, pins))
 
     def __del__(self):
         UI.debug_confirm('Deleting the %s' % self.name)
