@@ -10,7 +10,7 @@ from copy import deepcopy
 # Some functions raise custom exceptions
 from . import exceptions
 # Constants for rpi2caster
-from . import constants
+from .constants import TRUE_ALIASES, ASSIGNMENT_SYMBOLS
 # Matrix data for diecases
 from . import matrix_data
 # Use the same database backend and user interface that matrix_data uses
@@ -122,9 +122,10 @@ class EmptyRibbon(object):
 
     def get_from_db(self, ribbon_id=None):
         """Gets the ribbon from database"""
-        ribbon = choose_ribbon(ribbon_id or self.ribbon_id)
-        if UI.yes_or_no('Override current data?'):
-            self = ribbon
+        data = choose_ribbon_from_db()
+        if data and UI.yes_or_no('Override current data?'):
+            (self.ribbon_id, self.description, diecase_id, self.customer,
+             self.unit_shift, self.contents) = data
             return True
 
     def store_in_db(self):
@@ -147,46 +148,12 @@ class EmptyRibbon(object):
 
     def import_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
-        # Ask, and stop here if answered no
-        UI.display('Loading the ribbon from file...')
-        filename = filename or UI.enter_input_filename()
-        if not filename:
-            return False
-        # Initialize the contents
-        try:
-            with io.open(filename, mode='r') as ribbon_file:
-                contents = [x.strip() for x in ribbon_file if x.strip()]
-            # Parse the file, get metadata
-        except (FileNotFoundError, IOError):
-            UI.confirm('Cannot open ribbon file %s' % filename)
-            return False
-        parameters = ['diecase', 'description', 'unit-shift',
-                      'diecase_id', 'customer']
-        metadata = parse_ribbon_metadata(contents, parameters)
-        # Metadata parsing
-        self.description, self.customer = None, None
-        self.unit_shift, diecase_id, self.contents = False, 0, []
-        if 'diecase' in metadata:
-            diecase_id = metadata['diecase']
-        elif 'diecase_id' in metadata:
-            diecase_id = metadata['diecase_id']
-        if 'description' in metadata:
-            self.description = metadata['description']
-        if 'customer' in metadata:
-            self.customer = metadata['customer']
-        if ('unit-shift' in metadata and
-                metadata['unit-shift'].lower() in constants.TRUE_ALIASES):
-            self.unit_shift = True
-        elif ('unit-shift' in metadata and
-              metadata['unit-shift'].lower() in constants.FALSE_ALIASES):
-            self.unit_shift = False
-        # Add the whole contents as the attribute
-        self.contents = contents
-        # Info about the filename
+        (self.ribbon_id, self.description, diecase_id, self.customer,
+         self.unit_shift, self.contents) = import_ribbon_from_file()
+        # Set filename as attribute
         self.filename = filename
-        # Choose diecase automatically
-        self.set_diecase(diecase_id)
-        return True
+        self.diecase = (diecase_id and self.set_diecase(diecase_id) or
+                        self.diecase)
 
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
@@ -204,11 +171,19 @@ class Ribbon(EmptyRibbon):
     """A class for ribbons chosen from database or file"""
     def __init__(self, ribbon_id=None, filename=None):
         super().__init__()
-        self.filename = filename
-        self.ribbon_id = ribbon_id
-        # Try to select ribbon file first
-        if not self.import_from_file(filename):
-            self.get_from_db(ribbon_id)
+        try:
+            ribbon_data = (ribbon_id and DB.get_ribbon(ribbon_id) or
+                           filename and import_ribbon_from_file(filename) or
+                           choose_ribbon_from_db() or
+                           import_ribbon_from_file())
+            (self.ribbon_id, self.description, diecase_id, self.customer,
+             self.unit_shift, self.contents) = ribbon_data
+            # Update diecase if correct diecase_id found in ribbon
+            self.diecase = (diecase_id and self.set_diecase(diecase_id) or
+                            self.diecase)
+        # Otherwise use empty ribbon
+        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+            pass
 
 
 class EmptyWork(object):
@@ -370,44 +345,6 @@ def list_ribbons():
     return results
 
 
-def choose_ribbon(ribbon_id=None, filename=None):
-    """Tries to choose a ribbon from database.
-    If this fails, tries to choose a file instead."""
-    ribbon_data = []
-    try:
-        # Automatic choice
-        ribbon_data = DB.get_ribbon(ribbon_id)
-    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-        while True:
-            available_ribbons = list_ribbons()
-            if filename or not available_ribbons:
-                break
-            # Enter the diecase name or raise an exception to break the loop
-            prompt = 'Number of a ribbon? (leave blank to exit): '
-            choice = UI.enter_data_or_blank(prompt, int)
-            if not choice:
-                break
-            # Safeguards against entering a wrong number
-            # or non-numeric string
-            try:
-                ribbon_id = available_ribbons[choice]
-                ribbon_data = DB.get_ribbon(ribbon_id)
-                break
-            except (KeyError,
-                    exceptions.DatabaseQueryError, exceptions.NoMatchingData):
-                UI.confirm('Ribbon number is incorrect!')
-    # Construct a new ribbon object
-    ribbon = EmptyRibbon()
-    if ribbon_data:
-        (ribbon.ribbon_id, ribbon.description, diecase_id, ribbon.customer,
-         ribbon.unit_shift, ribbon.contents) = ribbon_data
-        ribbon.set_diecase(diecase_id)
-    else:
-        ribbon.import_from_file(filename)
-    # Assign diecase to ribbon
-    return ribbon
-
-
 def list_works():
     """Lists all works in the database."""
     data = DB.get_all_works()
@@ -436,7 +373,7 @@ def choose_work(work_id=None, filename=None):
     # Do it only if we have diecases (depends on list_diecases retval)
     work_data = []
     try:
-        work_data = DB.get_ribbon(work_id)
+        work_data = DB.get_work(work_id)
     except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
         while True:
             available_works = list_works()
@@ -467,29 +404,70 @@ def choose_work(work_id=None, filename=None):
     return work
 
 
-def parse_ribbon_metadata(content, parameters):
-    """Catches the parameters included at the beginning of the ribbon.
-    These parameters are used for storing diecase ID, set width, title etc.
-    and serve mostly informational purposes, but can also be used for
-    controlling some aspects of the program (e.g. displaying characters
-    being cast).
+def import_ribbon_from_file(filename=None):
+    """Imports ribbon from file, parses parameters, returns a list of them"""
+    def get_value(line, symbol):
+        """Helper function - strips whitespace and symbols"""
+        # Split the line on an assignment symbol, get the second part,
+        # strip any whitespace or multipled symbols
+        return line.split(symbol, 1)[-1].strip(symbol).strip()
 
-    The row is parsed if it starts with a parameter, then the assignment
-    operator is used for splitting the string in two (parameter and value),
-    and a dictionary with parsed parameters is returned.
-    """
-    result = {}
-    # Work on an unmodified copy and delete lines from the sequence
-    for line in content[:]:
+    UI.display('Loading the ribbon from file...')
+    try:
+        filename = filename or UI.enter_input_filename()
+        with io.open(filename, mode='r') as ribbon_file:
+            cleaned_ribbon = [line.strip() for line in ribbon_file if line]
+    except (FileNotFoundError, IOError):
+        UI.confirm('Cannot open ribbon file %s' % filename)
+        return False
+    # What to look for
+    parameters = ['diecase', 'description', 'desc', 'unit-shift',
+                  'diecase_id', 'customer']
+    # Metadata (anything found), contents (the rest)
+    metadata = {}
+    contents = []
+    # Look for parameters line per line, get parameter value
+    # If parameters exhausted, append the line to contents
+    for line in cleaned_ribbon:
         for parameter in parameters:
             if line.startswith(parameter):
-                for symbol in constants.ASSIGNMENT_SYMBOLS:
-                    members = line.split(symbol, 1)
-                    try:
-                        value = members[1].strip()
-                        result[parameter] = value
+                for sym in ASSIGNMENT_SYMBOLS:
+                    if sym in line:
+                        # Data found
+                        metadata[parameter] = get_value(line, sym)
                         break
-                    except (IndexError, ValueError):
-                        pass
-                content.remove(line)
-    return result
+                break
+        else:
+            contents.append(line)
+    # Metadata parsing
+    diecase_id = ('diecase' in metadata and metadata['diecase'] or
+                  'diecase_id' in metadata and metadata['diecase_id'] or 0)
+    description = ('description' in metadata and metadata['description'] or
+                   'desc' in metadata and metadata['desc'] or None)
+    customer = 'customer' in metadata and metadata['customer'] or None
+    unit_shift = ('unit-shift' in metadata and
+                  metadata['unit-shift'].lower() in TRUE_ALIASES) or False
+    ribbon_id = 'NOT SET'
+    # Add the whole contents as the attribute
+    return (ribbon_id, description, diecase_id, customer, unit_shift, contents)
+
+
+def choose_ribbon_from_db():
+    """Chooses ribbon data from database"""
+    while True:
+        available_ribbons = list_ribbons()
+        if not available_ribbons:
+            break
+        # Enter the diecase name or raise an exception to break the loop
+        prompt = 'Number of a ribbon? (leave blank to exit): '
+        choice = UI.enter_data_or_blank(prompt, int)
+        if not choice:
+            break
+        # Safeguards against entering a wrong number
+        # or non-numeric string
+        try:
+            ribbon_id = available_ribbons[choice]
+            return DB.get_ribbon(ribbon_id)
+        except (KeyError,
+                exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+            UI.confirm('Ribbon number is incorrect!')

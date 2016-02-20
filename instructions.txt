@@ -1,0 +1,24 @@
+rpi2caster - Raspberry Pi controls a Monotype composition caster
+----------------------------------------------------------------
+
+To start, enter:
+
+./rpi2caster.py
+
+and choose option(s) from menu.
+
+You can also start in the casting or inventory management mode.
+To do it, enter:
+
+./rpi2caster.py c (or ./rpi2caster.py cast)
+./rpi2caster.py i (or ./rpi2caster.py inv)
+
+If you want to start in casting mode - you can specify the file to cast
+in the command line:
+
+./rpi2caster.py c /path/to/file
+
+Use [TAB] key for name auto-completion - enter a part of the name, then
+press [TAB] once or twice. If more than one file or directory matches the
+entered name, they will be displayed. Enter some more characters then
+press [TAB] again. 

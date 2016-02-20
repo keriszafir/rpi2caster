@@ -133,7 +133,7 @@ class Casting(object):
         self.caster = monotype.MonotypeCaster()
         self.mode = monotype.Mode()
         self.ribbon = (ribbon_file and
-                       typesetting_data.choose_ribbon(filename=ribbon_file) or
+                       typesetting_data.Ribbon(filename=ribbon_file) or
                        typesetting_data.EmptyRibbon())
 
     @check_modes
@@ -618,7 +618,7 @@ class Casting(object):
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
-        self.ribbon = typesetting_data.choose_ribbon()
+        self.ribbon = typesetting_data.Ribbon()
 
     def _choose_diecase(self):
         """Chooses a diecase from database"""

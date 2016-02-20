@@ -35,7 +35,6 @@ class MonotypeCaster(object):
         if self.lock:
             UI.display('Caster %s is already busy!' % self.name)
         else:
-            # Set default wedge positions
             self.lock = True
             UI.debug_confirm('Entering the %s caster context...' % self.name)
             return self

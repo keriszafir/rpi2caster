@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """rpi2caster - top-level script for starting the components"""
 from os import system
+from sys import argv
 import argparse
 from . import exceptions
 from .text_ui import yes_or_no, menu, exit_program
@@ -99,8 +100,11 @@ def main():
 
     Parse input options and decide which to run"""
     # Help description and epilogue i.e. what you see at the bottom
-    desc = 'rpi2caster - Raspberry Pi controls a Monotype composition caster.'
-    epi = 'Typesetting is not ready yet.'
+    desc = ('Starting rpi2caster without arguments will open the main menu, '
+            'where you can choose what to do (casting, inventory management, '
+            'typesetting), toggle simulation or perforation modes.')
+    epi = ('Enter "%s [command] -h" for detailed help about its options. '
+           'Typesetting is not ready yet.' % argv[0])
     # Initialize the main arguments parser
     main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
@@ -173,7 +177,6 @@ def main():
     # Default action
     comp_parser.set_defaults(job=translate)
     args = main_parser.parse_args()
-    print(args)
     # Parsers defined
     try:
         args.job(args)
