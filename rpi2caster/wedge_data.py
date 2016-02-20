@@ -39,7 +39,8 @@ class DefaultWedge(object):
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.series, 'Wedge series'),
+        data = [('\n', '\nWedge data'),
+                (self.series, 'Wedge series'),
                 (self.set_width, 'Set width'),
                 (self.brit_pica, 'British pica (.1667") based wedge?'),
                 (' '.join([str(x) for x in self.unit_arrangement if x]),

@@ -13,24 +13,17 @@ except ImportError:
 
 
 def read_file(filename):
-    """Tries to read a file.
-
-    Returns its contents (if file is readable), or False otherwise.
-    """
-# Open a file with signals, test if it's readable and return its contents
+    """Returns file contents (if file is readable), or False otherwise.
+    Strips whitespace and removes empty lines."""
+    # Open a file with signals, test if it's readable and return its contents
     try:
-        content = []
         with io.open(filename, 'r') as input_file:
-            content_generator = input_file.readlines()
-            for line in content_generator:
-                # Strip newline characters from lines
-                content.append(line.strip('\n'))
-            return content
+            return [l.strip() for l in input_file if l.strip()]
     except (IOError, FileNotFoundError):
         return False
 
 
-def parse_record(input_data):
+def parse_record(input_data, add_o15=True):
     """parse_record(input_data):
 
     Parses an input string, and returns a list with two elements:
@@ -56,11 +49,8 @@ def parse_record(input_data):
     0005 5 //comment   <-- sets 0005 justification wedge to 5,
                            turns pump off, displays comment.
     """
-    try:
-        ' '.join(input_data)
-    except TypeError:
-        input_data = str(input_data)
-
+    # Should work both on lists and strings
+    input_data = ''.join([str(x) for x in input_data])
     # Assume we don't have a comment...
     raw_signals = input_data
     comment = ''
@@ -71,7 +61,7 @@ def parse_record(input_data):
             [raw_signals, comment] = input_data.split(symbol, 1)
             break
     # Parse the signals part here
-    signals = parse_signals_string(raw_signals.strip().upper())
+    signals = parse_signals(raw_signals.strip().upper(), add_o15)
     # Return a list with processed signals and comment
     return [signals, comment.strip()]
 
@@ -98,7 +88,6 @@ def count_lines_and_chars(contents):
 
 def count_combinations(contents):
     """Count all combinations in ribbon file.
-
     This is usually called when pre-processing the file for punching."""
     all_combinations = 0
     for line in contents:
@@ -134,8 +123,8 @@ def rewind_needed(contents):
             return False
 
 
-def parse_signals_string(raw_signals):
-    """parse_signals_string(raw_signals):
+def parse_signals(signals, add_o15=True):
+    """parse_signals(signals):
 
     Parses a string with Monotype signals on input.
     Skips all but the "useful" signals: A...O, 1...15, 0005, S, 0075.
@@ -145,27 +134,31 @@ def parse_signals_string(raw_signals):
     Filter out all non-alphanumeric characters and whitespace.
     Convert to uppercase.
     """
-    if not raw_signals:
-        return []
-    raw_signals = ''.join([x for x in raw_signals if x.isalnum()]).upper()
+    col_sigs = 'ABCDEFGHIJKLMNOS'
+    digits = '1234567890'
+    signals = ''.join([x.upper().strip() for x in signals
+                       if x.upper() in col_sigs + digits])
+    o15_found = 'O15' in signals or 'O' in signals or '15' in signals
     # Build a list of justification signals
-    justification = [sig for sig in ['0005', '0075'] if sig in raw_signals]
+    justification = [sig for sig in ['0005', '0075'] if sig in signals]
     # Remove these signals from the input string
     for sig in justification + [str(i) for i in range(100, 14, -1)]:
         # We operate on a string, so cannot remove the item...
-        raw_signals = raw_signals.replace(sig, '')
+        signals = signals.replace(sig, '')
     # From remaining numbers, determine row numbers.
     # The highest number will be removed from the raw_signals to avoid
     # erroneously adding its digits as signals.
     rows = []
     for number in range(14, 0, -1):
-        if str(number) in raw_signals:
-            raw_signals = raw_signals.replace(str(number), '')
+        if str(number) in signals:
+            signals = signals.replace(str(number), '')
             rows.append(str(number))
     # Columns + S justification signal
-    columns = [s for s in 'ABCDEFGHIJKLMNS' if s in raw_signals]
-    # Return a list containing all signals and default O15
-    return columns + justification + rows + ['O15']
+    columns = [s for s in col_sigs if s in signals if s is not 'O']
+    # Return a list containing all signals and O15 if needed, if the input
+    # string or list contained any useful combinations
+    results = justification + columns + rows
+    return results and results + ['O15'] * add_o15 or ['O15'] * o15_found or []
 
 
 def get_column(signals):

@@ -80,14 +80,16 @@ def repeat_or_exit(func):
 
 
 def cast_result(func):
-    """Ask for confirmation and cast the resulting ribbon"""
+    """Ask for confirmation and cast the resulting ribbon;
+    uses temporary stats object"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         new_ribbon = func(self, *args, **kwargs)
         if self.mode.testing or UI.yes_or_no('Cast it?'):
             self.ribbon.contents, old_ribbon = new_ribbon, self.ribbon.contents
+            self.stats, old_stats = Stats(self), self.stats
             retval = self.cast()
-            self.ribbon.contents = old_ribbon
+            self.ribbon.contents, self.stats = old_ribbon, old_stats
             return retval
         else:
             return False
@@ -101,17 +103,6 @@ def stringify(func):
         data = func(self)
         info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
         return '\n'.join(info) + '\n'
-    return wrapper
-
-
-def temporary_stats(func):
-    """Uses brand new stats object for the job"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        old_stats, self.stats = self.stats, Stats(self)
-        retval = func(self, *args, **kwargs)
-        self.stats = old_stats
-        return retval
     return wrapper
 
 
@@ -159,14 +150,15 @@ class Casting(object):
             self.stats.update_job_info()
             self.stats.display_job_info()
             # Now process the queue
-            generator = (p.parse_record(record) for record in source)
+            generator = (p.parse_record(record, add_o15=self.mode.punching)
+                         for record in source)
             for (signals, comment) in generator:
                 comment = comment and UI.display(comment)
                 if not signals:
                     # No signals (comment only)- go to the next combination
                     continue
-                elif not self.mode.punching:
-                    # Use O15 only in punching mode
+                elif self.mode.casting:
+                    # Do not send O15 in casting mode
                     signals = [sig for sig in signals if sig is not 'O15']
                 self.stats.update(signals)
                 self.stats.display()
@@ -175,12 +167,12 @@ class Casting(object):
             if jobs:
                 UI.confirm('%s more job(s) remaining' % jobs)
         # This is the end
-        UI.confirm('Finished!')
+        if not self.mode.testing:
+            UI.confirm('Finished!')
 
     @repeat_or_exit
     @testing_mode
     @cast_result
-    @temporary_stats
     def test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
         intro = 'Testing the front pinblock - signals 1 towards 14.'
@@ -190,7 +182,6 @@ class Casting(object):
     @repeat_or_exit
     @testing_mode
     @cast_result
-    @temporary_stats
     def test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
         intro = ('This will test the front pinblock - signals NI, NL, A...N. ')
@@ -200,7 +191,6 @@ class Casting(object):
     @repeat_or_exit
     @testing_mode
     @cast_result
-    @temporary_stats
     def test_all(self):
         """Tests all valves and composition caster's inputs in original
         Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
@@ -211,10 +201,23 @@ class Casting(object):
         UI.confirm(intro)
         return [x for x in c.SIGNALS]
 
+    @check_modes
+    def test_combination(self):
+        """Tests a user-specified combination of signals"""
+        while True:
+            UI.display('Enter the signals to send to the caster, '
+                       'or leave empty to return to menu: ')
+            string = UI.enter_data_or_blank('Signals? (leave blank to exit): ')
+            if not string:
+                break
+            signals = p.parse_signals(string, add_o15=self.mode.punching)
+            if signals:
+                UI.display('Activating ' + ' '.join(signals))
+                self.caster.output.valves_on(signals)
+
     @repeat
     @testing_mode
     @cast_result
-    @temporary_stats
     def send_combination(self):
         """Send a specified combination to the caster, repeat"""
         # You can enter new signals or exit
@@ -225,13 +228,10 @@ class Casting(object):
         return [signals]
 
     @repeat_or_exit
-    @temporary_stats
     @cast_result
     # TODO: Selection from diecase by character
     def cast_sorts(self):
-        """cast_sorts():
-
-        Sorts casting routine, based on the position in diecase.
+        """Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
         """
         queue = []
@@ -296,7 +296,6 @@ class Casting(object):
         return queue
 
     @cast_result
-    @temporary_stats
     def cast_spaces(self):
         """cast_spaces():
 
@@ -395,7 +394,6 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
-    @temporary_stats
     def align_wedges(self):
         """Allows to align the justification wedges so that when you're
         casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -422,7 +420,6 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
-    @temporary_stats
     def align_mould(self):
         """align_mould:
 
@@ -448,7 +445,6 @@ class Casting(object):
 
     @repeat_or_exit
     @cast_result
-    @temporary_stats
     def align_diecase(self):
         # TODO: REFACTOR
         """Casts the "en dash" characters for calibrating the character X-Y
@@ -498,7 +494,6 @@ class Casting(object):
             UI.display('Done. Compare the lengths and adjust if needed.')
 
     @cast_result
-    @temporary_stats
     def line_casting(self):
         """line_casting:
 
@@ -546,7 +541,7 @@ class Casting(object):
                     (self.test_rear_pinblock, 'Test the rear pinblock',
                      'Tests the pins NI, NL, A...N one by one',
                      not perforator),
-                    (self.send_combination, 'Send specified signals',
+                    (self.test_combination, 'Send specified signals',
                      'Sends the specified signal combination', True),
                     (self.align_wedges, 'Adjust the 52D wedge',
                      'Calibrate the space transfer wedge for correct width',
@@ -580,7 +575,6 @@ class Casting(object):
     def stats(self, stats):
         """Parse the stats to get the ribbon data"""
         self.__dict__['stats'] = stats
-        self.__dict__['stats'].update_ribbon_info()
 
     @property
     def ribbon(self):
@@ -628,7 +622,6 @@ class Casting(object):
         """Chooses a wedge from registered ones"""
         self.wedge = wedge_data.choose_wedge()
 
-    @stringify
     def _display_additional_info(self):
         """Collect ribbon, diecase and wedge data here"""
         data = self.caster.get_parameters()
@@ -636,7 +629,8 @@ class Casting(object):
         data.extend(self.diecase.get_parameters())
         data.extend(self.wedge.get_parameters())
         data.extend(self.stats.get_parameters())
-        return data
+        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
+        UI.confirm('\n'.join(info) + '\n')
 
     def _main_menu_options(self):
         """Build a list of options, adding an option if condition is met"""
@@ -663,6 +657,8 @@ class Casting(object):
                  'Cast from matrix with given coordinates', not perforator),
                 (self.cast_spaces, 'Cast spaces or quads',
                  'Casts spaces or quads of a specified width', not perforator),
+                (self._display_additional_info, 'Show detailed info...',
+                 'Displays caster, ribbon, diecase and wedge details', True),
                 (self.diagnostics_submenu, 'Service...',
                  'Interface and machine diagnostic functions', True)]
         # Built a list of menu options conditionally
@@ -681,13 +677,13 @@ class Casting(object):
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.\n\n'
                   'This program reads a ribbon (from file or database) '
-                  'and casts the type on a composition caster. \n\nMain Menu:')
+                  'and casts the type on a composition caster.'
+                  '\n\nCasting / Punching Menu:')
         # Keep displaying the menu and go back here after any method ends
         while True:
             # Catch any known exceptions here
             try:
-                UI.menu(self._main_menu_options(), header=header,
-                        footer=self._display_additional_info())()
+                UI.menu(self._main_menu_options(), header=header, footer='')()
             except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
                 # Will skip to the end of the loop, and start all over
                 pass
@@ -702,6 +698,7 @@ class Stats(object):
         self.current = {'combination': [], '0075': '15', '0005': '15'}
         self.previous = self.current
         self.session = session
+        self._collect_ribbon_info
 
     def display(self):
         """Displays the current stats depending on session parameters"""
@@ -765,7 +762,7 @@ class Stats(object):
         """Updates the info on starting the new job"""
         pass
 
-    def update_ribbon_info(self):
+    def _collect_ribbon_info(self):
         """Parses the ribbon, counts combinations, lines and characters"""
         self.ribbon_data['job_codes'] = 0
         self.ribbon_data['job_lines'] = 0

@@ -21,7 +21,6 @@ class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
-        self.name = 'Monotype composition caster (mockup)'
         self.sensor = SimulationSensor()
         self.output = SimulationOutput()
         self.stop = EmergencyStop()
@@ -33,16 +32,20 @@ class MonotypeCaster(object):
         """Lock the resource so that only one object can use it
         with context manager"""
         if self.lock:
-            UI.display('Caster %s is already busy!' % self.name)
+            UI.display('Caster is already busy!')
         else:
             self.lock = True
-            UI.debug_confirm('Entering the %s caster context...' % self.name)
+            UI.debug_confirm('Entering the caster context...')
             return self
+
+    def __exit__(self, *_):
+        UI.debug_confirm('Caster no longer in use.')
+        self.lock = False
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Caster name')]
         # Collect data from I/O drivers
+        data = [('\n', '\nCaster data')]
         data.extend(self.sensor.get_parameters())
         data.extend(self.stop.get_parameters())
         data.extend(self.output.get_parameters())
@@ -60,14 +63,12 @@ class MonotypeCaster(object):
         stopping the machine for a short time - not recommended as the
         mould cools down and type quality can deteriorate).
 
+        If the pump was working, the program will store 0075/0005 wedge
+        positions, send 0005 to stop the pump and display the menu.
         If the operator decides to go on with casting, the aborted sequence
         will be re-cast so as to avoid missing characters in the composition.
-
-        Safety measure: this function will call "emergency_cleanup" routine
-        whenever the operator decides to go back to menu or exit program
-        after the machine stops rotating during casting. This is to ensure
-        that the pump will not stay on afterwards, leading to lead squirts
-        or any other unwanted effects.
+        If the pump was working before, its operation will be resumed
+        and the wedges will be reset to previous positions.
 
         When casting, the pace is dictated by the caster and its RPM. Thus,
         we can't arbitrarily set the intervals between valve ON and OFF
@@ -102,10 +103,6 @@ class MonotypeCaster(object):
                 stop_menu()
                 # If user continues, pump will be restarted if it was working
                 self.pump.start()
-
-    def __exit__(self, *_):
-        UI.debug_confirm('Caster %s no longer in use.' % self.name)
-        self.lock = False
 
 
 class Pump(object):

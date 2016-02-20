@@ -94,7 +94,8 @@ class EmptyRibbon(object):
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.filename, 'File name'),
+        data = [('\n', '\nRibbon data'),
+                (self.filename, 'File name'),
                 (self.ribbon_id, 'Ribbon ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
@@ -120,12 +121,14 @@ class EmptyRibbon(object):
         """Copies itself and returns an independent object"""
         return deepcopy(self)
 
-    def get_from_db(self, ribbon_id=None):
+    def get_from_db(self):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
         if data and UI.yes_or_no('Override current data?'):
             (self.ribbon_id, self.description, diecase_id, self.customer,
              self.unit_shift, self.contents) = data
+            self.diecase = (diecase_id and self.set_diecase(diecase_id) or
+                            self.diecase)
             return True
 
     def store_in_db(self):
@@ -214,7 +217,8 @@ class EmptyWork(object):
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.work_id, 'Work ID'),
+        data = [('\n', '\nWork data'),
+                (self.work_id, 'Work ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
                 (self.type_series, 'Monotype type series'),
@@ -416,7 +420,7 @@ def import_ribbon_from_file(filename=None):
     try:
         filename = filename or UI.enter_input_filename()
         with io.open(filename, mode='r') as ribbon_file:
-            cleaned_ribbon = [line.strip() for line in ribbon_file if line]
+            ribbon = [line.strip() for line in ribbon_file if line.strip()]
     except (FileNotFoundError, IOError):
         UI.confirm('Cannot open ribbon file %s' % filename)
         return False
@@ -428,7 +432,7 @@ def import_ribbon_from_file(filename=None):
     contents = []
     # Look for parameters line per line, get parameter value
     # If parameters exhausted, append the line to contents
-    for line in cleaned_ribbon:
+    for line in ribbon:
         for parameter in parameters:
             if line.startswith(parameter):
                 for sym in ASSIGNMENT_SYMBOLS:
@@ -447,7 +451,7 @@ def import_ribbon_from_file(filename=None):
     customer = 'customer' in metadata and metadata['customer'] or None
     unit_shift = ('unit-shift' in metadata and
                   metadata['unit-shift'].lower() in TRUE_ALIASES) or False
-    ribbon_id = 'NOT SET'
+    ribbon_id = None
     # Add the whole contents as the attribute
     return (ribbon_id, description, diecase_id, customer, unit_shift, contents)
 

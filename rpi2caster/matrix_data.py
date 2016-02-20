@@ -134,7 +134,8 @@ class EmptyDiecase(object):
 
     def get_parameters(self):
         """Gets a list of parameters"""
-        data = [(self.diecase_id, 'Diecase ID'),
+        data = [('\n', '\nMatrix case data'),
+                (self.diecase_id, 'Diecase ID'),
                 (self.typeface_name, 'Typeface'),
                 (self.type_series, 'Type series'),
                 (self.type_size, 'Type size')]

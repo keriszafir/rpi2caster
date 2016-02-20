@@ -75,14 +75,13 @@ class SysfsEmergencyStop(EmergencyStop):
         super().__init__()
         self.gpio = gpio
         self.name = 'Kernel SysFS interface for emergency stop button GPIO'
-        (self.value_file, self.edge_file) = configure_sysfs_interface(gpio)
+        self.value_file = configure_sysfs_interface(gpio)
 
     def get_parameters(self):
         """Gets a list of parameters"""
         data = [(self.name, 'Emergency stop button driver'),
                 (self.gpio, 'GPIO number'),
-                (self.value_file, 'Value file path'),
-                (self.edge_file, 'Edge file path')]
+                (self.value_file, 'Value file path')]
         return data
 
 
@@ -114,4 +113,4 @@ def configure_sysfs_interface(gpio):
                    'You must export the GPIO no %s as input first!'
                    % (gpio_value_file, gpio))
     else:
-        return (gpio_value_file, gpio_edge_file)
+        return gpio_value_file

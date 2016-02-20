@@ -13,13 +13,13 @@ def cast(args):
     session = casting_session.Casting(args.ribbon_file)
     session.mode.simulation = args.simulation
     session.mode.punching = args.punching
-    if not args.simulation:
-        session.caster.name = 'Monotype Composition Caster'
     session.caster.UI = casting_session.UI
     casting_session.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly
     if args.direct and args.ribbon_file:
         session.cast()
+    if args.testing:
+        session.diagnostics_submenu()
     else:
         session.main_menu()
 
@@ -60,7 +60,8 @@ def change_simulation(args):
 
 def main_menu(args):
     """Main menu - choose the module"""
-    header = ('rpi2caster - computer aided type casting for Monotype'
+    header = ('rpi2caster - computer aided type casting for Monotype '
+              'composition / type & rule casters.'
               '\n\nMain menu:\n')
     while True:
         options = [(exit_program, 'Exit',
@@ -110,7 +111,7 @@ def main():
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
                              source=None, simulation=False, punching=False,
                              unstable=False, manual=False, diecase=False,
-                             direct=False)
+                             direct=False, testing=False)
     #
     # Define commands
     #
@@ -133,6 +134,9 @@ def main():
     cast_parser.add_argument('-p', '--punch', action='store_true',
                              dest='punching',
                              help='Ribbon punching (perforation) mode')
+    cast_parser.add_argument('-t', '--test', action='store_true',
+                             dest='testing',
+                             help='Caster / interface diagnostics')
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='Ribbon file name')
     cast_parser.set_defaults(job=cast, ribbon_file=None)
@@ -180,7 +184,8 @@ def main():
     # Parsers defined
     try:
         args.job(args)
-    except exceptions.ExitProgram:
+    except (exceptions.ExitProgram, exceptions.ReturnToMenu,
+            exceptions.MenuLevelUp):
         print('Goodbye!')
     except (KeyboardInterrupt, EOFError):
         print('\nInterrupted by user.')

@@ -11,8 +11,8 @@ UI = matrix_data.UI
 
 def main_menu():
     """Display the main menu for inventory management"""
-    header = ('Matrix case  and wedge management utility for rpi2caster.'
-              '\n\nMain menu:\n')
+    header = ('Matrix case  and wedge manipulation utility for rpi2caster.'
+              '\n\nInventory Management menu:\n')
     options = [(exceptions.exit_program, 'Exit',
                 'Exits the inventory management'),
                (matrix_data.diecase_operations, 'Matrix operations...',
