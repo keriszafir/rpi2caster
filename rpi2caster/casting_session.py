@@ -99,16 +99,6 @@ def cast_result(func):
     return wrapper
 
 
-def stringify(func):
-    """Converts the list of tuples to a newline-separated string"""
-    def wrapper(self):
-        """Wrapper function"""
-        data = func(self)
-        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        return '\n'.join(info) + '\n'
-    return wrapper
-
-
 class Casting(object):
     """Casting:
 
@@ -623,21 +613,20 @@ class Casting(object):
 
     def _choose_diecase(self):
         """Chooses a diecase from database"""
-        self.diecase = matrix_data.choose_diecase()
+        self.diecase = matrix_data.Diecase()
 
     def _choose_wedge(self):
         """Chooses a wedge from registered ones"""
-        self.wedge = wedge_data.choose_wedge()
+        self.wedge = wedge_data.Wedge()
 
-    def _display_additional_info(self):
+    def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
-        data = self.caster.get_parameters()
-        data.extend(self.ribbon.get_parameters())
-        data.extend(self.diecase.get_parameters())
-        data.extend(self.wedge.get_parameters())
-        data.extend(self.stats.get_parameters())
-        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        UI.confirm('\n'.join(info) + '\n')
+        UI.display_parameters(self.caster.get_parameters(),
+                              self.ribbon.get_parameters(),
+                              self.diecase.get_parameters(),
+                              self.wedge.get_parameters(),
+                              self.stats.get_parameters())
+        UI.confirm()
 
     def _main_menu_options(self):
         """Build a list of options, adding an option if condition is met"""
@@ -664,7 +653,7 @@ class Casting(object):
                  'Cast from matrix with given coordinates', not perforator),
                 (self.cast_spaces, 'Cast spaces or quads',
                  'Casts spaces or quads of a specified width', not perforator),
-                (self._display_additional_info, 'Show detailed info...',
+                (self._display_details, 'Show detailed info...',
                  'Displays caster, ribbon, diecase and wedge details', True),
                 (self.diagnostics_submenu, 'Service...',
                  'Interface and machine diagnostic functions', True)]
@@ -707,15 +696,6 @@ class Stats(object):
         self.session = session
         self._collect_ribbon_info()
 
-    def display(self):
-        """Displays the current stats depending on session parameters"""
-        if self.session.mode.casting:
-            UI.display(self._full_info())
-        elif self.session.mode.punching:
-            UI.display(self._brief_info())
-        elif self.session.mode.testing:
-            UI.display(self._brief_info())
-
     def display_ribbon_info(self):
         """Displays the ribbon data"""
         UI.display(self._get_ribbon_info())
@@ -724,14 +704,12 @@ class Stats(object):
         """Displays info at the beginning of the job"""
         UI.display(self._get_job_info() + self._get_ribbon_info())
 
-    @stringify
     def _get_job_info(self):
         """Gets info about current job"""
         return [(self.ribbon_data['current_job'], 'Current job'),
                 (self.ribbon_data['all_jobs'] -
                  self.ribbon_data['current_job'], 'Jobs remaining')]
 
-    @stringify
     def _get_ribbon_info(self):
         """Gets ribbon parameters"""
         return [(self.ribbon_data['job_codes'], 'Combinations in ribbon'),
@@ -744,13 +722,11 @@ class Stats(object):
                 (self.ribbon_data['job_lines'], 'Lines to cast'),
                 (self.ribbon_data['job_chars'], 'Characters incl. spaces')]
 
-    @stringify
     def _brief_info(self):
         """Brief info: current combination, comment, combinations done,
         all combinations, percent done"""
         return [(' '.join(self.current['combination']), 'Current combination')]
 
-    @stringify
     def _full_info(self):
         """Full statistics: all from brief info and wedge positions"""
         return [(' '.join(self.current['combination']), 'Current combination')]

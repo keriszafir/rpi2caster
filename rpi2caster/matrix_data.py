@@ -11,11 +11,11 @@ import csv
 # Object copying
 from copy import deepcopy
 # Some functions raise custom exceptions
-from . import exceptions
+from . import exceptions as e
 # Wedge operations for several matrix-case management functions
 from . import wedge_data
 # Constants module
-from . import constants
+from . import constants as c
 # Use the same database backend and user interface as wedge_data uses
 DB = wedge_data.DB
 UI = wedge_data.UI
@@ -46,7 +46,7 @@ class EmptyDiecase(object):
         # Start with an empty layout
         new_layout = generate_empty_layout()
         # Load the layout from file
-        submitted_layout = submit_layout_file()
+        submitted_layout = import_layout_file()
         if not submitted_layout:
             UI.confirm('File does not contain a proper layout!')
             return False
@@ -78,6 +78,8 @@ class EmptyDiecase(object):
         with io.open(filename, 'a') as output_file:
             csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
                                     quoting=csv.QUOTE_ALL)
+            csv_writer.writerow(['Character', 'Style(s)', 'Column', 'Row',
+                                 'Unit width'])
             for record in self.layout:
                 (char, styles, column, row, units) = record
                 csv_writer.writerow([char, ', '.join(styles),
@@ -147,7 +149,7 @@ class EmptyDiecase(object):
             DB.add_diecase(self)
             UI.confirm('Data saved successfully.')
             return True
-        except exceptions.DatabaseQueryError:
+        except e.DatabaseQueryError:
             UI.confirm('Cannot save the diecase!')
 
     def delete_from_db(self):
@@ -162,7 +164,7 @@ class EmptyDiecase(object):
         try:
             DB.get_diecase(self.diecase_id)
             return True
-        except (exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+        except (e.DatabaseQueryError, e.NoMatchingData):
             return False
 
     def get_styles(self):
@@ -183,13 +185,10 @@ class EmptyDiecase(object):
         # Menu
         try:
             while True:
-                messages = ['\nMatrix case manipulation:\n\n'
-                            '[V]iew, [C]lear, [E]dit, [I]mport '
-                            'or e[X]port layout\nAssign [W]edge, '
-                            'change [T]ypeface or diecase [ID]\n']
-                self.show_parameters()
-                self.wedge.show_parameters()
-                options = {'M': exceptions.return_to_menu,
+                UI.clear()
+                UI.display_parameters(self.get_parameters(),
+                                      self.wedge.get_parameters())
+                options = {'M': e.return_to_menu,
                            'T': self.set_typeface,
                            'W': self.assign_wedge,
                            'ID': self.set_diecase_id,
@@ -198,15 +197,19 @@ class EmptyDiecase(object):
                            'V': self.show_layout,
                            'I': self.import_layout,
                            'X': self.export_layout,
-                           '': exceptions.menu_level_up}
+                           '': e.menu_level_up}
+                messages = ['\nMatrix case manipulation:\n\n'
+                            '[V]iew, [C]lear or resize, [E]dit, [I]mport '
+                            'or e[X]port layout\nAssign [W]edge, '
+                            'change [T]ypeface or diecase [ID]\n\n']
                 # Save to database needs a complete set of metadata
-                missing = [x for x in (self.type_series, self.type_size,
-                                       self.typeface_name, self.diecase_id)
-                           if not x]
-                if missing:
-                    messages.append('Some data is missing - '
-                                    'cannot save to database.\n')
-                else:
+                required = {'Type series': self.type_series,
+                            'Type size': self.type_size,
+                            'Typeface / font family name': self.typeface_name,
+                            'Diecase ID': self.diecase_id}
+                missing = [item for item in required if not required[item]]
+                messages.extend([item + ' is not set\n' for item in missing])
+                if not missing:
                     options['S'] = self.save_to_db
                     messages.append('[S]ave diecase to database')
                 # Check if it's in the database
@@ -219,7 +222,7 @@ class EmptyDiecase(object):
                 messages.append('\nYour choice: ')
                 message = ''.join(messages)
                 UI.simple_menu(message, options)()
-        except exceptions.MenuLevelUp:
+        except e.MenuLevelUp:
             # Exit matrix case manipulation menu
             return True
 
@@ -231,14 +234,14 @@ class Diecase(EmptyDiecase):
     def __init__(self, diecase_id=None):
         super().__init__()
         # Diecases created with diecase_id will be set up automatically
-        temp_diecase = choose_diecase(diecase_id)
-        # Assign attributes to diecase we're initializing
-        self.diecase_id = temp_diecase.diecase_id
-        self.type_series = temp_diecase.type_series
-        self.type_size = temp_diecase.type_size
-        self.typeface_name = temp_diecase.typeface_name
-        self.layout = temp_diecase.layout
-        self.wedge = temp_diecase.wedge
+        try:
+            diecase_data = (diecase_id and DB.get_diecase(diecase_id) or
+                            choose_diecase())
+            (self.diecase_id, self.type_series, self.type_size, wedge_series,
+             set_width, self.typeface_name, self.layout) = diecase_data
+            self.wedge = wedge_data.Wedge(wedge_series, set_width)
+        except (KeyError, TypeError, e.NoMatchingData, e.DatabaseQueryError):
+            UI.display('Diecase choice failed. Using empty one instead.')
 
 
 def diecase_operations():
@@ -248,9 +251,8 @@ def diecase_operations():
                    'choose a diecase or define a new one')
         while True:
             # Choose a wedge or initialize a new one
-            diecase = choose_diecase()
-            diecase.manipulation_menu()
-    except exceptions.ReturnToMenu:
+            Diecase().manipulation_menu()
+    except e.ReturnToMenu:
         # Exit wedge operations
         return True
 
@@ -286,70 +288,25 @@ def list_diecases():
 def choose_diecase(diecase_id=None):
     """Lists diecases and lets the user choose one;
     returns the Diecase class object with all parameters set up."""
-    # First try to get the diecase by ID:
-    try:
-        diecase_data = DB.get_diecase(diecase_id)
-    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-        # If this fails, choose manually
-        while True:
+    prompt = 'Number of a diecase or leave blank for an empty one: '
+    while True:
+        try:
             UI.display('Choose a matrix case:', end='\n\n')
-            available_diecases = list_diecases()
-            # Enter the diecase name
-            prompt = 'Number of a diecase or leave blank for an empty one: '
+            data = list_diecases()
             choice = UI.enter_data_or_blank(prompt)
-            if not choice:
-                return EmptyDiecase()
-            # Safeguards against entering a wrong number or non-numeric string
-            try:
-                diecase_id = available_diecases[choice]
-                diecase_data = DB.get_diecase(diecase_id)
-                break
-            except (KeyError,
-                    exceptions.NoMatchingData,
-                    exceptions.DatabaseQueryError):
-                UI.confirm('Diecase number is incorrect!')
-    (diecase_id, type_series, type_size, wedge_series, set_width,
-     typeface_name, layout) = diecase_data
-    diecase = EmptyDiecase()
-    diecase.diecase_id = diecase_id
-    diecase.type_series = type_series
-    diecase.type_size = type_size
-    diecase.typeface_name = typeface_name
-    diecase.layout = layout
-    diecase.wedge = wedge_data.Wedge(wedge_series, set_width)
-    return diecase
+            return choice and DB.get_diecase(data[choice]) or None
+        except (KeyError):
+            UI.confirm('Diecase number is incorrect!')
+        except (e.NoMatchingData, e.DatabaseQueryError):
+            UI.display('No diecases found in database')
+            return None
 
 
-def submit_layout_file():
-    """submit_layout_file:
-
-    Reads a matrix case arrangement from a text or csv file.
+def import_layout_file():
+    """Reads a matrix case arrangement from a text or csv file.
     The format should be:
     "character";"style1,style2...";"column";"row";"unit_width"
     """
-    def process_record(record):
-        """Prepares the record found in file for adding to the layout"""
-        # A record is a list with all diecase data:
-        # [character, (style1, style2...), column, row, units]
-        # Add a character - first item; if it's a space, don't change it
-        try:
-            # 5 fields in a record = unit value given
-            # Unit value must be converted to int
-            (char, styles, column, row, units) = record
-            units = int(units.strip())
-        except (ValueError, AttributeError):
-            # 4 fields = unit value not given
-            # (or unit value cannot be converted to int)
-            (char, styles, column, row) = record
-            units = 0
-        if char != ' ':
-            char = char.strip()
-        styles = [style.strip() for style in styles.split(',')]
-        row = int(row.strip())
-        column = column.strip()
-        # Pack it again
-        return (char, styles, column, row, units)
-
     # Give us a file or end here
     filename = UI.enter_input_filename()
     if not filename:
@@ -378,12 +335,10 @@ def submit_layout_file():
         columns = {record[2] for record in processed_records}
         rows = sorted({record[3] for record in processed_records})
         # Check if 17 columns (15x17, 16x17), else 15 columns (old 15x15)
-        if 'NI' in columns or 'NL' in columns or 16 in rows:
-            columns = constants.COLUMNS_17
-        else:
-            columns = constants.COLUMNS_15
+        big_layout = 'NI' in columns or 'NL' in columns or 16 in rows
+        columns_list = big_layout and c.COLUMNS_17 or c.COLUMNS_15
         # We now have completed uploading a layout and making a list out of it
-        layout = [record for row in rows for col in columns
+        layout = [record for row in rows for col in columns_list
                   for record in processed_records
                   if record[2] == col and record[3] == row]
         # Show the uploaded layout
@@ -399,13 +354,34 @@ def generate_empty_layout(rows=0, columns=0):
         prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
         (rows, columns) = UI.simple_menu(prompt, options)
     # Generate column numbers
-    if columns == 17:
-        columns_list = constants.COLUMNS_17
-    else:
-        columns_list = constants.COLUMNS_15
+    columns_list = columns == 17 and c.COLUMNS_17 or c.COLUMNS_15
     # Generate row numbers: 1...15 or 1...16
     rows_list = [num + 1 for num in range(rows)]
     # Generate an empty layout with default row unit values
     layout = [['', ['roman'], column, row, 0]
               for row in rows_list for column in columns_list]
     return layout
+
+
+def process_record(record):
+    """Prepares the record found in file for adding to the layout"""
+    # A record is a list with all diecase data:
+    # [character, (style1, style2...), column, row, units]
+    # Add a character - first item; if it's a space, don't change it
+    try:
+        # 5 fields in a record = unit value given
+        # Unit value must be converted to int
+        (char, styles, column, row, units) = record
+        units = int(units.strip())
+    except (ValueError, AttributeError):
+        # 4 fields = unit value not given
+        # (or unit value cannot be converted to int)
+        (char, styles, column, row) = record
+        units = 0
+    if char != ' ':
+        char = char.strip()
+    styles = [style.strip() for style in styles.split(',')]
+    row = int(row.strip())
+    column = column.strip()
+    # Pack it again
+    return (char, styles, column, row, units)

@@ -125,27 +125,28 @@ def main():
     cast_parser = jobs.add_parser('cast', aliases=['c'],
                                   help=('Casting with a Monotype caster '
                                         'or mockup caster for testing'))
-    cast_parser.add_argument('-d', '--debug', help='Debug mode',
-                             action="store_true")
-    cast_parser.add_argument('-D', '--direct', help='Direct casting - no menu',
+    cast_parser.add_argument('-d', '--debug', help='debug mode',
                              action="store_true")
     cast_parser.add_argument('-s', '--simulation', action='store_true',
-                             help='Simulate casting instead of real casting')
+                             help='simulate casting instead of real casting')
     cast_parser.add_argument('-p', '--punch', action='store_true',
                              dest='punching',
-                             help='Ribbon punching (perforation) mode')
-    cast_parser.add_argument('-t', '--test', action='store_true',
-                             dest='testing',
-                             help='Caster / interface diagnostics')
+                             help='ribbon punching (perforation) mode')
+    test_or_cast = cast_parser.add_mutually_exclusive_group()
+    test_or_cast.add_argument('-t', '--test', action='store_true',
+                              dest='testing',
+                              help='caster / interface diagnostics')
+    test_or_cast.add_argument('-D', '--direct', action="store_true",
+                              help='direct casting - no menu',)
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
-                             help='Ribbon file name')
+                             help='ribbon file name')
     cast_parser.set_defaults(job=cast, ribbon_file=None)
     #
     # Inventory management subparser
     #
     inv_parser = jobs.add_parser('inventory', aliases=['i', 'inv'],
                                  help='Wedge and matrix case management')
-    inv_parser.add_argument('-d', '--debug', help='Debug mode',
+    inv_parser.add_argument('-d', '--debug', help='debug mode',
                             action="store_true")
     inv_parser.set_defaults(job=inv)
     #
@@ -154,7 +155,7 @@ def main():
     upd_parser = jobs.add_parser('update', aliases=['u', 'upd'],
                                  help='Update the software')
     upd_parser.add_argument('-u', '--unstable', action='store_true',
-                            help='Use unstable (development) version')
+                            help='update to unstable (development) version')
     upd_parser.set_defaults(job=update)
     #
     # Composition (typesetting) program subparser

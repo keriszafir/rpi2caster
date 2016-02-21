@@ -8,7 +8,7 @@ import io
 # Object copying
 from copy import deepcopy
 # Some functions raise custom exceptions
-from . import exceptions
+from . import exceptions as e
 # Constants for rpi2caster
 from .constants import TRUE_ALIASES, ASSIGNMENT_SYMBOLS
 # Matrix data for diecases
@@ -139,7 +139,7 @@ class EmptyRibbon(object):
             DB.add_ribbon(self)
             UI.confirm('Ribbon added successfully.')
             return True
-        except (exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+        except (e.DatabaseQueryError, e.NoMatchingData):
             UI.confirm('Cannot store ribbon in database!')
             return False
 
@@ -185,8 +185,8 @@ class Ribbon(EmptyRibbon):
             self.diecase = (diecase_id and self.set_diecase(diecase_id) or
                             self.diecase)
         # Otherwise use empty ribbon
-        except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-            pass
+        except (e.NoMatchingData, e.DatabaseQueryError):
+            UI.display('Ribbon choice failed. Starting a new one.')
 
 
 class EmptyWork(object):
@@ -277,12 +277,7 @@ class EmptyWork(object):
 
     def import_from_file(self, filename=None):
         """Reads a text file and sets contents."""
-        if not self.text or UI.yes_or_no('Overwrite current content?'):
-            filename = filename or UI.enter_input_filename()
-            if filename:
-                # Initialize the contents
-                with io.open(filename, mode='r') as work_file:
-                    self.text = [x for x in work_file]
+        self.text = import_work_from_file(filename)
 
     def delete_from_db(self):
         """Deletes a work from database."""
@@ -290,7 +285,7 @@ class EmptyWork(object):
             try:
                 DB.delete_work(self)
                 UI.display('Ribbon deleted successfully.')
-            except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
+            except (e.NoMatchingData, e.DatabaseQueryError):
                 UI.display('Cannot delete work from database!')
 
     def store_in_db(self):
@@ -299,7 +294,7 @@ class EmptyWork(object):
             DB.add_work(self)
             UI.confirm('Data added successfully.')
             return True
-        except (exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+        except (e.DatabaseQueryError, e.NoMatchingData):
             UI.confirm('Cannot store work in database!')
 
 
@@ -307,23 +302,18 @@ class Work(EmptyWork):
     """A class for works (sources) for typesetting from database or file"""
     def __init__(self, work_id=None, filename=None):
         super().__init__()
-        self.set_work_id(work_id)
-        self.import_from_file(filename)
-        self.set_description()
-        self.set_customer()
-        diecase = matrix_data.choose_diecase()
-        self.set_typeface(type_series=diecase.type_series,
-                          type_size=diecase.type_size,
-                          typeface_name=diecase.typeface_name)
+        try:
+            work_data = (work_id and DB.get_work(work_id) or
+                         choose_work_from_db())
+            (self.work_id, self.description, self.customer, self.type_series,
+             self.type_size, self.typeface_name, self.text) = work_data
+        except (e.NoMatchingData, e.DatabaseQueryError):
+            UI.display('Work choice failed. Starting a new one.')
 
 
 def list_ribbons():
     """Lists all ribbons in the database."""
-    try:
-        data = DB.get_all_ribbons()
-    except exceptions.DatabaseQueryError:
-        UI.display('Cannot access ribbon database!')
-        return None
+    data = DB.get_all_ribbons()
     results = {}
     UI.display('\n' +
                'Index'.ljust(7) +
@@ -370,42 +360,6 @@ def list_works():
     UI.display('\n\n')
     # Now we can return the number - work ID pairs
     return results
-
-
-def choose_work(work_id=None, filename=None):
-    """Lets user choose a text file for typesetting."""
-    # Do it only if we have diecases (depends on list_diecases retval)
-    work_data = []
-    try:
-        work_data = DB.get_work(work_id)
-    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-        while True:
-            available_works = list_works()
-            if filename or not available_works:
-                break
-            # Enter the diecase name
-            prompt = 'Number of a work? (leave blank to exit): '
-            choice = UI.enter_data_or_blank(prompt, int)
-            if not choice:
-                break
-            # Safeguards against entering a wrong number or non-numeric string
-            try:
-                work_data = DB.get_work(available_works[choice])
-                break
-            except KeyError:
-                UI.confirm('Index number is incorrect!')
-    # Construct a new work object
-    work = EmptyWork()
-    if work_data:
-        (work.work_id, work.description, work.customer, work.type_series,
-         work.type_size, work.typeface_name, work.text) = work_data
-    else:
-        work.import_from_file(filename)
-        diecase = matrix_data.choose_diecase()
-        work.type_series = diecase.type_series
-        work.type_size = diecase.type_size
-        work.typeface_name = diecase.typeface_name
-    return work
 
 
 def import_ribbon_from_file(filename=None):
@@ -456,22 +410,40 @@ def import_ribbon_from_file(filename=None):
     return (ribbon_id, description, diecase_id, customer, unit_shift, contents)
 
 
+def import_work_from_file(filename=None):
+    """Imports work text from file"""
+    filename = filename or UI.enter_input_filename()
+    if filename:
+        # Initialize the contents
+        with io.open(filename, mode='r') as work_file:
+            return [x for x in work_file]
+
+
 def choose_ribbon_from_db():
     """Chooses ribbon data from database"""
+    prompt = 'Number of a ribbon? (leave blank to exit): '
     while True:
-        available_ribbons = list_ribbons()
-        if not available_ribbons:
-            break
-        # Enter the diecase name or raise an exception to break the loop
-        prompt = 'Number of a ribbon? (leave blank to exit): '
-        choice = UI.enter_data_or_blank(prompt, int)
-        if not choice:
-            break
-        # Safeguards against entering a wrong number
-        # or non-numeric string
         try:
-            ribbon_id = available_ribbons[choice]
-            return DB.get_ribbon(ribbon_id)
-        except (KeyError,
-                exceptions.DatabaseQueryError, exceptions.NoMatchingData):
+            data = list_ribbons()
+            choice = UI.enter_data_or_blank(prompt, int)
+            return choice and DB.get_ribbon(data[choice]) or None
+        except KeyError:
             UI.confirm('Ribbon number is incorrect!')
+        except (e.DatabaseQueryError, e.NoMatchingData):
+            UI.display('No ribbons found in database')
+            return None
+
+
+def choose_work_from_db():
+    """Chooses work data from database"""
+    prompt = 'Number of a work? (leave blank to exit): '
+    while True:
+        try:
+            data = list_works()
+            choice = UI.enter_data_or_blank(prompt, int)
+            return choice and DB.get_ribbon(data[choice]) or None
+        except KeyError:
+            UI.confirm('Work number is incorrect!')
+        except (e.DatabaseQueryError, e.NoMatchingData):
+            UI.display('No works found in database')
+            return None

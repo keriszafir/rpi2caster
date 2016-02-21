@@ -99,6 +99,13 @@ def display(*args, **kwargs):
     print(*args, **kwargs)
 
 
+def display_parameters(*data):
+    """Displays the parameters given as a list/tuple of 2-item lists/tuples:
+    [(value1, description1), (value2, description2)] - if value is there"""
+    print('\n'.join(['%s: %s' % (desc, value) for item in data
+                     for (value, desc) in item if value]) + '\n')
+
+
 def debug_info(*args, **kwargs):
     """Prints debug messages to screen if in debug mode"""
     if DEBUG_MODE:

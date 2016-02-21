@@ -11,7 +11,7 @@ from copy import deepcopy
 # Default user interface
 from .global_settings import USER_INTERFACE as UI
 # Custom exceptions for rpi2caster suite
-from . import exceptions
+from . import exceptions as e
 # Constants for known normal wedge unit arrangements
 from . import wedge_arrangements
 # Constants shared among modules
@@ -134,7 +134,7 @@ class DefaultWedge(object):
             DB.add_wedge(self)
             UI.confirm('Wedge saved successfully.')
             return True
-        except exceptions.DatabaseQueryError:
+        except e.DatabaseQueryError:
             UI.display()
             self.show_parameters()
             UI.confirm('Cannot save the wedge - check if it is already there.')
@@ -155,10 +155,10 @@ class DefaultWedge(object):
                 self.show_parameters()
                 UI.display('\n')
                 messages = ['[E]dit wedge, [S]ave to database']
-                options = {'M': exceptions.return_to_menu,
+                options = {'M': e.return_to_menu,
                            'E': self.edit,
                            'S': self.save_to_db,
-                           '': exceptions.menu_level_up}
+                           '': e.menu_level_up}
                 if self.check_db():
                     options['D'] = self.delete_from_db
                     messages.append(', [D]elete from database')
@@ -168,21 +168,23 @@ class DefaultWedge(object):
                 messages.append('\nYour choice: ')
                 message = ''.join(messages)
                 UI.simple_menu(message, options)()
-        except exceptions.MenuLevelUp:
+        except e.MenuLevelUp:
             # Exit wedge manipulation menu
             return True
 
 
 class Wedge(DefaultWedge):
     """Wedge: wedge data"""
-    def __init__(self, series='', set_width=0):
+    def __init__(self, wedge_series=None, set_width=None):
         super().__init__()
-        # Wedges will be setup automatically
-        temp_wedge = choose_wedge(series, set_width)
-        self.series = temp_wedge.series
-        self.set_width = temp_wedge.set_width
-        self.brit_pica = temp_wedge.brit_pica
-        self.unit_arrangement = temp_wedge.unit_arrangement
+        try:
+            wedge_data = (wedge_series and set_width and
+                          DB.get_wedge(wedge_series, set_width) or
+                          choose_wedge() or None)
+            (self.series, self.set_width, self.brit_pica,
+             self.unit_arrangement) = wedge_data
+        except (TypeError, ValueError, e.NoMatchingData, e.DatabaseQueryError):
+            UI.display('Wedge choice failed. Using S5-12 instead.')
 
 
 def wedge_operations():
@@ -191,9 +193,8 @@ def wedge_operations():
         UI.display('Wedge manipulation: choose a wedge or define a new one')
         while True:
             # Choose a wedge or initialize a new one
-            wedge = choose_wedge()
-            wedge.manipulation_menu()
-    except exceptions.ReturnToMenu:
+            Wedge().manipulation_menu()
+    except e.ReturnToMenu:
         # Exit wedge operations
         return True
 
@@ -239,36 +240,19 @@ def list_wedges():
     return results
 
 
-def choose_wedge(wedge_series='', set_width=0):
+def choose_wedge():
     """Tries to choose a wedge of given series and set width.
     If that fails, lists wedges and lets the user choose one;
     returns the wedge."""
-    # Select automatically
-    try:
-        wedge_parameters = DB.get_wedge(wedge_series, set_width)
-    except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-        while True:
+    prompt = 'Enter number (leave blank to work with default S5-12E): '
+    while True:
+        try:
             UI.display('\nChoose a wedge:', end='\n')
-            try:
-                available_wedges = list_wedges()
-            except (exceptions.NoMatchingData, exceptions.DatabaseQueryError):
-                UI.display('No wedges found in database. '
-                           'Using default S5-12E...')
-                return DefaultWedge()
-            # Enter the diecase name
-            prompt = 'Enter number (leave blank to work with default S5-12E): '
+            available_wedges = list_wedges()
             choice = UI.enter_data_or_blank(prompt, int)
-            if not choice:
-                return DefaultWedge()
-            # Safeguards against entering a wrong number or non-numeric string
-            try:
-                wedge_parameters = available_wedges[choice]
-                break
-            except KeyError:
-                UI.confirm('Wedge number is incorrect!')
-                continue
-    wedge = DefaultWedge()
-    (wedge.series, wedge.set_width, brit_pica,
-     wedge.unit_arrangement) = wedge_parameters
-    wedge.brit_pica = bool(brit_pica)
-    return wedge
+            return choice and available_wedges[choice] or None
+        except KeyError:
+            UI.confirm('Wedge number is incorrect!')
+        except (e.NoMatchingData, e.DatabaseQueryError):
+            UI.display('No wedges found in database.')
+            return None
