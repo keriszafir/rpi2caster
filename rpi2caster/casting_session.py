@@ -156,7 +156,7 @@ class Casting(object):
                     self.caster.process(self._check_if_o15_needed(signals))
                 jobs -= 1
             except e.CastingAborted:
-                UI.yes_or_no('Cast again?') or e.return_to_menu()
+                UI.yes_or_no('Cast again?') or e.menu_level_up()
             if jobs:
                 UI.confirm('%s more job(s) remaining' % jobs)
         # This is the end
@@ -217,7 +217,7 @@ class Casting(object):
         # You can enter new signals or exit
         prompt = ('Enter the signals to send to the caster, '
                   'or leave empty to return to menu: ')
-        signals = UI.enter_data_or_blank(prompt) or e.return_to_menu()
+        signals = UI.enter_data_or_blank(prompt) or e.menu_level_up()
         return [signals]
 
     @repeat_or_exit
@@ -469,7 +469,7 @@ class Casting(object):
                 pass
             # Finished. Return to menu.
             options = {'C': continue_aligning,
-                       'M': e.return_to_menu,
+                       'M': e.menu_level_up,
                        'E': e.exit_program}
             UI.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
             # Cast 5 nine-unit quads
@@ -623,6 +623,7 @@ class Casting(object):
         """Collect ribbon, diecase and wedge data here"""
         UI.display_parameters(self.caster.get_parameters(),
                               self.ribbon.get_parameters(),
+                              self.stats.get_parameters(),
                               self.diecase.get_parameters(),
                               self.wedge.get_parameters(),
                               self.stats.get_parameters())
@@ -663,13 +664,7 @@ class Casting(object):
                 in opts if condition]
 
     def main_menu(self):
-        """main_menu:
-
-        Calls UI.menu() with options, a header and a footer.
-        Options: {option_name : description}
-        Header: string displayed over menu
-        Footer: string displayed under menu (all info will be added here).
-        """
+        """Main menu for the type casting utility."""
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.\n\n'
                   'This program reads a ribbon (from file or database) '
@@ -698,11 +693,11 @@ class Stats(object):
 
     def display_ribbon_info(self):
         """Displays the ribbon data"""
-        UI.display(self._get_ribbon_info())
+        UI.display_parameters(self._get_ribbon_info())
 
     def display_job_info(self):
         """Displays info at the beginning of the job"""
-        UI.display(self._get_job_info() + self._get_ribbon_info())
+        UI.display_parameters(self._get_job_info() + self._get_ribbon_info())
 
     def _get_job_info(self):
         """Gets info about current job"""
@@ -718,7 +713,8 @@ class Stats(object):
 
     def get_parameters(self):
         """Gets ribbon parameters"""
-        return [(self.ribbon_data['job_codes'], 'Combinations in ribbon'),
+        return [('\n', '\nRibbon statistics'),
+                (self.ribbon_data['job_codes'], 'Combinations in ribbon'),
                 (self.ribbon_data['job_lines'], 'Lines to cast'),
                 (self.ribbon_data['job_chars'], 'Characters incl. spaces')]
 

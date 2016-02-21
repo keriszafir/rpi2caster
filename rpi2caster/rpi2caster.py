@@ -3,7 +3,7 @@
 from os import system
 from sys import argv
 import argparse
-from . import exceptions
+from . import exceptions as e
 from .text_ui import yes_or_no, menu, exit_program
 
 
@@ -48,12 +48,12 @@ def update(args):
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)
 
 
-def change_punching(args):
+def toggle_punching(args):
     """Switch between punching and casting modes"""
     args.punching = not args.punching
 
 
-def change_simulation(args):
+def toggle_simulation(args):
     """Switch between simulation and casting/punching modes"""
     args.simulation = not args.simulation
 
@@ -77,20 +77,19 @@ def main_menu(args):
                     'Compose text for casting'),
                    (update, 'Update the program',
                     'Check whether new version is available and update'),
-                   (change_punching, 'Switch to %s mode'
+                   (toggle_punching, 'Switch to %s mode'
                     % {True: 'casting',
                        False: 'ribbon punching'}[args.punching],
                     ('The casting program has different functionality '
                      'in casting and punching modes.')),
-                   (change_simulation, 'Switch to %s mode'
+                   (toggle_simulation, 'Switch to %s mode'
                     % {True: 'casting or ribbon punching',
                        False: 'simulation'}[args.simulation],
                     {True: 'Use a real machine',
                      False: 'Use a mockup for testing'}[args.simulation])]
         try:
             menu(options, header=header, footer='')(args)
-        except (exceptions.ReturnToMenu, exceptions.MenuLevelUp,
-                exceptions.ExitProgram):
+        except (e.ReturnToMenu, e.MenuLevelUp, e.ExitProgram):
             pass
         except (KeyboardInterrupt, EOFError):
             exit_program()
@@ -108,6 +107,7 @@ def main():
            'Typesetting is not ready yet.' % argv[0])
     # Initialize the main arguments parser
     main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
+    # Set default values for all options globally
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
                              source=None, simulation=False, punching=False,
                              unstable=False, manual=False, diecase=False,
@@ -125,19 +125,25 @@ def main():
     cast_parser = jobs.add_parser('cast', aliases=['c'],
                                   help=('Casting with a Monotype caster '
                                         'or mockup caster for testing'))
+    # Debug mode
     cast_parser.add_argument('-d', '--debug', help='debug mode',
                              action="store_true")
+    # Simulation mode: casting/punching without the actual caster/interface
     cast_parser.add_argument('-s', '--simulation', action='store_true',
                              help='simulate casting instead of real casting')
+    # Punch ribbon: uses different sensor, always adds O+15 to combinations
     cast_parser.add_argument('-p', '--punch', action='store_true',
                              dest='punching',
                              help='ribbon punching (perforation) mode')
     test_or_cast = cast_parser.add_mutually_exclusive_group()
+    # Starts in the diagnostics submenu of the casting program
     test_or_cast.add_argument('-t', '--test', action='store_true',
                               dest='testing',
                               help='caster / interface diagnostics')
+    # Allows to start casting right away without entering menu
     test_or_cast.add_argument('-D', '--direct', action="store_true",
                               help='direct casting - no menu',)
+    # Ribbon - input file specification
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='ribbon file name')
     cast_parser.set_defaults(job=cast, ribbon_file=None)
@@ -146,6 +152,7 @@ def main():
     #
     inv_parser = jobs.add_parser('inventory', aliases=['i', 'inv'],
                                  help='Wedge and matrix case management')
+    # Debug mode
     inv_parser.add_argument('-d', '--debug', help='debug mode',
                             action="store_true")
     inv_parser.set_defaults(job=inv)
@@ -154,6 +161,7 @@ def main():
     #
     upd_parser = jobs.add_parser('update', aliases=['u', 'upd'],
                                  help='Update the software')
+    # Update to unstable version
     upd_parser.add_argument('-u', '--unstable', action='store_true',
                             help='update to unstable (development) version')
     upd_parser.set_defaults(job=update)
@@ -169,6 +177,7 @@ def main():
     comp_parser.add_argument('-D', '--diecase', dest='diecase_id',
                              help='diecase ID for typesetting',
                              metavar='ID')
+    # Debug mode
     comp_parser.add_argument('-d', '--debug', help='Debug mode',
                              action="store_true")
     # Input filename option
@@ -185,8 +194,7 @@ def main():
     # Parsers defined
     try:
         args.job(args)
-    except (exceptions.ExitProgram, exceptions.ReturnToMenu,
-            exceptions.MenuLevelUp):
+    except (e.ExitProgram, e.ReturnToMenu, e.MenuLevelUp):
         print('Goodbye!')
     except (KeyboardInterrupt, EOFError):
         print('\nInterrupted by user.')
