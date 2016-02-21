@@ -23,7 +23,7 @@ def read_file(filename):
         return False
 
 
-def parse_record(input_data, add_o15=True):
+def parse_record(input_data):
     """parse_record(input_data):
 
     Parses an input string, and returns a list with two elements:
@@ -61,7 +61,7 @@ def parse_record(input_data, add_o15=True):
             [raw_signals, comment] = input_data.split(symbol, 1)
             break
     # Parse the signals part here
-    signals = parse_signals(raw_signals.strip().upper(), add_o15)
+    signals = parse_signals(raw_signals.strip().upper())
     # Return a list with processed signals and comment
     return [signals, comment.strip()]
 
@@ -123,7 +123,7 @@ def rewind_needed(contents):
             return False
 
 
-def parse_signals(signals, add_o15=True):
+def parse_signals(signals):
     """parse_signals(signals):
 
     Parses a string with Monotype signals on input.
@@ -157,8 +157,7 @@ def parse_signals(signals, add_o15=True):
     columns = [s for s in col_sigs if s in signals if s is not 'O']
     # Return a list containing all signals and O15 if needed, if the input
     # string or list contained any useful combinations
-    results = justification + columns + rows
-    return results and results + ['O15'] * add_o15 or ['O15'] * o15_found or []
+    return justification + columns + rows + ['O15'] * o15_found or []
 
 
 def get_column(signals):

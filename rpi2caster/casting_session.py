@@ -17,7 +17,7 @@ A module for everything related to working on a Monotype composition caster:
 # Signals parsing methods for rpi2caster
 from . import parsing as p
 # Custom exceptions
-from . import exceptions
+from . import exceptions as e
 # Constants shared between modules
 from . import constants as c
 # Typesetting functions module
@@ -38,7 +38,10 @@ def check_modes(func):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        UI.debug_confirm('About to cast, punch or test')
+        UI.debug_confirm('About to %s' %
+                         (self.mode.casting and 'cast composition...' or
+                          self.mode.testing and 'test outputs...' or
+                          self.mode.punching and 'punch ribbon...'))
         # Instantiate and enter context
         with self.mode.sensor() as self.caster.sensor:
             with self.mode.output() as self.caster.output:
@@ -150,20 +153,20 @@ class Casting(object):
             self.stats.update_job_info()
             self.stats.display_job_info()
             # Now process the queue
-            generator = (p.parse_record(record, add_o15=self.mode.punching)
-                         for record in source)
-            for (signals, comment) in generator:
-                comment = comment and UI.display(comment)
-                if not signals:
-                    # No signals (comment only)- go to the next combination
-                    continue
-                elif self.mode.casting:
-                    # Do not send O15 in casting mode
-                    signals = [sig for sig in signals if sig is not 'O15']
-                self.stats.update(signals)
-                self.stats.display()
-                self.caster.process_signals(signals)
-            jobs -= 1
+            generator = (p.parse_record(record) for record in source)
+            try:
+                for (signals, comment) in generator:
+                    # Display the comment
+                    comment = comment and UI.display(comment)
+                    if not signals:
+                        # No signals (comment only)- go to the next combination
+                        continue
+                    self.stats.update(signals)
+                    self.stats.display()
+                    self.caster.process(self._check_if_o15_needed(signals))
+                jobs -= 1
+            except e.CastingAborted:
+                UI.yes_or_no('Cast again?') or e.return_to_menu()
             if jobs:
                 UI.confirm('%s more job(s) remaining' % jobs)
         # This is the end
@@ -201,6 +204,7 @@ class Casting(object):
         UI.confirm(intro)
         return [x for x in c.SIGNALS]
 
+    @testing_mode
     @check_modes
     def test_combination(self):
         """Tests a user-specified combination of signals"""
@@ -208,12 +212,12 @@ class Casting(object):
             UI.display('Enter the signals to send to the caster, '
                        'or leave empty to return to menu: ')
             string = UI.enter_data_or_blank('Signals? (leave blank to exit): ')
-            if not string:
-                break
-            signals = p.parse_signals(string, add_o15=self.mode.punching)
+            signals = self._check_if_o15_needed(p.parse_signals(string))
             if signals:
                 UI.display('Activating ' + ' '.join(signals))
                 self.caster.output.valves_on(signals)
+            else:
+                break
 
     @repeat
     @testing_mode
@@ -223,8 +227,7 @@ class Casting(object):
         # You can enter new signals or exit
         prompt = ('Enter the signals to send to the caster, '
                   'or leave empty to return to menu: ')
-        signals = (UI.enter_data_or_blank(prompt) or
-                   exceptions.return_to_menu())
+        signals = UI.enter_data_or_blank(prompt) or e.return_to_menu()
         return [signals]
 
     @repeat_or_exit
@@ -241,7 +244,7 @@ class Casting(object):
             UI.display('Sorts casting by matrix coordinates\n\n')
             prompt = 'Combination? (default: G5): '
             user_code = UI.enter_data_or_blank(prompt).upper() or 'G5'
-            combination = p.parse_signals_string(user_code)
+            combination = p.parse_signals(user_code)
             row = p.get_row(combination)
             column = p.get_column(combination)
             units = 0
@@ -262,8 +265,7 @@ class Casting(object):
             # Enter custom unit value (no points-based calculation yet)
             prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
             while not 4 < units < 25:
-                units = (UI.enter_data_or_blank(prompt, float) or
-                         row_units)
+                units = UI.enter_data_or_blank(prompt, float) or row_units
             # Calculate the unit width difference and apply justification
             diff = units - row_units
             calc = typesetting_funcs.calculate_wedges
@@ -323,7 +325,7 @@ class Casting(object):
         while True:
             prompt = 'Combination? (default: G5): '
             code_string = UI.enter_data_or_blank(prompt).upper() or 'G5'
-            combination = p.parse_signals_string(code_string)
+            combination = p.parse_signals(code_string)
             row = p.get_row(combination)
             column = p.get_column(combination)
             width = 0.0
@@ -459,7 +461,7 @@ class Casting(object):
             dash_position = [mat[2] + str(mat[3])
                              for mat in self.diecase.layout
                              if mat[0] == '–'][0]
-        except (exceptions.MatrixNotFound, TypeError, IndexError):
+        except (e.MatrixNotFound, TypeError, IndexError):
             # Choose it manually
             dash_position = UI.enter_data_or_blank('En dash (–) at: ').upper()
         try:
@@ -467,7 +469,7 @@ class Casting(object):
             lowercase_n_position = [mat[2] + str(mat[3])
                                     for mat in self.diecase.layout
                                     if mat[0] == 'n'][0]
-        except (exceptions.MatrixNotFound, TypeError, IndexError):
+        except (e.MatrixNotFound, TypeError, IndexError):
             # Choose itmanually
             lowercase_n_position = UI.enter_data_or_blank('"n" at: ').upper()
         while True:
@@ -477,8 +479,8 @@ class Casting(object):
                 pass
             # Finished. Return to menu.
             options = {'C': continue_aligning,
-                       'M': exceptions.return_to_menu,
-                       'E': exceptions.exit_program}
+                       'M': e.return_to_menu,
+                       'E': e.exit_program}
             UI.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
             # Cast 5 nine-unit quads
             # End here if casting unsuccessful.
@@ -521,7 +523,12 @@ class Casting(object):
         self.ribbon.contents = old_ribbon
         return queue
 
-    def heatup(self):
+    def _check_if_o15_needed(self, signals):
+        """Checks if we need to activate O15, based on mode"""
+        return ([x for x in signals if x is not 'O15' or self.mode.testing] +
+                ['O15'] * (self.mode.punching and not self.mode.testing))
+
+    def _heatup(self):
         """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
         queue = (['NKJS 0005 0075'] + ['O15'] * 20 +
                  ['NKJS 0005 0075'] + ['NJS 0005'])
@@ -532,7 +539,7 @@ class Casting(object):
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
             perforator = self.mode.punching
-            opts = [(exceptions.menu_level_up, 'Back',
+            opts = [(e.menu_level_up, 'Back',
                      'Returns to main menu', True),
                     (self.test_all, 'Test outputs',
                      'Tests all the air outputs one by one', True),
@@ -562,7 +569,7 @@ class Casting(object):
             try:
                 # Catch "return to menu" and "exit program" exceptions here
                 UI.menu(menu_options(), header=header)()
-            except exceptions.ReturnToMenu:
+            except e.ReturnToMenu:
                 # Stay in the menu
                 pass
 
@@ -638,7 +645,7 @@ class Casting(object):
         perforator = self.mode.punching
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
-        opts = [(exceptions.exit_program, 'Exit', 'Exits the program', True),
+        opts = [(e.exit_program, 'Exit', 'Exits the program', True),
                 (self.cast, 'Cast or punch composition',
                  'Casts type or punch a ribbon', ribbon),
                 (self._choose_ribbon, 'Select ribbon',
@@ -684,7 +691,7 @@ class Casting(object):
             # Catch any known exceptions here
             try:
                 UI.menu(self._main_menu_options(), header=header, footer='')()
-            except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
+            except (e.ReturnToMenu, e.MenuLevelUp):
                 # Will skip to the end of the loop, and start all over
                 pass
 
@@ -698,7 +705,7 @@ class Stats(object):
         self.current = {'combination': [], '0075': '15', '0005': '15'}
         self.previous = self.current
         self.session = session
-        self._collect_ribbon_info
+        self._collect_ribbon_info()
 
     def display(self):
         """Displays the current stats depending on session parameters"""

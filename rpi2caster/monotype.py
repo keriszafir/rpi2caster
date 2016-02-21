@@ -51,8 +51,8 @@ class MonotypeCaster(object):
         data.extend(self.output.get_parameters())
         return data
 
-    def process_signals(self, signals, timeout=5):
-        """process_signals(signals, timeout):
+    def process(self, signals, timeout=5):
+        """process(signals, timeout):
 
         Checks for the machine's rotation, sends the signals (activates
         solenoid valves) after the caster is in the "air bar down" position.
@@ -124,9 +124,9 @@ class Pump(object):
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
-                self.caster.sensor.wait_for(new_state=True, force_cycle=True)
+                self.caster.sensor.wait_for(True, 30, True)
                 self.caster.output.valves_on(c.PUMP_STOP)
-                self.caster.sensor.wait_for(new_state=False)
+                self.caster.sensor.wait_for(False, 30, True)
                 self.caster.output.valves_off()
                 UI.display('Pump is now off.')
                 return True
@@ -138,8 +138,8 @@ class Pump(object):
         if self.was_working:
             UI.display('Resuming pump action...')
             # Set the wedge positions from before stop
-            self.caster.process_signals(c.PUMP_STOP + [self.last_0005])
-            self.caster.process_signals(c.PUMP_START + [self.last_0075])
+            self.caster.process(c.PUMP_STOP + [self.last_0005])
+            self.caster.process(c.PUMP_START + [self.last_0075])
             UI.display('Pump action resumed.')
 
 
