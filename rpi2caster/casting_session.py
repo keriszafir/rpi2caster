@@ -34,14 +34,14 @@ wedge_data = matrix_data.wedge_data
 UI = typesetting_data.UI
 
 
-def check_modes(func):
+def choose_sensor_and_driver(func):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        UI.debug_confirm('About to %s' %
-                         (self.mode.casting and 'cast composition...' or
-                          self.mode.testing and 'test outputs...' or
-                          self.mode.punching and 'punch ribbon...'))
+        UI.debug_pause('About to %s' %
+                       (self.mode.casting and 'cast composition...' or
+                        self.mode.testing and 'test outputs...' or
+                        self.mode.punching and 'punch ribbon...'))
         # Instantiate and enter context
         with self.mode.sensor() as self.caster.sensor:
             with self.mode.output() as self.caster.output:
@@ -51,7 +51,7 @@ def check_modes(func):
     return wrapper
 
 
-def testing_mode(func):
+def use_testing_mode(func):
     """Decorator for setting the testing mode for certain functions"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
@@ -77,7 +77,7 @@ def repeat_or_exit(func):
         """Wrapper function"""
         while True:
             func(self, *args, **kwargs)
-            if not UI.yes_or_no('Start again?'):
+            if not UI.confirm('Start again?'):
                 break
     return wrapper
 
@@ -88,7 +88,7 @@ def cast_result(func):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         new_ribbon = func(self, *args, **kwargs)
-        if self.mode.testing or UI.yes_or_no('Cast it?'):
+        if self.mode.testing or UI.confirm('Cast it?'):
             self.ribbon.contents, old_ribbon = new_ribbon, self.ribbon.contents
             self.stats, old_stats = Stats(self), self.stats
             retval = self.cast()
@@ -96,6 +96,39 @@ def cast_result(func):
             return retval
         else:
             return False
+    return wrapper
+
+
+def prepare_job(casting):
+    """Prepares the job for casting"""
+    def wrapper(self, source=None):
+        """Wrapper function"""
+        # Casting mode: cast backwards
+        # 0005 at the beginning signals that the ribbon needs rewind
+        source = source or self.ribbon.contents
+        if p.rewind_needed(source) and self.mode.casting:
+            source = [x for x in reversed(source)]
+        # Ask how many times to repeat this
+        prompt = 'How many repetitions? (default: 1) : '
+        jobs = self.mode.casting and UI.enter_data_or_blank(prompt, int) or 1
+        self.stats.ribbon_data['all_jobs'] = jobs
+        # Get the ribbon statistics
+        self.stats.display_ribbon_info()
+        while jobs:
+            self.stats.update_job_info()
+            self.stats.display_job_info()
+            try:
+                # The casting job
+                retval = source and casting(self, source) or False
+                jobs -= 1
+            except e.CastingAborted:
+                if UI.confirm('Cast again?'):
+                    e.menu_level_up()
+            if jobs:
+                UI.pause('%s more job(s) remaining' % jobs)
+            elif not self.mode.testing:
+                UI.pause('Finished!')
+        return retval
     return wrapper
 
 
@@ -120,69 +153,49 @@ class Casting(object):
                        typesetting_data.Ribbon(filename=ribbon_file) or
                        typesetting_data.EmptyRibbon())
 
-    @check_modes
-    def cast(self):
-        """Casts the sequence of codes in self.ribbon.contents,
+    @prepare_job
+    @choose_sensor_and_driver
+    def cast(self, ribbon):
+        """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
-        source = self.ribbon.contents
-        # Casting mode: cast backwards
-        # 0005 at the beginning signals that the ribbon needs rewind
-        if p.rewind_needed(source) and self.mode.casting:
-            source = [x for x in reversed(source)]
-        # Ask how many times to repeat this
-        prompt = 'How many repetitions? (default: 1) : '
-        jobs = self.mode.casting and UI.enter_data_or_blank(prompt, int) or 1
-        self.stats.ribbon_data['all_jobs'] = jobs
-        # Get the ribbon statistics
-        self.stats.display_ribbon_info()
+        self.stats.update_job_info()
+        self.stats.display_job_info()
+        # Now process the queue
+        generator = (p.parse_record(record) for record in ribbon)
         # Wait for machine to start
         self.caster.sensor.detect_rotation()
-        # Cast/punch it a given number of times
-        while jobs:
-            self.stats.update_job_info()
-            self.stats.display_job_info()
-            # Now process the queue
-            generator = (p.parse_record(record) for record in source)
-            try:
-                for (signals, comment) in generator:
-                    # Display the comment
-                    comment = comment and UI.display(comment)
-                    if not signals:
-                        # No signals (comment only)- go to the next combination
-                        continue
-                    self.stats.update(signals)
-                    self.stats.display()
-                    self.caster.process(self._check_if_o15_needed(signals))
-                jobs -= 1
-            except e.CastingAborted:
-                UI.yes_or_no('Cast again?') or e.menu_level_up()
-            if jobs:
-                UI.confirm('%s more job(s) remaining' % jobs)
-        # This is the end
-        if not self.mode.testing:
-            UI.confirm('Finished!')
+        for (signals, comment) in generator:
+            # Display the comment
+            comment = comment and UI.display(comment)
+            if not signals:
+                # No signals (comment only)- go to the next combination
+                continue
+            self.stats.update_combination_info(signals)
+            self.stats.display_combination_info()
+            self.caster.process(self._check_if_o15_needed(signals))
+        return True
 
     @repeat_or_exit
-    @testing_mode
+    @use_testing_mode
     @cast_result
     def test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
         intro = 'Testing the front pinblock - signals 1 towards 14.'
-        UI.confirm(intro)
+        UI.pause(intro)
         return [str(n) for n in range(1, 15)]
 
     @repeat_or_exit
-    @testing_mode
+    @use_testing_mode
     @cast_result
     def test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
         intro = ('This will test the front pinblock - signals NI, NL, A...N. ')
-        UI.confirm(intro)
+        UI.pause(intro)
         return [x for x in c.COLUMNS_17]
 
     @repeat_or_exit
-    @testing_mode
+    @use_testing_mode
     @cast_result
     def test_all(self):
         """Tests all valves and composition caster's inputs in original
@@ -191,11 +204,11 @@ class Casting(object):
         intro = ('This will test all the air lines in the same order '
                  'as the holes on the paper tower: \n%s\n'
                  'MAKE SURE THE PUMP IS DISENGAGED.' % ' '.join(c.SIGNALS))
-        UI.confirm(intro)
+        UI.pause(intro)
         return [x for x in c.SIGNALS]
 
-    @testing_mode
-    @check_modes
+    @use_testing_mode
+    @choose_sensor_and_driver
     def test_combination(self):
         """Tests a user-specified combination of signals"""
         while True:
@@ -210,7 +223,7 @@ class Casting(object):
                 break
 
     @repeat
-    @testing_mode
+    @use_testing_mode
     @cast_result
     def send_combination(self):
         """Send a specified combination to the caster, repeat"""
@@ -242,9 +255,9 @@ class Casting(object):
             # HMN or KMN systems are not supported yet
             question = 'Trying to access 16th row. Use unit shift?'
 
-            unit_shift = row == 16 and UI.yes_or_no(question)
+            unit_shift = row == 16 and UI.confirm(question)
             if row == 16 and not unit_shift:
-                UI.confirm('Aborting.')
+                UI.pause('Aborting.')
                 continue
             elif unit_shift:
                 row -= 1
@@ -275,12 +288,12 @@ class Casting(object):
             signals = column_code + (diff and 'S' or '') + str(row)
             # Ask for confirmation
             prompt = 'Casting %s lines of %s%s. OK?' % (lines, column, row)
-            if UI.yes_or_no(prompt):
+            if UI.confirm(prompt):
                 line_codes = ['NKJS 0005 0075' + str(pos_0005),
                               'NKS 0075' + str(pos_0075)]
                 line_codes.extend([signals] * sorts)
                 queue.extend(line_codes * lines)
-            if not UI.yes_or_no('Another combination?'):
+            if not UI.confirm('Another combination?'):
                 # Finished gathering data
                 break
         queue.append('NKJS 0005 0075')
@@ -321,9 +334,9 @@ class Casting(object):
             width = 0.0
             # Not using unit shift by default, ask for row 16
             question = 'Trying to access 16th row. Use unit shift?'
-            unit_shift = row == 16 and UI.yes_or_no(question)
+            unit_shift = row == 16 and UI.confirm(question)
             if row == 16 and not unit_shift:
-                UI.confirm('Aborting.')
+                UI.pause('Aborting.')
                 continue
             elif unit_shift:
                 row -= 1
@@ -373,12 +386,12 @@ class Casting(object):
             # Ask for confirmation
             prompt = ('Casting %s lines of %s-point spaces from %s%s. OK?' %
                       (lines, width, column, row))
-            if UI.yes_or_no(prompt):
+            if UI.confirm(prompt):
                 line_codes = ['NKJS 0005 0075' + str(pos_0005),
                               'NKS 0075' + str(pos_0075)]
                 line_codes.extend([signals] * sorts)
                 queue.extend(line_codes * lines)
-            if not UI.yes_or_no('Another combination?'):
+            if not UI.confirm('Another combination?'):
                 # Finished gathering data
                 break
         queue.extend(['NKJS 0005 0075', 'NJS 0005'])
@@ -508,7 +521,7 @@ class Casting(object):
         typesetter.compose()
         queue = typesetter.justify()
         self.ribbon.contents, old_ribbon = queue, self.ribbon.contents
-        if UI.yes_or_no('Show the codes?'):
+        if UI.confirm('Show the codes?'):
             self.ribbon.display_contents()
         self.ribbon.contents = old_ribbon
         return queue
@@ -627,7 +640,7 @@ class Casting(object):
                               self.diecase.get_parameters(),
                               self.wedge.get_parameters(),
                               self.stats.get_parameters())
-        UI.confirm()
+        UI.pause()
 
     def _main_menu_options(self):
         """Build a list of options, adding an option if condition is met"""
@@ -699,6 +712,10 @@ class Stats(object):
         """Displays info at the beginning of the job"""
         UI.display_parameters(self._get_job_info() + self._get_ribbon_info())
 
+    def display_combination_info(self):
+        """Displays info about the current combination"""
+        # UI.display_parameters(self._brief_info)
+
     def _get_job_info(self):
         """Gets info about current job"""
         return [(self.ribbon_data['current_job'], 'Current job'),
@@ -727,7 +744,7 @@ class Stats(object):
         """Full statistics: all from brief info and wedge positions"""
         return [(' '.join(self.current['combination']), 'Current combination')]
 
-    def update(self, combination):
+    def update_combination_info(self, combination):
         """Updates the stats based on current combination"""
         # Remember the previous state
         self.previous = self.current

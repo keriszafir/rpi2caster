@@ -28,6 +28,6 @@ def main_menu():
         except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
             pass
         except exceptions.NoMatchingData:
-            UI.confirm('No matching data found!', UI.MSG_MENU)
+            UI.pause('No matching data found!', UI.MSG_MENU)
         except exceptions.DatabaseQueryError:
-            UI.confirm('Database query error!', UI.MSG_MENU)
+            UI.pause('Database query error!', UI.MSG_MENU)

@@ -24,9 +24,7 @@ def read_file(filename):
 
 
 def parse_record(input_data):
-    """parse_record(input_data):
-
-    Parses an input string, and returns a list with two elements:
+    """Parses an input string, and returns a list with two elements:
     -the Monotype signals (unprocessed),
     -any comments delimited by symbols from COMMENT_SYMBOLS list.
     We need to work on strings. Convert any lists, integers etc.
@@ -60,67 +58,8 @@ def parse_record(input_data):
             # Split on the first encountered symbol
             [raw_signals, comment] = input_data.split(symbol, 1)
             break
-    # Parse the signals part here
-    signals = parse_signals(raw_signals.strip().upper())
-    # Return a list with processed signals and comment
-    return [signals, comment.strip()]
-
-
-def count_lines_and_chars(contents):
-    """Count newlines and characters+spaces in ribbon file.
-    This is usually called when pre-processing the file for casting.
-    """
-    all_lines = 0
-    all_chars = 0
-    for line in contents:
-        # Strip comments
-        signals = parse_record(line)[0]
-        # Parse the signals part of the line
-        if check_character(signals):
-            all_chars += 1
-        elif check_newline(signals):
-            all_lines += 1
-    # -1 lines because of the starting galley trip / double justification code
-    # Cannot be negative
-    all_lines = max(0, all_lines - 1)
-    return [all_lines, all_chars]
-
-
-def count_combinations(contents):
-    """Count all combinations in ribbon file.
-    This is usually called when pre-processing the file for punching."""
-    all_combinations = 0
-    for line in contents:
-        # Get signals list. Increase counter if we have signals.
-        if parse_record(line)[0]:
-            all_combinations += 1
-    # Return the number
-    return all_combinations
-
-
-def rewind_needed(contents):
-    """rewind_needed:
-
-    Detects ribbon direction so that we can use the ribbons generated
-    with different software and still cast them in correct order.
-    This function checks if the casting sequence starts with 0005 / NJ only
-    (which is found at the end of the job, to stop the pump) - it indicates
-    that the ribbon should be reversed.
-    """
-    newline_found = False
-    for line in contents:
-        # Get the signals part of a line
-        signals = parse_record(line)[0]
-        # Toggle this to True if newline combinations are found
-        newline_found = newline_found or check_newline(signals)
-        # Determine the result the first time pump stop combination is found
-        if check_pump_stop(signals) and not newline_found:
-            # Starts with pump stop i.e. the last combination
-            # - cast it backwards
-            return True
-        elif newline_found:
-            # Starts with newline - cast it forwards
-            return False
+    # Parse the signals and return a list with processed signals and comment
+    return [parse_signals(raw_signals), comment.strip()]
 
 
 def parse_signals(signals):
@@ -158,6 +97,61 @@ def parse_signals(signals):
     # Return a list containing all signals and O15 if needed, if the input
     # string or list contained any useful combinations
     return justification + columns + rows + ['O15'] * o15_found or []
+
+
+def count_lines_and_chars(contents):
+    """Count newlines and characters+spaces in ribbon file.
+    This is usually called when pre-processing the file for casting.
+    """
+    all_lines = 0
+    all_chars = 0
+    for line in contents:
+        # Strip comments
+        signals = parse_record(line)[0]
+        # Parse the signals part of the line
+        if check_character(signals):
+            all_chars += 1
+        elif check_newline(signals):
+            all_lines += 1
+    # -1 lines because of the starting galley trip / double justification code
+    # Cannot be negative
+    all_lines = max(0, all_lines - 1)
+    return [all_lines, all_chars]
+
+
+def count_combinations(contents):
+    """Count all combinations in ribbon file.
+    This is usually called when pre-processing the file for punching."""
+    all_combinations = 0
+    for line in contents:
+        # Get signals list. Increase counter if we have signals.
+        if parse_record(line)[0]:
+            all_combinations += 1
+    # Return the number
+    return all_combinations
+
+
+def rewind_needed(contents):
+    """Detects ribbon direction so that we can use the ribbons generated
+    with different software and still cast them in correct order.
+    This function checks if the casting sequence starts with 0005 / NJ only
+    (which is found at the end of the job, to stop the pump) - it indicates
+    that the ribbon should be reversed.
+    """
+    newline_found = False
+    for line in contents:
+        # Get the signals part of a line
+        signals = parse_record(line)[0]
+        # Toggle this to True if newline combinations are found
+        newline_found = newline_found or check_newline(signals)
+        # Determine the result the first time pump stop combination is found
+        if check_pump_stop(signals) and not newline_found:
+            # Starts with pump stop i.e. the last combination
+            # - cast it backwards
+            return True
+        elif newline_found:
+            # Starts with newline - cast it forwards
+            return False
 
 
 def get_column(signals):

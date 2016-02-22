@@ -84,7 +84,7 @@ class DefaultWedge(object):
             set_width = UI.enter_data(prompt, float)
         # Check if it has a different pica as a base for unit calculations
         prompt = 'Old British pica (0.1667") based wedge?'
-        brit_pica = wedge_name.endswith('E') or UI.yes_or_no(prompt)
+        brit_pica = wedge_name.endswith('E') or UI.confirm(prompt)
         # We have the wedge name, so we can look the wedge up in known wedges
         # (no need to enter the unit arrangement manually)
         try:
@@ -115,7 +115,7 @@ class DefaultWedge(object):
         while len(unit_arrangement) < 17:
             unit_arrangement.append(unit_arrangement[-1])
         # We now should have a correct arrangement...
-        if UI.yes_or_no('Apply changes?'):
+        if UI.confirm('Apply changes?'):
             self.series = series
             self.set_width = set_width
             self.brit_pica = brit_pica
@@ -123,7 +123,7 @@ class DefaultWedge(object):
 
     def delete_from_db(self):
         """Deletes the wedge from database"""
-        ans = UI.yes_or_no('Are you sure?')
+        ans = UI.confirm('Are you sure?')
         if ans and DB.delete_wedge(self):
             UI.display('Wedge definition deleted successfully from database.')
             return True
@@ -132,12 +132,12 @@ class DefaultWedge(object):
         """Stores the wedge definition in database"""
         try:
             DB.add_wedge(self)
-            UI.confirm('Wedge saved successfully.')
+            UI.pause('Wedge saved successfully.')
             return True
         except e.DatabaseQueryError:
             UI.display()
             self.show_parameters()
-            UI.confirm('Cannot save the wedge - check if it is already there.')
+            UI.pause('Cannot save the wedge - check if it is already there.')
             UI.display()
             return False
 
@@ -214,7 +214,7 @@ def generate_wedge_collection(series='5', brit_pica=True):
         wedge.unit_arrangement = unit_arrangement
         wedge.save_to_db()
     list_wedges()
-    UI.confirm()
+    UI.pause()
 
 
 def list_wedges():
@@ -252,7 +252,7 @@ def choose_wedge():
             choice = UI.enter_data_or_blank(prompt, int)
             return choice and available_wedges[choice] or None
         except KeyError:
-            UI.confirm('Wedge number is incorrect!')
+            UI.pause('Wedge number is incorrect!')
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('No wedges found in database.')
             return None

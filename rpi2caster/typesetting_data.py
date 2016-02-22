@@ -58,7 +58,7 @@ class EmptyRibbon(object):
         # Ask if we are sure we want to update this
         # if self.ribbon_id was set earlier
         condition = (not self.ribbon_id or ribbon_id != self.ribbon_id and
-                     UI.yes_or_no('Are you sure to change the ribbon ID?'))
+                     UI.confirm('Are you sure to change the ribbon ID?'))
         if condition:
             self.ribbon_id = ribbon_id
             return True
@@ -82,7 +82,7 @@ class EmptyRibbon(object):
     def set_unit_shift(self, unit_shift=False):
         """Chooses whether unit-shift is needed"""
         prompt = 'Is unit shift needed?'
-        self.unit_shift = (bool(unit_shift) or UI.yes_or_no(prompt) or
+        self.unit_shift = (bool(unit_shift) or UI.confirm(prompt) or
                            self.unit_shift)
 
     def show_parameters(self):
@@ -112,10 +112,10 @@ class EmptyRibbon(object):
                 UI.display(contents_generator.__next__())
         except StopIteration:
             # End of generator
-            UI.confirm('Finished', UI.MSG_MENU)
+            UI.pause('Finished', UI.MSG_MENU)
         except (EOFError, KeyboardInterrupt):
             # Press ctrl-C to abort displaying long ribbons
-            UI.confirm('Aborted', UI.MSG_MENU)
+            UI.pause('Aborted', UI.MSG_MENU)
 
     def copy(self):
         """Copies itself and returns an independent object"""
@@ -124,7 +124,7 @@ class EmptyRibbon(object):
     def get_from_db(self):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
-        if data and UI.yes_or_no('Override current data?'):
+        if data and UI.confirm('Override current data?'):
             (self.ribbon_id, self.description, diecase_id, self.customer,
              self.unit_shift, self.contents) = data
             self.diecase = (diecase_id and self.set_diecase(diecase_id) or
@@ -137,15 +137,15 @@ class EmptyRibbon(object):
         # Ask for confirmation
         try:
             DB.add_ribbon(self)
-            UI.confirm('Ribbon added successfully.')
+            UI.pause('Ribbon added successfully.')
             return True
         except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.confirm('Cannot store ribbon in database!')
+            UI.pause('Cannot store ribbon in database!')
             return False
 
     def delete_from_db(self):
         """Deletes a ribbon from database."""
-        if UI.yes_or_no('Are you sure?'):
+        if UI.confirm('Are you sure?'):
             DB.delete_ribbon(self)
             UI.display('Ribbon deleted successfully.')
 
@@ -233,7 +233,7 @@ class EmptyWork(object):
         # Ask if we are sure we want to update this
         # if self.work_id was set earlier
         condition = (not self.work_id or work_id != self.work_id and
-                     UI.yes_or_no('Are you sure to change the work ID?'))
+                     UI.confirm('Are you sure to change the work ID?'))
         if condition:
             self.work_id = work_id
             return True
@@ -262,7 +262,7 @@ class EmptyWork(object):
                          self.typeface_name)
         # Validate data
         current_data_not_set = not self.type_series and not self.type_size
-        if current_data_not_set or UI.yes_or_no('Apply changes?'):
+        if current_data_not_set or UI.confirm('Apply changes?'):
             self.type_series = type_series
             self.type_size = type_size
             self.typeface_name = typeface_name
@@ -281,7 +281,7 @@ class EmptyWork(object):
 
     def delete_from_db(self):
         """Deletes a work from database."""
-        if UI.yes_or_no('Are you sure?'):
+        if UI.confirm('Are you sure?'):
             try:
                 DB.delete_work(self)
                 UI.display('Ribbon deleted successfully.')
@@ -292,10 +292,10 @@ class EmptyWork(object):
         """Stores the work in database"""
         try:
             DB.add_work(self)
-            UI.confirm('Data added successfully.')
+            UI.pause('Data added successfully.')
             return True
         except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.confirm('Cannot store work in database!')
+            UI.pause('Cannot store work in database!')
 
 
 class Work(EmptyWork):
@@ -376,7 +376,7 @@ def import_ribbon_from_file(filename=None):
         with io.open(filename, mode='r') as ribbon_file:
             ribbon = [line.strip() for line in ribbon_file if line.strip()]
     except (FileNotFoundError, IOError):
-        UI.confirm('Cannot open ribbon file %s' % filename)
+        UI.pause('Cannot open ribbon file %s' % filename)
         return False
     # What to look for
     parameters = ['diecase', 'description', 'desc', 'unit-shift',
@@ -428,7 +428,7 @@ def choose_ribbon_from_db():
             choice = UI.enter_data_or_blank(prompt, int)
             return choice and DB.get_ribbon(data[choice]) or None
         except KeyError:
-            UI.confirm('Ribbon number is incorrect!')
+            UI.pause('Ribbon number is incorrect!')
         except (e.DatabaseQueryError, e.NoMatchingData):
             UI.display('No ribbons found in database')
             return None
@@ -443,7 +443,7 @@ def choose_work_from_db():
             choice = UI.enter_data_or_blank(prompt, int)
             return choice and DB.get_ribbon(data[choice]) or None
         except KeyError:
-            UI.confirm('Work number is incorrect!')
+            UI.pause('Work number is incorrect!')
         except (e.DatabaseQueryError, e.NoMatchingData):
             UI.display('No works found in database')
             return None

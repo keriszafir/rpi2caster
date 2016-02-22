@@ -34,7 +34,7 @@ class EmptyDiecase(object):
     def show_layout(self):
         """Shows the diecase layout"""
         UI.display_diecase_layout(self)
-        UI.confirm()
+        UI.pause()
 
     def edit_layout(self):
         """Edits a layout and asks if user wants to save changes"""
@@ -48,7 +48,7 @@ class EmptyDiecase(object):
         # Load the layout from file
         submitted_layout = import_layout_file()
         if not submitted_layout:
-            UI.confirm('File does not contain a proper layout!')
+            UI.pause('File does not contain a proper layout!')
             return False
         # Update the empty layout with characters read from file
         # record = (char, styles, column, row, units)
@@ -58,7 +58,7 @@ class EmptyDiecase(object):
                     if record[2] == position[2] and record[3] == position[3]:
                         new_layout[new_layout.index(position)] = record
         except (TypeError, ValueError):
-            UI.confirm('Cannot process the uploaded layout!')
+            UI.pause('Cannot process the uploaded layout!')
             return False
         # Other positions will be empty but defined
         # Now display the layout - need to use a temporary diecase for that
@@ -68,7 +68,7 @@ class EmptyDiecase(object):
         UI.display('\nSubmitted layout:\n')
         UI.display_diecase_layout(temp_diecase)
         # Ask for confirmation
-        if UI.yes_or_no('Save the changes?'):
+        if UI.confirm('Save the changes?'):
             self.layout = new_layout
             return True
 
@@ -84,13 +84,13 @@ class EmptyDiecase(object):
                 (char, styles, column, row, units) = record
                 csv_writer.writerow([char, ', '.join(styles),
                                      column, row, units])
-        UI.confirm('File %s successfully saved.' % filename)
+        UI.pause('File %s successfully saved.' % filename)
         return True
 
     def clear_layout(self):
         """Clears a layout for the diecase"""
         layout = generate_empty_layout()
-        if UI.yes_or_no('Are you sure?'):
+        if UI.confirm('Are you sure?'):
             self.layout = layout
 
     def set_diecase_id(self, diecase_id=None):
@@ -101,7 +101,7 @@ class EmptyDiecase(object):
         # Ask if we are sure we want to update this
         # if self.diecase_id was set earlier
         condition = (not self.diecase_id or diecase_id != self.diecase_id and
-                     UI.yes_or_no('Are you sure to change diecase ID?'))
+                     UI.confirm('Are you sure to change diecase ID?'))
         if condition:
             self.diecase_id = diecase_id
             return True
@@ -118,7 +118,7 @@ class EmptyDiecase(object):
                          self.typeface_name)
         # Validate data
         current_data_not_set = not self.type_series and not self.type_size
-        if current_data_not_set or UI.yes_or_no('Apply changes?'):
+        if current_data_not_set or UI.confirm('Apply changes?'):
             self.type_series = type_series
             self.type_size = type_size
             self.typeface_name = typeface_name
@@ -147,14 +147,14 @@ class EmptyDiecase(object):
         """Stores the matrix case definition/layout in database"""
         try:
             DB.add_diecase(self)
-            UI.confirm('Data saved successfully.')
+            UI.pause('Data saved successfully.')
             return True
         except e.DatabaseQueryError:
-            UI.confirm('Cannot save the diecase!')
+            UI.pause('Cannot save the diecase!')
 
     def delete_from_db(self):
         """Deletes a diecase from database"""
-        ans = UI.yes_or_no('Are you sure?')
+        ans = UI.confirm('Are you sure?')
         if ans and DB.delete_diecase(self):
             UI.display('Matrix case deleted successfully.')
             return True
@@ -296,7 +296,7 @@ def choose_diecase(diecase_id=None):
             choice = UI.enter_data_or_blank(prompt)
             return choice and DB.get_diecase(data[choice]) or None
         except (KeyError):
-            UI.confirm('Diecase number is incorrect!')
+            UI.pause('Diecase number is incorrect!')
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('No diecases found in database')
             return None
@@ -323,9 +323,9 @@ def import_layout_file():
         UI.display('File preview: displaying first 5 rows:\n')
         UI.display('\n'.join(displayed_lines), end='\n\n')
         # Ask if the first row is a header - if so, away with it
-        if UI.yes_or_no('Is the 1st row a table header? '):
+        if UI.confirm('Is the 1st row a table header? '):
             all_records.pop(0)
-    if not UI.yes_or_no('Proceed?'):
+    if not UI.confirm('Proceed?'):
         return False
     try:
         # Process the records

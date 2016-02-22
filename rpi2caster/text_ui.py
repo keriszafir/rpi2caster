@@ -118,13 +118,13 @@ def debug_enter_data(prompt):
         return input('DEBUG: ' + prompt)
 
 
-def debug_confirm(msg1='', msg2=MSG_CONTINUE):
+def debug_pause(msg1='', msg2=MSG_CONTINUE):
     """For debug confirmations"""
     if DEBUG_MODE:
         input('DEBUG: ' + msg1 + ' - ' + msg2)
 
 
-def confirm(msg1='', msg2=MSG_CONTINUE):
+def pause(msg1='', msg2=MSG_CONTINUE):
     """Waits until user presses return"""
     input(msg1 + '\n' + msg2)
 
@@ -255,12 +255,9 @@ def simple_menu(message, options):
             pass
 
 
-def yes_or_no(question):
-    """yes_or_no
-
-    Asks a simple question with yes or no answers.
-    Returns True for yes and False for no.
-    """
+def confirm(question):
+    """Asks a simple question with yes or no answers.
+    Returns True for yes and False for no."""
     return simple_menu('%s [Y / N]: ' % question, {'Y': True, 'N': False})
 
 
@@ -398,7 +395,7 @@ def edit_diecase_layout(diecase):
         # Get current matrix data
         old_mat = get_matrix(column, row)
         mat_id = working_diecase.layout.index(old_mat)
-        if yes_or_no('Save the matrix in layout?'):
+        if confirm('Save the matrix in layout?'):
             working_diecase.layout[mat_id] = mat
 
     def edit_matrix(mat):
@@ -501,7 +498,7 @@ def edit_diecase_layout(diecase):
             simple_menu(prompt, options)()
         except exceptions.MenuLevelUp:
             que = 'Save the changes?'
-            if working_diecase.layout != diecase.layout and yes_or_no(que):
+            if working_diecase.layout != diecase.layout and confirm(que):
                 diecase.layout = working_diecase.layout
             break
 

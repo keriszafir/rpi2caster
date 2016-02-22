@@ -35,11 +35,11 @@ class MonotypeCaster(object):
             UI.display('Caster is already busy!')
         else:
             self.lock = True
-            UI.debug_confirm('Entering the caster context...')
+            UI.debug_pause('Entering the caster context...')
             return self
 
     def __exit__(self, *_):
-        UI.debug_confirm('Caster no longer in use.')
+        UI.debug_pause('Caster no longer in use.')
         self.lock = False
 
     def get_parameters(self):
@@ -154,11 +154,11 @@ class SimulationSensor(object):
     def __enter__(self):
         if not self.lock:
             self.lock = True
-            UI.debug_confirm('Using a %s for machine feedback' % self.name)
+            UI.debug_pause('Using a %s for machine feedback' % self.name)
             return self
 
     def __exit__(self, *_):
-        UI.debug_confirm('The %s is no longer in use' % self.name)
+        UI.debug_pause('The %s is no longer in use' % self.name)
         self.lock = False
 
     def get_parameters(self):
@@ -213,8 +213,8 @@ class PunchingSensor(SimulationSensor):
 
     def detect_rotation(self):
         """Ask for user confirmation before punching"""
-        UI.confirm('\nRibbon punching: \n'
-                   'Put the ribbon on the perforator and turn on the air.')
+        UI.pause('\nRibbon punching: \n'
+                 'Put the ribbon on the perforator and turn on the air.')
 
     def wait_for(self, new_state, timeout=30, force_cycle=False):
         """Waits for user keypress before toggling the output state.
@@ -257,7 +257,7 @@ class TestSensor(SimulationSensor):
     def wait_for(self, new_state, *_, **__):
         """Waits for keypress before turning the line off"""
         if not new_state:
-            UI.confirm('Next combination?')
+            UI.pause('Next combination?')
 
 
 class EmergencyStop(object):
@@ -280,17 +280,17 @@ class SimulationOutput(object):
         self.signals_arrangement = [str(x).upper() for x in sig_arr.split(',')]
 
     def __del__(self):
-        UI.debug_confirm('Deleting the %s' % self.name)
+        UI.debug_pause('Deleting the %s' % self.name)
 
     def __enter__(self):
         if not self.lock:
             self.lock = True
-            UI.debug_confirm('Using the %s for sending signals...' % self.name)
+            UI.debug_pause('Using the %s for sending signals...' % self.name)
             return self
 
     def __exit__(self, *_):
         self.valves_off()
-        UI.debug_confirm('Driver for %s no longer in use.' % self.name)
+        UI.debug_pause('Driver for %s no longer in use.' % self.name)
         self.lock = False
 
     def get_parameters(self):

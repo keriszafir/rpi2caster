@@ -4,7 +4,7 @@ from os import system
 from sys import argv
 import argparse
 from . import exceptions as e
-from .text_ui import yes_or_no, menu, exit_program
+from .text_ui import confirm, menu, exit_program
 
 
 def cast(args):
@@ -42,7 +42,7 @@ def translate(args):
 def update(args):
     """Updates the software"""
     # Upgrade routine
-    if yes_or_no('Update the software?'):
+    if confirm('Update the software?'):
         pre = args.unstable and '--pre' or ''
         print('You may be asked for the admin password...')
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)
