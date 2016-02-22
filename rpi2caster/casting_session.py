@@ -106,27 +106,37 @@ def prepare_job(casting):
         # Casting mode: cast backwards
         # 0005 at the beginning signals that the ribbon needs rewind
         source = source or self.ribbon.contents
-        if p.rewind_needed(source) and self.mode.casting:
+        if self.mode.casting and p.rewind_needed(source):
             source = [x for x in reversed(source)]
         # Ask how many times to repeat this
         prompt = 'How many repetitions? (default: 1) : '
-        jobs = self.mode.casting and UI.enter_data_or_blank(prompt, int) or 1
-        self.stats.ribbon_data['all_jobs'] = jobs
+        runs = self.mode.casting and UI.enter_data_or_blank(prompt, int) or 1
+        last_line = 0
+        prompt = 'How many lines to skip? (default: %s) : ' % last_line
+        lines_skipped = (self.mode.casting and
+                         UI.enter_data_or_blank(prompt, int) or last_line)
+        self.stats.runs = runs
         # Get the ribbon statistics
-        self.stats.display_ribbon_info()
-        while jobs:
-            self.stats.update_job_info()
-            self.stats.display_job_info()
+        UI.display(self.stats.session_info)
+        while self.stats.runs:
+            while lines_skipped:
+                lines_skipped -= 1
+                # TODO: line skipping in current run = truncating the ribbon
+                # Consider using ribbon as a LIFO queue (reverse for punching)
+            UI.display_parameters(self.stats.run_info)
             try:
-                # The casting job
+                # Cast (punch, test) the ribbon if there is a ribbon to cast
                 retval = source and casting(self, source) or False
-                jobs -= 1
+                self.stats.runs -= 1
             except e.CastingAborted:
-                if UI.confirm('Cast again?'):
+                # TODO: add line skipping like in the previous version
+                last_line = self.stats.run_data['current_line']
+                if not UI.confirm('Cast again?'):
                     e.menu_level_up()
-            if jobs:
-                UI.pause('%s more job(s) remaining' % jobs)
+            if self.stats.runs:
+                UI.pause('%s more run(s) remaining' % runs)
             elif not self.mode.testing:
+                # Don't wait when testing
                 UI.pause('Finished!')
         return retval
     return wrapper
@@ -159,8 +169,7 @@ class Casting(object):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
-        self.stats.update_job_info()
-        self.stats.display_job_info()
+        UI.display_parameters(self.stats.run_info)
         # Now process the queue
         generator = (p.parse_record(record) for record in ribbon)
         # Wait for machine to start
@@ -171,9 +180,10 @@ class Casting(object):
             if not signals:
                 # No signals (comment only)- go to the next combination
                 continue
-            self.stats.update_combination_info(signals)
-            self.stats.display_combination_info()
-            self.caster.process(self._check_if_o15_needed(signals))
+            self.stats.code = signals
+            UI.display_parameters(self.stats.code_info)
+            signals = self._check_if_o15_needed(signals)
+            self.caster.process(signals)
         return True
 
     @repeat_or_exit
@@ -696,87 +706,112 @@ class Casting(object):
 class Stats(object):
     """Casting statistics gathering and displaying functions"""
     def __init__(self, session):
-        self.ribbon_data = {'lines_done': 0, 'all_lines': 0, 'current_job': 0,
-                            'all_jobs': 0, 'job_lines': 0, 'job_chars': 0,
-                            'job_codes': 0, 'all_chars': 0}
-        self.current = {'combination': [], '0075': '15', '0005': '15'}
+        self.run_data = {'lines_done': 0, 'lines': 0, 'current_job': 0,
+                         'all_jobs': 0, 'job_lines': 0, 'job_chars': 0,
+                         'job_codes': 0, 'all_chars': 0}
+        self.code_data = {'char': 0, 'code': 0, 'line': 0}
+        self.current = {'combination': [], '0075': '15', '0005': '15',
+                        'code': 0, 'line': 0, 'char': 0, 'run': 0,
+                        'pump_working': False, }
         self.previous = self.current
         self.session = session
-        self._collect_ribbon_info()
+        self.ribbon = session.ribbon.contents
 
-    def display_ribbon_info(self):
-        """Displays the ribbon data"""
-        UI.display_parameters(self._get_ribbon_info())
+    @property
+    def all_runs_data(self):
+        """Returns a dictionary with all chars, codes and lines for the entire
+        casting session (i.e. all runs combined)."""
+        return {'lines': self.run_data['lines'] * self.runs_number,
+                'chars': self.run_data['chars'] * self.runs_number,
+                'codes': self.run_data['chars'] * self.runs_number,
+                'runs': self.runs_number}
 
-    def display_job_info(self):
-        """Displays info at the beginning of the job"""
-        UI.display_parameters(self._get_job_info() + self._get_ribbon_info())
+    @property
+    def runs(self):
+        """Gets the runs (repetitions) number"""
+        return self.__dict__['_runs']
 
-    def display_combination_info(self):
-        """Displays info about the current combination"""
-        # UI.display_parameters(self._brief_info)
+    @runs.setter
+    def runs(self, runs=1):
+        """Sets the runs (repetitions) number"""
+        self.__dict__['_runs'] = isinstance(runs, int) and runs or 1
 
-    def _get_job_info(self):
-        """Gets info about current job"""
-        return [(self.ribbon_data['current_job'], 'Current job'),
-                (self.ribbon_data['all_jobs'] -
-                 self.ribbon_data['current_job'], 'Jobs remaining')]
-
-    def _get_ribbon_info(self):
-        """Gets ribbon parameters"""
-        return [(self.ribbon_data['job_codes'], 'Combinations in ribbon'),
-                (self.ribbon_data['job_lines'], 'Lines to cast'),
-                (self.ribbon_data['job_chars'], 'Characters incl. spaces')]
+    @property
+    def last_line(self):
+        """Gets the current run's line"""
+        return self.current['line']
 
     def get_parameters(self):
         """Gets ribbon parameters"""
         return [('\n', '\nRibbon statistics'),
-                (self.ribbon_data['job_codes'], 'Combinations in ribbon'),
-                (self.ribbon_data['job_lines'], 'Lines to cast'),
-                (self.ribbon_data['job_chars'], 'Characters incl. spaces')]
+                (self.run_data['job_codes'], 'Combinations in ribbon'),
+                (self.run_data['job_lines'], 'Lines to cast'),
+                (self.run_data['job_chars'], 'Characters incl. spaces')]
 
-    def _brief_info(self):
-        """Brief info: current combination, comment, combinations done,
-        all combinations, percent done"""
-        return [(' '.join(self.current['combination']), 'Current combination')]
+    @property
+    def session_info(self):
+        """Displays the ribbon data"""
+        data = []
+        return data
 
-    def _full_info(self):
-        """Full statistics: all from brief info and wedge positions"""
-        return [(' '.join(self.current['combination']), 'Current combination')]
+    @property
+    def run_info(self):
+        """Displays info at the beginning of each run"""
+        data = []
+        if not self.session.mode.testing:
+            data.append((self.run_data['codes'], 'Codes in the run'))
+        if self.session.mode.casting:
+            data.append((self.run_data['lines'], 'Lines in the run'))
+            data.append((self.run_data['chars'], 'Characters in the run'))
+        return data
 
-    def update_combination_info(self, combination):
+    @run_info.setter
+    def run_number(self, run_number=1):
+        """Updates the info on starting the new job"""
+        pass
+
+    @property
+    def code_info(self):
+        """Displays info about the current combination"""
+        # General stats for all modes:
+        data = []
+        codes = ' '.join(self.current['combination'])
+        data.append((codes, 'Current combination'))
+        # For casting and punching:
+        if not self.session.mode.testing:
+            # TODO: current char / job chars / all chars'
+            data.append((self.current['char'], 'Current character'))
+        if self.session.mode.casting:
+            pass
+        return data
+
+    @code_info.setter
+    def code(self, combination):
         """Updates the stats based on current combination"""
         # Remember the previous state
         self.previous = self.current
         # Update line info
-        self._set_current(combination)
+        self.current['combination'] = combination
         # Check the pump working/non-working status in the casting mode
         if self.session.mode.casting:
             self._check_pump()
+            self._update_wedge_positions(combination)
 
-    def update_job_info(self):
-        """Updates the info on starting the new job"""
-        pass
-
-    def _collect_ribbon_info(self):
+    @session_info.setter
+    def ribbon(self, ribbon):
         """Parses the ribbon, counts combinations, lines and characters"""
-        self.ribbon_data['job_codes'] = 0
-        self.ribbon_data['job_lines'] = 0
-        self.ribbon_data['job_chars'] = 0
-        generator = (p.parse_record(x) for x in self.session.ribbon.contents)
+        self.run_data['codes'] = 0
+        self.run_data['lines'] = 0
+        self.run_data['chars'] = 0
+        generator = (p.parse_record(x) for x in ribbon)
         for (combination, _) in generator:
             if combination:
                 # Guards against empty combination i.e. line with comment only
-                self.ribbon_data['job_codes'] += 1
+                self.run_data['codes'] += 1
             if p.check_newline(combination):
-                self.ribbon_data['job_lines'] += 1
+                self.run_data['lines'] += 1
             elif p.check_character(combination):
-                self.ribbon_data['job_chars'] += 1
-
-    def _set_current(self, combination):
-        """Gets the current combination and updates casting statistics"""
-        self.current['combination'] = combination or ['O15']
-        self._update_wedge_positions(combination)
+                self.run_data['chars'] += 1
 
     def _check_pump(self):
         """Checks pump based on current and previous combination"""
