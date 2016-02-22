@@ -295,6 +295,7 @@ class Work(EmptyWork):
              self.type_size, self.typeface_name, self.text) = work_data
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Work choice failed. Starting a new one.')
+            self.text = import_work_from_file(filename)
 
 
 def list_ribbons():

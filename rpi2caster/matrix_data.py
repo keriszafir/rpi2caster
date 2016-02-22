@@ -125,7 +125,7 @@ class EmptyDiecase(object):
 
     def assign_wedge(self, wedge_series=None, set_width=0):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
-        self.wedge = wedge_data.choose_wedge(wedge_series, set_width)
+        self.wedge = wedge_data.Wedge(wedge_series, set_width)
 
     @property
     def parameters(self):
@@ -277,7 +277,7 @@ def list_diecases():
     return results
 
 
-def choose_diecase(diecase_id=None):
+def choose_diecase():
     """Lists diecases and lets the user choose one;
     returns the Diecase class object with all parameters set up."""
     prompt = 'Number of a diecase or leave blank for an empty one: '
@@ -287,7 +287,7 @@ def choose_diecase(diecase_id=None):
             data = list_diecases()
             choice = UI.enter_data_or_blank(prompt)
             return choice and DB.get_diecase(data[choice]) or None
-        except (KeyError):
+        except KeyError:
             UI.pause('Diecase number is incorrect!')
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('No diecases found in database')

@@ -8,15 +8,15 @@ Database-related classes for rpi2caster suite.
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 import json
+# this module uses sqlite3 database for storing caster, interface,
+# wedge, diecase & matrix parameters:
+import sqlite3
 # Custom exceptions
 from . import exceptions
 # Get global settings
 from . import global_settings
 # Package constants
 from . import constants
-# this module uses sqlite3 database for storing caster, interface,
-# wedge, diecase & matrix parameters:
-import sqlite3
 
 
 class Database(object):
