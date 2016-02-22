@@ -85,23 +85,16 @@ class EmptyRibbon(object):
         self.unit_shift = (bool(unit_shift) or UI.confirm(prompt) or
                            self.unit_shift)
 
-    def show_parameters(self):
-        """Shows diecase's parameters"""
-        data = self.get_parameters()
-        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        for item in info:
-            UI.display(item)
-
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [('\n', '\nRibbon data'),
+        return [('\n', '\nRibbon data'),
                 (self.filename, 'File name'),
                 (self.ribbon_id, 'Ribbon ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
                 (self.diecase.diecase_id, 'Matrix case ID'),
                 (self.unit_shift, 'Casting with unit-shift')]
-        return data
 
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
@@ -133,7 +126,7 @@ class EmptyRibbon(object):
 
     def store_in_db(self):
         """Stores the ribbon in database"""
-        self.show_parameters()
+        UI.display_parameters(self.parameters)
         # Ask for confirmation
         try:
             DB.add_ribbon(self)
@@ -160,7 +153,7 @@ class EmptyRibbon(object):
 
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
-        self.show_parameters()
+        UI.display_parameters(self.parameters)
         # Now enter filename for writing
         filename = filename or UI.enter_output_filename()
         if filename:
@@ -208,23 +201,16 @@ class EmptyWork(object):
         self.typeface_name = None
         self.text = ''
 
-    def show_parameters(self):
-        """Shows diecase's parameters"""
-        data = self.get_parameters()
-        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        for item in info:
-            UI.display(item)
-
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [('\n', '\nWork data'),
+        return [('\n', '\nWork data'),
                 (self.work_id, 'Work ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
                 (self.type_series, 'Monotype type series'),
                 (self.type_size, 'Type size'),
                 (self.typeface_name, 'Typeface name')]
-        return data
 
     def set_work_id(self, work_id=None):
         """Sets the work ID"""
@@ -379,20 +365,20 @@ def import_ribbon_from_file(filename=None):
         UI.pause('Cannot open ribbon file %s' % filename)
         return False
     # What to look for
-    parameters = ['diecase', 'description', 'desc', 'unit-shift',
-                  'diecase_id', 'customer']
+    keywords = ['diecase', 'description', 'desc', 'unit-shift',
+                'diecase_id', 'customer']
     # Metadata (anything found), contents (the rest)
     metadata = {}
     contents = []
     # Look for parameters line per line, get parameter value
     # If parameters exhausted, append the line to contents
     for line in ribbon:
-        for parameter in parameters:
-            if line.startswith(parameter):
+        for keyword in keywords:
+            if line.startswith(keyword):
                 for sym in ASSIGNMENT_SYMBOLS:
                     if sym in line:
                         # Data found
-                        metadata[parameter] = get_value(line, sym)
+                        metadata[keyword] = get_value(line, sym)
                         break
                 break
         else:

@@ -30,22 +30,15 @@ class DefaultWedge(object):
         self.brit_pica = True
         self.unit_arrangement = constants.S5
 
-    def show_parameters(self):
-        """Shows diecase's parameters"""
-        data = self.get_parameters()
-        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        for item in info:
-            UI.display(item)
-
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [('\n', '\nWedge data'),
+        return [('\n', '\nWedge data'),
                 (self.series, 'Wedge series'),
                 (self.set_width, 'Set width'),
                 (self.brit_pica, 'British pica (.1667") based wedge?'),
                 (' '.join([str(x) for x in self.unit_arrangement if x]),
                  'Unit arrangement for this wedge')]
-        return data
 
     def copy(self):
         """Copies itself and returns an independent object"""
@@ -136,7 +129,7 @@ class DefaultWedge(object):
             return True
         except e.DatabaseQueryError:
             UI.display()
-            self.show_parameters()
+            UI.display_parameters(self.parameters)
             UI.pause('Cannot save the wedge - check if it is already there.')
             UI.display()
             return False
@@ -152,7 +145,7 @@ class DefaultWedge(object):
             while True:
                 # Keep working on a chosen diecase
                 UI.display('\n')
-                self.show_parameters()
+                UI.display_parameters(self.parameters)
                 UI.display('\n')
                 messages = ['[E]dit wedge, [S]ave to database']
                 options = {'M': e.return_to_menu,

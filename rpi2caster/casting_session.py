@@ -101,43 +101,56 @@ def cast_result(func):
 
 def prepare_job(casting):
     """Prepares the job for casting"""
+    def add_quads_for_mould_heatup():
+        """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
+        return (['NKJS 0005 0075'] + ['O15'] * 20) * 2
+
     def wrapper(self, source=None):
         """Wrapper function"""
+        # Alias to make it shorter
+        enter = UI.enter_data_or_blank
         # Casting mode: cast backwards
         # 0005 at the beginning signals that the ribbon needs rewind
-        source = source or self.ribbon.contents
         if self.mode.casting and p.rewind_needed(source):
             source = [x for x in reversed(source)]
         # Ask how many times to repeat this
         prompt = 'How many repetitions? (default: 1) : '
-        runs = self.mode.casting and UI.enter_data_or_blank(prompt, int) or 1
-        last_line = 0
-        prompt = 'How many lines to skip? (default: %s) : ' % last_line
-        lines_skipped = (self.mode.casting and
-                         UI.enter_data_or_blank(prompt, int) or last_line)
-        self.stats.runs = runs
+        runs_left = self.mode.casting and enter(prompt, int) or 1
+        lines_skipped = 0
+        prompt = 'How many lines to skip? (default: %s) : '
+        self.stats.runs = runs_left
         # Get the ribbon statistics
         UI.display(self.stats.session_info)
-        while self.stats.runs:
-            while lines_skipped:
-                lines_skipped -= 1
+        while runs_left:
+            if self.mode.casting:
+                # Ask how many lines to skip at the start of each run
+                UI.display('Starting run %s of %s, %s left'
+                           % (self.stats.current['run'], self.stats.runs,
+                              runs_left))
+                lines_skipped = (enter(prompt % lines_skipped, int) or
+                                 lines_skipped)
+                while lines_skipped:
+                    lines_skipped -= 1
+                # Ask if user wants to cast some quads to heat up the mould
+                if UI.confirm('Cast quads to heat up the mould?'):
+                    source.extend(add_quads_for_mould_heatup())
                 # TODO: line skipping in current run = truncating the ribbon
                 # Consider using ribbon as a LIFO queue (reverse for punching)
             UI.display_parameters(self.stats.run_info)
             try:
                 # Cast (punch, test) the ribbon if there is a ribbon to cast
                 retval = source and casting(self, source) or False
-                self.stats.runs -= 1
+                runs_left -= 1
             except e.CastingAborted:
-                # TODO: add line skipping like in the previous version
-                last_line = self.stats.run_data['current_line']
+                line_when_aborted = self.stats.run_data['current_line']
+                # Resume casting at two lines before abort occurred
+                # (to heat up the mould) - don't allow negative numbers
+                lines_skipped = max(0, line_when_aborted - 2)
                 if not UI.confirm('Cast again?'):
                     e.menu_level_up()
-            if self.stats.runs:
-                UI.pause('%s more run(s) remaining' % runs)
-            elif not self.mode.testing:
-                # Don't wait when testing
-                UI.pause('Finished!')
+        if not self.mode.testing:
+            # Don't wait when testing
+            UI.pause('Finished!')
         return retval
     return wrapper
 
@@ -172,8 +185,8 @@ class Casting(object):
         UI.display_parameters(self.stats.run_info)
         # Now process the queue
         generator = (p.parse_record(record) for record in ribbon)
-        # Wait for machine to start
-        self.caster.sensor.detect_rotation()
+        if not self.mode.testing:
+            self.caster.sensor.check_if_machine_is_working()
         for (signals, comment) in generator:
             # Display the comment
             comment = comment and UI.display(comment)
@@ -183,6 +196,7 @@ class Casting(object):
             self.stats.code = signals
             UI.display_parameters(self.stats.code_info)
             signals = self._check_if_o15_needed(signals)
+            # Let the caster do the job
             self.caster.process(signals)
         return True
 
@@ -541,12 +555,6 @@ class Casting(object):
         return ([x for x in signals if x is not 'O15' or self.mode.testing] +
                 ['O15'] * (self.mode.punching and not self.mode.testing))
 
-    def _heatup(self):
-        """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
-        queue = (['NKJS 0005 0075'] + ['O15'] * 20 +
-                 ['NKJS 0005 0075'] + ['NJS 0005'])
-        return queue
-
     def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
         def menu_options():
@@ -644,12 +652,9 @@ class Casting(object):
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
-        UI.display_parameters(self.caster.get_parameters(),
-                              self.ribbon.get_parameters(),
-                              self.stats.get_parameters(),
-                              self.diecase.get_parameters(),
-                              self.wedge.get_parameters(),
-                              self.stats.get_parameters())
+        UI.display_parameters(self.caster.parameters, self.ribbon.parameters,
+                              self.stats.parameters, self.diecase.parameters,
+                              self.wedge.parameters)
         UI.pause()
 
     def _main_menu_options(self):
@@ -711,7 +716,7 @@ class Stats(object):
                          'job_codes': 0, 'all_chars': 0}
         self.code_data = {'char': 0, 'code': 0, 'line': 0}
         self.current = {'combination': [], '0075': '15', '0005': '15',
-                        'code': 0, 'line': 0, 'char': 0, 'run': 0,
+                        'code': 0, 'line': 1, 'char': 0, 'run': 1,
                         'pump_working': False, }
         self.previous = self.current
         self.session = session
@@ -721,10 +726,10 @@ class Stats(object):
     def all_runs_data(self):
         """Returns a dictionary with all chars, codes and lines for the entire
         casting session (i.e. all runs combined)."""
-        return {'lines': self.run_data['lines'] * self.runs_number,
-                'chars': self.run_data['chars'] * self.runs_number,
-                'codes': self.run_data['chars'] * self.runs_number,
-                'runs': self.runs_number}
+        return {'lines': self.run_data['lines'] * self.runs,
+                'chars': self.run_data['chars'] * self.runs,
+                'codes': self.run_data['chars'] * self.runs,
+                'runs': self.runs}
 
     @property
     def runs(self):
@@ -741,7 +746,8 @@ class Stats(object):
         """Gets the current run's line"""
         return self.current['line']
 
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets ribbon parameters"""
         return [('\n', '\nRibbon statistics'),
                 (self.run_data['job_codes'], 'Combinations in ribbon'),

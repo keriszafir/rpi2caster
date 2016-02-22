@@ -42,14 +42,12 @@ class MonotypeCaster(object):
         UI.debug_pause('Caster no longer in use.')
         self.lock = False
 
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
         # Collect data from I/O drivers
-        data = [('\n', '\nCaster data')]
-        data.extend(self.sensor.get_parameters())
-        data.extend(self.stop.get_parameters())
-        data.extend(self.output.get_parameters())
-        return data
+        return ([('\n', '\nCaster data')] + self.sensor.parameters +
+                self.stop.parameters + self.output.parameters)
 
     def process(self, signals, timeout=5):
         """process(signals, timeout):
@@ -90,9 +88,9 @@ class MonotypeCaster(object):
             try:
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
-                self.sensor.wait_for(new_state=True, timeout=timeout)
+                self.sensor.wait_for(True, timeout)
                 self.output.valves_on(signals)
-                self.sensor.wait_for(new_state=False, timeout=timeout)
+                self.sensor.wait_for(False, timeout)
                 self.output.valves_off()
                 # self._send_signals_to_caster(signals, cycle_timeout)
                 # Successful ending - the combination has been cast
@@ -124,9 +122,9 @@ class Pump(object):
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
-                self.caster.sensor.wait_for(True, 30, True)
+                self.caster.sensor.wait_for(True, 30)
                 self.caster.output.valves_on(c.PUMP_STOP)
-                self.caster.sensor.wait_for(False, 30, True)
+                self.caster.sensor.wait_for(False, 30)
                 self.caster.output.valves_off()
                 UI.display('Pump is now off.')
                 return True
@@ -161,13 +159,13 @@ class SimulationSensor(object):
         UI.debug_pause('The %s is no longer in use' % self.name)
         self.lock = False
 
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Sensor driver'),
+        return [(self.name, 'Sensor driver'),
                 (self.manual_mode, 'Manual mode')]
-        return data
 
-    def detect_rotation(self):
+    def check_if_machine_is_working(self):
         """Detect machine cycles and alert if it's not working"""
         UI.display('Now checking if the machine is running...')
         cycles = 3
@@ -176,14 +174,14 @@ class SimulationSensor(object):
                 while cycles:
                     # Run a new cycle
                     UI.display(cycles)
-                    self.wait_for(new_state=True, timeout=30, force_cycle=True)
+                    self.wait_for(new_state=True, timeout=30)
                     cycles -= 1
                 return True
             except (e.MachineStopped,
                     KeyboardInterrupt, EOFError):
                 stop_menu()
 
-    def wait_for(self, new_state, timeout=5, force_cycle=False):
+    def wait_for(self, new_state, timeout=5, time_on=0.1, time_off=0.1):
         """Waits for a keypress to emulate machine cycle, unless user
         switches to auto mode, where all combinations are processed in batch"""
         status = {True: 'ON', False: 'OFF'}
@@ -201,8 +199,10 @@ class SimulationSensor(object):
             elif time() - start_time > timeout:
                 UI.display('Timeout - you answered after %ds' % timeout)
                 raise e.MachineStopped
+        elif new_state:
+            sleep(time_off)
         else:
-            sleep(0.1)
+            sleep(time_on)
 
 
 class PunchingSensor(SimulationSensor):
@@ -211,36 +211,14 @@ class PunchingSensor(SimulationSensor):
         super().__init__()
         self.name = 'Timer-driven or manual advance for perforator'
 
-    def detect_rotation(self):
+    def check_if_machine_is_working(self):
         """Ask for user confirmation before punching"""
         UI.pause('\nRibbon punching: \n'
                  'Put the ribbon on the perforator and turn on the air.')
 
-    def wait_for(self, new_state, timeout=30, force_cycle=False):
-        """Waits for user keypress before toggling the output state.
-        After switching to auto mode on/off timings are fixed and the process
-        continues without user intervention."""
-        status = {True: 'UP', False: 'DOWN'}
-        UI.display('Punches going %s' % status[new_state])
-        if self.manual_mode or force_cycle:
-            start_time = time()
-            # Ask whether to cast or simulate machine stop
-            prompt = ('[Enter] to continue, [S] to stop '
-                      'or [A] to switch to automatic mode? ')
-            answer = UI.enter_data_or_blank(prompt) or ' '
-            if answer in 'aA':
-                self.manual_mode = False
-            elif answer in 'sS':
-                raise e.MachineStopped
-            elif time() - start_time > timeout:
-                UI.display('Timeout - you answered after %ds' % timeout)
-                raise e.MachineStopped
-        elif new_state:
-            # Time needed for all punches to go down
-            sleep(0.4)
-        else:
-            # Time needed for all punches to go up
-            sleep(0.25)
+    def wait_for(self, new_state, timeout=30, time_on=0.25, time_off=0.4):
+        """Calls simulation sensor's function, but with different timings"""
+        super().wait_for(new_state, timeout, time_on, time_off)
 
 
 class TestSensor(SimulationSensor):
@@ -250,11 +228,7 @@ class TestSensor(SimulationSensor):
         super().__init__()
         self.name = 'Timer-driven or manual advance for perforator'
 
-    def detect_rotation(self):
-        """Don't hold the process"""
-        pass
-
-    def wait_for(self, new_state, *_, **__):
+    def wait_for(self, new_state, *_):
         """Waits for keypress before turning the line off"""
         if not new_state:
             UI.pause('Next combination?')
@@ -267,7 +241,8 @@ class EmergencyStop(object):
         self.name = 'Mockup emergency stop button'
         self.signals, self.value_file, self.edge_file = None, None, None
 
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
         return [(self.name, 'Emergency stop button driver')]
 
@@ -293,11 +268,11 @@ class SimulationOutput(object):
         UI.debug_pause('Driver for %s no longer in use.' % self.name)
         self.lock = False
 
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Output driver'),
+        return [(self.name, 'Output driver'),
                 (' '.join(self.signals_arrangement), 'Signals arrangement')]
-        return data
 
     def one_on(self, sig):
         """Looks a signal up in arrangement and turns it on"""

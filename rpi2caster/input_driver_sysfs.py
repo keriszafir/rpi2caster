@@ -32,15 +32,15 @@ class SysfsSensor(SimulationSensor):
             self.value_file = '/dev/null'
             self.edge_file = '/dev/null'
 
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Sensor driver'),
+        return [(self.name, 'Sensor driver'),
                 (self.gpio, 'GPIO number'),
                 (self.value_file, 'Value file path'),
                 (self.edge_file, 'Edge file path')]
-        return data
 
-    def wait_for(self, new_state, timeout=5, force_cycle=False):
+    def wait_for(self, new_state, timeout=5, *_):
         """
         Waits until the sensor is in the desired state.
         new_state = True or False.
@@ -49,19 +49,24 @@ class SysfsSensor(SimulationSensor):
         pass before exit.
         Uses software debouncing set at 50ms
         """
+        def get_state():
+            """Reads current input state"""
+            gpiostate.seek(0)
+            # File can contain "1\n" or "0\n"; convert it to boolean
+            return bool(int(gpiostate.read().strip()))
+
+        # Set debounce time to now
         debounce = time()
-        # Prevent sudden exit
-        if force_cycle and self.last_state == new_state:
-            self.last_state = not new_state
+        # Prevent sudden exit in the midst of machine cycle
+        with io.open(self.value_file, 'r') as gpiostate:
+            if get_state() == new_state:
+                self.last_state = not new_state
         with io.open(self.value_file, 'r') as gpiostate:
             signals = select.epoll()
             signals.register(gpiostate, select.POLLPRI)
             while self.last_state != new_state:
                 if signals.poll(timeout):
-                    gpiostate.seek(0)
-                    # Strip whitespace from string read from file,
-                    # convert to boolean
-                    state = bool(int(gpiostate.read().strip()))
+                    state = get_state()
                     if time() - debounce > 0.05:
                         self.last_state = state
                     debounce = time()
@@ -77,12 +82,12 @@ class SysfsEmergencyStop(EmergencyStop):
         self.name = 'Kernel SysFS interface for emergency stop button GPIO'
         self.value_file = configure_sysfs_interface(gpio)
 
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [(self.name, 'Emergency stop button driver'),
+        return [(self.name, 'Emergency stop button driver'),
                 (self.gpio, 'GPIO number'),
                 (self.value_file, 'Value file path')]
-        return data
 
 
 def configure_sysfs_interface(gpio):

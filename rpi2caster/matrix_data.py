@@ -127,21 +127,14 @@ class EmptyDiecase(object):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
         self.wedge = wedge_data.choose_wedge(wedge_series, set_width)
 
-    def show_parameters(self):
-        """Shows diecase's parameters"""
-        data = self.get_parameters()
-        info = ['%s: %s' % (desc, value) for (value, desc) in data if value]
-        for item in info:
-            UI.display(item)
-
-    def get_parameters(self):
+    @property
+    def parameters(self):
         """Gets a list of parameters"""
-        data = [('\n', '\nMatrix case data'),
+        return [('\n', '\nMatrix case data'),
                 (self.diecase_id, 'Diecase ID'),
                 (self.typeface_name, 'Typeface'),
                 (self.type_series, 'Type series'),
                 (self.type_size, 'Type size')]
-        return data
 
     def save_to_db(self):
         """Stores the matrix case definition/layout in database"""
@@ -186,8 +179,7 @@ class EmptyDiecase(object):
         try:
             while True:
                 UI.clear()
-                UI.display_parameters(self.get_parameters(),
-                                      self.wedge.get_parameters())
+                UI.display_parameters(self.parameters, self.wedge.parameters)
                 options = {'M': e.return_to_menu,
                            'T': self.set_typeface,
                            'W': self.assign_wedge,
