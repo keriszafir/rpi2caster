@@ -27,7 +27,7 @@ class SysfsSensor(SimulationSensor):
         self.value_file_obj = None
         self.name = 'Kernel SysFS interface for photocell sensor GPIO'
         try:
-            (self.value_file, self.edge_file) = configure_sysfs_interface(gpio)
+            self.value_file = configure_sysfs_interface(gpio)
         except TypeError:
             self.value_file = '/dev/null'
             self.edge_file = '/dev/null'
