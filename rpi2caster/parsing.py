@@ -131,26 +131,23 @@ def count_combinations(contents):
     return all_combinations
 
 
-def rewind_needed(contents):
+def stop_comes_first(contents):
     """Detects ribbon direction so that we can use the ribbons generated
     with different software and still cast them in correct order.
-    This function checks if the casting sequence starts with 0005 / NJ only
-    (which is found at the end of the job, to stop the pump) - it indicates
-    that the ribbon should be reversed.
-    """
-    newline_found = False
+    This function loops over the ribbon to test if the stop sequence
+    (NJ or 0005) comes before the newline sequence (NKJ or 0075+0005).
+    If so, returns True (the ribbon needs to be rewound for casting).
+    Otherwise, False."""
+    start_found = False
     for line in contents:
-        # Get the signals part of a line
-        signals = parse_record(line)[0]
+        # Get the signals part of a line, discard the comment
+        signals, _ = parse_record(line)
         # Toggle this to True if newline combinations are found
-        newline_found = newline_found or check_newline(signals)
+        start_found = start_found or check_newline(signals)
         # Determine the result the first time pump stop combination is found
-        if check_pump_stop(signals) and not newline_found:
-            # Starts with pump stop i.e. the last combination
-            # - cast it backwards
+        if check_pump_stop(signals) and not start_found:
             return True
-        elif newline_found:
-            # Starts with newline - cast it forwards
+        elif start_found:
             return False
 
 

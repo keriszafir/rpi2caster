@@ -14,6 +14,7 @@ A module for everything related to working on a Monotype composition caster:
 """
 
 # IMPORTS:
+from collections import deque
 # Signals parsing methods for rpi2caster
 from . import parsing as p
 # Custom exceptions
@@ -82,11 +83,9 @@ def cast_or_punch_result(ribbon_source):
         """Wrapper function"""
         new_ribbon = ribbon_source(self, *args, **kwargs)
         if self.mode.testing or UI.confirm('Cast it?'):
-            #self.ribbon.contents, old_ribbon = new_ribbon, self.ribbon.contents
             self.stats, old_stats = Stats(self), self.stats
             retval = self.cast_or_punch(new_ribbon, *args, **kwargs)
             self.stats = old_stats
-            # self.ribbon.contents, self.stats = old_ribbon, old_stats
             return retval
         else:
             return False
@@ -95,53 +94,63 @@ def cast_or_punch_result(ribbon_source):
 
 def prepare_job(cast_or_punch):
     """Prepares the job for casting"""
-    def add_quads_for_mould_heatup():
-        """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
-        return (['NKJS 0005 0075'] + ['O15'] * 20) * 2
+    def line_of_quads():
+        """Casts 20 quads from the O15 matrix to heat up the mould"""
+        return ['O15'] * 20 + ['NKJS 0005 0075']
 
-    def wrapper(self, source=None):
+    def wrapper(self, ribbon=None):
         """Wrapper function"""
         # Alias to make it shorter
         enter = UI.enter_data_or_blank
-        # Casting mode: cast backwards
-        # 0005 at the beginning signals that the ribbon needs rewind
-        source = source or self.ribbon.contents
-        if self.mode.casting and p.rewind_needed(source):
-            source = [x for x in reversed(source)]
-        # Ask how many times to repeat this
-        prompt = 'How many repetitions? (default: 1) : '
-        runs_left = self.mode.casting and enter(prompt, int) or 1
-        lines_skipped = 0
-        prompt = 'How many lines to skip? (default: %s) : '
-        self.stats.runs = runs_left
+        l_skipped = 0
+        ribbon = ribbon or self.ribbon.contents
+        self.stats.runs = 1
+        self.stats.ribbon = ribbon
+        UI.display_parameters(self.stats.run_info)
+        if self.mode.casting:
+            # Rewind the ribbon if 0005 is found before 0005+0075
+            if p.stop_comes_first(ribbon):
+                ribbon = [x for x in reversed(ribbon)]
+            # Ask how many times to repeat this
+            prompt = 'How many times do you want to cast it? (default: 1) : '
+            runs_left = abs(self.mode.casting and enter(prompt, int) or 1)
+            self.stats.runs = runs_left
         # Get the ribbon statistics
-        UI.display(self.stats.session_info)
+        UI.display_parameters(self.stats.session_info)
         while runs_left:
             if self.mode.casting:
-                # Ask how many lines to skip at the start of each run
+                queue = deque(ribbon)
                 UI.display('Starting run %s of %s, %s left'
                            % (self.stats.current['run'], self.stats.runs,
                               runs_left))
-                lines_skipped = (enter(prompt % lines_skipped, int) or
-                                 lines_skipped)
-                while lines_skipped:
-                    lines_skipped -= 1
-                # Ask if user wants to cast some quads to heat up the mould
-                if UI.confirm('Cast quads to heat up the mould?'):
-                    source.extend(add_quads_for_mould_heatup())
-                # TODO: line skipping in current run = truncating the ribbon
-                # Consider using ribbon as a LIFO queue (reverse for punching)
+                # Line skipping - ask user
+                prompt = 'How many lines to skip? (default: %s) : '
+                l_skipped = (enter(prompt % l_skipped, int) or l_skipped) - 2
+                UI.display('Casting two more lines, to heat up the mould.')
+                # Add one or more lines of quads if not skipping enough
+                quads = line_of_quads() * -l_skipped
+                # Apply constraints: not negative and at least one
+                l_skipped = min(l_skipped, self.stats.ribbon_lines - 1)
+                l_skipped = max(0, l_skipped)
+                # Make sure we take off lines from the beginning of casting job
+                # i.e. last lines of text
+                combination = ''
+                while l_skipped:
+                    combination = queue.popleft()
+                    l_skipped -= 1 * p.check_newline(combination)
+                # Add it back, then add those quads
+                queue.appendleft(combination)
+                queue.extendleft(quads)
             UI.display_parameters(self.stats.run_info)
             try:
                 # Cast (punch, test) the ribbon if there is a ribbon to cast
-                retval = source and cast_or_punch(self, source) or False
+                retval = queue and cast_or_punch(self, queue) or False
                 runs_left -= 1
             except e.CastingAborted:
-                line_when_aborted = self.stats.run_data['current_line']
                 # Resume casting at two lines before abort occurred
                 # (to heat up the mould) - don't allow negative numbers
-                lines_skipped = max(0, line_when_aborted - 2)
-                if not UI.confirm('Cast again?'):
+                l_skipped = self.stats.run_data['current_line']
+                if not UI.confirm('Retry the job?'):
                     e.menu_level_up()
         if not self.mode.testing:
             # Don't wait when testing
@@ -724,7 +733,7 @@ class Stats(object):
         casting session (i.e. all runs combined)."""
         return {'lines': self.run_data['lines'] * self.runs,
                 'chars': self.run_data['chars'] * self.runs,
-                'codes': self.run_data['chars'] * self.runs,
+                'codes': self.run_data['codes'] * self.runs,
                 'runs': self.runs}
 
     @property
@@ -743,6 +752,11 @@ class Stats(object):
         return self.current['line']
 
     @property
+    def ribbon_lines(self):
+        """Gets number of lines per ribbon"""
+        return self.run_data['job_lines']
+
+    @property
     def parameters(self):
         """Gets ribbon parameters"""
         return [('\n', '\nRibbon statistics'),
@@ -753,8 +767,10 @@ class Stats(object):
     @property
     def session_info(self):
         """Displays the ribbon data"""
-        data = []
-        return data
+        return [(self.all_runs_data['runs'], 'Casting runs'),
+                (self.all_runs_data['codes'], 'All codes'),
+                (self.all_runs_data['chars'], 'All chars'),
+                (self.all_runs_data['lines'], 'All lines')]
 
     @property
     def run_info(self):
@@ -763,8 +779,8 @@ class Stats(object):
         if not self.session.mode.testing:
             data.append((self.run_data['codes'], 'Codes in the run'))
         if self.session.mode.casting:
-            data.append((self.run_data['lines'], 'Lines in the run'))
             data.append((self.run_data['chars'], 'Characters in the run'))
+            data.append((self.run_data['lines'], 'Lines in the run'))
         return data
 
     @run_info.setter
