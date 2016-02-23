@@ -34,7 +34,7 @@ wedge_data = matrix_data.wedge_data
 UI = typesetting_data.UI
 
 
-def choose_sensor_and_driver(func):
+def choose_sensor_and_driver(cast_or_punch):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
@@ -46,60 +46,54 @@ def choose_sensor_and_driver(func):
         with self.mode.sensor() as self.caster.sensor:
             with self.mode.output() as self.caster.output:
                 with self.caster:
-                    retval = func(self, *args, **kwargs)
-                    return retval
+                    return cast_or_punch(self, *args, **kwargs)
     return wrapper
 
 
-def use_testing_mode(func):
+def use_testing_mode(testing_routine):
     """Decorator for setting the testing mode for certain functions"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         self.mode.testing = True
-        retval = func(self, *args, **kwargs)
+        retval = testing_routine(self, *args, **kwargs)
         self.mode.testing = False
         return retval
     return wrapper
 
 
-def repeat(func):
+def repeat(all_over=False):
     """Decorator for repeating all over"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        while True:
-            func(self, *args, **kwargs)
-    return wrapper
+    def outer(routine):
+        """Outer wrapper"""
+        def inner(self, *args, **kwargs):
+            """Inner wrapper"""
+            while True:
+                routine(self, *args, **kwargs)
+                if not all_over and not UI.confirm('Start again?'):
+                    break
+        return inner
+    return outer
 
 
-def repeat_or_exit(func):
-    """Decorator for repeating all over or stopping"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        while True:
-            func(self, *args, **kwargs)
-            if not UI.confirm('Start again?'):
-                break
-    return wrapper
-
-
-def cast_result(func):
+def cast_or_punch_result(ribbon_source):
     """Ask for confirmation and cast the resulting ribbon;
     uses temporary stats object"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        new_ribbon = func(self, *args, **kwargs)
+        new_ribbon = ribbon_source(self, *args, **kwargs)
         if self.mode.testing or UI.confirm('Cast it?'):
-            self.ribbon.contents, old_ribbon = new_ribbon, self.ribbon.contents
+            #self.ribbon.contents, old_ribbon = new_ribbon, self.ribbon.contents
             self.stats, old_stats = Stats(self), self.stats
-            retval = self.cast()
-            self.ribbon.contents, self.stats = old_ribbon, old_stats
+            retval = self.cast_or_punch(new_ribbon, *args, **kwargs)
+            self.stats = old_stats
+            # self.ribbon.contents, self.stats = old_ribbon, old_stats
             return retval
         else:
             return False
     return wrapper
 
 
-def prepare_job(casting):
+def prepare_job(cast_or_punch):
     """Prepares the job for casting"""
     def add_quads_for_mould_heatup():
         """Casts 2 lines x 20 quads from the O15 matrix to heat up the mould"""
@@ -111,6 +105,7 @@ def prepare_job(casting):
         enter = UI.enter_data_or_blank
         # Casting mode: cast backwards
         # 0005 at the beginning signals that the ribbon needs rewind
+        source = source or self.ribbon.contents
         if self.mode.casting and p.rewind_needed(source):
             source = [x for x in reversed(source)]
         # Ask how many times to repeat this
@@ -139,7 +134,7 @@ def prepare_job(casting):
             UI.display_parameters(self.stats.run_info)
             try:
                 # Cast (punch, test) the ribbon if there is a ribbon to cast
-                retval = source and casting(self, source) or False
+                retval = source and cast_or_punch(self, source) or False
                 runs_left -= 1
             except e.CastingAborted:
                 line_when_aborted = self.stats.run_data['current_line']
@@ -178,7 +173,7 @@ class Casting(object):
 
     @prepare_job
     @choose_sensor_and_driver
-    def cast(self, ribbon):
+    def cast_or_punch(self, ribbon):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
@@ -200,27 +195,27 @@ class Casting(object):
             self.caster.process(signals)
         return True
 
-    @repeat_or_exit
+    @repeat
     @use_testing_mode
-    @cast_result
+    @cast_or_punch_result
     def test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
         intro = 'Testing the front pinblock - signals 1 towards 14.'
         UI.pause(intro)
         return [str(n) for n in range(1, 15)]
 
-    @repeat_or_exit
+    @repeat
     @use_testing_mode
-    @cast_result
+    @cast_or_punch_result
     def test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
         intro = ('This will test the front pinblock - signals NI, NL, A...N. ')
         UI.pause(intro)
         return [x for x in c.COLUMNS_17]
 
-    @repeat_or_exit
+    @repeat
     @use_testing_mode
-    @cast_result
+    @cast_or_punch_result
     def test_all(self):
         """Tests all valves and composition caster's inputs in original
         Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
@@ -246,9 +241,9 @@ class Casting(object):
             else:
                 break
 
-    @repeat
+    @repeat(all_over=True)
     @use_testing_mode
-    @cast_result
+    @cast_or_punch_result
     def send_combination(self):
         """Send a specified combination to the caster, repeat"""
         # You can enter new signals or exit
@@ -257,8 +252,8 @@ class Casting(object):
         signals = UI.enter_data_or_blank(prompt) or e.menu_level_up()
         return [signals]
 
-    @repeat_or_exit
-    @cast_result
+    @repeat
+    @cast_or_punch_result
     # TODO: Selection from diecase by character
     def cast_sorts(self):
         """Sorts casting routine, based on the position in diecase.
@@ -324,7 +319,8 @@ class Casting(object):
         queue.append('NJS 0005')
         return queue
 
-    @cast_result
+    @repeat
+    @cast_or_punch_result
     def cast_spaces(self):
         """cast_spaces():
 
@@ -421,8 +417,8 @@ class Casting(object):
         queue.extend(['NKJS 0005 0075', 'NJS 0005'])
         return queue
 
-    @repeat_or_exit
-    @cast_result
+    @repeat
+    @cast_or_punch_result
     def align_wedges(self):
         """Allows to align the justification wedges so that when you're
         casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -447,8 +443,8 @@ class Casting(object):
         queue.extend(['NKJS 0005 0075', 'NJS 0005'])
         return queue
 
-    @repeat_or_exit
-    @cast_result
+    @repeat
+    @cast_or_punch_result
     def align_mould(self):
         """align_mould:
 
@@ -472,8 +468,8 @@ class Casting(object):
         queue.extend(['NKJS 0005 0075', 'NJS 0005'])
         return queue
 
-    @repeat_or_exit
-    @cast_result
+    @repeat
+    @cast_or_punch_result
     def align_diecase(self):
         # TODO: REFACTOR
         """Casts the "en dash" characters for calibrating the character X-Y
@@ -522,7 +518,7 @@ class Casting(object):
             # At the end of successful sequence, some info for the user:
             UI.display('Done. Compare the lengths and adjust if needed.')
 
-    @cast_result
+    @cast_or_punch_result
     def line_casting(self):
         """line_casting:
 
@@ -664,7 +660,7 @@ class Casting(object):
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
-                (self.cast, 'Cast or punch composition',
+                (self.cast_or_punch, 'Cast or punch composition',
                  'Casts type or punch a ribbon', ribbon),
                 (self._choose_ribbon, 'Select ribbon',
                  'Selects a ribbon from database or file', True),
