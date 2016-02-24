@@ -204,7 +204,7 @@ class Casting(object):
             if not signals:
                 # No signals (comment only)- go to the next combination
                 continue
-            self.stats.code = signals
+            self.stats.signals = signals
             UI.display_parameters(self.stats.code_parameters)
             # Let the caster do the job
             self.caster.process(add_or_remove_o15(signals))

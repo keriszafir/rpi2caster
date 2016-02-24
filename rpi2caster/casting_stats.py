@@ -20,7 +20,7 @@ class Stats(object):
     def next_line(self):
         """Updates the info about the runs"""
         self.__dict__['_current']['line'] = self.current_line_number + 1
-        self.__dict__['_lines_left'] = self.lines_left - 1
+        self.__dict__['_run_data']['lines_left'] = self.lines_left - 1
 
     def next_char(self):
         """Updates the characters info"""
@@ -67,14 +67,16 @@ class Stats(object):
         """Displays info about the current combination"""
         # General stats for all modes:
         current = self.__dict__.get('_current', {})
-        data = [(p.check_newline(current['signals']), 'Starting a new line.')]
-        data.append((self.current_line_number, 'Line'))
+        new_line = p.check_newline(current.get('signals', []))
+        char = p.check_character(current.get('signals', []))
+        data = [(new_line and self.current_line_number, 'Starting a new line')]
+        data.append((new_line and self.lines_left, 'Lines left'))
         data.append((' '.join(current.get('signals', [])), 'Combination'))
         data.append((current.get('code', []), 'Current code'))
         pump = {True: 'ON', False: 'OFF'}[current.get('pump_status', False)]
         # For casting and punching:
         if not self.session.mode.diagnostics:
-            data.append((self.current_char_number, 'Current char'))
+            data.append((char and self.current_char_number, 'Current char'))
         if self.session.mode.casting:
             data.append((current.get('0075', '15'), 'Wedge 0075 now at'))
             data.append((current.get('0005', '15'), 'Wedge 0005 now at'))
@@ -104,7 +106,7 @@ class Stats(object):
     @property
     def lines_left(self):
         """Gets the lines number"""
-        return self.__dict__.get('_lines_left', 1)
+        return self.__dict__.get('_run_data', {}).get('lines_left', 1)
 
     @property
     def current_char_number(self):
@@ -119,7 +121,7 @@ class Stats(object):
     @property
     def current_line_number(self):
         """Gets the current line number"""
-        return self.__dict__.get('_current', {}).get('line', 1)
+        return self.__dict__.get('_current', {}).get('line', 0)
 
     @property
     def ribbon_lines(self):
@@ -127,7 +129,7 @@ class Stats(object):
         return self.__dict__.get('_run_data', {}).get('lines', 1)
 
     @code_parameters.setter
-    def code(self, signals):
+    def signals(self, signals):
         """Updates the stats based on current combination"""
         # Save previous state
         current_dict = self.__dict__.get('_current', {})
@@ -177,6 +179,7 @@ class Stats(object):
                 run_data['run_lines'] += 1
             elif p.check_character(combination):
                 run_data['run_chars'] += 1
+        run_data['lines_left'] = run_data['run_lines'] + 1
 
     def _check_pump(self):
         """Checks pump based on current and previous combination"""
