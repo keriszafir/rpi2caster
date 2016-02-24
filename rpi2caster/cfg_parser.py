@@ -1,18 +1,14 @@
 # -*- coding: utf-8 -*-
-"""
-conffile_parser
-
-Module for reading and writing configuration from/to conffile.
-"""
+"""Module for reading configuration from conffile."""
 import io
 # Config parser for reading the interface settings
 import configparser
 # Global settings for rpi2caster
-from . import global_settings
+from .global_settings import CONFIG_PATH
 # Custom exceptions
-from . import exceptions
+from .exceptions import NotConfigured, ConfigFileUnavailable
 # Package constants
-from . import constants
+from .constants import DEFAULT_CONFIG_PATHS, TRUE_ALIASES, FALSE_ALIASES
 
 
 def initialize_config():
@@ -21,8 +17,7 @@ def initialize_config():
     Looks for the configuration file, tests if it's readable.
     Throws an exception if errors occur.
     """
-    config_paths = ([global_settings.CONFIG_PATH] +
-                    constants.DEFAULT_CONFIG_PATHS)
+    config_paths = [CONFIG_PATH] + DEFAULT_CONFIG_PATHS
     for path in config_paths:
         try:
             with io.open(path, 'r'):
@@ -30,10 +25,9 @@ def initialize_config():
                 cfg.read(path)
                 return cfg
         except (IOError, FileNotFoundError):
-            # Try next
             continue
     # No config file specified can be accessed
-    raise exceptions.ConfigFileUnavailable('Cannot access config file!')
+    raise ConfigFileUnavailable('Cannot access config file!')
 
 
 def get_config(section_name, option_name):
@@ -56,7 +50,7 @@ def get_config(section_name, option_name):
         return determine(value)
     except (configparser.NoSectionError, configparser.NoOptionError):
         # If section or option is not configured, raise an exception
-        raise exceptions.NotConfigured
+        raise NotConfigured
 
 
 def determine(value):
@@ -70,11 +64,11 @@ def determine(value):
         elif value in ['none', 'null']:
             # Value was specified to be None or null
             return None
-        elif value in constants.TRUE_ALIASES:
-            # Return boolean True if option was marked as 1, on, true, yes
+        elif value in TRUE_ALIASES:
+            # 1, on, true, yes
             return True
-        elif value in constants.FALSE_ALIASES:
-            # Return False if the option was marked as 0, off, false, no
+        elif value in FALSE_ALIASES:
+            # 0, off, false, no
             return False
         else:
             # Return an integer

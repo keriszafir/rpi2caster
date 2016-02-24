@@ -44,11 +44,6 @@ class Database(object):
     """
 
     def __init__(self):
-        """init:
-
-        Sets up config path (specified or default),
-        sets up database path (specified, set up in config, then default),
-        """
         database_paths = ([global_settings.DATABASE_PATH] +
                           constants.DEFAULT_DATABASE_PATHS)
         # Connect to the database

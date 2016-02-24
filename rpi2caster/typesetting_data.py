@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""typesetting_data
-
-Database operations for text and ribbon storing, retrieving and deleting.
-"""
+"""Operations on ribbon and work objects: creating, editing and deleting. """
 # File operations
 import io
 # Object copying
@@ -18,7 +15,7 @@ DB = matrix_data.DB
 UI = matrix_data.UI
 
 
-class EmptyRibbon(object):
+class Ribbon(object):
     """Ribbon objects - no matter whether files or database entries.
 
     A ribbon has the following attributes:
@@ -48,7 +45,7 @@ class EmptyRibbon(object):
         self.unit_shift = False
         self.filename = None
         self.contents = []
-        self.diecase = matrix_data.EmptyDiecase()
+        self.diecase = matrix_data.Diecase()
 
     def set_ribbon_id(self, ribbon_id=None):
         """Sets the ribbon ID"""
@@ -77,7 +74,7 @@ class EmptyRibbon(object):
 
     def set_diecase(self, diecase_id=None):
         """Chooses the diecase for this ribbon"""
-        self.diecase = matrix_data.Diecase(diecase_id)
+        self.diecase = matrix_data.SelectDiecase(diecase_id)
 
     def set_unit_shift(self, unit_shift=False):
         """Chooses whether unit-shift is needed"""
@@ -163,7 +160,7 @@ class EmptyRibbon(object):
                     ribbon_file.write(line)
 
 
-class Ribbon(EmptyRibbon):
+class SelectRibbon(Ribbon):
     """A class for ribbons chosen from database or file"""
     def __init__(self, ribbon_id=None, filename=None):
         super().__init__()
@@ -182,7 +179,7 @@ class Ribbon(EmptyRibbon):
             UI.display('Ribbon choice failed. Starting a new one.')
 
 
-class EmptyWork(object):
+class Work(object):
     """Work objects = input files (and input from editor).
 
     A work object has the following attributes:
@@ -284,7 +281,7 @@ class EmptyWork(object):
             UI.pause('Cannot store work in database!')
 
 
-class Work(EmptyWork):
+class SelectWork(Work):
     """A class for works (sources) for typesetting from database or file"""
     def __init__(self, work_id=None, filename=None):
         super().__init__()
@@ -385,13 +382,10 @@ def import_ribbon_from_file(filename=None):
         else:
             contents.append(line)
     # Metadata parsing
-    diecase_id = ('diecase' in metadata and metadata['diecase'] or
-                  'diecase_id' in metadata and metadata['diecase_id'] or 0)
-    description = ('description' in metadata and metadata['description'] or
-                   'desc' in metadata and metadata['desc'] or None)
-    customer = 'customer' in metadata and metadata['customer'] or None
-    unit_shift = ('unit-shift' in metadata and
-                  metadata['unit-shift'].lower() in TRUE_ALIASES) or False
+    diecase_id = metadata.get('diecase', '') or metadata.get('diecase_id', '')
+    description = metadata.get('description', '') or metadata.get('desc', '')
+    customer = metadata.get('customer', '')
+    unit_shift = metadata.get('unit-shift', '').lower() in TRUE_ALIASES
     ribbon_id = None
     # Add the whole contents as the attribute
     return (ribbon_id, description, diecase_id, customer, unit_shift, contents)

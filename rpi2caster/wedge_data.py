@@ -14,21 +14,19 @@ from .global_settings import USER_INTERFACE as UI
 from . import exceptions as e
 # Constants for known normal wedge unit arrangements
 from . import wedge_arrangements
-# Constants shared among modules
-from . import constants
 # Database backend
 from . import database
 DB = database.Database()
 
 
-class DefaultWedge(object):
+class Wedge(object):
     """Default S5-12E wedge"""
     def __init__(self):
         # Default wedge data - for S5-12E
         self.series = '5'
         self.set_width = 12
         self.brit_pica = True
-        self.unit_arrangement = constants.S5
+        self.unit_arrangement = wedge_arrangements.S5
 
     @property
     def parameters(self):
@@ -80,27 +78,24 @@ class DefaultWedge(object):
         brit_pica = wedge_name.endswith('E') or UI.confirm(prompt)
         # We have the wedge name, so we can look the wedge up in known wedges
         # (no need to enter the unit arrangement manually)
-        try:
-            # Look up the unit arrangement
-            unit_arrangement = [x for x in wedge_arrangements.table[series]]
-        except KeyError:
-            while True:
-                # Enter manually:
-                prompt = ('Enter the wedge unit values for rows 1...15 '
-                          'or 1...16, separated by commas.\n')
-                # Now we need to be sure that all whitespace is stripped,
-                # and the value written to database is a list of integers
-                try:
-                    unit_arrangement = [int(i.strip()) for i in
-                                        UI.enter_data(prompt).split(',')]
-                except ValueError:
-                    UI.display('Incorrect value - enter the values again.')
-                    continue
+        unit_arrangement = wedge_arrangements.table.get(series, None)
+        while unit_arrangement is None:
+            # Enter manually:
+            prompt = ('Enter the wedge unit values for rows 1...15 '
+                      'or 1...16, separated by commas.\n')
+            # Now we need to be sure that all whitespace is stripped,
+            # and the value written to database is a list of integers
+            try:
+                unit_arrangement = [int(i.strip())
+                                    for i in UI.enter_data(prompt).split(',')]
                 # Display warning if the number of steps is not
                 # 15 or 16 (15 is most common, 16 was used for HMN and KMN).
-                if 15 <= len(unit_arrangement) <= 16:
-                    break
-                UI.display('Wedge must have 15 or 16 steps - re-enter values.')
+                if not 15 <= len(unit_arrangement) <= 16:
+                    UI.display('Wedge must have 15 or 16 steps - enter again.')
+                    unit_arrangement = None
+            except ValueError:
+                UI.display('Incorrect value - enter the values again.')
+
         # Now we need to adjust the arrangement...
         # Add 0 as the first item
         unit_arrangement = [0] + unit_arrangement
@@ -166,8 +161,8 @@ class DefaultWedge(object):
             return True
 
 
-class Wedge(DefaultWedge):
-    """Wedge: wedge data"""
+class SelectWedge(Wedge):
+    """Selects a wedge automatically or manually"""
     def __init__(self, wedge_series=None, set_width=None):
         super().__init__()
         try:
@@ -186,7 +181,7 @@ def wedge_operations():
         UI.display('Wedge manipulation: choose a wedge or define a new one')
         while True:
             # Choose a wedge or initialize a new one
-            Wedge().manipulation_menu()
+            SelectWedge().manipulation_menu()
     except e.ReturnToMenu:
         # Exit wedge operations
         return True
@@ -197,7 +192,7 @@ def generate_wedge_collection(series='5', brit_pica=True):
     for a given series (S5 by default)"""
     widths = [x + y for x in range(5, 15) for y in (0, 0.25, 0.5, 0.75)]
     for set_width in widths:
-        wedge = DefaultWedge()
+        wedge = Wedge()
         wedge.series = series
         wedge.set_width = set_width
         wedge.brit_pica = brit_pica
@@ -224,12 +219,12 @@ def list_wedges():
     for index, wedge in enumerate(data, start=1):
         # Save the wedge associated with the index
         results[index] = wedge
-        # Modify the wedge data for display
+        # Unit arrangement is the last item of the wedge list
         unit_arrangement = wedge[-1]
-        # Display only wedge parameters and not unit arrangement
+        # Build a row for each wedge
         data_string = ''.join([str(field).ljust(10) for field in wedge[:-1]])
-        values_string = ' '.join([str(x) for x in unit_arrangement if x])
-        UI.display(str(index).ljust(5) + data_string + values_string)
+        unit_values_string = ' '.join([str(x) for x in unit_arrangement if x])
+        UI.display(str(index).ljust(5) + data_string + unit_values_string)
     return results
 
 

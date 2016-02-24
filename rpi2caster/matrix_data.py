@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""matrix_data
-
-Module containing functions for diecase retrieval and parsing,
+"""Module containing functions for diecase retrieval and parsing,
 diecase storing, parameter searches.
 """
 # File operations
@@ -21,14 +19,14 @@ DB = wedge_data.DB
 UI = wedge_data.UI
 
 
-class EmptyDiecase(object):
+class Diecase(object):
     """Diecase: matrix case attributes and operations"""
     def __init__(self):
         self.diecase_id = ''
         self.type_series = ''
         self.type_size = ''
         self.typeface_name = ''
-        self.wedge = wedge_data.DefaultWedge()
+        self.wedge = wedge_data.Wedge()
         self.layout = generate_empty_layout(15, 17)
 
     def show_layout(self):
@@ -62,7 +60,7 @@ class EmptyDiecase(object):
             return False
         # Other positions will be empty but defined
         # Now display the layout - need to use a temporary diecase for that
-        temp_diecase = EmptyDiecase()
+        temp_diecase = Diecase()
         temp_diecase.layout = new_layout
         temp_diecase.wedge = self.wedge
         UI.display('\nSubmitted layout:\n')
@@ -125,7 +123,7 @@ class EmptyDiecase(object):
 
     def assign_wedge(self, wedge_series=None, set_width=0):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
-        self.wedge = wedge_data.Wedge(wedge_series, set_width)
+        self.wedge = wedge_data.SelectWedge(wedge_series, set_width)
 
     @property
     def parameters(self):
@@ -219,7 +217,7 @@ class EmptyDiecase(object):
             return True
 
 
-class Diecase(EmptyDiecase):
+class SelectDiecase(Diecase):
     """Initialize a diecase object with or without given ID.
     If possible, choose automatically. If this fails, choose manually,
     and if user chooses no diecase, an empty one will be initialized."""
@@ -231,7 +229,7 @@ class Diecase(EmptyDiecase):
                             choose_diecase())
             (self.diecase_id, self.type_series, self.type_size, wedge_series,
              set_width, self.typeface_name, self.layout) = diecase_data
-            self.wedge = wedge_data.Wedge(wedge_series, set_width)
+            self.wedge = wedge_data.SelectWedge(wedge_series, set_width)
         except (KeyError, TypeError, e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Diecase choice failed. Using empty one instead.')
 
@@ -243,7 +241,7 @@ def diecase_operations():
                    'choose a diecase or define a new one')
         while True:
             # Choose a wedge or initialize a new one
-            Diecase().manipulation_menu()
+            SelectDiecase().manipulation_menu()
     except e.ReturnToMenu:
         # Exit wedge operations
         return True

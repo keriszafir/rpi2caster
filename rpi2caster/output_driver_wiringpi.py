@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-output_driver_wiringpi - wiringPi2-based output driver for MCP23017
-"""
+"""output_driver_wiringpi - wiringPi2-based output driver for MCP23017"""
 
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:

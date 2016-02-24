@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-user-interfaces
-
-This module contains user interfaces to be used by rpi2caster suite.
-"""
+"""Command-line interface functions for rpi2caster"""
 
 # IMPORTS for text user interface
 import io
@@ -61,7 +57,7 @@ def menu(options, header='', footer='', no_debug=False):
     # Display all the options
     # Tab indent, option number, option name (not processing option 0 yet!)
     for i, (function, desc, long_desc) in enumerate(options):
-        if i:
+        if i > 0:
             functions.append(function)
             print('\t %i : %s \n\t\t %s \n' % (i, desc, long_desc))
     # Option 0 is displayed last, add some whitespace around it
@@ -85,7 +81,7 @@ def menu(options, header='', footer='', no_debug=False):
             # Entered anything non-digit - repeat
             your_choice = ''
     # At last, we have chosen a valid option...
-    # Return a corresponding value - which is option[2]
+    # Return a corresponding value - which is option
     return functions[choice_number]
 
 
@@ -97,6 +93,12 @@ def clear():
 def display(*args, **kwargs):
     """Displays info for the user - print all in one line"""
     print(*args, **kwargs)
+
+
+def display_header(text, symbol='-'):
+    """Displays a header banner"""
+    dash_line = symbol * len(text)
+    print('\n\n' + dash_line + '\n' + text + '\n' + dash_line + '\n')
 
 
 def display_parameters(*data):

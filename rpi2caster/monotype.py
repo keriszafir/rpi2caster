@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Drivers for generic Monotype caster """
+"""Caster object for either real or virtual Monotype composition caster"""
 # Built-in time module
 from time import time, sleep
 # Custom exceptions module
@@ -185,7 +185,7 @@ class SimulationSensor(object):
         """Waits for a keypress to emulate machine cycle, unless user
         switches to auto mode, where all combinations are processed in batch"""
         status = {True: 'ON', False: 'OFF'}
-        UI.display('The sensor is going %s' % status[new_state])
+        UI.debug_info('The sensor is going %s' % status[new_state])
         if self.manual_mode:
             start_time = time()
             # Ask whether to cast or simulate machine stop
@@ -305,36 +305,58 @@ class Mode(object):
         self.simulation = False
         self.punching = False
         self.testing = False
+        self.calibration = False
 
     @property
     def simulation(self):
         """Simulation mode"""
-        return self.__dict__['simulation'] and True or False
+        return self.__dict__.get('simulation', False)
 
     @simulation.setter
     def simulation(self, value):
         """Set the simulation mode"""
-        self.__dict__['simulation'] = value
+        self.__dict__['simulation'] = value and True or False
+
+    @property
+    def calibration(self):
+        """Machine calibration mode"""
+        return self.__dict__.get('calibration', False)
+
+    @calibration.setter
+    def calibration(self, value):
+        """Set the machine calibration mode"""
+        self.__dict__['calibration'] = value and True or False
+
+    @property
+    def diagnostics(self):
+        """Machine diagnostics i.e. testing or calibration"""
+        return self.testing or self.calibration
+
+    @diagnostics.setter
+    def diagnostics(self, value=False):
+        """Turns the testing or calibration mode off"""
+        if not value:
+            self.testing = self.calibration = False
 
     @property
     def punching(self):
         """Punching mode"""
-        return self.__dict__['punching'] and True or False
+        return self.__dict__.get('punching', False)
 
     @punching.setter
     def punching(self, value):
         """Set the punching mode"""
-        self.__dict__['punching'] = value
+        self.__dict__['punching'] = value and True or False
 
     @property
     def testing(self):
         """Testing mode"""
-        return self.__dict__['testing'] and True or False
+        return self.__dict__.get('testing', False)
 
     @testing.setter
     def testing(self, value):
         """Set the testing mode"""
-        self.__dict__['testing'] = value
+        self.__dict__['testing'] = value and True or False
 
     @property
     def casting(self):
@@ -344,18 +366,15 @@ class Mode(object):
     @property
     def sensor(self):
         """Chooses a proper sensor"""
-        sensor = (self.testing and TestSensor or
-                  self.punching and PunchingSensor or
-                  self.simulation and SimulationSensor or
-                  hardware_sensor)
-        return sensor
+        return (self.testing and TestSensor or
+                self.punching and PunchingSensor or
+                self.simulation and SimulationSensor or
+                hardware_sensor)
 
     @property
     def output(self):
         """Chooses a simulation or hardware output driver"""
-        output = (self.simulation and SimulationOutput or
-                  hardware_output)
-        return output
+        return self.simulation and SimulationOutput or hardware_output
 
 
 def stop_menu():

@@ -21,7 +21,7 @@ ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
 
 # Config file locations
 DEFAULT_CONFIG_PATHS = ['/etc/rpi2caster.conf', 'data/rpi2caster.conf']
-# Useful for config files
+# Useful for config files (all aliases must be lowercase)
 TRUE_ALIASES = ['true', 'on', 'yes']
 FALSE_ALIASES = ['false', 'off', 'no']
 
@@ -29,9 +29,6 @@ FALSE_ALIASES = ['false', 'off', 'no']
 DEFAULT_DATABASE_PATHS = ['/var/local/rpi2caster/monotype.db',
                           '/var/local/rpi2caster/rpi2caster.db',
                           'data/rpi2caster.db']
-
-# S5 wedge unit arrangement
-S5 = ['', 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18]
 
 # Column numbers in 15x17 diecase
 COLUMNS_15 = [x for x in 'ABCDEFGHIJKLMNO']

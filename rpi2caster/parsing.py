@@ -182,11 +182,8 @@ def check_0005(signals):
 
 
 def check_newline(signals):
-    """check_newline(signals):
-
-    Checks if the newline (0005, 0075 or NKJ) is present in combination.
-    This is called for each new line when parsing the ribbon file
-    during casting.
+    """Checks if the newline (0005, 0075 or NKJ) is present in combination.
+    This is called for each new line when parsing the ribbon file when casting.
     """
     return check_0075(signals) and check_0005(signals)
 
@@ -201,39 +198,6 @@ def check_pump_start(signals):
     return check_0075(signals)
 
 
-def check_wedge_positions(signals):
-    """Check the wedge positions, deprecated"""
-    working_signals = signals[:]
-    for signal in ['0005', '0075'] + [s for s in 'ABCDEFGHIJKLMNOS']:
-        try:
-            working_signals.remove(signal)
-        except ValueError:
-            pass
-    # Initialize with None positions
-    pos_0005 = [None]
-    pos_0075 = [None]
-    # Check which combination it is
-    # Determine 0075 position (if set, it'll override None)
-    if '0075' in signals or set(['N', 'K']).issubset(signals):
-        pos_0075 = working_signals or ['15']
-    # Determine 0005 position (if set, it'll override None)
-    if '0005' in signals or set(['N', 'J']).issubset(signals):
-        pos_0005 = working_signals or ['15']
-    # Now return the wedge positions
-    return tuple(pos_0075 + pos_0005)
-
-
 def check_character(signals):
-    """Check if the combination is a character.
-
-    Not-characters (no type is cast) are:
-    0005 (pump off) or NJ (pump off, unit-adding),
-    0075 (pump on) or NK (pump on, unit-adding),
-    0005 0075 (galley trip) or NKJ (galley trip, unit-adding),
-    empty sequence.
-    """
-    return (signals and
-            '0005' not in signals and
-            '0075' not in signals and not
-            set(['N', 'K']).issubset(signals) and not
-            set(['N', 'J']).issubset(signals))
+    """Check if this is a character i.e. no 0005/NJ and no 0075/NK in code."""
+    return signals and not check_0005(signals) and not check_0075(signals)

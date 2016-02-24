@@ -2,7 +2,10 @@
 
 Thanks to John Cornelisse for those unit arrangements!
 """
+# S5 wedge unit arrangement
+S5 = [0, 5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18, 18]
 
+# Additional wedge arrangements
 table = {'5': [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
          '96': [5, 6, 7, 8, 9, 9, 10, 10, 11, 12, 13, 14, 15, 16, 18],
          '111': [5, 6, 7, 8, 8, 8, 9, 9, 9, 9, 10, 12, 12, 13, 15],
