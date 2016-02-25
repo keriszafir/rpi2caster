@@ -25,8 +25,16 @@ class Wedge(object):
         # Default wedge data - for S5-12E
         self.series = '5'
         self.set_width = 12
-        self.brit_pica = True
+        self.is_brit_pica = True
         self.unit_arrangement = wedge_arrangements.S5
+
+    @property
+    def pica(self):
+        """Get the pica value for the wedge. Can be .1667" (old British)
+        or .166" (new British; American). The .1667" was commonly used with
+        wedges made for European markets (wedge designation series-setE).
+        Curiously, the old British pica is the same as modern DTP pica."""
+        return self.is_brit_pica and 0.1667 or 0.166
 
     @property
     def parameters(self):
@@ -34,7 +42,7 @@ class Wedge(object):
         return [('\n', '\nWedge data'),
                 (self.series, 'Wedge series'),
                 (self.set_width, 'Set width'),
-                (self.brit_pica, 'British pica (.1667") based wedge?'),
+                (self.is_brit_pica, 'British pica (.1667") based wedge?'),
                 (' '.join([str(x) for x in self.unit_arrangement if x]),
                  'Unit arrangement for this wedge')]
 
@@ -75,7 +83,7 @@ class Wedge(object):
             set_width = UI.enter_data(prompt, float)
         # Check if it has a different pica as a base for unit calculations
         prompt = 'Old British pica (0.1667") based wedge?'
-        brit_pica = wedge_name.endswith('E') or UI.confirm(prompt)
+        is_brit_pica = wedge_name.endswith('E') or UI.confirm(prompt)
         # We have the wedge name, so we can look the wedge up in known wedges
         # (no need to enter the unit arrangement manually)
         unit_arrangement = wedge_arrangements.table.get(series, None)
@@ -106,7 +114,7 @@ class Wedge(object):
         if UI.confirm('Apply changes?'):
             self.series = series
             self.set_width = set_width
-            self.brit_pica = brit_pica
+            self.is_brit_pica = is_brit_pica
             self.unit_arrangement = unit_arrangement
 
     def delete_from_db(self):
@@ -169,7 +177,7 @@ class SelectWedge(Wedge):
             wedge_data = (wedge_series and set_width and
                           DB.get_wedge(wedge_series, set_width) or
                           choose_wedge() or None)
-            (self.series, self.set_width, self.brit_pica,
+            (self.series, self.set_width, self.is_brit_pica,
              self.unit_arrangement) = wedge_data
         except (TypeError, ValueError, e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Wedge choice failed. Using S5-12 instead.')
@@ -187,7 +195,7 @@ def wedge_operations():
         return True
 
 
-def generate_wedge_collection(series='5', brit_pica=True):
+def generate_wedge_collection(series='5', is_brit_pica=True):
     """Generates a collection of wedges for all set widths from 5.0 to 14.75
     for a given series (S5 by default)"""
     widths = [x + y for x in range(5, 15) for y in (0, 0.25, 0.5, 0.75)]
@@ -195,7 +203,7 @@ def generate_wedge_collection(series='5', brit_pica=True):
         wedge = Wedge()
         wedge.series = series
         wedge.set_width = set_width
-        wedge.brit_pica = brit_pica
+        wedge.is_brit_pica = is_brit_pica
         unit_arrangement = [0] + [x for x in wedge_arrangements.table[series]]
         while len(unit_arrangement) < 17:
             unit_arrangement.append(unit_arrangement[-1])

@@ -14,6 +14,8 @@ from . import exceptions as e
 from . import wedge_data
 # Constants module
 from . import constants as c
+# Parsing module
+from . import parsing as p
 # Use the same database backend and user interface as wedge_data uses
 DB = wedge_data.DB
 UI = wedge_data.UI
@@ -38,6 +40,30 @@ class Diecase(object):
         """Edits a layout and asks if user wants to save changes"""
         # Edit the layout
         UI.edit_diecase_layout(self)
+
+    def get_matrix(self, char='', *styles):
+        """Chooses a matrix manually"""
+        matrix = Matrix()
+        matrix.diecase = self
+        if char:
+            UI.display('Enter matrix data for character: %s' % char)
+        styles = styles
+        prompt = 'Combination? (default: G5): '
+        code_string = UI.enter_data_or_blank(prompt).upper() or 'G5'
+        combination = p.parse_signals(code_string)
+        # Got a list of signals
+        row = p.get_row(combination)
+        column = p.get_column(combination)
+        # Default unit width value = determine based on wedge
+        units = self.wedge.unit_arrangement[row]
+        prompt = 'Unit width? (default: %s): ' % units
+        units = abs(UI.enter_data_or_blank(prompt, int) or units)
+        matrix.char = char
+        matrix.styles = styles
+        matrix.column = column
+        matrix.row = row
+        matrix.units = units
+        return matrix
 
     def import_layout(self):
         """Imports a layout from file"""
@@ -232,6 +258,40 @@ class SelectDiecase(Diecase):
             self.wedge = wedge_data.SelectWedge(wedge_series, set_width)
         except (KeyError, TypeError, e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Diecase choice failed. Using empty one instead.')
+
+
+class Matrix(object):
+    """A class for single matrices - all matrix data"""
+    def __init__(self):
+        self.char = ''
+        self.styles = []
+        self.column = 'O'
+        self.row = 15
+        self.units = 18
+        self.diecase = Diecase()
+
+    @property
+    def row_units(self):
+        """Gets the row's unit width value for the diecase's wedge"""
+        return self.diecase.wedge.unit_arrangement[self.row]
+
+    @property
+    def row(self):
+        """Gets the row number"""
+        return self.__dict__.get('_row', 5)
+
+    @row.setter
+    def row(self, value):
+        """Gets the row number"""
+        value = int(value)
+        value = max(1, value)
+        value = min(value, 16)
+        self.__dict__['_row'] = value
+
+    @property
+    def code(self):
+        """Gets the matrix code"""
+        return self.column + str(self.row)
 
 
 def diecase_operations():

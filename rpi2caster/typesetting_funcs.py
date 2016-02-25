@@ -21,7 +21,7 @@ class Typesetter(object):
         self.set_width = None
         self.unit_arrangement = None
         self.unit_line_length = None
-        self.brit_pica = None
+        self.is_brit_pica = None
         # Begin with setting up default parameters
         self.ligatures = 3
         self.unit_shift = False
@@ -108,9 +108,9 @@ class Typesetter(object):
         # Set it as the current style
         self.current_style = self.main_style
         # Display info for the user
-        ui.display('Composing for %s %s - %s' % (typeface_name, self.type_size,
+        UI.display('Composing for %s %s - %s' % (typeface_name, self.type_size,
                                                  type_series))
-        ui.display('Wedge used: %s - %s set' % (self.wedge_series,
+        UI.display('Wedge used: %s - %s set' % (self.wedge_series,
                                                 self.set_width))
 
     def parse_and_generate(self, input_text):
@@ -164,19 +164,19 @@ class Typesetter(object):
         didot = self.type_size.endswith('D')
         fournier = self.type_size.endswith('F')
         # Check if we're using an old-pica wedge
-        self.brit_pica = wedge_data.is_old_pica(self.wedge_series,
+        self.is_brit_pica = wedge_data.is_old_pica(self.wedge_series,
                                                 self.set_width)
-        if (didot or fournier) and not self.brit_pica:
-            ui.display('Warning: your wedge is not based on pica=0.1667"!'
+        if (didot or fournier) and not self.is_brit_pica:
+            UI.display('Warning: your wedge is not based on pica=0.1667"!'
                        '\nIt may lead to wrong type width.')
 
     def show_layout(self):
         """Asks whether to show the diecase layout. If so, prints it."""
-        if ui.yes_or_no('Show the layout?'):
-            ui.display('\n\n')
-            ui.display_diecase_layout(self.diecase_layout,
+        if UI.confirm('Show the layout?'):
+            UI.display('\n\n')
+            UI.display_diecase_layout(self.diecase_layout,
                                       self.unit_arrangement)
-            ui.display('\n\n')
+            UI.display('\n\n')
 
     def _manual_or_automatic(self):
         """manual_or_automatic:
@@ -184,10 +184,10 @@ class Typesetter(object):
         Allows to choose if typesetting will be done with more user control.
         """
         # Manual control allows for tweaking more parameters during typesetting
-        self.manual_control = ui.yes_or_no('Use manual mode? (more control) ')
+        self.manual_control = UI.confirm('Use manual mode? (more control) ')
         if self.manual_control:
             # Choose unit shift: yes or no?
-            self.unit_shift = ui.yes_or_no('Do you use unit-shift? ')
+            self.unit_shift = UI.confirm('Do you use unit-shift? ')
             # Choose alignment mode
             self._choose_alignment()
             # Select the composition mode
@@ -205,7 +205,7 @@ class Typesetter(object):
         """
         prompt = 'Ligatures: [1] - off, [2] characters, [3] characters? '
         options = {'1': False, '2': 2, '3': 3}
-        self.ligatures = ui.simple_menu(prompt, options)
+        self.ligatures = UI.simple_menu(prompt, options)
 
     def _choose_alignment(self):
         """Lets the user choose the text alignment in line or column."""
@@ -214,7 +214,7 @@ class Typesetter(object):
                    'R': self._align_right,
                    'B': self._align_both}
         message = ('Default alignment: [L]eft, [C]enter, [R]ight, [B]oth? ')
-        self.current_alignment = ui.simple_menu(message, options)
+        self.current_alignment = UI.simple_menu(message, options)
 
     def _choose_style(self):
         """Parses the diecase for available styles and lets user choose one."""
@@ -228,7 +228,7 @@ class Typesetter(object):
         styles_list = ['%s : %s' % (x, options[x]) for x in sorted(options)]
         styles_list = ', '.join(styles_list)
         prompt = 'Choose a dominant style: %s ' % styles_list
-        self.main_style = ui.simple_menu(prompt, options)
+        self.main_style = UI.simple_menu(prompt, options)
 
     def _get_space_code(self, desired_unit_width, high_space=False):
         """get_space_code:
@@ -270,10 +270,10 @@ class Typesetter(object):
     def _configure_spaces(self):
         """Chooses the spaces that will be used in typesetting."""
         # To make lines shorter
-        enter = ui.enter_data_or_blank
-        enter_type = ui.enter_data_or_blank
+        enter = UI.enter_data_or_blank
+        enter_type = UI.enter_data_or_blank
         get_space_code = self._get_space_code
-        y_n = ui.yes_or_no
+        y_n = UI.confirm
         # List available spaces
         # Matrix in layout is defined as follows:
         # (character, (style1, style2...)) : (column, row, unit_width)
@@ -367,17 +367,17 @@ class Typesetter(object):
             # Nothing found in the diecase for this character?
             # Define it then yourself!
             matrix = []
-            ui.display('Enter the position for character %s, style: %s'
+            UI.display('Enter the position for character %s, style: %s'
                        % (char, self.current_style))
-            row = ui.enter_data('Column? ').upper
-            column = ui.enter_data('Row? ', int)
+            row = UI.enter_data('Column? ').upper
+            column = UI.enter_data('Row? ', int)
             matrix = [mat for mat in self.diecase_layout
                       if mat[2] == column and mat[3] == row]
         if len(matches) == 1:
             matrix = matches[0]
         elif len(matches) > 1:
             options = dict(enumerate(matches, start=1))
-            matrix = ui.simple_menu('Choose a matrix for the character %s, '
+            matrix = UI.simple_menu('Choose a matrix for the character %s, '
                                     'style: %s' % (char, self.current_style),
                                     options)
             self.custom_characters.append(matrix)
@@ -425,10 +425,10 @@ class Typesetter(object):
                     finished = True
                     break
             # Line composed now, align and justify it
-            ui.debug_info('Line finished. Now aligning...')
+            UI.debug_info('Line finished. Now aligning...')
             self.current_alignment()
         # Now we're done typesetting
-        ui.confirm('Typesetting finished!')
+        UI.pause('Typesetting finished!')
         return True
 
     def _enter_line_length(self):
@@ -437,7 +437,7 @@ class Typesetter(object):
         Asks user to enter line length and specify measurement units.
         Returns line length in inches for further calculations.
         """
-        line_length = ui.enter_data('Line length? : ', float)
+        line_length = UI.enter_data('Line length? : ', float)
         # Choose the measurement unit - and its equivalent in inches
         options = {'A': 0.1660,
                    'B': 0.1667,
@@ -448,20 +448,20 @@ class Typesetter(object):
                    '[B]ritish pica = DTP, '
                    '[C]entimeter, [D]idot cicero, [F]ournier cicero: ')
         # Calculate the line length in inches
-        inches = ui.simple_menu(message, options) * line_length
+        inches = UI.simple_menu(message, options) * line_length
         # Choose pica based on wedge, calculate line length in picas
-        if self.brit_pica:
+        if self.is_brit_pica:
             picas = inches / 0.1667
         else:
             picas = inches / 0.166
         # Display the info
-        ui.display('Line length in inches: %s' % round(inches, 2))
-        ui.display('Line length in picas: %s' % round(picas, 2))
+        UI.display('Line length in inches: %s' % round(inches, 2))
+        UI.display('Line length in picas: %s' % round(picas, 2))
         # 1 pica em is equal to 18 units 12-set
         # Units of a given set = 18 * pica_length * set_width / 12
         # Return the result
         self.unit_line_length = round(18 * picas * self.set_width / 12, 2)
-        ui.display('Line length in %s-set units: %s' % (self.set_width,
+        UI.display('Line length in %s-set units: %s' % (self.set_width,
                                                         self.unit_line_length))
 
     # Define some parsing functions
@@ -513,7 +513,7 @@ class Typesetter(object):
         # Add as many fixed spaces as we can
         # Don't exceed the line length (in units) specified in setup!
         # Predict if the increment will exceed it or not
-        ui.debug_info('Justifying line...')
+        UI.debug_info('Justifying line...')
         fill_spaces_number = 0
         space_units = self.spaces['fixed']['units']
         # Determine if we have to add any spaces (otherwise - skip the loop)
@@ -544,21 +544,21 @@ class Typesetter(object):
 
     def _align_left(self):
         """Aligns the previous chunk to the left."""
-        ui.debug_info('Aligning line to the left...')
+        UI.debug_info('Aligning line to the left...')
         (spaces, var_space_units) = self._justify_line(mode=1)
         self.line_buffer.extend(spaces)
         self._start_new_line(var_space_units)
 
     def _align_right(self):
         """Aligns the previous chunk to the right."""
-        ui.debug_info('Aligning line to the right...')
+        UI.debug_info('Aligning line to the right...')
         (spaces, var_space_units) = self._justify_line(mode=1)
         self.line_buffer = spaces + self.line_buffer
         self._start_new_line(var_space_units)
 
     def _align_center(self):
         """Aligns the previous chunk to the center."""
-        ui.debug_info('Aligning line to the center...')
+        UI.debug_info('Aligning line to the center...')
         (spaces, var_space_units) = self._justify_line(mode=2)
         # Prepare the line: (content, wedge_positions)
         self.line_buffer = spaces + self.line_buffer + spaces
@@ -566,7 +566,7 @@ class Typesetter(object):
 
     def _align_both(self):
         """Aligns the previous chunk to both edges and ends the line."""
-        ui.debug_info('Aligning line to both edges...')
+        UI.debug_info('Aligning line to both edges...')
         (_, var_space_units) = self._justify_line(mode=0)
         self._start_new_line(var_space_units)
 
@@ -582,7 +582,7 @@ class Typesetter(object):
         prompt = ('\nWARNING: You are trying to use 16th row on a matrix case.'
                   '\nFor that you must use the unit-shift attachment. '
                   'Do you wish to compose for unit-shift? \n')
-        self.unit_shift = ui.yes_or_no(prompt)
+        self.unit_shift = UI.confirm(prompt)
         if self.unit_shift:
             for (combination, _, _) in self.buffer:
                 combination.replace('D', 'EF')
@@ -594,8 +594,8 @@ class Typesetter(object):
         # Is the character width correction needed at all?
         unit_difference = char_units - row_units
         # Tell us what we are translating
-        ui.debug_info('Character:', comment, 'style:', self.current_style)
-        ui.debug_info('Matrix at:', combination)
+        UI.debug_info('Character:', comment, 'style:', self.current_style)
+        UI.debug_info('Matrix at:', combination)
         # Trying to access the 16th row with no unit shift activated
         if row == 16 and not self.unit_shift:
             self.convert_to_unit_shift()
@@ -617,27 +617,27 @@ class Typesetter(object):
                 # (that's why we used unit shift)
                 unit_difference = 0
                 # Info for user
-                ui.debug_info('Correcting the width by unit shift...')
-                ui.debug_info('Character units:', char_units,
+                UI.debug_info('Correcting the width by unit shift...')
+                UI.debug_info('Character units:', char_units,
                               'row units:', row_units)
                 # Override previous combination
                 combination = shifted_column + str(shifted_row)
             elif row == 16:
                 # Use unit shift for these even if you have to add units
                 unit_difference = char_units - shifted_row_units
-                ui.debug_info('Casting from row 16 - unit shift is necessary')
-                ui.debug_info('Character units:', char_units,
+                UI.debug_info('Casting from row 16 - unit shift is necessary')
+                UI.debug_info('Character units:', char_units,
                               'row units:', shifted_row_units)
                 combination = shifted_column + str(shifted_row)
             # Combination after corrections
-            ui.debug_info('Combination with unit shift:', combination, '')
+            UI.debug_info('Combination with unit shift:', combination, '')
         # Check if we need unit corrections at all...
         if not unit_difference:
-            ui.debug_info('No unit corrections needed.')
+            UI.debug_info('No unit corrections needed.')
         elif unit_difference << 0:
-            ui.debug_info('Taking away %s units' % -1 * unit_difference)
+            UI.debug_info('Taking away %s units' % -1 * unit_difference)
         elif unit_difference >> 0:
-            ui.debug_info('Adding %s units' % unit_difference)
+            UI.debug_info('Adding %s units' % unit_difference)
 
     def justify(self):
         """justify:
@@ -735,7 +735,7 @@ class Typesetter(object):
 # Functions needed elsewhere
 
 
-def calculate_wedges(difference, set_width, brit_pica=False):
+def calculate_wedges(difference, set_width, is_brit_pica=False):
     """calculate_wedges:
 
     Calculates and returns wedge positions for character.
@@ -745,7 +745,7 @@ def calculate_wedges(difference, set_width, brit_pica=False):
     # Delta is in units of a given set
     # First, we must know whether pica = .1667" or .166" and correct the width
     # if needed.
-    if brit_pica:
+    if is_brit_pica:
         coefficient = 1
     else:
         coefficient = 0.1660 / 0.1667
@@ -807,4 +807,4 @@ def parse_combination(combination):
     except ValueError:
         # This happens if no rows found - default to 15
         row = 15
-    return {'column': column, 'row': row}
+    return (column, row)

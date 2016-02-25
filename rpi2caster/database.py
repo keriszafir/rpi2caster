@@ -66,9 +66,9 @@ class Database(object):
     def add_wedge(self, wedge):
         """Registers a wedge in our database."""
         # data - a list with wedge parameters to be written,
-        # boolean brit_pica must be converted to int,
+        # boolean is_brit_pica must be converted to int,
         # a unit arrangement is a JSON-encoded list
-        data = [wedge.series, wedge.set_width, int(wedge.brit_pica),
+        data = [wedge.series, wedge.set_width, int(wedge.is_brit_pica),
                 json.dumps(wedge.unit_arrangement)]
         with self.db_connection:
             try:
@@ -99,7 +99,7 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 sql = ('SELECT * FROM wedges WHERE wedge_series = ?'
                        'AND set_width = ? AND brit_pica = ?')
-                data = [wedge.series, wedge.set_width, int(wedge.brit_pica)]
+                data = [wedge.series, wedge.set_width, int(wedge.is_brit_pica)]
                 cursor.execute(sql, data)
                 data = cursor.fetchall()
                 # Empty list = False
@@ -126,10 +126,10 @@ class Database(object):
                 cursor.execute('SELECT * FROM wedges '
                                'WHERE wedge_series = ? AND set_width = ?',
                                [str(wedge_series), float(set_width)])
-                (wedge_series, set_width, brit_pica,
+                (wedge_series, set_width, is_brit_pica,
                  raw_unit_arrangement) = cursor.fetchone()
                 # Change return value of steps to list:
-                wedge = [wedge_series, set_width, bool(brit_pica),
+                wedge = [wedge_series, set_width, bool(is_brit_pica),
                          [int(x) for x in json.loads(raw_unit_arrangement)]]
                 return wedge
             except (TypeError, ValueError, IndexError):
@@ -146,7 +146,7 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 sql = ('DELETE FROM wedges WHERE wedge_series = ? '
                        'AND set_width = ? AND brit_pica = ?')
-                data = [wedge.series, wedge.set_width, wedge.brit_pica]
+                data = [wedge.series, wedge.set_width, wedge.is_brit_pica]
                 cursor.execute(sql, data)
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
@@ -166,8 +166,8 @@ class Database(object):
                     raise exceptions.NoMatchingData
                 for record in all_wedges:
                     (wedge_series, set_width,
-                     brit_pica, unit_arrangement) = record
-                    record = [wedge_series, set_width, bool(brit_pica),
+                     is_brit_pica, unit_arrangement) = record
+                    record = [wedge_series, set_width, bool(is_brit_pica),
                               [x for x in json.loads(unit_arrangement)]]
                     processed_wedges.append(record)
                 return processed_wedges

@@ -13,9 +13,20 @@ from .exceptions import WrongConfiguration
 from .constants import MCP0, MCP1
 
 
+class Singleton(type):
+    """Make only one object"""
+    instance = None
+
+    def __call__(cls, *args, **kw):
+        if not cls.instance:
+            cls.instance = super(Singleton, cls).__call__(*args, **kw)
+        return cls.instance
+
+
 class WiringPiOutputDriver(SimulationOutput):
     """A 32-channel control interface based on two MCP23017 chips"""
     pin_base = 65
+    __metaclass__ = Singleton
 
     def __init__(self, mcp0_address=MCP0, mcp1_address=MCP1, sig_arr=SIGNALS):
         super().__init__(sig_arr=sig_arr)

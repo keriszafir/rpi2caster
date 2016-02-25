@@ -63,8 +63,12 @@ class ExitProgram(UIOops):
 
 
 class ChangeParameters(UIOops):
-    """Raised when user decides to change parameters in a current routine.
-    """
+    """Raised when user decides to change parameters in a current routine. """
+    pass
+
+
+class Row16(ChangeParameters):
+    """Raised when row 16 found in parsing - turn on HMN/KMN/unit-shift"""
     pass
 
 

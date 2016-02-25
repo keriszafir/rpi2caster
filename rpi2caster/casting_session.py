@@ -57,30 +57,18 @@ def choose_sensor_and_driver(cast_or_punch):
     return wrapper
 
 
-def repeat(routine):
-    """Decorator for repeating with user confirmation"""
-    def wrapper(self, *args, **kwargs):
-        """Inner wrapper"""
-        while True:
-            routine(self, *args, **kwargs)
-            if not UI.confirm('Start again?'):
-                break
-    return wrapper
-
-
 def cast_or_punch_result(ribbon_source):
     """Ask for confirmation and cast the resulting ribbon;
     uses temporary stats object"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         new_ribbon = ribbon_source(self, *args, **kwargs)
-        if self.mode.diagnostics or UI.confirm('Cast / punch it?'):
-            self.stats, old_stats = Stats(self), self.stats
-            try:
-                self.cast_or_punch(new_ribbon, *args, **kwargs)
-            except e.CastingAborted:
-                pass
-            self.mode.diagnostics, self.stats = False, old_stats
+        self.stats, old_stats = Stats(self), self.stats
+        try:
+            self.cast_or_punch(new_ribbon)
+        except e.CastingAborted:
+            pass
+        self.mode.diagnostics, self.stats = False, old_stats
     return wrapper
 
 
@@ -99,10 +87,11 @@ def prepare_job(cast_or_punch):
         # Rewind the ribbon if 0005 is found before 0005+0075
         if not diagnostics and not punching and p.stop_comes_first(ribbon):
             ribbon = [x for x in reversed(ribbon)]
-        UI.display_header('Ribbon info:')
         self.stats.ribbon = ribbon
-        UI.display_parameters(self.stats.parameters)
-        UI.display('\n')
+        if not diagnostics:
+            UI.display_header('Ribbon info:')
+            UI.display_parameters(self.stats.parameters)
+            UI.display('\n')
         # Ask how many times to repeat this (always 1 run for calibrating)
         prompt = 'How many times do you want to cast it? (default: 1) : '
         self.stats.runs = ((diagnostics or punching) * 1 or
@@ -114,20 +103,23 @@ def prepare_job(cast_or_punch):
         # Feed info to statistics; get session info from statistics
         self.stats.ribbon = ribbon
         self.stats.runs_left = self.stats.runs
-        UI.display_header('Session info:')
-        UI.display_parameters(self.stats.session_parameters)
+        # Leave at least one line in the ribbon to cast
+        l_skipped = min(l_skipped, self.stats.ribbon_lines - 1)
+        if not diagnostics:
+            UI.display_header('Session info:')
+            UI.display_parameters(self.stats.session_parameters)
         while self.stats.runs_left:
             queue = deque(ribbon)
-            UI.display_header('Starting run %s of %s, %s left'
-                              % (self.stats.current_run_number,
-                                 self.stats.runs, self.stats.runs_left))
+            if not diagnostics:
+                UI.display_header('Starting run %s of %s, %s left'
+                                  % (self.stats.current_run_number,
+                                     self.stats.runs, self.stats.runs_left))
             quad_lines = 0
             if not (punching or diagnostics) and UI.confirm('Heat the mould?'):
                 l_skipped -= 2
                 # When skipping less than 2 lines, we'll cast quads instead
                 quad_lines = max(-l_skipped, 0)
             # Apply constraints: 0 <= lines_skipped < lines in ribbon
-            l_skipped = min(l_skipped, self.stats.ribbon_lines - 1)
             l_skipped = max(0, l_skipped)
             if l_skipped:
                 UI.display('Skipping %s initial lines...' % l_skipped)
@@ -138,7 +130,7 @@ def prepare_job(cast_or_punch):
             code = ''
             # Add one more line to skip - because ribbon starts with 0075-0005
             l_skipped += 1
-            while l_skipped:
+            while l_skipped and not diagnostics:
                 code = queue.popleft()
                 l_skipped -= 1 * p.check_newline(code)
             # Add it back, then add those quads
@@ -192,9 +184,10 @@ class Casting(object):
         casting_queue = casting_queue or self.ribbon
         self.stats.next_run()
         self.stats.queue = casting_queue
-        UI.display_header('Current run info:')
-        UI.display_parameters(self.stats.run_parameters)
-        UI.display('\n')
+        if not self.mode.diagnostics:
+            UI.display_header('Current run info:')
+            UI.display_parameters(self.stats.run_parameters)
+            UI.display('\n')
         # Now process the queue
         generator = (p.parse_record(record) for record in casting_queue)
         if not self.mode.testing:
@@ -210,7 +203,6 @@ class Casting(object):
             self.caster.process(add_or_remove_o15(signals))
         return True
 
-    @repeat
     @cast_or_punch_result
     def test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
@@ -218,7 +210,6 @@ class Casting(object):
         self.mode.testing = True
         return [str(n) for n in range(1, 15)]
 
-    @repeat
     @cast_or_punch_result
     def test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
@@ -226,7 +217,6 @@ class Casting(object):
         self.mode.testing = True
         return [x for x in c.COLUMNS_17]
 
-    @repeat
     @cast_or_punch_result
     def test_all(self):
         """Tests all valves and composition caster's inputs in original
@@ -238,7 +228,6 @@ class Casting(object):
         self.mode.testing = True
         return [x for x in c.SIGNALS]
 
-    @repeat
     @cast_or_punch_result
     def test_justification(self):
         """Tests the 0075-S-0005"""
@@ -263,72 +252,62 @@ class Casting(object):
         self.caster.output.valves_off()
         self.mode.testing = False
 
-    @repeat
     @cast_or_punch_result
-    # TODO: Selection from diecase by character
-    def cast_sorts(self):
+    def cast_sorts(self, source=()):
         """Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
         """
         queue = []
-        # Outer loop
-        while True:
-            UI.clear()
-            UI.display('Sorts casting by matrix coordinates\n\n')
-            prompt = 'Combination? (default: G5): '
-            user_code = UI.enter_data_or_blank(prompt).upper() or 'G5'
-            combination = p.parse_signals(user_code)
-            row = p.get_row(combination)
-            column = p.get_column(combination)
-            units = 0
-            # If we want to cast from row 16, we need unit-shift
-            # HMN or KMN systems are not supported yet
-            question = 'Trying to access 16th row. Use unit shift?'
-
-            unit_shift = row == 16 and UI.confirm(question)
-            if row == 16 and not unit_shift:
-                UI.pause('Aborting.')
+        casting_queue = [x for x in source] or [(None, None, 0)]
+        for (char, style, qty) in casting_queue:
+            # Make an infinite iterator when we call this function without
+            # the list of character-style pairs
+            prompt = ('Character: %s\n'
+                      'Y: add to casting queue, N: skip it?' % char)
+            if not char:
+                casting_queue.append((char, style, 0))
+            elif not UI.confirm(prompt):
                 continue
-            elif unit_shift:
-                row -= 1
-                # Turn on D. Replace D with EF.
-                column_code = (column is 'D' and 'EF' or column) + 'D'
-            # Determine the unit width for a row
-            row_units = self.wedge.unit_arrangement[row]
-            # Enter custom unit value (no points-based calculation yet)
-            prompt = 'Unit width value? (decimal, default: %s) : ' % row_units
-            while not 4 < units < 25:
-                units = UI.enter_data_or_blank(prompt, float) or row_units
-            # Calculate the unit width difference and apply justification
-            diff = units - row_units
-            calc = typesetting_funcs.calculate_wedges
-            (pos_0075, pos_0005) = calc(diff, self.wedge.set_width,
-                                        self.wedge.brit_pica)
+            prompt = 'Character? (leave blank to end specifying characters): '
+            char = char or UI.enter_data_or_blank(prompt)
+            if not char:
+                break
+            available_styles = {'r': 'roman', 'b': 'bold',
+                                'i': 'italic', 's': 'smallcaps',
+                                'l': 'subscript', 'u': 'superscript'}
+            style = style or (available_styles.get(UI.enter_data_or_blank(
+                'Styles: [r]oman, [b]old, [i]talic, [s]mall caps, '
+                '[l]ower index, [u]pper index (default: roman): ', str), 'r'))
+            matrix = self.diecase.get_matrix(char, [style])
+            diff = matrix.units - matrix.row_units
+            wedge_positions = self.calculate_wedges(diff)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts per line? (default: 10): '
-            sorts = abs(UI.enter_data_or_blank(prompt, int) or 10)
+            qty = qty or abs(UI.enter_data_or_blank(prompt, int) or 10)
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
+            UI.display('\n')
             # Warn if we want to cast too many sorts from a single matrix
             warning = ('Warning: you want to cast a single character more than'
                        ' 10 times. This may lead to matrix overheating!\n')
-            if sorts > 10:
+            if qty > 10:
                 UI.display(warning)
-            # Add 'S' if there is width difference
-            signals = column_code + (diff and 'S' or '') + str(row)
+            UI.display('\n')
+            line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
+                          PUMP_ON + str(wedge_positions['0075'])] + ['O15'] * 2
+            # 2 quads in the beginning, then spaces, then 2 quads in the end
+            line_codes.extend([matrix.code + (diff and 'S' or '')] * qty)
+            line_codes.extend(['O15'] * 2)
             # Ask for confirmation
-            prompt = 'Casting %s lines of %s%s. OK?' % (lines, column, row)
-            if UI.confirm(prompt):
-                line_codes = [GALLEY_TRIP + str(pos_0005),
-                              PUMP_ON + str(pos_0075)]
-                line_codes.extend([signals] * sorts)
-                queue.extend(line_codes * lines)
-            if not UI.confirm('Another combination?'):
-                # Finished gathering data
-                break
-        return queue + [GALLEY_TRIP, PUMP_OFF]
+            queue.extend(line_codes * lines)
+        # No sequences? No casting.
+        if queue and UI.confirm('Cast the sequence?'):
+            UI.display('\nEach line will have two em-quads at the start '
+                       'and at the end, to support the type.\n')
+            return queue + [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
+        else:
+            e.return_to_menu()
 
-    @repeat
     @cast_or_punch_result
     def cast_spaces(self):
         """Spaces casting routine, based on the position in diecase.
@@ -336,86 +315,59 @@ class Casting(object):
         """
         queue = []
         # Measurement system
-        options = {'A': 0.1660,
-                   'B': 0.1667,
-                   'D': 0.1776,
-                   'F': 0.1629}
-        message = ('Measurement unit to use? [A]merican Johnson pica = 0.166",'
-                   '[B]ritish pica = 0.1667",\n [D]idot cicero = 0.1776", '
-                   '[F]ournier cicero = 0.1629": ')
-        pica_def = UI.simple_menu(message, options)
+        prompt = ('Measurement unit to use? \n'
+                  '[A]merican Johnson pica = 0.166",'
+                  '[B]ritish pica = 0.1667",\n[D]idot cicero = 0.1776", '
+                  '[F]ournier cicero = 0.1629": ')
+        pica = UI.simple_menu(prompt, {'A': 0.1660, 'B': 0.1667,
+                                       'D': 0.1776, 'F': 0.1629})
         # Ask about line length
         prompt = 'Galley line length in above units? (default: 25) : '
-        line_length = abs(UI.enter_data_or_blank(prompt, int) or 25)
-        # Unit line length:
-        unit_line_length = int(18 * pica_def / 0.1667 * line_length *
-                               self.wedge.set_width / 12)
-        prompt = 'Combination? (default: G5): '
-        code_string = UI.enter_data_or_blank(prompt).upper() or 'G5'
-        combination = p.parse_signals(code_string)
-        row = p.get_row(combination)
-        column = p.get_column(combination)
-        width = 0.0
-        # Not using unit shift by default, ask for row 16
-        question = 'Trying to access 16th row. Use unit shift?'
-        unit_shift = row == 16 and UI.confirm(question)
-        if row == 16 and not unit_shift:
-            UI.pause('Aborting.')
-            e.return_to_menu()
-        elif unit_shift:
-            row -= 1
-            column = (column is 'D' and 'EF' or column) + 'D'
-        # Determine the unit width for a row
-        row_units = self.wedge.unit_arrangement[row]
-        prompt = '\nHow many lines? (default: 1): '
-        lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
-        # Space width in points
-        options = {'6': 1/6,
-                   '4': 1/4,
-                   '3': 1/3,
-                   '2': 1/2,
-                   '1': 1,
-                   'C': 0}
-        message = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
-                   '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
-        # Width in points
-        width = UI.simple_menu(message, options) * 12.0
-        # Ask about custom value, then specify units
-        while not 2 <= width <= 20:
-            prompt = 'Custom width in points (decimal, 2...20) ? : '
-            width = UI.enter_data_or_blank(prompt, float)
-        # We now have width in pica points
-        # If we don't use an old British pica wedge, we must take
-        # the pica difference into account
-        # Calculate unit width of said number of points
-        # We do it this way:
-        # units = picas * set_width/12 * 18
-        # a pica is 12 points, so:
-        # units = points * set_width/12 * 1 / 12 * 18
-        # 18 / (12*12) = 0.125, hence division by 8
-        factor = pica_def / 0.1667
-        space_units = round(width * factor * self.wedge.set_width / 8, 2)
-        # How many spaces will fit in a line? Calculate it...
-        # We add 2 em-quads at O15 before and after the proper spaces
-        # We need 64 additional units for that - need to subtract
-        allowance = unit_line_length - 64
-        sorts = int(allowance // space_units)
-        # Check if the corrections are needed at all
-        diff = space_units - row_units
-        calc = typesetting_funcs.calculate_wedges
-        (pos_0075, pos_0005) = calc(diff, self.wedge.set_width,
-                                    self.wedge.brit_pica)
-        # Add 'S' if there is width difference
-        signals = column + (diff and 'S' or '') + str(row)
-        # Ask for confirmation
-        prompt = ('Casting %s lines of %s-point spaces from %s%s. OK?' %
-                  (lines, width, column, row))
-        if UI.confirm(prompt):
-            line_codes = [GALLEY_TRIP + str(pos_0005),
-                          PUMP_ON + str(pos_0075)]
-            line_codes.extend([signals] * sorts)
+        line_length = abs(UI.enter_data_or_blank(prompt, int) or 25)*1.0
+        # We need 72 additional units for two quads before and after line
+        line_length = int(18 * pica / 0.1667 * line_length *
+                          self.wedge.set_width / 12) - 72
+        while True:
+            matrix = self.diecase.get_matrix(' ')
+            prompt = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
+                      '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
+            # Width in points
+            width = UI.simple_menu(prompt, {'6': 1/6, '4': 1/4, '3': 1/3,
+                                            '2': 1/2, '1': 1, 'C': 0}) * 12.0
+            # Ask about custom value, then specify units
+            while not 2 <= width <= 20:
+                prompt = 'Custom width in points (decimal, 2...20) ? : '
+                width = UI.enter_data_or_blank(prompt, float)
+            prompt = '\nHow many lines? (default: 1): '
+            lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
+            prompt = ('Casting %s lines of %s-point spaces from %s%s. OK?'
+                      % (lines, width, matrix.column, matrix.row))
+            # Repeat
+            if not UI.confirm(prompt):
+                continue
+            # Calculate unit width of said number of points
+            # We do it this way:
+            # units = picas * set_width/12 * 18
+            # a pica is 12 points, so:
+            # units = points * set_width/12 * 1 / 12 * 18
+            # 18 / (12*12) = 0.125, hence division by 8
+            width = round(width * pica / self.wedge.pica *
+                          self.wedge.set_width / 8, 2)
+            # How many spaces will fit in a line? Calculate it...
+            qty = int(line_length // width)
+            # Check if the corrections are needed at all
+            diff = width - matrix.row_units
+            wedge_positions = self.calculate_wedges(diff)
+            # Add 'S' if there is width difference
+            signals = matrix.code + (diff and 'S' or '')
+            line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
+                          PUMP_ON + str(wedge_positions['0075'])]
+            # 2 quads in the beginning, then spaces, then 2 quads in the end
+            line_codes.extend(['O15'] * 2 + [signals] * qty + ['O15'] * 2)
+            # Ask for confirmation
             queue.extend(line_codes * lines)
-        return queue + [GALLEY_TRIP, PUMP_OFF]
+            if queue and UI.confirm('Y to cast, N to add some more spaces?'):
+                return queue + [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
 
     @cast_or_punch_result
     def adhoc_typesetting(self):
@@ -443,7 +395,6 @@ class Casting(object):
         self.ribbon.contents = old_ribbon
         return queue
 
-    @repeat
     @cast_or_punch_result
     def calibrate_wedges(self):
         """Allows to calibrate the justification wedges so that when you're
@@ -466,11 +417,10 @@ class Casting(object):
         signals = 'G5'
         queue = [GALLEY_TRIP] + [signals] * 7
         queue.extend([GALLEY_TRIP + '8', PUMP_ON + '3'] + [signals + 'S'] * 7)
-        queue.extend([GALLEY_TRIP, PUMP_OFF])
+        queue.extend([GALLEY_TRIP, PUMP_OFF, PUMP_OFF])
         self.mode.calibration = True
         return queue
 
-    @repeat
     @cast_or_punch_result
     def calibrate_mould(self):
         """Calculates the width, displays it and casts some 9-unit characters.
@@ -480,64 +430,24 @@ class Casting(object):
                  'Cast G5 (9-units wide on S5 wedge), then measure the width. '
                  'Adjust if needed.')
         UI.display(intro)
-        pica = self.wedge.brit_pica and 0.1667 or 0.166
         # We calculate the width of double 9 units = 18 units, i.e. 1 pica em
-        em_width = pica * self.wedge.set_width / 12.0
+        em_width = self.wedge.pica * self.wedge.set_width / 12.0
         UI.display('9 units (1en) is %s" wide' % round(0.5 * em_width, 4))
         UI.display('18 units (1em) is %s" wide' % round(em_width, 4))
         signals = 'G5'
         self.mode.calibration = True
-        return [GALLEY_TRIP] + [signals] * 7 + [GALLEY_TRIP, PUMP_OFF]
+        return [GALLEY_TRIP] + [signals] * 7 + [GALLEY_TRIP] + [PUMP_OFF] * 2
 
-    @repeat
-    @cast_or_punch_result
     def calibrate_diecase(self):
-        # TODO: REFACTOR
         """Casts the "en dash" characters for calibrating the character X-Y
         relative to type body."""
-        intro = ('X-Y character calibration:\n'
-                 'Cast some en-dashes and/or lowercase "n" letters, '
-                 'then check the position of the character relative to the '
-                 'type body.\nAdjust if needed.')
-        UI.display(intro)
-        try:
-            # Find the en-dash automatically
-            dash_position = [mat[2] + str(mat[3])
-                             for mat in self.diecase.layout
-                             if mat[0] == '–'][0]
-        except (e.MatrixNotFound, TypeError, IndexError):
-            # Choose it manually
-            dash_position = UI.enter_data_or_blank('En dash (–) at: ').upper()
-        try:
-            # Find the "n" letter automatically
-            lowercase_n_position = [mat[2] + str(mat[3])
-                                    for mat in self.diecase.layout
-                                    if mat[0] == 'n'][0]
-        except (e.MatrixNotFound, TypeError, IndexError):
-            # Choose itmanually
-            lowercase_n_position = UI.enter_data_or_blank('"n" at: ').upper()
-        while True:
-            # Subroutines for menu options
-            def continue_aligning():
-                """Do nothing"""
-                pass
-            # Finished. Return to menu.
-            options = {'C': continue_aligning,
-                       'M': e.menu_level_up,
-                       'E': e.exit_program}
-            UI.simple_menu('\n[C]ontinue, [M]enu or [E]xit? ', options)()
-            # Cast 5 nine-unit quads
-            # End here if casting unsuccessful.
-            if dash_position:
-                UI.display('Now casting en dash')
-                if not self.cast_from_matrix(dash_position, 7):
-                    continue
-            if lowercase_n_position:
-                UI.display('Now casting lowercase "n"')
-                if not self.cast_from_matrix(lowercase_n_position, 7):
-                    continue
-            # At the end of successful sequence, some info for the user:
-            UI.display('Done. Compare the lengths and adjust if needed.')
+        UI.display('X-Y character calibration:\n'
+                   'Cast some en-dashes and/or lowercase "n" letters, '
+                   'then check the position of the character relative to the '
+                   'type body.\nAdjust if needed.')
+        self.mode.calibration = True
+        self.cast_sorts([('–', 'roman', 7), ('n', 'roman', 7),
+                         ('h', 'roman', 7)])
 
     def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
@@ -696,3 +606,35 @@ class Casting(object):
             except (e.ReturnToMenu, e.MenuLevelUp):
                 # Will skip to the end of the loop, and start all over
                 pass
+
+    def calculate_wedges(self, diff):
+        """calculate_wedges:
+
+        Calculates and returns wedge positions for character.
+        Uses pre-calculated unit width difference between row's unit width
+        and character's width (with optional corrections).
+        """
+        # Calculate the inch width of delta
+        # 1 pica = 18 units 12 set = 0.1667 (old British pica)
+        # or 0.1660 (Am. pica); unit_width = 12 * pica / (set width * 18)
+        steps_0005 = int(diff * 0.166 / self.wedge.pica *
+                         self.wedge.set_width * 2000 / 1296) + 53
+        # Adjust the wedges
+        # You do it in respect to the neutral position i.e. 3/8:
+        # 3 steps of 0075 and 8 steps of 0005 wedge.
+        # 3 / 8 = 1 * 15 + 8 = 53 - that would be 53 steps of 0005 wedge
+        # Add safeguards against wrong wedge positions
+        # Minimum wedge positions (0075/0005) are 1/1, maximum 15/15
+        # This is equivalent to min 1*15+1=16 steps and max 15*15+15=240 steps
+        # WARNING - the actual value when casting chars/high spaces must not be
+        # wider than the matrix (.2" for small composition, 0.4 for 2x2 etc),
+        # otherwise we get a splash between mats!
+        steps_0005 = min(steps_0005, 240)
+        # Lower limit: 1/1 wedge positions:
+        steps_0005 = max(16, steps_0005)
+        steps_0075 = 0
+        while steps_0005 > 15:
+            steps_0005 -= 15
+            steps_0075 += 1
+        # Got the wedge positions, return them
+        return {'0075': steps_0075, '0005': steps_0005}

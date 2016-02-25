@@ -5,6 +5,7 @@ This module contains file- and line-parsing functions for the casting program.
 """
 import io
 from . import constants
+from .exceptions import Row16
 # Check if alternate comment symbols are configured
 try:
     from .global_settings import COMMENT_SYMBOLS
@@ -83,6 +84,9 @@ def parse_signals(signals):
     # Remove these signals from the input string
     for sig in justification + [str(i) for i in range(100, 14, -1)]:
         # We operate on a string, so cannot remove the item...
+        # Raise an exception if there is row 16 in the ribbon
+        if sig == '16' and sig in signals:
+            raise Row16
         signals = signals.replace(sig, '')
     # From remaining numbers, determine row numbers.
     # The highest number will be removed from the raw_signals to avoid
