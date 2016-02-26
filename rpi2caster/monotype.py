@@ -82,9 +82,6 @@ class MonotypeCaster(object):
         of duty cycle (bright/dark area ratio) and phase shift (disc's position
         relative to 0 degrees caster position).
         """
-        # First check if HMN or unit-shift must be applied
-        signals = (self.mode.unitshift and convert_unitshift(signals) or
-                   self.mode.hmn and convert_hmn(signals) or signals)
         while True:
             # Escape this only by returning True on success,
             # or raising exceptions.CastingAborted, exceptions.ExitProgram
@@ -370,26 +367,24 @@ class CasterMode(object):
     @property
     def hmn(self):
         """Check if HMN mode is currently on"""
-        return self.__dict__.get('hmn', False)
+        return self.__dict__.get('_hmn', False)
 
     @hmn.setter
     def hmn(self, value):
-        """Set the HMN mode and turn off unit shift"""
+        """Set the HMN mode"""
         value = value and True or False
-        self.unitshift = False
-        self.__dict__['hmn'] = value
+        self.__dict__['_hmn'] = value
 
     @property
     def unitshift(self):
         """Check if the unit shift mode is currently on"""
-        return self.__dict__.get('unit-shift', False)
+        return self.__dict__.get('_unit-shift', False)
 
     @unitshift.setter
     def unitshift(self, value):
-        """Set the unit-shift mode and turn off unit shift"""
+        """Set the unit-shift mode"""
         value = value and True or False
-        self.hmn = False
-        self.__dict__['unit-shift'] = value
+        self.__dict__['_unit-shift'] = value
 
     @property
     def sensor(self):
@@ -403,6 +398,29 @@ class CasterMode(object):
     def output(self):
         """Chooses a simulation or hardware output driver"""
         return self.simulation and SimulationOutput or hardware_output
+
+    def choose_row16_addressing(self):
+        """Let user decide which way to address row 16"""
+        def hmn_on():
+            """Turn on the HMN 16x17 attachment"""
+            UI.display('Turn the HMN attachment ON')
+            self.hmn = True
+
+        def unitshift_on():
+            """Turn on the unit-shift attachment (introduced in 1960s)"""
+            UI.display('Turn the attachment ON - switch under the paper tower')
+            self.unitshift = True
+
+        def do_nothing():
+            """User can choose not to use any attachment"""
+            return None
+
+        prompt = ('You want to cast from a matrix in the 16th row.\n'
+                  'Which attachment do you use: HMN, Unit-Shift or none?\n'
+                  '(if none - the matrix will be replaced with O15)\n\n'
+                  'Your choice: [U]nit-Shift, [H]MN, leave blank for none?: ')
+        options = {'U': unitshift_on, 'H': hmn_on, '': do_nothing}
+        UI.simple_menu(prompt, options)()
 
 
 def stop_menu():
@@ -418,40 +436,6 @@ def stop_menu():
     message = ('Machine is not running!\n'
                '[C]ontinue, [A]bort or [E]xit program? ')
     UI.simple_menu(message, options)()
-
-
-def convert_hmn(signals):
-    """Converts the signals to HMN coding system; affects 16th row only."""
-    # NI, NL -> HNI, HNL (append H)
-    # H -> HN (append N)
-    # M -> MN (append N)
-    # N -> MN (append M)
-    # O -> HMN (append all)
-    # A...G, I...L -> HM + column
-    if '16' in signals:
-        signals.remove('16')
-        if 'H' in signals or 'M' in signals:
-            signals.append('N')
-        elif 'N' in signals:
-            signals.append(('I' in signals or 'L' in signals) and 'H' or 'M')
-        elif [x for x in 'ABCDEFGIJKL' if x in signals]:
-            signals.extend(['H', 'M'])
-        else:
-            signals.extend(['H', 'M', 'N'])
-    allowed_signals = ([x for x in 'ABCDEFGHIJKLMN'] +
-                       [str(x) for x in range(1, 15)] + ['O15'])
-    return list({i for i in signals if i in allowed_signals})
-
-
-def convert_unitshift(signals):
-    """Converts the signals to unit-shift coding system; affects all codes
-    from column "D" and row 16. We don't use unit-shift for anything other than
-    accessing the 16th row on large diecases."""
-    signals = [x for x in signals]
-    if 'D' in signals:
-        signals.remove('D')
-        signals.extend(['E', 'F'])
-    return [sig if sig != '16' else 'D' for sig in signals if sig != 'D']
 
 
 def hardware_sensor():

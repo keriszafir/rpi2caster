@@ -62,13 +62,12 @@ def cast_or_punch_result(ribbon_source):
     uses temporary stats object"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        new_ribbon = ribbon_source(self, *args, **kwargs)
-        self.stats, old_stats = Stats(self), self.stats
         try:
-            self.cast_queue(new_ribbon)
+            self.cast_queue(ribbon_source(self, *args, **kwargs))
         except e.CastingAborted:
             pass
-        self.caster.mode.diagnostics, self.stats = False, old_stats
+        self.caster.mode.diagnostics = False
+        self.caster.mode.hmn, self.caster.mode.unitshift = False, False
     return wrapper
 
 
@@ -99,8 +98,7 @@ def prepare_job(cast_queue):
         prompt = 'How many lines do you want to skip?  (default: 0): '
         l_skipped = (not diagnostics and not punching and
                      abs(enter(prompt, int) or 0))
-        # Feed info to statistics; get session info from statistics
-        self.stats.ribbon = ribbon
+        # Tell the stats how many times we do the job
         self.stats.runs_left = self.stats.runs
         # Leave at least one line in the ribbon to cast
         l_skipped = min(l_skipped, self.stats.ribbon_lines - 1)
@@ -163,6 +161,7 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
+        self.stats = Stats(self)
         self.ribbon = (ribbon_file and
                        typesetting_data.SelectRibbon(filename=ribbon_file) or
                        typesetting_data.Ribbon())
@@ -173,28 +172,66 @@ class Casting(object):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
+        mode = self.caster.mode
 
         def add_or_remove_o15(signals):
             """Checks if we need to activate O15, based on mode"""
-            mode = self.caster.mode
             return ([x for x in signals if x is not 'O15' or mode.testing] +
                     ['O15'] * (mode.punching and not mode.testing))
 
+        def convert_16th_row_addressing(signals):
+            """Changes the signals to match the selected method of addressing
+            16th row on the matrix case"""
+            # HMN:
+            # convert as commented below
+            # HMN used special and rare wedges that had 16 steps.
+            #
+            # Unit-shift:
+            # replace D column with EF; add D for shifting the diecase
+            # Normal wedge stays where it was; only the diecase moves.
+            if self.caster.mode.hmn and '16' in signals:
+                if 'H' in signals:
+                    # H -> HN
+                    signals.append('N')
+                elif 'N' in signals and not ('I' in signals or 'L' in signals):
+                    # N -> MN
+                    signals.append('M')
+                elif 'N' in signals or 'M' in signals:
+                    # NI, NL, M -> HNI, HNL, HM
+                    signals.append('H')
+                elif [x for x in 'ABCDEFGIJKL' if x in signals]:
+                    # A...G, I...L -> HMA...G, HMI...L
+                    signals.extend(['H', 'M'])
+                else:
+                    # O15 (no other signals) -> HMN
+                    signals.extend(['H', 'M', 'N'])
+            elif self.caster.mode.unitshift:
+                if 'D' in signals:
+                    signals.remove('D')
+                    signals.extend(['E', 'F'])
+                if '16' in signals:
+                    signals.append('D')
+            # Return a list of "normal" signals i.e. no 16
+            # arranged in Monotype order (NMLK...13, 14, 0005, O15)
+            return [sig for sig in c.SIGNALS if sig in signals]
+
         self.stats.next_run()
         self.stats.queue = casting_queue
-        if not self.caster.mode.diagnostics:
+        if not mode.diagnostics:
             UI.display_header('Current run info:')
             UI.display_parameters(self.stats.run_parameters)
             UI.display('\n')
         # Now process the queue
         generator = (p.parse_record(record) for record in casting_queue)
-        if not self.caster.mode.testing:
+        if not mode.testing:
             self.caster.sensor.check_if_machine_is_working()
         for (signals, comment) in generator:
             comment = comment and UI.display(comment)
             if not signals:
                 # No signals (comment only)- go to the next combination
                 continue
+            # Check if HMN or unit-shift must be applied
+            signals = convert_16th_row_addressing(signals)
             self.stats.signals = signals
             UI.display_parameters(self.stats.code_parameters)
             # Let the caster do the job
@@ -300,7 +337,8 @@ class Casting(object):
             line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
                           PUMP_ON + str(wedge_positions['0075'])] + ['O15'] * 2
             # 2 quads in the beginning, then spaces, then 2 quads in the end
-            line_codes.extend([matrix.code + (diff and 'S' or '')] * qty)
+            line_codes.extend([matrix.code + (diff and 'S' or '') +
+                               '// ' + matrix.char] * qty)
             line_codes.extend(['O15'] * 2)
             # Ask for confirmation
             queue.extend(line_codes * lines)
@@ -495,52 +533,50 @@ class Casting(object):
     @property
     def stats(self):
         """Ribbon/job statistics"""
-        return self.__dict__.get('stats', Stats(self))
+        return self.__dict__.get('_stats', Stats(self))
 
     @stats.setter
     def stats(self, stats):
         """Parse the stats to get the ribbon data"""
-        self.__dict__['stats'] = (isinstance(stats, Stats) and stats or
-                                  Stats(self))
+        self.__dict__['_stats'] = (isinstance(stats, Stats) and stats or
+                                   Stats(self))
 
     @property
     def ribbon(self):
         """Ribbon for the casting session"""
-        return self.__dict__.get('ribbon', typesetting_data.Ribbon())
+        return self.__dict__.get('_ribbon', typesetting_data.Ribbon())
 
     @ribbon.setter
     def ribbon(self, ribbon):
         """Ribbon setter"""
         rib = (isinstance(ribbon, typesetting_data.Ribbon) and ribbon or
                typesetting_data.SelectRibbon())
-        self.__dict__['ribbon'] = rib
+        self.__dict__['_ribbon'] = rib
         self.diecase = self.ribbon.diecase
-        # New stats after choosing a different ribbon
-        self.stats = Stats(self)
 
     @property
     def diecase(self):
         """Ribbon for the casting session"""
-        return self.__dict__.get('diecase', matrix_data.Diecase())
+        return self.__dict__.get('_diecase', matrix_data.Diecase())
 
     @diecase.setter
     def diecase(self, diecase):
         """Ribbon setter"""
         case = (isinstance(diecase, matrix_data.Diecase) and diecase or
                 matrix_data.SelectDiecase())
-        self.__dict__['diecase'] = case
+        self.__dict__['_diecase'] = case
         self.wedge = self.diecase.wedge
 
     @property
     def wedge(self):
         """Ribbon for the casting session"""
-        return self.__dict__.get('wedge', wedge_data.Wedge())
+        return self.__dict__.get('_wedge', wedge_data.Wedge())
 
     @wedge.setter
     def wedge(self, wedge):
         """Ribbon setter"""
-        self.__dict__['wedge'] = (isinstance(wedge, wedge_data.Wedge) and
-                                  wedge or wedge_data.SelectWedge())
+        self.__dict__['_wedge'] = (isinstance(wedge, wedge_data.Wedge) and
+                                   wedge or wedge_data.SelectWedge())
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
@@ -557,8 +593,7 @@ class Casting(object):
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
         UI.display_parameters(self.caster.parameters, self.ribbon.parameters,
-                              self.stats.parameters, self.diecase.parameters,
-                              self.wedge.parameters)
+                              self.diecase.parameters, self.wedge.parameters)
         UI.pause()
 
     def _main_menu_options(self):

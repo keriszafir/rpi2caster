@@ -149,18 +149,21 @@ class Stats(object):
     @session_parameters.setter
     def ribbon(self, ribbon):
         """Parses the ribbon, counts combinations, lines and characters"""
+        mode = self.session.caster.mode
         run_data = self.__dict__['_run_data']
         run_data['codes'] = 0
         run_data['lines'] = 0
         run_data['chars'] = 0
         generator = (p.parse_record(x) for x in ribbon)
-        for (combination, _) in generator:
-            if combination:
+        for (signals, _) in generator:
+            if signals:
                 # Guards against empty combination i.e. line with comment only
                 run_data['codes'] += 1
-            if p.check_newline(combination):
+            if '16' in signals and not mode.hmn and not mode.unitshift:
+                mode.choose_row16_addressing()
+            if p.check_newline(signals):
                 run_data['lines'] += 1
-            elif p.check_character(combination):
+            elif p.check_character(signals):
                 run_data['chars'] += 1
 
     @run_parameters.setter
