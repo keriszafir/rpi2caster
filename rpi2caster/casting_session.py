@@ -401,7 +401,8 @@ class Casting(object):
             diff = width - matrix.row_units
             wedge_positions = self.calculate_wedges(diff)
             # Add 'S' if there is width difference
-            signals = matrix.code + (diff and 'S' or '')
+            comment = '%s-point space' % width
+            signals = matrix.code + (diff and 'S' or '') + '// ' + comment
             line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
                           PUMP_ON + str(wedge_positions['0075'])]
             # 2 quads in the beginning, then spaces, then 2 quads in the end
