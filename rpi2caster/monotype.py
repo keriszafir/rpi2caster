@@ -21,6 +21,7 @@ class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
+        self.mode = Mode()
         self.sensor = SimulationSensor()
         self.output = SimulationOutput()
         self.stop = EmergencyStop()

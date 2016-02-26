@@ -164,7 +164,7 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
-        self.mode = monotype.Mode()
+        # self.mode = monotype.Mode()
         self.ribbon = (ribbon_file and
                        typesetting_data.SelectRibbon(filename=ribbon_file) or
                        typesetting_data.Ribbon())
@@ -178,19 +178,20 @@ class Casting(object):
 
         def add_or_remove_o15(signals):
             """Checks if we need to activate O15, based on mode"""
-            return ([x for x in signals if x != 'O15' or self.mode.testing] +
-                    ['O15'] * (self.mode.punching and not self.mode.testing))
+            mode = self.caster.mode
+            return ([x for x in signals if x is not 'O15' or mode.testing] +
+                    ['O15'] * (mode.punching and not mode.testing))
 
         casting_queue = casting_queue or self.ribbon
         self.stats.next_run()
         self.stats.queue = casting_queue
-        if not self.mode.diagnostics:
+        if not self.caster.mode.diagnostics:
             UI.display_header('Current run info:')
             UI.display_parameters(self.stats.run_parameters)
             UI.display('\n')
         # Now process the queue
         generator = (p.parse_record(record) for record in casting_queue)
-        if not self.mode.testing:
+        if not self.caster.mode.testing:
             self.caster.sensor.check_if_machine_is_working()
         for (signals, comment) in generator:
             comment = comment and UI.display(comment)
@@ -207,14 +208,14 @@ class Casting(object):
     def test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
         UI.pause('Testing the front pinblock - signals 1 towards 14.')
-        self.mode.testing = True
+        self.caster.mode.testing = True
         return [str(n) for n in range(1, 15)]
 
     @cast_or_punch_result
     def test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
         UI.pause('This will test the front pinblock - signals NI, NL, A...N. ')
-        self.mode.testing = True
+        self.caster.mode.testing = True
         return [x for x in c.COLUMNS_17]
 
     @cast_or_punch_result
@@ -225,20 +226,20 @@ class Casting(object):
         UI.pause('This will test all the air lines in the same order '
                  'as the holes on the paper tower: \n%s\n'
                  'MAKE SURE THE PUMP IS DISENGAGED.' % ' '.join(c.SIGNALS))
-        self.mode.testing = True
+        self.caster.mode.testing = True
         return [x for x in c.SIGNALS]
 
     @cast_or_punch_result
     def test_justification(self):
         """Tests the 0075-S-0005"""
         UI.pause('This will test the justification pin block (0075, S, 0005).')
-        self.mode.testing = True
+        self.caster.mode.testing = True
         return ['0075', 'S', '0005']
 
     @choose_sensor_and_driver
     def test_any_code(self):
         """Tests a user-specified combination of signals"""
-        self.mode.testing = False
+        self.caster.mode.testing = False
         while True:
             UI.display('Enter the signals to send to the caster, '
                        'or leave empty to return to menu: ')
@@ -250,7 +251,7 @@ class Casting(object):
             else:
                 break
         self.caster.output.valves_off()
-        self.mode.testing = False
+        self.caster.mode.testing = False
 
     @cast_or_punch_result
     def cast_sorts(self, source=()):
@@ -418,7 +419,7 @@ class Casting(object):
         queue = [GALLEY_TRIP] + [signals] * 7
         queue.extend([GALLEY_TRIP + '8', PUMP_ON + '3'] + [signals + 'S'] * 7)
         queue.extend([GALLEY_TRIP, PUMP_OFF, PUMP_OFF])
-        self.mode.calibration = True
+        self.caster.mode.calibration = True
         return queue
 
     @cast_or_punch_result
@@ -435,7 +436,7 @@ class Casting(object):
         UI.display('9 units (1en) is %s" wide' % round(0.5 * em_width, 4))
         UI.display('18 units (1em) is %s" wide' % round(em_width, 4))
         signals = 'G5'
-        self.mode.calibration = True
+        self.caster.mode.calibration = True
         return [GALLEY_TRIP] + [signals] * 7 + [GALLEY_TRIP] + [PUMP_OFF] * 2
 
     def calibrate_diecase(self):
@@ -445,7 +446,7 @@ class Casting(object):
                    'Cast some en-dashes and/or lowercase "n" letters, '
                    'then check the position of the character relative to the '
                    'type body.\nAdjust if needed.')
-        self.mode.calibration = True
+        self.caster.mode.calibration = True
         self.cast_sorts([('–', 'roman', 7), ('n', 'roman', 7),
                          ('h', 'roman', 7)])
 
@@ -453,7 +454,7 @@ class Casting(object):
         """Settings and alignment menu for servicing the caster"""
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
-            caster = not self.mode.punching
+            caster = not self.caster.mode.punching
             opts = [(e.menu_level_up, 'Back',
                      'Returns to main menu', True),
                     (self.test_all, 'Test outputs',
@@ -560,7 +561,7 @@ class Casting(object):
     def _main_menu_options(self):
         """Build a list of options, adding an option if condition is met"""
         # Options are described with tuples: (function, description, condition)
-        caster = not self.mode.punching
+        caster = not self.caster.mode.punching
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),

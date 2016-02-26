@@ -11,8 +11,8 @@ def cast(args):
     """Casting on an actual caster or simulation"""
     from . import casting_session
     session = casting_session.Casting(args.ribbon_file)
-    session.mode.simulation = args.simulation
-    session.mode.punching = args.punching
+    session.caster.mode.simulation = args.simulation
+    session.caster.mode.punching = args.punching
     session.caster.UI = casting_session.UI
     casting_session.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly
