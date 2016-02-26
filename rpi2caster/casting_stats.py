@@ -55,9 +55,9 @@ class Stats(object):
         """Displays info at the beginning of each run"""
         source = self.__dict__.get('_run_data', {})
         data = []
-        if not self.session.mode.testing:
+        if not self.session.caster.mode.testing:
             data.append((source.get('run_codes', 0), 'Codes in the run'))
-        if self.session.mode.casting:
+        if self.session.caster.mode.casting:
             data.append((source.get('run_chars', 0), 'Chars in the run'))
             data.append((source.get('run_lines', 0), 'Lines in the run'))
         return data
@@ -75,9 +75,9 @@ class Stats(object):
         data.append((current.get('code', []), 'Current code'))
         pump = {True: 'ON', False: 'OFF'}[current.get('pump_status', False)]
         # For casting and punching:
-        if not self.session.mode.diagnostics:
+        if not self.session.caster.mode.diagnostics:
             data.append((char and self.current_char_number, 'Current char'))
-        if self.session.mode.casting:
+        if self.session.caster.mode.casting:
             data.append((current.get('0075', '15'), 'Wedge 0075 now at'))
             data.append((current.get('0005', '15'), 'Wedge 0005 now at'))
             data.append((pump, 'Pump is'))
@@ -142,7 +142,7 @@ class Stats(object):
         elif p.check_newline(signals):
             self.next_line()
         # Check the pump working/non-working status in the casting mode
-        if self.session.mode.casting:
+        if self.session.caster.mode.casting:
             self._update_wedge_positions()
             self._check_pump()
 

@@ -21,7 +21,7 @@ class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
-        self.mode = Mode()
+        self.mode = CasterMode()
         self.sensor = SimulationSensor()
         self.output = SimulationOutput()
         self.stop = EmergencyStop()
@@ -82,6 +82,9 @@ class MonotypeCaster(object):
         of duty cycle (bright/dark area ratio) and phase shift (disc's position
         relative to 0 degrees caster position).
         """
+        # First check if HMN or unit-shift must be applied
+        signals = (self.mode.unitshift and convert_unitshift(signals) or
+                   self.mode.hmn and convert_hmn(signals) or signals)
         while True:
             # Escape this only by returning True on success,
             # or raising exceptions.CastingAborted, exceptions.ExitProgram
@@ -300,7 +303,7 @@ class SimulationOutput(object):
             self.one_off(sig)
 
 
-class Mode(object):
+class CasterMode(object):
     """Session mode: casting / simulation / perforation"""
     def __init__(self):
         self.simulation = False
@@ -365,6 +368,30 @@ class Mode(object):
         return not self.punching and not self.testing
 
     @property
+    def hmn(self):
+        """Check if HMN mode is currently on"""
+        return self.__dict__.get('hmn', False)
+
+    @hmn.setter
+    def hmn(self, value):
+        """Set the HMN mode and turn off unit shift"""
+        value = value and True or False
+        self.unitshift = False
+        self.__dict__['hmn'] = value
+
+    @property
+    def unitshift(self):
+        """Check if the unit shift mode is currently on"""
+        return self.__dict__.get('unit-shift', False)
+
+    @unitshift.setter
+    def unitshift(self, value):
+        """Set the unit-shift mode and turn off unit shift"""
+        value = value and True or False
+        self.hmn = False
+        self.__dict__['unit-shift'] = value
+
+    @property
     def sensor(self):
         """Chooses a proper sensor"""
         return (self.testing and TestSensor or
@@ -391,6 +418,40 @@ def stop_menu():
     message = ('Machine is not running!\n'
                '[C]ontinue, [A]bort or [E]xit program? ')
     UI.simple_menu(message, options)()
+
+
+def convert_hmn(signals):
+    """Converts the signals to HMN coding system; affects 16th row only."""
+    # NI, NL -> HNI, HNL (append H)
+    # H -> HN (append N)
+    # M -> MN (append N)
+    # N -> MN (append M)
+    # O -> HMN (append all)
+    # A...G, I...L -> HM + column
+    if '16' in signals:
+        signals.remove('16')
+        if 'H' in signals or 'M' in signals:
+            signals.append('N')
+        elif 'N' in signals:
+            signals.append(('I' in signals or 'L' in signals) and 'H' or 'M')
+        elif [x for x in 'ABCDEFGIJKL' if x in signals]:
+            signals.extend(['H', 'M'])
+        else:
+            signals.extend(['H', 'M', 'N'])
+    allowed_signals = ([x for x in 'ABCDEFGHIJKLMN'] +
+                       [str(x) for x in range(1, 15)] + ['O15'])
+    return list({i for i in signals if i in allowed_signals})
+
+
+def convert_unitshift(signals):
+    """Converts the signals to unit-shift coding system; affects all codes
+    from column "D" and row 16. We don't use unit-shift for anything other than
+    accessing the 16th row on large diecases."""
+    signals = [x for x in signals]
+    if 'D' in signals:
+        signals.remove('D')
+        signals.extend(['E', 'F'])
+    return [sig if sig != '16' else 'D' for sig in signals if sig != 'D']
 
 
 def hardware_sensor():

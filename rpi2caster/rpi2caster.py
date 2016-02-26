@@ -16,8 +16,8 @@ def cast(args):
     session.caster.UI = casting_session.UI
     casting_session.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly
-    if args.direct and args.ribbon_file:
-        session.cast_or_punch()
+    if args.direct:
+        session.cast_composition()
     elif args.testing:
         session.diagnostics_submenu()
     else:

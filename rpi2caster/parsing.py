@@ -5,7 +5,6 @@ This module contains file- and line-parsing functions for the casting program.
 """
 import io
 from . import constants
-from .exceptions import Row16
 # Check if alternate comment symbols are configured
 try:
     from .global_settings import COMMENT_SYMBOLS
@@ -64,40 +63,35 @@ def parse_record(input_data):
 
 
 def parse_signals(signals):
-    """parse_signals(signals):
-
-    Parses a string with Monotype signals on input.
+    """Parses a string with Monotype signals on input.
     Skips all but the "useful" signals: A...O, 1...15, 0005, S, 0075.
-    Outputs a list of signals to be processed by send_signals_to_caster
-    in Monotype (or MonotypeSimulation) classes.
-
+    Outputs a list of signals to be processed by the machine control routines.
     Filter out all non-alphanumeric characters and whitespace.
     Convert to uppercase.
     """
-    col_sigs = 'ABCDEFGHIJKLMNOS'
-    digits = '1234567890'
-    signals = ''.join([x.upper().strip() for x in signals
-                       if x.upper() in col_sigs + digits])
+    col_sigs = 'ABCDEFGHIJKLMNS'
+    signals = (x.upper().strip() for x in signals)
+    signals = (x for x in signals if x.isdigit() or x in col_sigs + 'O')
+    signals = ''.join(signals)
+    # Find O+15 or 16th row
     o15_found = 'O15' in signals or 'O' in signals or '15' in signals
+    row_16_found = '16' in signals
     # Build a list of justification signals
     justification = [sig for sig in ['0005', '0075'] if sig in signals]
     # Remove these signals from the input string
     for sig in justification + [str(i) for i in range(100, 14, -1)]:
         # We operate on a string, so cannot remove the item...
-        # Raise an exception if there is row 16 in the ribbon
-        if sig == '16' and sig in signals:
-            raise Row16
         signals = signals.replace(sig, '')
     # From remaining numbers, determine row numbers.
     # The highest number will be removed from the raw_signals to avoid
     # erroneously adding its digits as signals.
-    rows = []
-    for number in range(14, 0, -1):
-        if str(number) in signals:
-            signals = signals.replace(str(number), '')
-            rows.append(str(number))
+    rows = row_16_found and ['16'] or []
+    for row in range(14, 0, -1):
+        if str(row) in signals:
+            rows.append(str(row))
+            signals = signals.replace(str(row), '')
     # Columns + S justification signal
-    columns = [s for s in col_sigs if s in signals if s is not 'O']
+    columns = [s for s in col_sigs if s in signals]
     # Return a list containing all signals and O15 if needed, if the input
     # string or list contained any useful combinations
     return justification + columns + rows + ['O15'] * o15_found or []

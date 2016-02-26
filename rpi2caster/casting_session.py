@@ -41,19 +41,19 @@ PUMP_OFF = 'NJS 0005'
 PUMP_ON = 'NKS 0075'
 
 
-def choose_sensor_and_driver(cast_or_punch):
+def choose_sensor_and_driver(cast_queue):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         UI.debug_pause('About to %s' %
-                       (self.mode.casting and 'cast composition...' or
-                        self.mode.testing and 'test outputs...' or
-                        self.mode.punching and 'punch ribbon...'))
+                       (self.caster.mode.casting and 'cast composition...' or
+                        self.caster.mode.testing and 'test outputs...' or
+                        self.caster.mode.punching and 'punch ribbon...'))
         # Instantiate and enter context
-        with self.mode.sensor() as self.caster.sensor:
-            with self.mode.output() as self.caster.output:
+        with self.caster.mode.sensor() as self.caster.sensor:
+            with self.caster.mode.output() as self.caster.output:
                 with self.caster:
-                    return cast_or_punch(self, *args, **kwargs)
+                    return cast_queue(self, *args, **kwargs)
     return wrapper
 
 
@@ -65,25 +65,24 @@ def cast_or_punch_result(ribbon_source):
         new_ribbon = ribbon_source(self, *args, **kwargs)
         self.stats, old_stats = Stats(self), self.stats
         try:
-            self.cast_or_punch(new_ribbon)
+            self.cast_queue(new_ribbon)
         except e.CastingAborted:
             pass
-        self.mode.diagnostics, self.stats = False, old_stats
+        self.caster.mode.diagnostics, self.stats = False, old_stats
     return wrapper
 
 
-def prepare_job(cast_or_punch):
+def prepare_job(cast_queue):
     """Prepares the job for casting"""
     line_of_quads = ['O15'] * 20 + ['NKJS 0005 0075']
     # Alias to make it shorter
     enter = UI.enter_data_or_blank
 
-    def wrapper(self, ribbon=()):
+    def wrapper(self, ribbon):
         """Wrapper function"""
         # Mode aliases
-        punching, diagnostics = self.mode.punching, self.mode.diagnostics
-        # Get ribbon, derive stats for it
-        ribbon = ribbon or self.ribbon.contents
+        punching = self.caster.mode.punching
+        diagnostics = self.caster.mode.diagnostics
         # Rewind the ribbon if 0005 is found before 0005+0075
         if not diagnostics and not punching and p.stop_comes_first(ribbon):
             ribbon = [x for x in reversed(ribbon)]
@@ -138,7 +137,7 @@ def prepare_job(cast_or_punch):
             queue.extendleft(quad_lines * line_of_quads)
             # The ribbon is ready for casting / punching
             try:
-                cast_or_punch(self, queue or [])
+                cast_queue(self, queue or [])
                 if not self.stats.runs_left and UI.confirm('Repeat?'):
                     self.stats.add_run()
             except e.CastingAborted:
@@ -164,14 +163,13 @@ class Casting(object):
     def __init__(self, ribbon_file=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
-        # self.mode = monotype.Mode()
         self.ribbon = (ribbon_file and
                        typesetting_data.SelectRibbon(filename=ribbon_file) or
                        typesetting_data.Ribbon())
 
     @choose_sensor_and_driver
     @prepare_job
-    def cast_or_punch(self, casting_queue=()):
+    def cast_queue(self, casting_queue):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
@@ -182,7 +180,6 @@ class Casting(object):
             return ([x for x in signals if x is not 'O15' or mode.testing] +
                     ['O15'] * (mode.punching and not mode.testing))
 
-        casting_queue = casting_queue or self.ribbon
         self.stats.next_run()
         self.stats.queue = casting_queue
         if not self.caster.mode.diagnostics:
@@ -252,6 +249,12 @@ class Casting(object):
                 break
         self.caster.output.valves_off()
         self.caster.mode.testing = False
+
+    @cast_or_punch_result
+    def cast_composition(self):
+        """Casts or punches the ribbon contents"""
+        ribbon = self.ribbon.contents
+        return ribbon and ribbon or e.return_to_menu()
 
     @cast_or_punch_result
     def cast_sorts(self, source=()):
@@ -565,7 +568,7 @@ class Casting(object):
         ribbon = self.ribbon.contents
         diecase_selected = self.diecase.diecase_id
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
-                (self.cast_or_punch, 'Cast or punch composition',
+                (self.cast_composition, 'Cast or punch composition',
                  'Casts type or punch a ribbon', ribbon),
                 (self._choose_ribbon, 'Select ribbon',
                  'Selects a ribbon from database or file', True),
