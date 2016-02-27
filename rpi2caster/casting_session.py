@@ -41,7 +41,7 @@ PUMP_OFF = 'NJS 0005'
 PUMP_ON = 'NKS 0075'
 
 
-def choose_sensor_and_driver(cast_queue):
+def choose_sensor_and_driver(casting_routine):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
@@ -53,7 +53,7 @@ def choose_sensor_and_driver(cast_queue):
         with self.caster.mode.sensor() as self.caster.sensor:
             with self.caster.mode.output() as self.caster.output:
                 with self.caster:
-                    return cast_queue(self, *args, **kwargs)
+                    return casting_routine(self, *args, **kwargs)
     return wrapper
 
 
@@ -63,7 +63,7 @@ def cast_or_punch_result(ribbon_source):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         try:
-            self.cast_queue(ribbon_source(self, *args, **kwargs))
+            self._cast_queue(ribbon_source(self, *args, **kwargs))
         except e.CastingAborted:
             pass
         self.caster.mode.diagnostics = False
@@ -71,7 +71,7 @@ def cast_or_punch_result(ribbon_source):
     return wrapper
 
 
-def prepare_job(cast_queue):
+def prepare_job(casting_workflow):
     """Prepares the job for casting"""
     line_of_quads = ['O15'] * 20 + ['NKJS 0005 0075']
     # Alias to make it shorter
@@ -107,11 +107,11 @@ def prepare_job(cast_queue):
             UI.display_parameters(self.stats.session_parameters)
         while self.stats.runs_left:
             queue = deque(ribbon)
+            quad_lines = 0
             if not diagnostics:
                 UI.display_header('Starting run %s of %s, %s left'
                                   % (self.stats.current_run_number,
                                      self.stats.runs, self.stats.runs_left))
-            quad_lines = 0
             if not (punching or diagnostics) and UI.confirm('Heat the mould?'):
                 l_skipped -= 2
                 # When skipping less than 2 lines, we'll cast quads instead
@@ -135,7 +135,7 @@ def prepare_job(cast_queue):
             queue.extendleft(quad_lines * line_of_quads)
             # The ribbon is ready for casting / punching
             try:
-                cast_queue(self, queue or [])
+                casting_workflow(self, queue or [])
                 if not self.stats.runs_left and UI.confirm('Repeat?'):
                     self.stats.add_run()
             except e.CastingAborted:
@@ -168,7 +168,7 @@ class Casting(object):
 
     @choose_sensor_and_driver
     @prepare_job
-    def cast_queue(self, casting_queue):
+    def _cast_queue(self, casting_queue):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
@@ -321,7 +321,7 @@ class Casting(object):
                 '[l]ower index, [u]pper index (default: roman): ', str), 'r'))
             matrix = self.diecase.get_matrix(char, [style])
             diff = matrix.units - matrix.row_units
-            wedge_positions = self.calculate_wedges(diff)
+            wedge_positions = self._calculate_wedges(diff)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts per line? (default: 10): '
             qty = qty or abs(UI.enter_data_or_blank(prompt, int) or 10)
@@ -401,7 +401,7 @@ class Casting(object):
             qty = int(line_length // width)
             # Check if the corrections are needed at all
             diff = width - matrix.row_units
-            wedge_positions = self.calculate_wedges(diff)
+            wedge_positions = self._calculate_wedges(diff)
             # Add 'S' if there is width difference
             signals = matrix.code + (diff and 'S' or '') + '// ' + comment
             line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
@@ -412,6 +412,37 @@ class Casting(object):
             queue.extend(line_codes * lines)
             if queue and UI.confirm('Y to cast, N to add some more spaces?'):
                 return queue + [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
+
+    def cast_typecases(self):
+        """Casting typecases according to supplied font scheme."""
+        scheme = typesetting_data.SelectFontScheme()
+        prompt = ('Scale in %, relative to 100 "a" characters:\n'
+                  '(leave blank to exit) ?: ')
+        scale = UI.enter_data_or_blank(prompt, float) / 100
+        if not scale:
+            return
+        available_styles = {'r': 'roman', 'b': 'bold',
+                            'i': 'italic', 's': 'smallcaps',
+                            'l': 'subscript', 'u': 'superscript'}
+        print('Styles to cast?\n'
+              'Available styles: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
+              '[l]ower index (a.k.a. subscript, inferior), '
+              '[u]pper index (a.k.a. superscript, superior).\n'
+              'Leave blank for roman.')
+        styles_string = UI.enter_data_or_blank('Styles?: ') or 'r'
+        styles = [available_styles.get(char, None) for char in styles_string]
+        styles = [style for style in styles if style is not None]
+        # Now generate and display the casting queue
+        sorts = {style: [(char, style, round(qty * scale))
+                         for (char, ch_style, qty) in scheme.layout
+                         if ch_style == style] for style in styles}
+        queue = []
+        for style in sorts:
+            UI.display_header(style)
+            queue.extend(sorts[style])
+            for (char, _, qty) in sorts[style]:
+                UI.display('%s : %s' % (char, qty))
+        self.cast_sorts(queue)
 
     @cast_or_punch_result
     def adhoc_typesetting(self):
@@ -532,6 +563,59 @@ class Casting(object):
                 # Stay in the menu
                 pass
 
+    def _main_menu_options(self):
+        """Build a list of options, adding an option if condition is met"""
+        # Options are described with tuples: (function, description, condition)
+        caster = not self.caster.mode.punching
+        ribbon = self.ribbon.contents
+        diecase_selected = self.diecase.diecase_id
+        opts = [(e.exit_program, 'Exit', 'Exits the program', True),
+                (self.cast_composition, 'Cast or punch composition',
+                 'Casts type or punch a ribbon', ribbon),
+                (self._choose_ribbon, 'Select ribbon',
+                 'Selects a ribbon from database or file', True),
+                (self._choose_diecase, 'Select diecase',
+                 'Selects a matrix case from database', True),
+                (self._choose_wedge, 'Select wedge',
+                 'Selects a wedge from database', True),
+                (self.ribbon.display_contents, 'View codes',
+                 'Displays all sequences in a ribbon', ribbon),
+                (self.diecase.show_layout, 'Show diecase layout',
+                 'Views the matrix case layout', diecase_selected),
+                (self.adhoc_typesetting, 'Ad-hoc typesetting',
+                 'Compose and cast a line of text', diecase_selected),
+                (self.cast_sorts, 'Cast sorts',
+                 'Cast from matrix with given coordinates', caster),
+                (self.cast_spaces, 'Cast spaces or quads',
+                 'Casts spaces or quads of a specified width', caster),
+                (self.cast_typecases, 'Cast typecases',
+                 'Casts a typecase based on a selected font scheme',
+                 caster and diecase_selected),
+                (self._display_details, 'Show detailed info...',
+                 'Displays caster, ribbon, diecase and wedge details', True),
+                (self.diagnostics_submenu, 'Service...',
+                 'Interface and machine diagnostic functions', True)]
+        # Built a list of menu options conditionally
+        return [(function, description, long_description)
+                for (function, description, long_description, condition)
+                in opts if condition]
+
+    def main_menu(self):
+        """Main menu for the type casting utility."""
+        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+                  'for Monotype Composition or Type and Rule casters.\n\n'
+                  'This program reads a ribbon (from file or database) '
+                  'and casts the type on a composition caster.'
+                  '\n\nCasting / Punching Menu:')
+        # Keep displaying the menu and go back here after any method ends
+        while True:
+            # Catch any known exceptions here
+            try:
+                UI.menu(self._main_menu_options(), header=header, footer='')()
+            except (e.ReturnToMenu, e.MenuLevelUp):
+                # Will skip to the end of the loop, and start all over
+                pass
+
     @property
     def stats(self):
         """Ribbon/job statistics"""
@@ -598,57 +682,7 @@ class Casting(object):
                               self.diecase.parameters, self.wedge.parameters)
         UI.pause()
 
-    def _main_menu_options(self):
-        """Build a list of options, adding an option if condition is met"""
-        # Options are described with tuples: (function, description, condition)
-        caster = not self.caster.mode.punching
-        ribbon = self.ribbon.contents
-        diecase_selected = self.diecase.diecase_id
-        opts = [(e.exit_program, 'Exit', 'Exits the program', True),
-                (self.cast_composition, 'Cast or punch composition',
-                 'Casts type or punch a ribbon', ribbon),
-                (self._choose_ribbon, 'Select ribbon',
-                 'Selects a ribbon from database or file', True),
-                (self._choose_diecase, 'Select diecase',
-                 'Selects a matrix case from database', True),
-                (self._choose_wedge, 'Select wedge',
-                 'Selects a wedge from database', True),
-                (self.ribbon.display_contents, 'View codes',
-                 'Displays all sequences in a ribbon', ribbon),
-                (self.diecase.show_layout, 'Show diecase layout',
-                 'Views the matrix case layout', diecase_selected),
-                (self.adhoc_typesetting, 'Ad-hoc typesetting',
-                 'Compose and cast a line of text', diecase_selected),
-                (self.cast_sorts, 'Cast sorts',
-                 'Cast from matrix with given coordinates', caster),
-                (self.cast_spaces, 'Cast spaces or quads',
-                 'Casts spaces or quads of a specified width', caster),
-                (self._display_details, 'Show detailed info...',
-                 'Displays caster, ribbon, diecase and wedge details', True),
-                (self.diagnostics_submenu, 'Service...',
-                 'Interface and machine diagnostic functions', True)]
-        # Built a list of menu options conditionally
-        return [(function, description, long_description)
-                for (function, description, long_description, condition)
-                in opts if condition]
-
-    def main_menu(self):
-        """Main menu for the type casting utility."""
-        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-                  'for Monotype Composition or Type and Rule casters.\n\n'
-                  'This program reads a ribbon (from file or database) '
-                  'and casts the type on a composition caster.'
-                  '\n\nCasting / Punching Menu:')
-        # Keep displaying the menu and go back here after any method ends
-        while True:
-            # Catch any known exceptions here
-            try:
-                UI.menu(self._main_menu_options(), header=header, footer='')()
-            except (e.ReturnToMenu, e.MenuLevelUp):
-                # Will skip to the end of the loop, and start all over
-                pass
-
-    def calculate_wedges(self, diff):
+    def _calculate_wedges(self, diff):
         """calculate_wedges:
 
         Calculates and returns wedge positions for character.

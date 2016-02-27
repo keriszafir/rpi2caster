@@ -154,6 +154,9 @@ class Stats(object):
         run_data['codes'] = 0
         run_data['lines'] = 0
         run_data['chars'] = 0
+        # Reset the character stats
+        self.__dict__['_current'] = {}
+        self.__dict__['_previous'] = {}
         generator = (p.parse_record(x) for x in ribbon)
         for (signals, _) in generator:
             if signals:

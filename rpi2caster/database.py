@@ -363,7 +363,7 @@ class Database(object):
     def add_scheme(self, scheme):
         """Registers a scheme (source text) in our database."""
         data = [scheme.scheme_id, scheme.description, scheme.language,
-                json.dumps(scheme.scheme)]
+                json.dumps(scheme.layout)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -391,6 +391,8 @@ class Database(object):
                 cursor.execute('SELECT * FROM font_schemes '
                                'WHERE scheme_id = ?', [scheme_id])
                 scheme = list(cursor.fetchone())
+                layout = scheme.pop()
+                scheme.append(json.loads(layout))
                 return scheme
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it

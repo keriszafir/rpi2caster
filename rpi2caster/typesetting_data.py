@@ -2,8 +2,8 @@
 """Operations on ribbon and scheme objects: creating, editing and deleting. """
 # File operations
 import io
-# Object copying
-from copy import deepcopy
+# CSV reader/writer
+import csv
 # Some functions raise custom exceptions
 from . import exceptions as e
 # Constants for rpi2caster
@@ -95,10 +95,6 @@ class Ribbon(object):
             # Press ctrl-C to abort displaying long ribbons
             UI.pause('Aborted', UI.MSG_MENU)
 
-    def copy(self):
-        """Copies itself and returns an independent object"""
-        return deepcopy(self)
-
     def get_from_db(self):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
@@ -175,7 +171,7 @@ class FontScheme(object):
         self.scheme_id = None
         self.description = None
         self.language = None
-        self.scheme = {}
+        self.layout = {}
 
     @property
     def parameters(self):
@@ -212,7 +208,7 @@ class FontScheme(object):
 
     def import_from_file(self, filename=None):
         """Reads a text file and sets contents."""
-        self.text = import_scheme_from_file(filename)
+        self.layout = import_scheme_from_file(filename)
 
     def delete_from_db(self):
         """Deletes a scheme from database."""
@@ -241,10 +237,10 @@ class SelectFontScheme(FontScheme):
             scheme_data = (scheme_id and DB.get_scheme(scheme_id) or
                            choose_scheme_from_db())
             (self.scheme_id, self.description, self.language,
-             self.scheme) = scheme_data
-        except (e.NoMatchingData, e.DatabaseQueryError):
+             self.layout) = scheme_data
+        except (TypeError, e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Scheme choice failed. Starting a new one.')
-            self.text = import_scheme_from_file(filename)
+            self.layout = import_scheme_from_file(filename)
 
 
 def list_ribbons():
@@ -340,10 +336,23 @@ def import_ribbon_from_file(filename=None):
 def import_scheme_from_file(filename=None):
     """Imports scheme text from file"""
     filename = filename or UI.enter_input_filename()
-    if filename:
-        # Initialize the contents
-        with io.open(filename, mode='r') as scheme_file:
-            return [x for x in scheme_file]
+    # Initialize the contents
+    with io.open(filename, mode='r') as scheme_file:
+        input_data = csv.reader(scheme_file, delimiter=';', quotechar='"')
+        all_records = [record for record in input_data]
+    displayed_lines = [' '.join(record) for record in all_records[:5]]
+    # Preview file
+    UI.display('File preview: displaying first 5 rows:\n')
+    UI.display('\n'.join(displayed_lines), end='\n\n')
+    # Ask if the first row is a header - if so, away with it
+    if UI.confirm('Is the 1st row a table header? '):
+        all_records.pop(0)
+        if not UI.confirm('Proceed?'):
+            return False
+    try:
+        return [(char, style, int(qty)) for char, style, qty in all_records]
+    except (KeyError, ValueError, IndexError):
+        return []
 
 
 def choose_ribbon_from_db():
@@ -368,7 +377,7 @@ def choose_scheme_from_db():
         try:
             data = list_schemes()
             choice = UI.enter_data_or_blank(prompt, int)
-            return choice and DB.get_ribbon(data[choice]) or None
+            return choice and DB.get_scheme(data[choice]) or None
         except KeyError:
             UI.pause('Font scheme number is incorrect!')
         except (e.DatabaseQueryError, e.NoMatchingData):
