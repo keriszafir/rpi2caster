@@ -169,71 +169,30 @@ class Casting(object):
     def cast_queue(self, casting_queue):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
-        casting, punching or testing)"""
-        mode = self.caster.mode
-
-        def add_or_remove_o15(signals):
-            """Checks if we need to activate O15, based on mode"""
-            return ([x for x in signals if x is not 'O15' or mode.testing] +
-                    ['O15'] * (mode.punching and not mode.testing))
-
-        def convert_16th_row_addressing(signals):
-            """Changes the signals to match the selected method of addressing
-            16th row on the matrix case"""
-            # HMN:
-            # convert as commented below
-            # HMN used special and rare wedges that had 16 steps.
-            #
-            # Unit-shift:
-            # replace D column with EF; add D for shifting the diecase
-            # Normal wedge stays where it was; only the diecase moves.
-            if self.caster.mode.hmn and '16' in signals:
-                if 'H' in signals:
-                    # H -> HN
-                    signals.append('N')
-                elif 'N' in signals and not ('I' in signals or 'L' in signals):
-                    # N -> MN
-                    signals.append('M')
-                elif 'N' in signals or 'M' in signals:
-                    # NI, NL, M -> HNI, HNL, HM
-                    signals.append('H')
-                elif [x for x in 'ABCDEFGIJKL' if x in signals]:
-                    # A...G, I...L -> HMA...G, HMI...L
-                    signals.extend(['H', 'M'])
-                else:
-                    # O15 (no other signals) -> HMN
-                    signals.extend(['H', 'M', 'N'])
-            elif self.caster.mode.unitshift:
-                if 'D' in signals:
-                    signals.remove('D')
-                    signals.extend(['E', 'F'])
-                if '16' in signals:
-                    signals.append('D')
-            # Return a list of "normal" signals i.e. no 16
-            # arranged in Monotype order (NMLK...13, 14, 0005, O15)
-            return [sig for sig in c.SIGNALS if sig in signals]
-
+        casting, punching or testing)
+        """
         self.stats.next_run()
         self.stats.queue = casting_queue
-        if not mode.diagnostics:
+        if not self.caster.mode.diagnostics:
             UI.display_header('Current run info:')
             UI.display_parameters(self.stats.run_parameters)
             UI.display('\n')
         # Now process the queue
         generator = (p.parse_record(record) for record in casting_queue)
-        if not mode.testing:
+        if not self.caster.mode.testing:
             self.caster.sensor.check_if_machine_is_working()
         for (signals, comment) in generator:
-            comment = comment and UI.display(comment)
+            UI.display('\n\n')
+            if comment:
+                UI.display(comment + '\n' + '-' * len(comment))
             if not signals:
                 # No signals (comment only)- go to the next combination
                 continue
             # Check if HMN or unit-shift must be applied
-            signals = convert_16th_row_addressing(signals)
             self.stats.signals = signals
             UI.display_parameters(self.stats.code_parameters)
             # Let the caster do the job
-            self.caster.process(add_or_remove_o15(signals))
+            self.caster.process(signals)
         return True
 
     @cast_or_punch_result

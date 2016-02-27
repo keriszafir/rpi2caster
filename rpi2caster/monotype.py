@@ -17,6 +17,61 @@ except e.NotConfigured:
     SIGNALS = c.ALNUM_ARR
 
 
+def adjust_signals(worker_function):
+    """Adjusts the signals received by caster so that:
+    1. O15 is stripped unless we are in testing mode (if explicitly stated)
+        or in punching mode (always - it helps drive the punches)
+    2. row 16 is addressed according to the selected method: HMN, unit-shift
+        or is not addressed for plain machines (O15 will be cast instead)
+    """
+    def wrapper(self, signals, *args, **kw):
+        """Wrapper function"""
+
+        def convert(signals):
+            """Changes the signals to match the selected method of addressing
+            16th row on the matrix case"""
+            # HMN:
+            # convert as commented below
+            # HMN used special and rare wedges that had 16 steps.
+            #
+            # Unit-shift:
+            # replace D column with EF; add D for shifting the diecase
+            # Normal wedge stays where it was; only the diecase moves.
+            if self.mode.hmn and '16' in signals:
+                if 'H' in signals:
+                    # H -> HN
+                    signals.append('N')
+                elif 'N' in signals and not ('I' in signals or 'L' in signals):
+                    # N -> MN
+                    signals.append('M')
+                elif 'N' in signals or 'M' in signals:
+                    # NI, NL, M -> HNI, HNL, HM
+                    signals.append('H')
+                elif [x for x in 'ABCDEFGIJKL' if x in signals]:
+                    # A...G, I...L -> HMA...G, HMI...L
+                    signals.extend(['H', 'M'])
+                else:
+                    # O15 (no other signals) -> HMN
+                    signals.extend(['H', 'M', 'N'])
+            elif self.mode.unitshift:
+                if 'D' in signals:
+                    signals.remove('D')
+                    signals.extend(['E', 'F'])
+                if '16' in signals:
+                    signals.append('D')
+            # Return a list of "normal" signals i.e. no 16
+            # arranged in Monotype order (NMLK...13, 14, 0005, O15)
+            return ([sig for sig in c.SIGNALS if sig in signals and
+                     sig is not 'O15' or self.mode.testing] +
+                    ['O15'] * (self.mode.punching and not self.mode.testing))
+
+        # Adjust the signals just before casting; show the new combination
+        signals = convert(signals)
+        UI.display(signals and ('Sending: ' + ' '.join(signals)) or '')
+        return worker_function(self, signals, *args, **kw)
+    return wrapper
+
+
 class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
@@ -50,8 +105,9 @@ class MonotypeCaster(object):
         return ([('\n', '\nCaster data')] + self.sensor.parameters +
                 self.stop.parameters + self.output.parameters)
 
-    def process(self, signals, timeout=5):
-        """process(signals, timeout):
+    @adjust_signals
+    def process(self, signals):
+        """process(signals):
 
         Checks for the machine's rotation, sends the signals (activates
         solenoid valves) after the caster is in the "air bar down" position.
@@ -89,18 +145,17 @@ class MonotypeCaster(object):
             try:
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
-                self.sensor.wait_for(True, timeout)
+                self.sensor.wait_for(True)
                 self.output.valves_on(signals)
-                self.sensor.wait_for(False, timeout)
+                self.sensor.wait_for(False)
                 self.output.valves_off()
-                # self._send_signals_to_caster(signals, cycle_timeout)
                 # Successful ending - the combination has been cast
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up and ask what to do
+                # If user continues, pump will be restarted if it was working
                 self.pump.stop()
                 stop_menu()
-                # If user continues, pump will be restarted if it was working
                 self.pump.start()
 
 
