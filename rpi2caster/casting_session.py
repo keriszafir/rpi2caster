@@ -23,18 +23,16 @@ from . import exceptions as e
 from . import constants as c
 # Typesetting functions module
 from . import typesetting_funcs
-# Read ribbon files
-from . import typesetting_data
 # Caster backend
 from . import monotype
 # Casting stats
 from .casting_stats import Stats
-# Modules imported in the typesetting_data - matrix_data - wedge_data
-# No need to import them again - just point to them
-matrix_data = typesetting_data.matrix_data
-wedge_data = matrix_data.wedge_data
-# User interface is the same as in typesetting_data
-UI = typesetting_data.UI
+# Globally selected UI
+from .global_settings import UI
+# Matrix, wedge and typesetting data models
+from . import typesetting_data
+from . import matrix_data
+from . import wedge_data
 # Constants for control sequences
 GALLEY_TRIP = 'NKJS 0005 0075'
 PUMP_OFF = 'NJS 0005'
@@ -63,7 +61,7 @@ def cast_or_punch_result(ribbon_source):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         try:
-            self._cast_queue(ribbon_source(self, *args, **kwargs))
+            self.cast_queue(ribbon_source(self, *args, **kwargs))
         except e.CastingAborted:
             pass
         self.caster.mode.diagnostics = False
@@ -168,7 +166,7 @@ class Casting(object):
 
     @choose_sensor_and_driver
     @prepare_job
-    def _cast_queue(self, casting_queue):
+    def cast_queue(self, casting_queue):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
         casting, punching or testing)"""
@@ -239,21 +237,21 @@ class Casting(object):
         return True
 
     @cast_or_punch_result
-    def test_front_pinblock(self):
+    def _test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
         UI.pause('Testing the front pinblock - signals 1 towards 14.')
         self.caster.mode.testing = True
         return [str(n) for n in range(1, 15)]
 
     @cast_or_punch_result
-    def test_rear_pinblock(self):
+    def _test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
         UI.pause('This will test the front pinblock - signals NI, NL, A...N. ')
         self.caster.mode.testing = True
         return [x for x in c.COLUMNS_17]
 
     @cast_or_punch_result
-    def test_all(self):
+    def _test_all(self):
         """Tests all valves and composition caster's inputs in original
         Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
         """
@@ -264,14 +262,14 @@ class Casting(object):
         return [x for x in c.SIGNALS]
 
     @cast_or_punch_result
-    def test_justification(self):
+    def _test_justification(self):
         """Tests the 0075-S-0005"""
         UI.pause('This will test the justification pin block (0075, S, 0005).')
         self.caster.mode.testing = True
         return ['0075', 'S', '0005']
 
     @choose_sensor_and_driver
-    def test_any_code(self):
+    def _test_any_code(self):
         """Tests a user-specified combination of signals"""
         self.caster.mode.testing = False
         while True:
@@ -471,7 +469,7 @@ class Casting(object):
         return queue
 
     @cast_or_punch_result
-    def calibrate_wedges(self):
+    def _calibrate_wedges(self):
         """Allows to calibrate the justification wedges so that when you're
         casting a 9-unit character with the S-needle at 0075:3 and 0005:8
         (neutral position), the    width is the same.
@@ -497,7 +495,7 @@ class Casting(object):
         return queue
 
     @cast_or_punch_result
-    def calibrate_mould(self):
+    def _calibrate_mould(self):
         """Calculates the width, displays it and casts some 9-unit characters.
         Then, the user measures the width and adjusts the mould opening width.
         """
@@ -513,7 +511,7 @@ class Casting(object):
         self.caster.mode.calibration = True
         return [GALLEY_TRIP] + [signals] * 7 + [GALLEY_TRIP] + [PUMP_OFF] * 2
 
-    def calibrate_diecase(self):
+    def _calibrate_diecase(self):
         """Casts the "en dash" characters for calibrating the character X-Y
         relative to type body."""
         UI.display('X-Y character calibration:\n'
@@ -531,23 +529,23 @@ class Casting(object):
             caster = not self.caster.mode.punching
             opts = [(e.menu_level_up, 'Back',
                      'Returns to main menu', True),
-                    (self.test_all, 'Test outputs',
+                    (self._test_all, 'Test outputs',
                      'Tests all the air outputs one by one', True),
-                    (self.test_front_pinblock, 'Test the front pinblock',
+                    (self._test_front_pinblock, 'Test the front pinblock',
                      'Tests the pins 1...14', caster),
-                    (self.test_rear_pinblock, 'Test the rear pinblock',
+                    (self._test_rear_pinblock, 'Test the rear pinblock',
                      'Tests the pins NI, NL, A...N one by one', caster),
-                    (self.test_justification, 'Test the 0075-S-0005 pinblock',
+                    (self._test_justification, 'Test the 0075-S-0005 pinblock',
                      'Tests the pins for justification wedges', caster),
-                    (self.test_any_code, 'Send specified signals',
+                    (self._test_any_code, 'Send specified signals',
                      'Sends the specified signal combination', True),
-                    (self.calibrate_wedges, 'Calibrate the 52D wedge',
+                    (self._calibrate_wedges, 'Calibrate the 52D wedge',
                      'Calibrate the space transfer wedge for correct width',
                      caster),
-                    (self.calibrate_mould, 'Calibrate mould opening',
+                    (self._calibrate_mould, 'Calibrate mould opening',
                      'Casts 9-unit characters to adjust the type width',
                      caster),
-                    (self.calibrate_diecase, 'Calibrate matrix X-Y',
+                    (self._calibrate_diecase, 'Calibrate matrix X-Y',
                      'Calibrate the character-to-body positioning', caster)]
             return [(function, description, long_description) for
                     (function, description, long_description, condition)

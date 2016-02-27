@@ -9,7 +9,7 @@ Processes the data retrieved from database.
 """
 from copy import deepcopy
 # Default user interface
-from .global_settings import USER_INTERFACE as UI
+from .global_settings import UI
 # Custom exceptions for rpi2caster suite
 from . import exceptions as e
 # Constants for known normal wedge unit arrangements

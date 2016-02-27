@@ -6,13 +6,15 @@ import io
 import csv
 # Some functions raise custom exceptions
 from . import exceptions as e
-# Constants for rpi2caster
-from .constants import ASSIGNMENT_SYMBOLS
 # Matrix data for diecases
 from . import matrix_data
-# Use the same database backend and user interface that matrix_data uses
-DB = matrix_data.DB
-UI = matrix_data.UI
+# Constants for rpi2caster
+from .constants import ASSIGNMENT_SYMBOLS
+# User interface
+from .global_settings import UI
+# Database
+from . import database
+DB = database.Database()
 
 
 class Ribbon(object):
@@ -178,7 +180,7 @@ class FontScheme(object):
         """Gets a list of parameters"""
         return [('\n', '\nScheme data'),
                 (self.scheme_id, 'Font scheme ID'),
-                (self.description, 'Description')
+                (self.description, 'Description'),
                 (self.language, 'Language')]
 
     def set_scheme_id(self, scheme_id=None):

@@ -8,11 +8,9 @@ import select
 # Debounce timers need this
 from time import time
 # Constants shared between modules
-from .constants import SENSOR_GPIO, EMERGENCY_STOP_GPIO
+from .global_settings import UI, SENSOR_GPIO, EMERGENCY_STOP_GPIO
 # Custom exceptions
 from .exceptions import MachineStopped
-# Default user interface
-from .global_settings import USER_INTERFACE as UI
 # Caster prototype
 from .monotype import SimulationSensor, EmergencyStop
 

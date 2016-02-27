@@ -6,7 +6,7 @@ import io
 import os
 import readline
 import glob
-from . import exceptions
+from . import exceptions as e
 from . import constants
 
 # Whether the debug mode is on (can be changed by setting module's attribute)
@@ -53,7 +53,7 @@ def menu(options, header='', footer='', no_debug=False):
         (zero_function, zero_desc, zero_long_desc) = options[0]
         functions = [zero_function]
     except IndexError:
-        raise exceptions.ExitProgram
+        raise e.ExitProgram
     # Display all the options
     # Tab indent, option number, option name (not processing option 0 yet!)
     for i, (function, desc, long_desc) in enumerate(options):
@@ -372,7 +372,7 @@ def edit_diecase_layout(diecase):
         print('Enter character: " " for low space (typical), "_" for '
               'high space (less common), leave empty to exit...')
         char = (enter_data_or_blank('Character?: ', str) or
-                exceptions.menu_level_up())
+                e.menu_level_up())
         available_styles = {'r': 'roman', 'b': 'bold',
                             'i': 'italic', 's': 'smallcaps',
                             'l': 'subscript', 'u': 'superscript'}
@@ -409,13 +409,13 @@ def edit_diecase_layout(diecase):
         display_matrix_details(mat)
         decision = simple_menu(prompt, options)
         if decision == 'exit':
-            exceptions.menu_level_up()
+            e.menu_level_up()
         elif decision:
             # Edit the mat
             try:
                 mat = change_parameters(mat)
                 save_matrix(mat)
-            except exceptions.MenuLevelUp:
+            except e.MenuLevelUp:
                 pass
 
     def single_cell_mode():
@@ -427,12 +427,12 @@ def edit_diecase_layout(diecase):
                 row = 0
                 while column not in constants.COLUMNS_17:
                     column = enter_data_or_blank(col_prompt, str)
-                    column = column.upper() or exceptions.menu_level_up()
+                    column = column.upper() or e.menu_level_up()
                 while row not in range(1, 17):
                     row = enter_data('Row (1 - 16)?: ', int)
                 mat = get_matrix(column, row)
                 edit_matrix(mat)
-            except exceptions.MenuLevelUp:
+            except e.MenuLevelUp:
                 break
 
     def all_rows_mode():
@@ -440,7 +440,7 @@ def edit_diecase_layout(diecase):
         try:
             for mat in working_diecase.layout:
                 edit_matrix(mat)
-        except exceptions.MenuLevelUp:
+        except e.MenuLevelUp:
             pass
 
     def all_columns_mode():
@@ -449,7 +449,7 @@ def edit_diecase_layout(diecase):
         try:
             (_,) = [edit_matrix(mat) for col in constants.COLUMNS_17
                     for mat in working_diecase.layout if mat[2] == col]
-        except exceptions.MenuLevelUp:
+        except e.MenuLevelUp:
             pass
 
     def single_row_mode():
@@ -459,10 +459,10 @@ def edit_diecase_layout(diecase):
                 row = 0
                 while row not in range(1, 17):
                     row = enter_data_or_blank('Row (1 - 16)?: ', int)
-                    row = row or exceptions.menu_level_up()
+                    row = row or e.menu_level_up()
                 (_,) = [edit_matrix(mat) for mat in working_diecase.layout
                         if mat[3] == row]
-            except exceptions.MenuLevelUp:
+            except e.MenuLevelUp:
                 break
 
     def single_column_mode():
@@ -473,10 +473,10 @@ def edit_diecase_layout(diecase):
                 column = ''
                 while column not in constants.COLUMNS_17:
                     column = enter_data_or_blank(col_prompt, str)
-                    column = column.upper() or exceptions.menu_level_up()
+                    column = column.upper() or e.menu_level_up()
                 (_,) = [edit_matrix(mat) for mat in working_diecase.layout
                         if mat[2] == column]
-            except exceptions.MenuLevelUp:
+            except e.MenuLevelUp:
                 break
     # Map unit values to rows
     # If the layout is empty, we need to initialize it
@@ -494,11 +494,11 @@ def edit_diecase_layout(diecase):
                'M': single_cell_mode,
                'R': single_row_mode,
                'C': single_column_mode,
-               '': exceptions.menu_level_up}
+               '': e.menu_level_up}
     while True:
         try:
             simple_menu(prompt, options)()
-        except exceptions.MenuLevelUp:
+        except e.MenuLevelUp:
             que = 'Save the changes?'
             if working_diecase.layout != diecase.layout and confirm(que):
                 diecase.layout = working_diecase.layout

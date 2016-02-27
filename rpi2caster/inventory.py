@@ -3,17 +3,17 @@
 
 Allows to add, list and delete wedges and diecases.
 """
-from . import exceptions
+from . import exceptions as e
 from . import matrix_data
-wedge_data = matrix_data.wedge_data
-UI = matrix_data.UI
+from . import wedge_data
+from .global_settings import UI
 
 
 def main_menu():
     """Display the main menu for inventory management"""
     header = ('Matrix case  and wedge manipulation utility for rpi2caster.'
               '\n\nInventory Management menu:\n')
-    options = [(exceptions.exit_program, 'Exit',
+    options = [(e.exit_program, 'Exit',
                 'Exits the inventory management'),
                (matrix_data.diecase_operations, 'Matrix operations...',
                 'Work on matrix cases'),
@@ -25,9 +25,9 @@ def main_menu():
     while True:
         try:
             UI.menu(options, header=header, footer='')()
-        except (exceptions.ReturnToMenu, exceptions.MenuLevelUp):
+        except (e.ReturnToMenu, e.MenuLevelUp):
             pass
-        except exceptions.NoMatchingData:
+        except e.NoMatchingData:
             UI.pause('No matching data found!', UI.MSG_MENU)
-        except exceptions.DatabaseQueryError:
+        except e.DatabaseQueryError:
             UI.pause('Database query error!', UI.MSG_MENU)

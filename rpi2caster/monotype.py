@@ -7,7 +7,7 @@ from . import exceptions as e
 # Constants module
 from . import constants as c
 # Default user interface
-from .global_settings import USER_INTERFACE as UI
+from .global_settings import UI
 # Configuration parsing
 from . import cfg_parser
 try:

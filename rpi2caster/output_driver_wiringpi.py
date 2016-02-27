@@ -10,7 +10,7 @@ except ImportError:
 # Import mockup output driver from monotype
 from .monotype import SimulationOutput, SIGNALS
 from .exceptions import WrongConfiguration
-from .constants import MCP0, MCP1
+from .global_settings import MCP0, MCP1
 
 
 class Singleton(type):

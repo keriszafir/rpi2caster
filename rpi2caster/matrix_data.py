@@ -16,9 +16,11 @@ from . import wedge_data
 from . import constants as c
 # Parsing module
 from . import parsing as p
-# Use the same database backend and user interface as wedge_data uses
-DB = wedge_data.DB
-UI = wedge_data.UI
+# Database backend
+from . import database
+# User interface
+from .global_settings import UI
+DB = database.Database()
 
 
 class Diecase(object):

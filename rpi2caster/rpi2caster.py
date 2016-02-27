@@ -13,7 +13,6 @@ def cast(args):
     session = casting_session.Casting(args.ribbon_file)
     session.caster.mode.simulation = args.simulation
     session.caster.mode.punching = args.punching
-    session.caster.UI = casting_session.UI
     casting_session.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly or testing
     if args.direct:

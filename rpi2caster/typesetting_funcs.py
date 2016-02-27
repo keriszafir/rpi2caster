@@ -6,7 +6,7 @@ Contains functions used for calculating line length, justification,
 setting wedge positions, breaking the line etc.
 """
 from . import exceptions as e
-from .global_settings import USER_INTERFACE as UI
+from .global_settings import UI
 from . import matrix_data
 from . import wedge_data
 

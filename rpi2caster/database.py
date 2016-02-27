@@ -16,7 +16,17 @@ from . import exceptions
 # Get global settings
 from . import global_settings
 # Package constants
-from . import constants
+from .constants import DEFAULT_DATABASE_PATHS
+
+
+class Singleton(type):
+    """Make only one object"""
+    instance = None
+
+    def __call__(cls, *args, **kw):
+        if not cls.instance:
+            cls.instance = super(Singleton, cls).__call__(*args, **kw)
+        return cls.instance
 
 
 class Database(object):
@@ -42,10 +52,11 @@ class Database(object):
     passed as an argument. It is necessary that the user who's running
     this program for setup has write access to the database file.
     """
+    __metaclass__ = Singleton
 
     def __init__(self):
         database_paths = ([global_settings.DATABASE_PATH] +
-                          constants.DEFAULT_DATABASE_PATHS)
+                          DEFAULT_DATABASE_PATHS)
         # Connect to the database
         for path in database_paths:
             try:

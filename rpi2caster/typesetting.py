@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """Typesetter program"""
 
-from rpi2caster import typesetting_data
-# from rpi2caster import typesetting_funcs
-UI = typesetting_data.UI
+from . import typesetting_data
+from .global_settings import UI
 
 
 def main_menu():
