@@ -135,14 +135,14 @@ class Ribbon(object):
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
         UI.display_parameters(self.parameters)
-        # Now enter filename for writing
+        # Choose file, write metadata, write contents
         filename = filename or UI.enter_output_filename()
-        if filename:
-            # Write everything to the file
-            # TODO: metadata write!
-            with io.open(filename, mode='w') as ribbon_file:
-                for line in self.contents:
-                    ribbon_file.write(line)
+        with io.open(filename, mode='w+') as ribbon_file:
+            ribbon_file.write('diecase: ' + self.diecase.diecase_id)
+            ribbon_file.write('description: ' + self.description)
+            ribbon_file.write('customer: ' + self.customer)
+            for line in self.contents:
+                ribbon_file.write(line)
 
 
 class SelectRibbon(Ribbon):
