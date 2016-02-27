@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Operations on ribbon and work objects: creating, editing and deleting. """
+"""Operations on ribbon and scheme objects: creating, editing and deleting. """
 # File operations
 import io
 # Object copying
@@ -7,7 +7,7 @@ from copy import deepcopy
 # Some functions raise custom exceptions
 from . import exceptions as e
 # Constants for rpi2caster
-from .constants import TRUE_ALIASES, ASSIGNMENT_SYMBOLS
+from .constants import ASSIGNMENT_SYMBOLS
 # Matrix data for diecases
 from . import matrix_data
 # Use the same database backend and user interface that matrix_data uses
@@ -22,7 +22,6 @@ class Ribbon(object):
     description, customer - strings
     diecase_id (diecase is selected automatically on casting, so user can e.g.
                 view the layout or know which wedge to use)
-    unit_shift - bool - stores whether this was coded for unit-shift or not
     contents - series of Monotype codes
 
     Methods:
@@ -34,15 +33,11 @@ class Ribbon(object):
     get_from_db - get data from database
     export_to_file - store the metadata and contents in text file
     store_in_db - store the metadata and contents in db
-    set_[description, customer, diecase_id, unit_shift] - set parameters
-        manually
-
-    """
+    set_[description, customer, diecase_id] - set parameters manually"""
     def __init__(self):
         self.ribbon_id = None
         self.description = None
         self.customer = None
-        self.unit_shift = False
         self.filename = None
         self.contents = []
         self.diecase = matrix_data.Diecase()
@@ -76,12 +71,6 @@ class Ribbon(object):
         """Chooses the diecase for this ribbon"""
         self.diecase = matrix_data.SelectDiecase(diecase_id)
 
-    def set_unit_shift(self, unit_shift=False):
-        """Chooses whether unit-shift is needed"""
-        prompt = 'Is unit shift needed?'
-        self.unit_shift = (bool(unit_shift) or UI.confirm(prompt) or
-                           self.unit_shift)
-
     @property
     def parameters(self):
         """Gets a list of parameters"""
@@ -90,8 +79,7 @@ class Ribbon(object):
                 (self.ribbon_id, 'Ribbon ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
-                (self.diecase.diecase_id, 'Matrix case ID'),
-                (self.unit_shift, 'Casting with unit-shift')]
+                (self.diecase.diecase_id, 'Matrix case ID')]
 
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
@@ -115,8 +103,8 @@ class Ribbon(object):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
         if data and UI.confirm('Override current data?'):
-            (self.ribbon_id, self.description, diecase_id, self.customer,
-             self.unit_shift, self.contents) = data
+            (self.ribbon_id, self.description, diecase_id,
+             self.customer, self.contents) = data
             self.diecase = (diecase_id and self.set_diecase(diecase_id) or
                             self.diecase)
             return True
@@ -141,8 +129,8 @@ class Ribbon(object):
 
     def import_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
-        (self.ribbon_id, self.description, diecase_id, self.customer,
-         self.unit_shift, self.contents) = import_ribbon_from_file()
+        (self.ribbon_id, self.description, diecase_id,
+         self.customer, self.contents) = import_ribbon_from_file()
         # Set filename as attribute
         self.filename = filename
         self.diecase = (diecase_id and self.set_diecase(diecase_id) or
@@ -155,6 +143,7 @@ class Ribbon(object):
         filename = filename or UI.enter_output_filename()
         if filename:
             # Write everything to the file
+            # TODO: metadata write!
             with io.open(filename, mode='w') as ribbon_file:
                 for line in self.contents:
                     ribbon_file.write(line)
@@ -169,8 +158,8 @@ class SelectRibbon(Ribbon):
                            filename and import_ribbon_from_file(filename) or
                            choose_ribbon_from_db() or
                            import_ribbon_from_file())
-            (self.ribbon_id, self.description, diecase_id, self.customer,
-             self.unit_shift, self.contents) = ribbon_data
+            (self.ribbon_id, self.description, diecase_id,
+             self.customer, self.contents) = ribbon_data
             # Update diecase if correct diecase_id found in ribbon
             self.diecase = (diecase_id and self.set_diecase(diecase_id) or
                             self.diecase)
@@ -179,120 +168,83 @@ class SelectRibbon(Ribbon):
             UI.display('Ribbon choice failed. Starting a new one.')
 
 
-class Work(object):
-    """Work objects = input files (and input from editor).
-
-    A work object has the following attributes:
-    description - e.g. author and title,
-    customer - to know for whom we are composing (for commercial workshops),
-    type_series, type_size, typeface_name - font data,
-    contents - the unprocessed text, utf8-encoded, to be read by the
-    typesetting program.
-    """
+class FontScheme(object):
+    """Font schemes store information about how many of each character is to be
+    cast when casting typecases. Each language has its own."""
     def __init__(self):
-        self.work_id = None
+        self.scheme_id = None
         self.description = None
-        self.customer = None
-        self.type_size = None
-        self.type_series = None
-        self.typeface_name = None
-        self.text = ''
+        self.language = None
+        self.scheme = {}
 
     @property
     def parameters(self):
         """Gets a list of parameters"""
-        return [('\n', '\nWork data'),
-                (self.work_id, 'Work ID'),
-                (self.description, 'Description'),
-                (self.customer, 'Customer'),
-                (self.type_series, 'Monotype type series'),
-                (self.type_size, 'Type size'),
-                (self.typeface_name, 'Typeface name')]
+        return [('\n', '\nScheme data'),
+                (self.scheme_id, 'Font scheme ID'),
+                (self.description, 'Description')
+                (self.language, 'Language')]
 
-    def set_work_id(self, work_id=None):
-        """Sets the work ID"""
-        prompt = 'Work ID? (leave blank to exit) : '
-        work_id = work_id or UI.enter_data_or_blank(prompt) or self.work_id
+    def set_scheme_id(self, scheme_id=None):
+        """Sets the scheme ID"""
+        prompt = 'Scheme ID? (leave blank to exit) : '
+        scheme_id = (scheme_id or UI.enter_data_or_blank(prompt) or
+                     self.scheme_id)
         # Ask if we are sure we want to update this
-        # if self.work_id was set earlier
-        condition = (not self.work_id or work_id != self.work_id and
-                     UI.confirm('Are you sure to change the work ID?'))
+        # if self.scheme_id was set earlier
+        condition = (not self.scheme_id or scheme_id != self.scheme_id and
+                     UI.confirm('Are you sure to change the scheme ID?'))
         if condition:
-            self.work_id = work_id
+            self.scheme_id = scheme_id
             return True
 
     def set_description(self, description=None):
-        """Manually sets the work's description"""
+        """Manually sets the scheme's description"""
         prompt = 'Enter the title: '
         self.description = (description or UI.enter_data_or_blank(prompt) or
                             self.description)
 
-    def set_customer(self, customer=None):
-        """Manually sets the customer"""
-        prompt = 'Enter the customer\'s name for this work: '
-        self.customer = (customer or UI.enter_data_or_blank(prompt) or
-                         self.customer)
-
-    def set_typeface(self, type_series=None, type_size=None,
-                     typeface_name=None):
-        """Sets the type series, size and typeface name"""
-        prompt = 'Type series: '
-        type_series = (type_series or UI.enter_data_or_blank(prompt) or
-                       self.type_series)
-        type_size = (type_size or UI.enter_data('Type size in points: ') or
-                     self.type_size)
-        typeface_name = (typeface_name or UI.enter_data('Typeface name: ') or
-                         self.typeface_name)
-        # Validate data
-        current_data_not_set = not self.type_series and not self.type_size
-        if current_data_not_set or UI.confirm('Apply changes?'):
-            self.type_series = type_series
-            self.type_size = type_size
-            self.typeface_name = typeface_name
-
-    def display_text(self):
-        """Displays the contents"""
-        UI.display(self.text)
-
-    def copy(self):
-        """Copies itself and returns an independent object"""
-        return deepcopy(self)
+    def set_language(self, language=None):
+        """Manually sets the language"""
+        prompt = 'Enter the language for this font scheme: '
+        self.language = (language or UI.enter_data_or_blank(prompt) or
+                         self.language)
 
     def import_from_file(self, filename=None):
         """Reads a text file and sets contents."""
-        self.text = import_work_from_file(filename)
+        self.text = import_scheme_from_file(filename)
 
     def delete_from_db(self):
-        """Deletes a work from database."""
+        """Deletes a scheme from database."""
         if UI.confirm('Are you sure?'):
             try:
-                DB.delete_work(self)
-                UI.display('Ribbon deleted successfully.')
+                DB.delete_scheme(self)
+                UI.display('Font scheme definition deleted successfully.')
             except (e.NoMatchingData, e.DatabaseQueryError):
-                UI.display('Cannot delete work from database!')
+                UI.display('Cannot delete scheme from database!')
 
     def store_in_db(self):
-        """Stores the work in database"""
+        """Stores the scheme in database"""
         try:
-            DB.add_work(self)
+            DB.add_scheme(self)
             UI.pause('Data added successfully.')
             return True
         except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.pause('Cannot store work in database!')
+            UI.pause('Cannot store scheme in database!')
 
 
-class SelectWork(Work):
-    """A class for works (sources) for typesetting from database or file"""
-    def __init__(self, work_id=None, filename=None):
+class SelectFontScheme(FontScheme):
+    """A class for font schemes selected from database or file"""
+    def __init__(self, scheme_id=None, filename=None):
         super().__init__()
         try:
-            work_data = (work_id and DB.get_work(work_id) or
-                         choose_work_from_db())
-            (self.work_id, self.description, self.customer, self.type_series,
-             self.type_size, self.typeface_name, self.text) = work_data
+            scheme_data = (scheme_id and DB.get_scheme(scheme_id) or
+                           choose_scheme_from_db())
+            (self.scheme_id, self.description, self.language,
+             self.scheme) = scheme_data
         except (e.NoMatchingData, e.DatabaseQueryError):
-            UI.display('Work choice failed. Starting a new one.')
-            self.text = import_work_from_file(filename)
+            UI.display('Scheme choice failed. Starting a new one.')
+            self.text = import_scheme_from_file(filename)
 
 
 def list_ribbons():
@@ -304,16 +256,13 @@ def list_ribbons():
                'Ribbon name'.ljust(30) +
                'Title'.ljust(30) +
                'Author'.ljust(30) +
-               'Diecase'.ljust(30) +
-               'Unit-shift on?'.ljust(15) + '\n')
+               'Diecase'.ljust(30) + '\n')
     for index, ribbon in enumerate(data, start=1):
         # Collect ribbon parameters
         index = str(index)
         row = [index.ljust(7)]
         # Add ribbon name, description, diecase ID
         row.extend([str(field).ljust(30) for field in ribbon])
-        # Add unit-shift
-        row.append(str(ribbon[5]).ljust(15))
         # Display it all
         UI.display(''.join(row))
         # Add number and ID to the result that will be returned
@@ -323,26 +272,25 @@ def list_ribbons():
     return results
 
 
-def list_works():
-    """Lists all works in the database."""
-    data = DB.get_all_works()
+def list_schemes():
+    """Lists all font schemes in the database."""
+    data = DB.get_all_schemes()
     results = {}
     UI.display('\n' +
                'Index'.ljust(7) +
-               'Work ID'.ljust(20) +
-               'Title'.ljust(20) +
-               'Author')
-    for index, work in enumerate(data, start=1):
-        # Collect work parameters
+               'Scheme ID'.ljust(20) +
+               'Description'.ljust(20) +
+               'Language'.ljust(20))
+    for index, scheme in enumerate(data, start=1):
+        # Collect scheme parameters
         index = str(index)
         row = [index.ljust(7)]
-        row.extend([str(field).ljust(20) for field in work[:-2]])
-        row.append(work[-2])
+        row.extend([str(field).ljust(20) for field in scheme[:-1]])
         UI.display(''.join(row))
         # Add number and ID to the result that will be returned
-        results[index] = work[0]
+        results[index] = scheme[0]
     UI.display('\n\n')
-    # Now we can return the number - work ID pairs
+    # Now we can return the number - scheme ID pairs
     return results
 
 
@@ -363,8 +311,7 @@ def import_ribbon_from_file(filename=None):
         UI.pause('Cannot open ribbon file %s' % filename)
         return False
     # What to look for
-    keywords = ['diecase', 'description', 'desc', 'unit-shift',
-                'diecase_id', 'customer']
+    keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer']
     # Metadata (anything found), contents (the rest)
     metadata = {}
     contents = []
@@ -385,19 +332,18 @@ def import_ribbon_from_file(filename=None):
     diecase_id = metadata.get('diecase', '') or metadata.get('diecase_id', '')
     description = metadata.get('description', '') or metadata.get('desc', '')
     customer = metadata.get('customer', '')
-    unit_shift = metadata.get('unit-shift', '').lower() in TRUE_ALIASES
     ribbon_id = None
     # Add the whole contents as the attribute
-    return (ribbon_id, description, diecase_id, customer, unit_shift, contents)
+    return (ribbon_id, description, diecase_id, customer, contents)
 
 
-def import_work_from_file(filename=None):
-    """Imports work text from file"""
+def import_scheme_from_file(filename=None):
+    """Imports scheme text from file"""
     filename = filename or UI.enter_input_filename()
     if filename:
         # Initialize the contents
-        with io.open(filename, mode='r') as work_file:
-            return [x for x in work_file]
+        with io.open(filename, mode='r') as scheme_file:
+            return [x for x in scheme_file]
 
 
 def choose_ribbon_from_db():
@@ -415,16 +361,16 @@ def choose_ribbon_from_db():
             return None
 
 
-def choose_work_from_db():
-    """Chooses work data from database"""
-    prompt = 'Number of a work? (leave blank to exit): '
+def choose_scheme_from_db():
+    """Chooses scheme data from database"""
+    prompt = 'Number of a scheme? (leave blank to exit): '
     while True:
         try:
-            data = list_works()
+            data = list_schemes()
             choice = UI.enter_data_or_blank(prompt, int)
             return choice and DB.get_ribbon(data[choice]) or None
         except KeyError:
-            UI.pause('Work number is incorrect!')
+            UI.pause('Font scheme number is incorrect!')
         except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.display('No works found in database')
+            UI.display('No font schemes found in database')
             return None

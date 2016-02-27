@@ -15,7 +15,7 @@ def cast(args):
     session.caster.mode.punching = args.punching
     session.caster.UI = casting_session.UI
     casting_session.UI.DEBUG_MODE = args.debug
-    # Skip menu if casting directly
+    # Skip menu if casting directly or testing
     if args.direct:
         session.cast_composition()
     elif args.testing:

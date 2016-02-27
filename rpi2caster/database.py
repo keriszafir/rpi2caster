@@ -289,7 +289,7 @@ class Database(object):
     def add_ribbon(self, ribbon):
         """Registers a ribbon in our database."""
         data = [ribbon.description, ribbon.customer, ribbon.diecase.diecase_id,
-                int(ribbon.unit_shift), json.dumps(ribbon.contents)]
+                json.dumps(ribbon.contents)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -299,12 +299,11 @@ class Database(object):
                                'description TEXT, '
                                'customer TEXT, '
                                'diecase_id TEXT NOT NULL, '
-                               'unit_shift INTEGER NOT NULL, '
                                'contents TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT INTO ribbons ('
                                'title, author, customer, diecase_id, contents'
-                               ') VALUES (?, ?, ?, ?, ?)''', data)
+                               ') VALUES (?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
@@ -322,11 +321,6 @@ class Database(object):
                 # Take the last item which is contents
                 # De-serialize it, convert it back to a list
                 raw_contents = json.loads(ribbon.pop())
-                # From the remaining list, take the last item which is
-                # the unit-shift flag (int, 0 or 1), make it boolean
-                unit_shift = bool(ribbon.pop())
-                # Add converted unit-shift back to the ribbon list
-                ribbon.append(unit_shift)
                 # Add the contents
                 ribbon.append(raw_contents)
                 # Return the list
@@ -351,12 +345,12 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def get_all_works(self):
-        """Gets all works (source texts) stored in database."""
+    def get_all_schemes(self):
+        """Gets all font schemes stored in database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM works')
+                cursor.execute('SELECT * FROM font_schemes')
                 # Check if we got any:
                 results = cursor.fetchall()
                 if not results:
@@ -366,43 +360,38 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def add_work(self, work):
-        """Registers a work (source text) in our database."""
-        data = [work.work_id, work.description, work.customer,
-                work.type_series, work.type_size, work.typeface_name,
-                work.text]
+    def add_scheme(self, scheme):
+        """Registers a scheme (source text) in our database."""
+        data = [scheme.scheme_id, scheme.description, scheme.language,
+                json.dumps(scheme.scheme)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 # Create the table first:
-                cursor.execute('CREATE TABLE IF NOT EXISTS works ('
-                               'work_id TEXT UNIQUE PRIMARY KEY, '
+                cursor.execute('CREATE TABLE IF NOT EXISTS font_schemes ('
+                               'scheme_id TEXT UNIQUE PRIMARY KEY, '
                                'description TEXT NOT NULL, '
-                               'customer TEXT NOT NULL, '
-                               'type_series TEXT NOT NULL, '
-                               'type_size TEXT NOT NULL, '
-                               'typeface_name TEXT NOT NULL, '
-                               'text TEXT NOT NULL)')
+                               'language TEXT NOT NULL, '
+                               'scheme_layout TEXT NOT NULL)')
                 # Then add an entry:
-                cursor.execute('INSERT INTO works ('
-                               'work_id, description, customer, type_series, '
-                               'type_size, typeface_name, text'
-                               ') VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
+                cursor.execute('INSERT INTO font_schemes ('
+                               'scheme_id, description, language, '
+                               'scheme_layout) VALUES (?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def get_work(self, work_id):
-        """Searches for work based on the unique work ID."""
+    def get_scheme(self, scheme_id):
+        """Searches for scheme based on the unique scheme ID."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM works WHERE work_id = ?',
-                               [work_id])
-                work = list(cursor.fetchone())
-                return work
+                cursor.execute('SELECT * FROM font_schemes '
+                               'WHERE scheme_id = ?', [scheme_id])
+                scheme = list(cursor.fetchone())
+                return scheme
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise exceptions.NoMatchingData
@@ -410,13 +399,13 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def delete_work(self, work):
-        """Deletes a work with given unique ID from the database."""
+    def delete_scheme(self, scheme):
+        """Deletes a scheme with given unique ID from the database."""
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('DELETE FROM works WHERE work_id = ?',
-                               [work.work_id])
+                cursor.execute('DELETE FROM font_schemes WHERE scheme_id = ?',
+                               [scheme.scheme_id])
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
