@@ -384,6 +384,8 @@ class Casting(object):
             lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
             prompt = ('Casting %s lines of %s-point spaces from %s%s. OK?'
                       % (lines, width, matrix.column, matrix.row))
+            # Save for later
+            comment = '%s-point space' % width
             # Repeat
             if not UI.confirm(prompt):
                 continue
@@ -401,7 +403,6 @@ class Casting(object):
             diff = width - matrix.row_units
             wedge_positions = self.calculate_wedges(diff)
             # Add 'S' if there is width difference
-            comment = '%s-point space' % width
             signals = matrix.code + (diff and 'S' or '') + '// ' + comment
             line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
                           PUMP_ON + str(wedge_positions['0075'])]
