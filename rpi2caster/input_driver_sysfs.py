@@ -8,11 +8,11 @@ import select
 # Debounce timers need this
 from time import time
 # Constants shared between modules
-from .global_settings import UI, SENSOR_GPIO, EMERGENCY_STOP_GPIO
+from .global_settings import UI, SENSOR_GPIO
 # Custom exceptions
 from .exceptions import MachineStopped
 # Caster prototype
-from .monotype import SimulationSensor, EmergencyStop
+from .monotype import SimulationSensor
 
 
 class SysfsSensor(SimulationSensor):
@@ -70,22 +70,6 @@ class SysfsSensor(SimulationSensor):
                     debounce = time()
                 else:
                     raise MachineStopped
-
-
-class SysfsEmergencyStop(EmergencyStop):
-    """Emergency stop button using kernel sysfs interface"""
-    def __init__(self, gpio=EMERGENCY_STOP_GPIO):
-        super().__init__()
-        self.gpio = gpio
-        self.name = 'Kernel SysFS interface for emergency stop button GPIO'
-        self.value_file = configure_sysfs_interface(gpio)
-
-    @property
-    def parameters(self):
-        """Gets a list of parameters"""
-        return [(self.name, 'Emergency stop button driver'),
-                (self.gpio, 'GPIO number'),
-                (self.value_file, 'Value file path')]
 
 
 def configure_sysfs_interface(gpio):

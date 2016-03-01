@@ -65,8 +65,11 @@ def adjust_signals(worker_function):
                      sig is not 'O15' or self.mode.testing] +
                     ['O15'] * (self.mode.punching and not self.mode.testing))
 
-        # Adjust the signals just before casting; show the new combination
+        # No signals = no casting!
+        if not signals:
+            return False
         signals = convert(signals)
+        # Adjust the signals just before casting; show the new combination
         UI.display(signals and ('Sending: ' + ' '.join(signals)) or '')
         return worker_function(self, signals, *args, **kw)
     return wrapper
@@ -79,10 +82,8 @@ class MonotypeCaster(object):
         self.mode = CasterMode()
         self.sensor = SimulationSensor()
         self.output = SimulationOutput()
-        self.stop = EmergencyStop()
         self.lock = False
-        # Attach a pump
-        self.pump = Pump(self)
+        self.pump_working = False
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
@@ -102,8 +103,7 @@ class MonotypeCaster(object):
     def parameters(self):
         """Gets a list of parameters"""
         # Collect data from I/O drivers
-        return ([('\n', '\nCaster data')] + self.sensor.parameters +
-                self.stop.parameters + self.output.parameters)
+        return (self.sensor.parameters + self.output.parameters)
 
     @adjust_signals
     def process(self, signals):
@@ -152,49 +152,26 @@ class MonotypeCaster(object):
                 # Successful ending - the combination has been cast
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                # Machine stopped during casting - clean up and ask what to do
-                # If user continues, pump will be restarted if it was working
-                self.pump.stop()
-                stop_menu()
-                self.pump.start()
+                # Machine stopped during casting - clean up
+                self.pump_stop()
+                raise e.MachineStopped
 
-
-class Pump(object):
-    """Pump class for storing the pump working/non-working status."""
-    def __init__(self, caster):
-        self.caster = caster
-        self.is_working = self.was_working = False
-        # Remember wedge positions on resume
-        self.current_0005 = self.last_0005 = '15'
-        self.current_0075 = self.last_0075 = '15'
-
-    def stop(self):
+    def pump_stop(self):
         """Forces pump stop - won't end until it is turned off"""
         UI.display('Turning all valves off - just in case...')
-        self.caster.output.valves_off()
-        self.last_0075, self.last_0005 = self.current_0075, self.current_0005
-        self.was_working = self.is_working
-        while self.is_working:
+        self.output.valves_off()
+        while self.pump_working:
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
-                self.caster.sensor.wait_for(True, 30)
-                self.caster.output.valves_on(c.PUMP_STOP)
-                self.caster.sensor.wait_for(False, 30)
-                self.caster.output.valves_off()
+                self.sensor.wait_for(True, 30)
+                self.output.valves_on(c.PUMP_STOP)
+                self.sensor.wait_for(False, 30)
+                self.output.valves_off()
                 UI.display('Pump is now off.')
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 pass
-
-    def start(self):
-        """Starts the pump with given wedge positions"""
-        if self.was_working:
-            UI.display('Resuming pump action...')
-            # Set the wedge positions from before stop
-            self.caster.process(c.PUMP_STOP + [self.last_0005])
-            self.caster.process(c.PUMP_START + [self.last_0075])
-            UI.display('Pump action resumed.')
 
 
 class SimulationSensor(object):
@@ -213,6 +190,8 @@ class SimulationSensor(object):
 
     def __exit__(self, *_):
         UI.debug_pause('The %s is no longer in use' % self.name)
+        # Reset manual mode
+        self.manual_mode = True
         self.lock = False
 
     @property
@@ -233,9 +212,10 @@ class SimulationSensor(object):
                     self.wait_for(new_state=True, timeout=30)
                     cycles -= 1
                 return True
-            except (e.MachineStopped,
-                    KeyboardInterrupt, EOFError):
-                stop_menu()
+            except (e.MachineStopped, KeyboardInterrupt, EOFError):
+                if not UI.confirm('Machine not running - continue? '
+                                  '[Y] to retry, or [N] to abort?'):
+                    e.return_to_menu()
 
     def wait_for(self, new_state, timeout=5, time_on=0.1, time_off=0.1):
         """Waits for a keypress to emulate machine cycle, unless user
@@ -288,19 +268,6 @@ class TestSensor(SimulationSensor):
         """Waits for keypress before turning the line off"""
         if not new_state:
             UI.pause('Next combination?')
-
-
-class EmergencyStop(object):
-    """Mockup for an emergency stop button"""
-    def __init__(self, gpio=None):
-        self.gpio = gpio
-        self.name = 'Mockup emergency stop button'
-        self.signals, self.value_file, self.edge_file = None, None, None
-
-    @property
-    def parameters(self):
-        """Gets a list of parameters"""
-        return [(self.name, 'Emergency stop button driver')]
 
 
 class SimulationOutput(object):
@@ -476,21 +443,6 @@ class CasterMode(object):
                   'Your choice: [U]nit-Shift, [H]MN, leave blank for none?: ')
         options = {'U': unitshift_on, 'H': hmn_on, '': do_nothing}
         UI.simple_menu(prompt, options)()
-
-
-def stop_menu():
-    """This allows us to choose whether we want to continue,
-    return to menu or exit if the machine is stopped during casting.
-    """
-    def continue_casting():
-        """Helper function - continue casting."""
-        return True
-    options = {'C': continue_casting,
-               'A': e.abort_casting,
-               'E': e.exit_program}
-    message = ('Machine is not running!\n'
-               '[C]ontinue, [A]bort or [E]xit program? ')
-    UI.simple_menu(message, options)()
 
 
 def hardware_sensor():

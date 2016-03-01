@@ -36,6 +36,9 @@ class CastingAborted(CastingOops):
     """Raised when casting is aborted due to machine stop."""
     pass
 
+class CastingFinished(CastingOops):
+    """Raised when casting is finished normally because ribbon runs out."""
+    pass
 
 class MachineStopped(CastingOops):
     """Raised by the caster control routines, when the machine stops."""

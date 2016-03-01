@@ -145,10 +145,7 @@ class Typesetter(object):
                     skip_steps = i - 1
                     if char not in ignored and char in available_characters:
                         # Try to look it up in spaces
-                        try:
-                            yield spaces_names[char]
-                        except KeyError:
-                            yield char
+                        yield spaces_names.get(char, char)
                         # End on first (largest) combination found
                         break
                 except IndexError:

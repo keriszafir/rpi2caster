@@ -101,11 +101,19 @@ def display_header(text, symbol='-'):
     print('\n\n' + dash_line + '\n' + text + '\n' + dash_line + '\n')
 
 
-def display_parameters(*data):
-    """Displays the parameters given as a list/tuple of 2-item lists/tuples:
-    [(value1, description1), (value2, description2)] - if value is there"""
-    print('\n'.join(['%s: %s' % (desc, value) for item in data
-                     for (value, desc) in item if value]) + '\n')
+def display_parameters(data):
+    """Displays the parameters by section (given as a dictionary):
+    {header1: [(param1_val1, param1_desc1), (param1_val2, param1_desc2)...],
+     header2: [(param2_val1, param2_desc1), (param2_val2, param2_desc2)...]...}
+     a section will be displayed if there are parameters to display;
+     a parameter will be displayed if its value evaluates to True."""
+    # {header: [(par1, desc1), (par2, desc2)], header2: [(...)]}
+    for key in data:
+        parameters = '\n'.join(['%s: %s' % (desc, value)
+                                for (value, desc) in data[key] if value])
+        if parameters:
+            display_header(key)
+            print(parameters)
 
 
 def debug_info(*args, **kwargs):
@@ -174,10 +182,7 @@ def _format_display(character, style):
                    'subscript': 35,
                    'superscript': 36}
     closing_sequence = '\033[0m'
-    try:
-        starting_sequence = '\033[' + str(style_codes[style]) + 'm'
-    except KeyError:
-        starting_sequence = closing_sequence
+    starting_sequence = '\033[' + str(style_codes.get(style, 0)) + 'm'
     character = starting_sequence + character + closing_sequence
     print(character)
     return character
@@ -185,10 +190,7 @@ def _format_display(character, style):
 
 def format_display(character, style):
     """This is a placeholder to be used until Python bug 24574 is fixed"""
-    try:
-        return STYLE_MODIFIERS[style] + character
-    except KeyError:
-        return character
+    return STYLE_MODIFIERS.get(style, '') + character
 
 
 def tab_complete(text, state):
@@ -283,11 +285,8 @@ def display_diecase_layout(diecase):
         # Otherwise we have a character - modify how it's displayed
         # based on style(s)
         else:
-            try:
-                for style in styles:
-                    character = format_display(character, style)
-            except (IndexError, KeyError):
-                pass
+            for style in styles:
+                character = format_display(character, style)
         # Add column and row to sets
         cols_set.add(column)
         rows_set.add(row)

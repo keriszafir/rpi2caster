@@ -39,8 +39,7 @@ class Wedge(object):
     @property
     def parameters(self):
         """Gets a list of parameters"""
-        return [('\n', '\nWedge data'),
-                (self.series, 'Wedge series'),
+        return [(self.series, 'Wedge series'),
                 (self.set_width, 'Set width'),
                 (self.is_brit_pica, 'British pica (.1667") based wedge?'),
                 (' '.join([str(x) for x in self.unit_arrangement if x]),
@@ -132,7 +131,7 @@ class Wedge(object):
             return True
         except e.DatabaseQueryError:
             UI.display()
-            UI.display_parameters(self.parameters)
+            UI.display_parameters({'Wedge data': self.parameters})
             UI.pause('Cannot save the wedge - check if it is already there.')
             UI.display()
             return False
@@ -148,7 +147,7 @@ class Wedge(object):
             while True:
                 # Keep working on a chosen diecase
                 UI.display('\n')
-                UI.display_parameters(self.parameters)
+                UI.display_parameters({'Wedge data': self.parameters})
                 UI.display('\n')
                 messages = ['[E]dit wedge, [S]ave to database']
                 options = {'M': e.return_to_menu,

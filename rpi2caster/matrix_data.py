@@ -156,8 +156,7 @@ class Diecase(object):
     @property
     def parameters(self):
         """Gets a list of parameters"""
-        return [('\n', '\nMatrix case data'),
-                (self.diecase_id, 'Diecase ID'),
+        return [(self.diecase_id, 'Diecase ID'),
                 (self.typeface_name, 'Typeface'),
                 (self.type_series, 'Type series'),
                 (self.type_size, 'Type size')]
@@ -201,11 +200,11 @@ class Diecase(object):
 
     def manipulation_menu(self):
         """A menu with all operations on a diecase"""
-        # Menu
         try:
             while True:
                 UI.clear()
-                UI.display_parameters(self.parameters, self.wedge.parameters)
+                UI.display_parameters({'Diecase data': self.parameters,
+                                       'Wedge data': self.wedge.parameters})
                 options = {'M': e.return_to_menu,
                            'T': self.set_typeface,
                            'W': self.assign_wedge,

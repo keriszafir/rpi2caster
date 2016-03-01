@@ -76,8 +76,7 @@ class Ribbon(object):
     @property
     def parameters(self):
         """Gets a list of parameters"""
-        return [('\n', '\nRibbon data'),
-                (self.filename, 'File name'),
+        return [(self.filename, 'File name'),
                 (self.ribbon_id, 'Ribbon ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
@@ -109,7 +108,7 @@ class Ribbon(object):
 
     def store_in_db(self):
         """Stores the ribbon in database"""
-        UI.display_parameters(self.parameters)
+        UI.display_parameters({'Ribbon data': self.parameters})
         # Ask for confirmation
         try:
             DB.add_ribbon(self)
@@ -136,7 +135,7 @@ class Ribbon(object):
 
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
-        UI.display_parameters(self.parameters)
+        UI.display_parameters({'Ribbon data': self.parameters})
         # Choose file, write metadata, write contents
         filename = filename or UI.enter_output_filename()
         with io.open(filename, mode='w+') as ribbon_file:
@@ -178,8 +177,7 @@ class FontScheme(object):
     @property
     def parameters(self):
         """Gets a list of parameters"""
-        return [('\n', '\nScheme data'),
-                (self.scheme_id, 'Font scheme ID'),
+        return [(self.scheme_id, 'Font scheme ID'),
                 (self.description, 'Description'),
                 (self.language, 'Language')]
 

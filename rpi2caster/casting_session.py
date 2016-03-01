@@ -56,8 +56,7 @@ def choose_sensor_and_driver(casting_routine):
 
 
 def cast_or_punch_result(ribbon_source):
-    """Ask for confirmation and cast the resulting ribbon;
-    uses temporary stats object"""
+    """Get the ribbon from decorated routine and cast it"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         try:
@@ -69,7 +68,7 @@ def cast_or_punch_result(ribbon_source):
     return wrapper
 
 
-def prepare_job(casting_workflow):
+def prepare_job(ribbon_casting_workflow):
     """Prepares the job for casting"""
     line_of_quads = ['O15'] * 20 + ['NKJS 0005 0075']
     # Alias to make it shorter
@@ -83,63 +82,51 @@ def prepare_job(casting_workflow):
         # Rewind the ribbon if 0005 is found before 0005+0075
         if not diagnostics and not punching and p.stop_comes_first(ribbon):
             ribbon = [x for x in reversed(ribbon)]
+        # New stats for the resulting ribbon
         self.stats.ribbon = ribbon
-        if not diagnostics:
-            UI.display_header('Ribbon info:')
-            UI.display_parameters(self.stats.parameters)
-            UI.display('\n')
-        # Ask how many times to repeat this (always 1 run for calibrating)
+        UI.display_parameters({'Ribbon info': self.stats.ribbon_parameters})
+        # Always 1 run for calibrating and punching
         prompt = 'How many times do you want to cast it? (default: 1) : '
-        self.stats.runs = ((diagnostics or punching) * 1 or
-                           abs(enter(prompt, int) or 1))
+        self.stats.runs = abs(not diagnostics and not punching and
+                              enter(prompt, int) or 1)
         # Line skipping - ask user if they want to skip any initial line(s)
         prompt = 'How many lines do you want to skip?  (default: 0): '
-        l_skipped = (not diagnostics and not punching and
-                     abs(enter(prompt, int) or 0))
-        # Tell the stats how many times we do the job
-        self.stats.runs_left = self.stats.runs
+        l_skipped = abs(not diagnostics and not punching and
+                        enter(prompt, int) or 0)
         # Leave at least one line in the ribbon to cast
-        l_skipped = min(l_skipped, self.stats.ribbon_lines - 1)
-        if not diagnostics:
-            UI.display_header('Session info:')
-            UI.display_parameters(self.stats.session_parameters)
-        while self.stats.runs_left:
+        l_skipped = min(l_skipped, self.stats.get_ribbon_lines() - 1)
+        UI.display_parameters({'Session info': self.stats.session_parameters})
+        # For each casting run repeat
+        while self.stats.get_runs_left():
             queue = deque(ribbon)
             quad_lines = 0
-            if not diagnostics:
-                UI.display_header('Starting run %s of %s, %s left'
-                                  % (self.stats.current_run_number,
-                                     self.stats.runs, self.stats.runs_left))
-            if not (punching or diagnostics) and UI.confirm('Heat the mould?'):
+            if (not punching and not diagnostics and
+                    self.stats.get_current_run() < 2 and
+                    UI.confirm('Cast 2 extra lines to heat up the mould?')):
                 l_skipped -= 2
-                # When skipping less than 2 lines, we'll cast quads instead
+                # When less than 2 lines can be skipped, we'll cast quads
                 quad_lines = max(-l_skipped, 0)
             # Apply constraints: 0 <= lines_skipped < lines in ribbon
             l_skipped = max(0, l_skipped)
-            if l_skipped:
-                UI.display('Skipping %s initial lines...' % l_skipped)
-            if quad_lines:
-                UI.display('Casting %s line(s) of 20 quads' % quad_lines)
+            UI.display(l_skipped and ('Skipping %s lines' % l_skipped) or '')
+            UI.display(quad_lines and ('Casting %s line(s) of 20 quads'
+                                       % quad_lines) or '')
             # Make sure we take off lines from the beginning of the
             # casting job - i.e. last lines of text; count the lines
             code = ''
             # Add one more line to skip - because ribbon starts with 0075-0005
-            l_skipped += 1
-            while l_skipped and not diagnostics:
+            # Guard against negative infinite loop if l_skipped == -2
+            while l_skipped + 1 > 0 and not diagnostics:
                 code = queue.popleft()
                 l_skipped -= 1 * p.check_newline(code)
             # Add it back, then add those quads
             queue.appendleft(code)
             queue.extendleft(quad_lines * line_of_quads)
             # The ribbon is ready for casting / punching
-            try:
-                casting_workflow(self, queue or [])
-                if not self.stats.runs_left and UI.confirm('Repeat?'):
-                    self.stats.add_run()
-            except e.CastingAborted:
-                l_skipped = self.stats.current_line_number
-                if not UI.confirm('Retry this job?'):
-                    return
+            self.stats.queue = queue
+            UI.display_parameters({'Current run': self.stats.run_parameters})
+            if not ribbon_casting_workflow(self, queue):
+                l_skipped = self.stats.get_last_line() - 1
     return wrapper
 
 
@@ -171,29 +158,33 @@ class Casting(object):
         displaying the statistics (depending on context:
         casting, punching or testing)
         """
-        self.stats.next_run()
-        self.stats.queue = casting_queue
-        if not self.caster.mode.diagnostics:
-            UI.display_header('Current run info:')
-            UI.display_parameters(self.stats.run_parameters)
-            UI.display('\n')
-        # Now process the queue
         generator = (p.parse_record(record) for record in casting_queue)
         if not self.caster.mode.testing:
             self.caster.sensor.check_if_machine_is_working()
-        for (signals, comment) in generator:
-            UI.display('\n\n')
-            if comment:
-                UI.display(comment + '\n' + '-' * len(comment))
-            if not signals:
-                # No signals (comment only)- go to the next combination
-                continue
-            # Check if HMN or unit-shift must be applied
-            self.stats.signals = signals
-            UI.display_parameters(self.stats.code_parameters)
-            # Let the caster do the job
-            self.caster.process(signals)
-        return True
+        try:
+            while True:
+                signals, comment = next(generator)
+                if comment and not signals:
+                    UI.display('\n\n' + comment + '\n' + '-' * len(comment))
+                    continue
+                # Check if HMN or unit-shift must be applied
+                self.stats.signals = signals
+                UI.display_parameters({comment: self.stats.code_parameters})
+                # Let the caster do the job
+                self.caster.process(signals)
+        except StopIteration:
+            # End of ribbon - ready to cast next run - ask to repeat casting
+            self.stats.next_run()
+            if not self.stats.get_runs_left() and UI.confirm('Repeat?'):
+                self.stats.one_more_run()
+            return True
+        except (e.MachineStopped, KeyboardInterrupt, EOFError):
+            exit_prompt = '[Y] to start next run or [N] to exit?'
+            if UI.confirm('Retry this job?'):
+                return False
+            elif self.stats.get_runs_left() and not UI.confirm(exit_prompt):
+                # Bypass the caller function
+                raise e.ReturnToMenu
 
     @cast_or_punch_result
     def _test_front_pinblock(self):
@@ -574,17 +565,6 @@ class Casting(object):
                 pass
 
     @property
-    def stats(self):
-        """Ribbon/job statistics"""
-        return self.__dict__.get('_stats', Stats(self))
-
-    @stats.setter
-    def stats(self, stats):
-        """Parse the stats to get the ribbon data"""
-        self.__dict__['_stats'] = (isinstance(stats, Stats) and stats or
-                                   Stats(self))
-
-    @property
     def ribbon(self):
         """Ribbon for the casting session"""
         return self.__dict__.get('_ribbon', typesetting_data.Ribbon())
@@ -635,8 +615,10 @@ class Casting(object):
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
-        UI.display_parameters(self.caster.parameters, self.ribbon.parameters,
-                              self.diecase.parameters, self.wedge.parameters)
+        UI.display_parameters({'Caster data': self.caster.parameters,
+                               'Ribbon data': self.ribbon.parameters,
+                               'Matrix case data': self.diecase.parameters,
+                               'Wedge data': self.wedge.parameters})
         UI.pause()
 
     def _calculate_wedges(self, diff):
