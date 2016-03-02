@@ -30,9 +30,9 @@ class Stats(object):
         session = self.__dict__['_session']
         return session.get('runs', 1) - session.get('runs_done', 0)
 
-    def get_last_line(self):
+    def get_lines_done(self):
         """Gets the current run line number"""
-        return self.__dict__.get('_run', {}).get('current_line', 1)
+        return self.__dict__.get('_run', {}).get('current_line', 0) - 1
 
     def get_ribbon_lines(self):
         """Gets number of lines per ribbon"""
@@ -117,7 +117,7 @@ class Stats(object):
             data.append((is_new_line and run.get('current_line', 1),
                          'Starting a new line'))
             # Lines of the current run
-            info = (('line: %s / all: %s [%.1f%%], %s left'
+            info = (('line: %s / all: %s [%.1f%% done], %s left'
                      % (run.get('current_line', 1), run.get('lines', 1),
                         (run.get('current_line', 1) - 1) /
                         run.get('lines', 1) * 100,
@@ -125,7 +125,7 @@ class Stats(object):
                      'This run'))
             data.append(info)
             # Lines of the whole casting job
-            info = (('line: %s / all: %s [%.1f%%], %s left'
+            info = (('line: %s / all: %s [%.1f%% done], %s left'
                      % (session.get('current_line', 1),
                         session.get('lines', 1),
                         (session.get('current_line', 1) - 1) /
@@ -151,7 +151,6 @@ class Stats(object):
         ribbon = self.__dict__['_ribbon']
         # Update whenever we change runs number via one_more_run
         session['runs'] = runs
-        session['current_run'] = 1
         session['codes'] = runs * ribbon.get('codes', 1)
         session['chars'] = runs * ribbon.get('chars', 1)
         session['lines'] = runs * ribbon.get('lines', 1)
@@ -160,12 +159,9 @@ class Stats(object):
     def ribbon(self, ribbon_contents):
         """Parses the ribbon, counts combinations, lines and characters"""
         mode = self.session.caster.mode
-        # Reset all counters
-        self.__dict__['_run'] = {'codes': 0, 'lines': 0, 'chars': 0}
-        self.__dict__['_ribbon'] = {'codes': 0, 'lines': -1, 'chars': 0}
-        self.__dict__['_session'] = {'codes': 0, 'lines': 0, 'chars': 0,
-                                     'current_run': 0, 'current_code': 0,
-                                     'current_line': 0, 'current_char': 0}
+        # Reset counters
+        self.__dict__['_ribbon'] = {'lines': -1, 'codes': 0, 'chars': 0}
+        self.__dict__['_session'] = {'lines': 0, 'codes': 0, 'chars': 0}
         self.__dict__['_current'] = {}
         self.__dict__['_previous'] = {}
         ribbon = self.__dict__['_ribbon']
@@ -185,15 +181,13 @@ class Stats(object):
     @run_parameters.setter
     def queue(self, queue):
         """Parses the ribbon, counts combinations, lines and characters"""
+        # Clear and start with -1 line for the initial galley trip
+        self.__dict__['_run'] = {'lines': -1, 'codes': 0, 'chars': 0}
         run = self.__dict__['_run']
-        # Start with -1 for the initial galley trip
-        run['lines'] = -1
-        run['lines_done'] = 0
-        run['codes'] = 0
-        run['chars'] = 0
-        run['current_line'] = 0
-        run['current_code'] = 0
-        run['current_char'] = 0
+        # Before first casting, set the current run number to 1
+        # (the session current run will be unset yet, so default)
+        session = self.__dict__['_session']
+        session['current_run'] = session.get('current_run', 1)
         generator = (p.parse_record(x) for x in queue)
         for (combination, _) in generator:
             if combination:
@@ -216,11 +210,11 @@ class Stats(object):
         self.__dict__['_previous'] = {k: v for k, v in current.items()}
         # Update combination info
         current['signals'] = signals
-        run['code'] = run.get('code', 0) + 1
-        session['code'] = session.get('code', 0) + 1
+        run['current_code'] = run.get('current_code', 0) + 1
+        session['current_code'] = session.get('current_code', 0) + 1
         if p.check_character(signals):
-            run['char'] = run.get('char', 0) + 1
-            session['char'] = session.get('char', 0) + 1
+            run['current_char'] = run.get('current_char', 0) + 1
+            session['current_char'] = session.get('current_char', 0) + 1
         elif self._check_double_justification():
             run['current_line'] = run.get('current_line', 0) + 1
             session['current_line'] = session.get('current_line', 0) + 1

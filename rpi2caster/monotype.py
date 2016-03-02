@@ -217,7 +217,7 @@ class SimulationSensor(object):
                                   '[Y] to retry, or [N] to abort?'):
                     e.return_to_menu()
 
-    def wait_for(self, new_state, timeout=5, time_on=0.1, time_off=0.1):
+    def wait_for(self, new_state, timeout=30, time_on=0.1, time_off=0.1):
         """Waits for a keypress to emulate machine cycle, unless user
         switches to auto mode, where all combinations are processed in batch"""
         status = {True: 'ON', False: 'OFF'}

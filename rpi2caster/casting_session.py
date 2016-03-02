@@ -126,7 +126,7 @@ def prepare_job(ribbon_casting_workflow):
             self.stats.queue = queue
             UI.display_parameters({'Current run': self.stats.run_parameters})
             if not ribbon_casting_workflow(self, queue):
-                l_skipped = self.stats.get_last_line() - 1
+                l_skipped = self.stats.get_lines_done()
     return wrapper
 
 
