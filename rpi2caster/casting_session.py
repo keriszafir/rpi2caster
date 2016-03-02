@@ -131,7 +131,7 @@ def prepare_job(ribbon_casting_workflow):
                 self.stats.next_run()
                 if not self.stats.get_runs_left() and UI.confirm('Repeat?'):
                     self.stats.one_more_run()
-            elif UI.confirm('Retry this job?'):
+            elif self.caster.mode.casting and UI.confirm('Retry this job?'):
                 # Casting aborted - ask if user wants to repeat
                 self.stats.undo_last_run()
             else:
@@ -179,8 +179,8 @@ class Casting(object):
         generator = (p.parse_record(record) for record in casting_queue)
         if not self.caster.mode.testing:
             self.caster.sensor.check_if_machine_is_working()
-        try:
-            while True:
+        while True:
+            try:
                 signals, comment = next(generator)
                 if comment and not signals:
                     UI.display('\n\n' + comment + '\n' + '-' * len(comment))
@@ -190,10 +190,14 @@ class Casting(object):
                 UI.display_parameters({comment: self.stats.code_parameters})
                 # Let the caster do the job
                 self.caster.process(signals)
-        except StopIteration:
-            return True
-        except (e.MachineStopped, KeyboardInterrupt, EOFError):
-            return False
+            except StopIteration:
+                return True
+            except (e.MachineStopped, KeyboardInterrupt, EOFError):
+                # Allow resume in punching mode
+                if self.caster.mode.punching and UI.confirm('Continue?'):
+                    self.caster.process(signals)
+                else:
+                    return False
 
     @cast_or_punch_result
     def _test_front_pinblock(self):
