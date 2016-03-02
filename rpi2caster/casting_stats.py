@@ -90,6 +90,19 @@ class Stats(object):
     @property
     def code_parameters(self):
         """Displays info about the current combination"""
+
+        def build_data(source, parameter, source_name,
+                       data_name=''):
+            """Builds data to display based on the given parameter"""
+            return (('%s / %s: %s [%.1f%% done], %s left'
+                     % (source.get('current_%s' % parameter, 0),
+                        source_name, source.get('%ss' % parameter, 0),
+                        (source.get('current_%s' % parameter, 1) - 1) /
+                        source.get('%ss' % parameter, 1) * 100,
+                        source.get('%ss' % parameter, 1) -
+                        source.get('current_%s' % parameter, 1) + 1),
+                     data_name or parameter.capitalize()))
+
         # Aliases to keep code a bit cleaner:
         current = self.__dict__.get('_current', {})
         run = self.__dict__.get('_run', {})
@@ -100,40 +113,32 @@ class Stats(object):
         is_new_line = p.check_newline(current.get('signals', []))
         is_char = p.check_character(current.get('signals', []))
         # Process the data to display, starting with general data
-        data = [(' '.join(current.get('signals', [])), 'Signals in ribbon')]
-        data.append((run.get('current_code', 1), 'Current code / run'))
-        data.append((multiple_runs and session.get('current_code', 1),
-                     'Current code / session'))
+        data = [(' '.join(current.get('signals', [])), 'Signals from ribbon')]
         # For casting and punching:
         if not self.session.caster.mode.diagnostics:
-            data.append((is_char and
-                         run.get('current_char', 0), 'Current char / run'))
-            data.append((is_char and multiple_runs and
-                         session.get('current_char', 0), 'Current char / all'))
+            # Codes per run
+            if multiple_runs:
+                data.append(build_data(run, 'code', 'this run'))
+            # Codes per session
+            data.append(build_data(session, 'code', 'all'))
         if self.session.caster.mode.casting:
             # Displayed pump status
             pump_bool = current.get('pump_working', False)
             pump = {True: 'ON', False: 'OFF'}[pump_bool]
             data.append((is_new_line and run.get('current_line', 1),
                          'Starting a new line'))
-            # Lines of the current run
-            info = (('line: %s / all: %s [%.1f%% done], %s left'
-                     % (run.get('current_line', 1), run.get('lines', 1),
-                        (run.get('current_line', 1) - 1) /
-                        run.get('lines', 1) * 100,
-                        run.get('lines', 1) - run.get('current_line', 1) + 1),
-                     'This run'))
-            data.append(info)
-            # Lines of the whole casting job
-            info = (('line: %s / all: %s [%.1f%% done], %s left'
-                     % (session.get('current_line', 1),
-                        session.get('lines', 1),
-                        (session.get('current_line', 1) - 1) /
-                        session.get('lines', 1) * 100,
-                        session.get('lines', 1) -
-                        session.get('current_line', 1) + 1),
-                     'Session'))
-            data.append(info)
+            # Characters per run
+            if is_char:
+                # Characters per run
+                if multiple_runs:
+                    data.append(build_data(run, 'char', 'this run'))
+                # Characters per session
+                data.append(build_data(session, 'char', 'all'))
+            # Lines per session
+            if multiple_runs:
+                data.append(build_data(run, 'line', 'this run'))
+            # Lines per run
+            data.append(build_data(session, 'line', 'all'))
             data.append((current.get('0075', '15'), 'Wedge 0075 now at'))
             data.append((current.get('0005', '15'), 'Wedge 0005 now at'))
             data.append((pump, 'Pump is'))

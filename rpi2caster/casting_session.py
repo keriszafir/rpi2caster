@@ -182,8 +182,10 @@ class Casting(object):
             exit_prompt = '[Y] to start next run or [N] to exit?'
             if UI.confirm('Retry this job?'):
                 return False
-            elif self.stats.get_runs_left() and not UI.confirm(exit_prompt):
-                # Bypass the caller function
+            elif (self.caster.mode.diagnostics or self.caster.mode.punching or
+                  self.stats.get_runs_left() - 1 and not
+                  UI.confirm(exit_prompt)):
+                # Bypass the caller function completely
                 raise e.ReturnToMenu
 
     @cast_or_punch_result

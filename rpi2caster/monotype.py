@@ -62,7 +62,7 @@ def adjust_signals(worker_function):
             # Return a list of "normal" signals i.e. no 16
             # arranged in Monotype order (NMLK...13, 14, 0005, O15)
             return ([sig for sig in c.SIGNALS if sig in signals and
-                     sig is not 'O15' or self.mode.testing] +
+                     (sig is not 'O15' or self.mode.testing)] +
                     ['O15'] * (self.mode.punching and not self.mode.testing))
 
         # No signals = no casting!
@@ -103,7 +103,7 @@ class MonotypeCaster(object):
     def parameters(self):
         """Gets a list of parameters"""
         # Collect data from I/O drivers
-        return (self.sensor.parameters + self.output.parameters)
+        return self.sensor.parameters + self.output.parameters
 
     @adjust_signals
     def process(self, signals):
