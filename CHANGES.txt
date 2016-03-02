@@ -1,2 +1,5 @@
-v0.2dev12 - casting program has typecase casting option and allows user to choose 16th row addressing
+v0.2dev14 - workflow fixes and code cleanup
 v0.2dev13 - better stats display during casting and punching
+v0.2dev12 - casting program has typecase casting option and allows user to choose 16th row addressing
+
+

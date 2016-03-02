@@ -43,10 +43,12 @@ def choose_sensor_and_driver(casting_routine):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        UI.debug_pause('About to %s' %
-                       (self.caster.mode.casting and 'cast composition...' or
-                        self.caster.mode.testing and 'test outputs...' or
-                        self.caster.mode.punching and 'punch ribbon...'))
+        UI.debug_pause('About to %s...' %
+                       (self.caster.mode.casting and 'cast composition' or
+                        self.caster.mode.testing and 'test the outputs' or
+                        self.caster.mode.calibration and
+                        'calibrate the machine' or
+                        self.caster.mode.punching and 'punch the ribbon'))
         # Instantiate and enter context
         with self.caster.mode.sensor() as self.caster.sensor:
             with self.caster.mode.output() as self.caster.output:
@@ -70,15 +72,13 @@ def cast_or_punch_result(ribbon_source):
 
 def prepare_job(ribbon_casting_workflow):
     """Prepares the job for casting"""
-    line_of_quads = ['O15'] * 20 + ['NKJS 0005 0075']
-    # Alias to make it shorter
-    enter = UI.enter_data_or_blank
 
     def wrapper(self, ribbon):
         """Wrapper function"""
         # Mode aliases
         punching = self.caster.mode.punching
         diagnostics = self.caster.mode.diagnostics
+        line_of_quads = ['O15'] * 20 + ['NKJS 0005 0075']
         # Rewind the ribbon if 0005 is found before 0005+0075
         if not diagnostics and not punching and p.stop_comes_first(ribbon):
             ribbon = [x for x in reversed(ribbon)]
@@ -88,11 +88,11 @@ def prepare_job(ribbon_casting_workflow):
         # Always 1 run for calibrating and punching
         prompt = 'How many times do you want to cast it? (default: 1) : '
         self.stats.runs = abs(not diagnostics and not punching and
-                              enter(prompt, int) or 1)
+                              UI.enter_data_or_blank(prompt, int) or 1)
         # Line skipping - ask user if they want to skip any initial line(s)
-        prompt = 'How many lines do you want to skip?  (default: 0): '
+        prompt = 'How many initial lines do you want to skip?  (default: 0): '
         l_skipped = abs(not diagnostics and not punching and
-                        enter(prompt, int) or 0)
+                        UI.enter_data_or_blank(prompt, int) or 0)
         # Leave at least one line in the ribbon to cast
         l_skipped = min(l_skipped, self.stats.get_ribbon_lines() - 1)
         UI.display_parameters({'Session info': self.stats.session_parameters})
@@ -124,27 +124,27 @@ def prepare_job(ribbon_casting_workflow):
             queue.extendleft(quad_lines * line_of_quads)
             # The ribbon is ready for casting / punching
             self.stats.queue = queue
+            exit_prompt = '[Y] to start next run or [N] to exit?'
             if ribbon_casting_workflow(self, queue):
                 # Casting successful - ready to cast next run - ask to repeat
                 # after the last run is completed (because user may want to
                 # cast / punch once more?)
-                self.stats.next_run()
-                if not self.stats.get_runs_left() and UI.confirm('Repeat?'):
+                if self.stats.all_done() and UI.confirm('One more run?'):
                     self.stats.one_more_run()
-            elif self.caster.mode.casting and UI.confirm('Retry this job?'):
+            elif self.caster.mode.casting and UI.confirm('Retry this run?'):
                 # Casting aborted - ask if user wants to repeat
                 self.stats.undo_last_run()
-            else:
-                # Check if there are any runs left
-                self.stats.next_run()
-                exit_prompt = '[Y] to start next run or [N] to exit?'
-                if (diagnostics or punching or
-                        self.stats.get_runs_left() and not
-                        UI.confirm(exit_prompt)):
-                    # Bypass the caller function completely
-                    return
-                self.stats.undo_last_run()
                 l_skipped = self.stats.get_lines_done()
+                # Start this run again
+            elif diagnostics or punching:
+                # Aborted, not continued (in punching mode) = end here ASAP
+                return
+            elif not self.stats.all_done() and UI.confirm(exit_prompt):
+                # There are some more runs to do - go on?
+                self.stats.undo_last_run()
+            else:
+                # Answered negative or this was the last / only run
+                return
     return wrapper
 
 
@@ -194,7 +194,9 @@ class Casting(object):
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Allow resume in punching mode
-                if self.caster.mode.punching and UI.confirm('Continue?'):
+                if (self.caster.mode.punching and not
+                        self.caster.mode.diagnostics and
+                        UI.confirm('Continue?')):
                     self.caster.process(signals)
                 else:
                     return False

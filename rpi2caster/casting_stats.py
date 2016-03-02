@@ -13,12 +13,13 @@ class Stats(object):
         self.__dict__['_session'] = {}
         self.session = session
 
-    def next_run(self):
-        """Updates the info about the runs"""
+    def all_done(self):
+        """Updates the info about the runs; checks if any are left"""
         session = self.__dict__['_session']
         # Current run will always be runs done +1
         session['runs_done'] = session.get('current_run', 1)
         session['current_run'] = session.get('current_run', 1) + 1
+        return session.get('runs', 1) - session.get('runs_done', 0) <= 0
 
     def one_more_run(self):
         """Adds one to all_runs number - in case of repeating the job"""
