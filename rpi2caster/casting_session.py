@@ -124,8 +124,24 @@ def prepare_job(ribbon_casting_workflow):
             queue.extendleft(quad_lines * line_of_quads)
             # The ribbon is ready for casting / punching
             self.stats.queue = queue
-            UI.display_parameters({'Current run': self.stats.run_parameters})
-            if not ribbon_casting_workflow(self, queue):
+            if ribbon_casting_workflow(self, queue):
+                # Casting successful - ready to cast next run - ask to repeat
+                # after the last run is completed (because user may want to
+                # cast / punch once more?)
+                self.stats.next_run()
+                if not self.stats.get_runs_left() and UI.confirm('Repeat?'):
+                    self.stats.one_more_run()
+            elif not UI.confirm('Retry this job?'):
+                # Casting aborted - ask if user wants to repeat
+                # Undo the session stats
+                self.stats.next_run()
+                exit_prompt = '[Y] to start next run or [N] to exit?'
+                if (diagnostics or punching or
+                        self.stats.get_runs_left() and not
+                        UI.confirm(exit_prompt)):
+                    # Bypass the caller function completely
+                    return
+                self.stats.undo_last_run()
                 l_skipped = self.stats.get_lines_done()
     return wrapper
 
@@ -173,20 +189,9 @@ class Casting(object):
                 # Let the caster do the job
                 self.caster.process(signals)
         except StopIteration:
-            # End of ribbon - ready to cast next run - ask to repeat casting
-            self.stats.next_run()
-            if not self.stats.get_runs_left() and UI.confirm('Repeat?'):
-                self.stats.one_more_run()
             return True
         except (e.MachineStopped, KeyboardInterrupt, EOFError):
-            exit_prompt = '[Y] to start next run or [N] to exit?'
-            if UI.confirm('Retry this job?'):
-                return False
-            elif (self.caster.mode.diagnostics or self.caster.mode.punching or
-                  self.stats.get_runs_left() - 1 and not
-                  UI.confirm(exit_prompt)):
-                # Bypass the caller function completely
-                raise e.ReturnToMenu
+            return False
 
     @cast_or_punch_result
     def _test_front_pinblock(self):

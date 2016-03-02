@@ -25,6 +25,15 @@ class Stats(object):
         # Updating the attribute to trigger the "magic" in self.runs setter
         self.runs += 1
 
+    def undo_last_run(self):
+        """Subtracts the current run stats from all runs stats;
+        this is called before repeating a failed casting run."""
+        session = self.__dict__['_session']
+        run = self.__dict__['_run']
+        session['current_line'] -= run.get('current_line', 0)
+        session['current_code'] -= run.get('current_code', 0)
+        session['current_char'] -= run.get('current_char', 0)
+
     def get_runs_left(self):
         """Gets the runs left number"""
         session = self.__dict__['_session']
@@ -41,6 +50,22 @@ class Stats(object):
     def get_current_run(self):
         """Gets the current run number"""
         return self.__dict__.get('_session', {}).get('current_run', 1)
+
+    @property
+    def runs(self):
+        """Gets the runs (repetitions) number"""
+        return self.__dict__.get('_session', {}).get('runs', 1)
+
+    @runs.setter
+    def runs(self, runs=1):
+        """Sets the runs (repetitions) number"""
+        session = self.__dict__['_session']
+        ribbon = self.__dict__['_ribbon']
+        # Update whenever we change runs number via one_more_run
+        session['runs'] = runs
+        session['codes'] = runs * ribbon.get('codes', 1)
+        session['chars'] = runs * ribbon.get('chars', 1)
+        session['lines'] = runs * ribbon.get('lines', 1)
 
     @property
     def ribbon_parameters(self):
@@ -67,42 +92,8 @@ class Stats(object):
                     (session.get('lines', 1), 'All lines')]
 
     @property
-    def run_parameters(self):
-        """Displays info at the beginning of each run"""
-        # Don't display in testing or calibration modes
-        session = self.__dict__.get('_session', {})
-        run = self.__dict__.get('_run', {})
-        if self.session.caster.mode.diagnostics or session.get('runs', 1) < 2:
-            return []
-        # Calculate this only for multi-run sessions in casting mode
-        data = [('%s / %s [%.1f%%], %s left'
-                 % (session.get('current_run', 1),
-                    session.get('runs', 1),
-                    session.get('runs_done', 1) / session.get('runs', 1) * 100,
-                    session.get('runs', 1) - session.get('current_run', 1)),
-                 'Current run')]
-        data.append((run.get('codes', 1), 'Codes in the run'))
-        if self.session.caster.mode.casting:
-            data.append((run.get('chars', 1), 'Chars in the run'))
-            data.append((run.get('lines', 1), 'Lines in the run'))
-        return data
-
-    @property
     def code_parameters(self):
         """Displays info about the current combination"""
-
-        def build_data(source, parameter, source_name,
-                       data_name=''):
-            """Builds data to display based on the given parameter"""
-            return (('%s / %s: %s [%.1f%% done], %s left'
-                     % (source.get('current_%s' % parameter, 0),
-                        source_name, source.get('%ss' % parameter, 0),
-                        (source.get('current_%s' % parameter, 1) - 1) /
-                        source.get('%ss' % parameter, 1) * 100,
-                        source.get('%ss' % parameter, 1) -
-                        source.get('current_%s' % parameter, 1) + 1),
-                     data_name or parameter.capitalize()))
-
         # Aliases to keep code a bit cleaner:
         current = self.__dict__.get('_current', {})
         run = self.__dict__.get('_run', {})
@@ -111,16 +102,18 @@ class Stats(object):
         multiple_runs = session.get('runs', 1) > 1
         # What to do with current code: is it a char or newline?
         is_new_line = p.check_newline(current.get('signals', []))
-        is_char = p.check_character(current.get('signals', []))
         # Process the data to display, starting with general data
         data = [(' '.join(current.get('signals', [])), 'Signals from ribbon')]
         # For casting and punching:
         if not self.session.caster.mode.diagnostics:
             # Codes per run
             if multiple_runs:
-                data.append(build_data(run, 'code', 'this run'))
+                data.append(build_data(run, 'code', 'Code / run'))
             # Codes per session
-            data.append(build_data(session, 'code', 'all'))
+            data.append(build_data(session, 'code', 'Code / job'))
+            # Runs per session
+            if multiple_runs:
+                data.append(build_data(session, 'run', 'Run / job'))
         if self.session.caster.mode.casting:
             # Displayed pump status
             pump_bool = current.get('pump_working', False)
@@ -128,37 +121,19 @@ class Stats(object):
             data.append((is_new_line and run.get('current_line', 1),
                          'Starting a new line'))
             # Characters per run
-            if is_char:
-                # Characters per run
-                if multiple_runs:
-                    data.append(build_data(run, 'char', 'this run'))
-                # Characters per session
-                data.append(build_data(session, 'char', 'all'))
+            if multiple_runs:
+                data.append(build_data(run, 'char', 'Character / run'))
+            # Characters per session
+            data.append(build_data(session, 'char', 'Character / job'))
             # Lines per session
             if multiple_runs:
-                data.append(build_data(run, 'line', 'this run'))
+                data.append(build_data(run, 'line', 'Line / run'))
             # Lines per run
-            data.append(build_data(session, 'line', 'all'))
+            data.append(build_data(session, 'line', 'Line / job'))
             data.append((current.get('0075', '15'), 'Wedge 0075 now at'))
             data.append((current.get('0005', '15'), 'Wedge 0005 now at'))
             data.append((pump, 'Pump is'))
         return data
-
-    @property
-    def runs(self):
-        """Gets the runs (repetitions) number"""
-        return self.__dict__.get('_session', {}).get('runs', 1)
-
-    @runs.setter
-    def runs(self, runs=1):
-        """Sets the runs (repetitions) number"""
-        session = self.__dict__['_session']
-        ribbon = self.__dict__['_ribbon']
-        # Update whenever we change runs number via one_more_run
-        session['runs'] = runs
-        session['codes'] = runs * ribbon.get('codes', 1)
-        session['chars'] = runs * ribbon.get('chars', 1)
-        session['lines'] = runs * ribbon.get('lines', 1)
 
     @session_parameters.setter
     def ribbon(self, ribbon_contents):
@@ -183,7 +158,7 @@ class Stats(object):
             elif p.check_character(signals):
                 ribbon['chars'] += 1
 
-    @run_parameters.setter
+    @ribbon_parameters.setter
     def queue(self, queue):
         """Parses the ribbon, counts combinations, lines and characters"""
         # Clear and start with -1 line for the initial galley trip
@@ -268,3 +243,15 @@ class Stats(object):
         before = self.__dict__.get('_previous', {}).get('signals', [])
         now = self.__dict__.get('_current', {}).get('signals', [])
         return p.check_newline(before) and p.check_pump_start(now)
+
+
+def build_data(source, parameter, data_name=''):
+    """Builds data to display based on the given parameter"""
+    return (('%s / %s [%.1f%% done], %s left'
+             % (source.get('current_%s' % parameter, 0),
+                source.get('%ss' % parameter, 0),
+                (source.get('current_%s' % parameter, 1) - 1) /
+                source.get('%ss' % parameter, 1) * 100,
+                source.get('%ss' % parameter, 1) -
+                source.get('current_%s' % parameter, 1) + 1),
+             data_name or parameter.capitalize()))
