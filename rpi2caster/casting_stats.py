@@ -30,9 +30,9 @@ class Stats(object):
         this is called before repeating a failed casting run."""
         session = self.__dict__['_session']
         run = self.__dict__['_run']
-        session['current_line'] -= run.get('current_line', 0)
-        session['current_code'] -= run.get('current_code', 0)
-        session['current_char'] -= run.get('current_char', 0)
+        session['failed_runs'] = session.get('failed_runs', 0) + 1
+        for par in ('current_line', 'current_code', 'current_char'):
+            session[par] = (session.get(par, 1) - run.get(par, 0))
 
     def get_runs_left(self):
         """Gets the runs left number"""
@@ -114,6 +114,7 @@ class Stats(object):
             # Runs per session
             if multiple_runs:
                 data.append(build_data(session, 'run', 'Run / job'))
+            data.append((session.get('failed_runs', 0), 'Failed runs'))
         if self.session.caster.mode.casting:
             # Displayed pump status
             pump_bool = current.get('pump_working', False)

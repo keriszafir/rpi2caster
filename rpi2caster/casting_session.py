@@ -131,9 +131,11 @@ def prepare_job(ribbon_casting_workflow):
                 self.stats.next_run()
                 if not self.stats.get_runs_left() and UI.confirm('Repeat?'):
                     self.stats.one_more_run()
-            elif not UI.confirm('Retry this job?'):
+            elif UI.confirm('Retry this job?'):
                 # Casting aborted - ask if user wants to repeat
-                # Undo the session stats
+                self.stats.undo_last_run()
+            else:
+                # Check if there are any runs left
                 self.stats.next_run()
                 exit_prompt = '[Y] to start next run or [N] to exit?'
                 if (diagnostics or punching or
