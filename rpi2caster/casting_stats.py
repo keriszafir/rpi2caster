@@ -13,15 +13,19 @@ class Stats(object):
         self.__dict__['_session'] = {}
         self.session = session
 
-    def all_done(self):
-        """Updates the info about the runs; checks if any are left"""
+    def end_run(self):
+        """Updates the info about the runs"""
         session = self.__dict__['_session']
         # Current run will always be runs done +1
         session['runs_done'] = session.get('current_run', 1)
         session['current_run'] = session.get('current_run', 1) + 1
+
+    def all_done(self):
+        """Check if there are runs left"""
+        session = self.__dict__['_session']
         return session.get('runs', 1) - session.get('runs_done', 0) <= 0
 
-    def one_more_run(self):
+    def add_one_more_run(self):
         """Adds one to all_runs number - in case of repeating the job"""
         # Updating the attribute to trigger the "magic" in self.runs setter
         self.runs += 1

@@ -109,8 +109,8 @@ def prepare_job(ribbon_casting_workflow):
             # Apply constraints: 0 <= lines_skipped < lines in ribbon
             l_skipped = max(0, l_skipped)
             UI.display(l_skipped and ('Skipping %s lines' % l_skipped) or '')
-            UI.display(quad_lines and ('Casting %s line(s) of 20 quads'
-                                       % quad_lines) or '')
+            prompt = 'Casting %s line(s) of 20 quads' % quad_lines
+            UI.display(quad_lines and prompt or '')
             # Make sure we take off lines from the beginning of the
             # casting job - i.e. last lines of text; count the lines
             code = ''
@@ -130,20 +130,20 @@ def prepare_job(ribbon_casting_workflow):
                 # after the last run is completed (because user may want to
                 # cast / punch once more?)
                 if self.stats.all_done() and UI.confirm('One more run?'):
-                    self.stats.one_more_run()
+                    self.stats.add_one_more_run()
             elif self.caster.mode.casting and UI.confirm('Retry this run?'):
                 # Casting aborted - ask if user wants to repeat
                 self.stats.undo_last_run()
-                l_skipped = self.stats.get_lines_done()
+                self.stats.add_one_more_run()
+                lines_ok = self.stats.get_lines_done()
+                prompt = 'Skip %s lines successfully cast?' % lines_ok
+                if lines_ok > 0 and UI.confirm(prompt):
+                    l_skipped = lines_ok
                 # Start this run again
-            elif diagnostics or punching:
-                # Aborted, not continued (in punching mode) = end here ASAP
-                return
             elif not self.stats.all_done() and UI.confirm(exit_prompt):
                 # There are some more runs to do - go on?
                 self.stats.undo_last_run()
             else:
-                # Answered negative or this was the last / only run
                 return
     return wrapper
 
@@ -191,6 +191,7 @@ class Casting(object):
                 # Let the caster do the job
                 self.caster.process(signals)
             except StopIteration:
+                self.stats.end_run()
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Allow resume in punching mode
@@ -199,6 +200,7 @@ class Casting(object):
                         UI.confirm('Continue?')):
                     self.caster.process(signals)
                 else:
+                    self.stats.end_run()
                     return False
 
     @cast_or_punch_result
