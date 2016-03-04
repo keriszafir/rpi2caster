@@ -284,7 +284,7 @@ class Casting(object):
             style = style or (available_styles.get(UI.enter_data_or_blank(
                 'Styles: [r]oman, [b]old, [i]talic, [s]mall caps, '
                 '[l]ower index, [u]pper index (default: roman): ', str), 'r'))
-            matrix = self.diecase.get_matrix(char, [style])
+            matrix = self.diecase.get_matrix(char, style)
             diff = matrix.units - matrix.row_units
             wedge_positions = self._calculate_wedges(diff)
             # Ask for number of sorts and lines, no negative numbers here

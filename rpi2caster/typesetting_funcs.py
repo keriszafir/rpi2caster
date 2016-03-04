@@ -5,79 +5,48 @@ typesetting_functions:
 Contains functions used for calculating line length, justification,
 setting wedge positions, breaking the line etc.
 """
+import io
 from . import exceptions as e
 from .global_settings import UI
 from . import matrix_data
 from . import wedge_data
+from . import typesetting_data
+
+COMMANDS = {'^00': 'roman', '^01': 'bold', '^02': 'italic',
+            '^03': 'smallcaps', '^04': 'subscript', '^05': 'superscript',
+            '^CR': 'align_left', '^CC': 'align_center', '^CL': 'align_right',
+            '^CF': 'align_both'}
 
 
-class Typesetter(object):
-    """Typesetting class"""
+class TypesettingSession(object):
+    """Glue layer for the whole typesetting session"""
     def __init__(self):
-        # No input data yet
-        self.type_size = None
-        self.wedge_series = None
-        self.diecase_layout = None
-        self.set_width = None
-        self.unit_arrangement = None
-        self.unit_line_length = None
-        self.is_brit_pica = None
-        # Begin with setting up default parameters
-        self.ligatures = 3
-        self.unit_shift = False
-        self.compose = self.auto_compose
-        self.current_alignment = self._align_left
-        # Set up the spaces
-        self.spaces = {'var': {'high': False,
-                               'units': 4,
-                               'symbol': ' ',
-                               'code': 'GS2'},
-                       'fixed': {'high': False,
-                                 'units': 9,
-                                 'code': 'G5',
-                                 'symbol': '_'},
-                       'nb': {'high': False,
-                              'units': 9,
-                              'code': 'G5',
-                              'symbol': '~'},
-                       'quad': {'high': False,
-                                'units': 18,
-                                'code': 'O15',
-                                'symbol': '\t'}}
-        # Current units in the line - start with 0
-        self.current_units = 0
-        # Justifying spaces number
-        self.current_line_var_spaces = 0
-        # Unit correction: -2 ... +10 applied to a character or a fragment
-        self.unit_correction = 0
-        # Commands for activating the typesetting functions
-        self.typesetting_commands = {'^00': self._style_roman,
-                                     '^01': self._style_bold,
-                                     '^02': self._style_italic,
-                                     '^03': self._style_smallcaps,
-                                     '^04': self._style_subscript,
-                                     '^05': self._style_superscript,
-                                     '^CR': self._align_left,
-                                     '^CL': self._align_right,
-                                     '^CC': self._align_center,
-                                     '^CF': self._align_both}
-        # Source text generator - at the start, sets none
-        self.text_source = None
-        # Custom character definitions - e.g. if multiple alternatives
-        # are found
-        self.custom_characters = []
-        # Add comments to the ribbon?
-        self.comments = True
-        # Work with roman by default
-        self.main_style = 'roman'
-        self.current_style = 'roman'
-        # By default use automatic typesetting - less user control
-        self.manual_control = False
-        # Combination buffer - empty now
-        self.line_buffer = []
-        self.buffer = []
-        self.output_buffer = []
+        # Instantiate all we need
+        self.settings = Settings()
+        self.translator = Translator()
+        self.input_data = InputData()
+        self.output_data = OutputData()
+        # Make yourself a bridge between the objects
+        self.settings.session = self
+        self.translator.session = self
+        self.input_data.session = self
+        self.output_data.session = self
 
+    def setup(self):
+        """Sets up the parameters for the session"""
+        pass
+
+class Settings(object):
+    """Typesetting job settings"""
+    def __init__(self):
+        self.wedge = wedge_data.Wedge()
+        self.diecase = matrix_data.SelectDiecase()
+
+    def set_ligatures(self):
+        """Chooses the max ligature size i.e. how many characters can form
+        a ligature"""
+        prompt = 'Ligature: how many characters? '
+        self.ligatures = abs(UI.enter_data(prompt, int))
     def session_setup(self, diecase_id):
         """Sets up initial typesetting session parameters:
 
@@ -113,10 +82,70 @@ class Typesetter(object):
         UI.display('Wedge used: %s - %s set' % (self.wedge_series,
                                                 self.set_width))
 
-    def parse_and_generate(self, input_text):
-        """parse_and_generate:
+    def _manual_or_automatic(self):
+        """Allows to choose if typesetting will be done with more user control.
+        """
+        # Manual control allows for tweaking more parameters during typesetting
+        self.manual_control = UI.confirm('Use manual mode? (more control) ')
+        if self.manual_control:
+            # Choose unit shift: yes or no?
+            self.unit_shift = UI.confirm('Do you use unit-shift? ')
+            # Choose alignment mode
+            self._choose_alignment()
+            # Select the composition mode
+            self.compose = self.manual_compose
+            # Set custom spaces
+            self._configure_spaces()
 
-        Generates a sequence of characters from the input text.
+    def _choose_style(self):
+        """Parses the diecase for available styles and lets user choose one."""
+        available_styles = matrix_data.get_styles(self.diecase_layout)
+        options = {str(i): style for i, style in
+                   enumerate(available_styles, start=1)}
+        # Nothing to choose from? Don't display the menu
+        if len(options) == 1:
+            self.main_style = options['1']
+        # Otherwise, let user choose
+        styles_list = ['%s : %s' % (x, options[x]) for x in sorted(options)]
+        styles_list = ', '.join(styles_list)
+        prompt = 'Choose a dominant style: %s ' % styles_list
+        self.main_style = UI.simple_menu(prompt, options)
+
+    @property
+    def diecase(self):
+        """Gets the diecase layout from the assigned diecase."""
+        diecase = self.__dict__.get('_diecase', matrix_data.Diecase())
+        return diecase.layout
+
+    @diecase.setter
+    def diecase(self, diecase):
+        """Sets up the diecase and chooses the wedge."""
+        self.__dict__['_diecase'] = diecase
+        self.wedge = diecase.wedge
+
+
+class InputData(object):
+    """Gets the input text, parses it, generates a sequence of characters
+    or commands"""
+    def __init__(self):
+        # Commands for activating the typesetting functions
+        self.text = ''
+        self.ligatures = 3
+
+    def open_file(self, filename=''):
+        """Opens a text file with text that will be typeset"""
+        while True:
+            # Choose file
+            filename = filename or UI.enter_input_filename()
+            if not filename:
+                return False
+            # Open it
+            with io.open(filename, 'r') as text_file:
+                self.text = '\n'.join(line for line in text_file)
+                return True
+
+    def parse_input(self, input_text):
+        """Generates a sequence of characters from the input text.
         For each character, this function predicts what two next characters
         and one next character are."""
         # This variable will prevent yielding a number of subsequent chars
@@ -125,11 +154,8 @@ class Typesetter(object):
         spaces_names = {self.spaces[name]['symbol']: name
                         for name in self.spaces}
         # Construct a list of characters that the diecase contains
-        command_codes = [code for code in self.typesetting_commands]
-        matrices = [mat[0] for mat in self.diecase_layout
-                    if self.current_style in mat[1]]
         spaces = [space for space in spaces_names]
-        available_characters = command_codes + matrices + spaces
+        available_characters = COMMANDS + matrices + spaces
         # Characters which will be skipped
         ignored = ('\n',)
         # What if char in text not present in diecase? Hmmm...
@@ -154,78 +180,193 @@ class Typesetter(object):
                     pass
             # Should add a custom character definition here...
 
-    def _check_if_wedge_is_ok(self):
-        """Checks if the wedge matches the chosen matrix case."""
-        # European Didot or Fournier diecase or not?
-        # Type size has the answer...
-        didot = self.type_size.endswith('D')
-        fournier = self.type_size.endswith('F')
-        # Check if we're using an old-pica wedge
-        self.is_brit_pica = wedge_data.is_old_pica(self.wedge_series,
-                                                self.set_width)
-        if (didot or fournier) and not self.is_brit_pica:
-            UI.display('Warning: your wedge is not based on pica=0.1667"!'
-                       '\nIt may lead to wrong type width.')
 
-    def show_layout(self):
-        """Asks whether to show the diecase layout. If so, prints it."""
-        if UI.confirm('Show the layout?'):
-            UI.display('\n\n')
-            UI.display_diecase_layout(self.diecase_layout,
-                                      self.unit_arrangement)
-            UI.display('\n\n')
+class OutputData(object):
+    """Responsible for justifying, adding comments and outputting the
+    ribbon"""
+    def __init__(self):
+        self.comments = False
+        self.buffer = []
+        self.ribbon = typesetting_data.Ribbon()
 
-    def _manual_or_automatic(self):
-        """manual_or_automatic:
+    def _justify_line(self, mode=1):
+        """justify_line(mode=1)
 
-        Allows to choose if typesetting will be done with more user control.
+        Justify the row; applies to all alignment routines.
+        This function supports various modes:
+        0: justification only by variable spaces
+        1: filling the line with one block of fixed spaces, then dividing
+           the remaining units among variable spaces
+        2: as above but with two blocks of fixed spaces
+        3, 4... - as above but with 3, 4... blocks of fixed spaces
+        Add fixed spaces only if mode is greater than 0
         """
-        # Manual control allows for tweaking more parameters during typesetting
-        self.manual_control = UI.confirm('Use manual mode? (more control) ')
-        if self.manual_control:
-            # Choose unit shift: yes or no?
-            self.unit_shift = UI.confirm('Do you use unit-shift? ')
-            # Choose alignment mode
-            self._choose_alignment()
-            # Select the composition mode
-            self.compose = self.manual_compose
-            # Set custom spaces
-            self._configure_spaces()
-            # Set ligatures for the job
-            self._set_ligatures()
+        # Add as many fixed spaces as we can
+        # Don't exceed the line length (in units) specified in setup!
+        # Predict if the increment will exceed it or not
+        UI.debug_info('Justifying line...')
+        fill_spaces_number = 0
+        space_units = self.spaces['fixed']['units']
+        # Determine if we have to add any spaces (otherwise - skip the loop)
+        result_length = self.current_units + mode * space_units
+        # Start with no spaces
+        fill_spaces = []
+        while mode and result_length < self.unit_line_length:
+            # Add units
+            self.current_units += mode * self.spaces['fixed']['units']
+            # Add a mode-dictated number of fill spaces
+            fill_spaces_number += mode
+            # Determine and add the space code to the line
+            space = list(self.spaces['fixed']['code'])
+            space.append('Fixed space %i units wide'
+                         % self.spaces['fixed']['units'])
+            space = tuple(space)
+            # Add as many spaces as needed
+            fill_spaces = [space for i in range(fill_spaces_number)]
+            # Update resulting length
+            result_length = self.current_units + mode * space_units
+        # The remaining units must be divided among the justifying spaces
+        # Determine the unit width
+        remaining_units = self.unit_line_length - self.current_units
+        var_space_units = remaining_units / self.current_line_var_spaces
+        # Return the space chunk (that will be appended at the beginning
+        # or the end of the line, or both) and unit width
+        return (fill_spaces, var_space_units)
 
-    def _set_ligatures(self):
-        """set_ligatures:
+    def _start_new_line(self, var_space_units):
+        """Starts a new line during typesetting"""
+        # Pass the unit width to the justify method later on
+        self.line_buffer.append(('newline', var_space_units, 'New line'))
+        self.buffer.extend(self.line_buffer)
+        self.line_buffer = []
+        self.current_units = 0
+        self.current_line_var_spaces = 0
 
-        Choose if you want to use no ligatures, 2-character
-        or 3-character ligatures.
-        """
-        prompt = 'Ligatures: [1] - off, [2] characters, [3] characters? '
-        options = {'1': False, '2': 2, '3': 3}
-        self.ligatures = UI.simple_menu(prompt, options)
+    def _align_left(self):
+        """Aligns the previous chunk to the left."""
+        UI.debug_info('Aligning line to the left...')
+        (spaces, var_space_units) = self._justify_line(mode=1)
+        self.line_buffer.extend(spaces)
+        self._start_new_line(var_space_units)
+
+    def _align_right(self):
+        """Aligns the previous chunk to the right."""
+        UI.debug_info('Aligning line to the right...')
+        (spaces, var_space_units) = self._justify_line(mode=1)
+        self.line_buffer = spaces + self.line_buffer
+        self._start_new_line(var_space_units)
+
+    def _align_center(self):
+        """Aligns the previous chunk to the center."""
+        UI.debug_info('Aligning line to the center...')
+        (spaces, var_space_units) = self._justify_line(mode=2)
+        # Prepare the line: (content, wedge_positions)
+        self.line_buffer = spaces + self.line_buffer + spaces
+        self._start_new_line(var_space_units)
+
+    def _align_both(self):
+        """Aligns the previous chunk to both edges and ends the line."""
+        UI.debug_info('Aligning line to both edges...')
+        (_, var_space_units) = self._justify_line(mode=0)
+        self._start_new_line(var_space_units)
+
+
+class Translator(object):
+    """Typesetting class"""
+    def __init__(self):
+        self.settings = {'unit_line_length': 0, 'current_units': 0,
+                         'ligatures': 3, 'current_line_var_spaces': 0,
+                         'custom_characters': [], 'current_unit_correction': 0,
+                         'main_style': 'roman', 'current_style': 'roman',
+                         'current_alignment': 'align_left'}
+        # Set up the spaces
+        self.spaces = {'var': {'high': False, 'units': 4, 'symbol': ' ',
+                               'code': 'GS2'},
+                       'fixed': {'high': False, 'units': 9, 'code': 'G5',
+                                 'symbol': '_'},
+                       'nb': {'high': False, 'units': 9, 'code': 'G5',
+                              'symbol': '~'},
+                       'quad': {'high': False, 'units': 18, 'code': 'O15',
+                                'symbol': '\t'}}
+        self.buffers = {'line': [], 'work': []}
+        self.compose = self.auto_compose
+        self.current_alignment = self._align_left
+        # By default use automatic typesetting - less user control
+        self.manual_control = False
 
     def _choose_alignment(self):
         """Lets the user choose the text alignment in line or column."""
-        options = {'L': self._align_left,
-                   'C': self._align_center,
-                   'R': self._align_right,
-                   'B': self._align_both}
+        options = {'L': 'align_left',
+                   'C': 'align_center',
+                   'R': 'align_right',
+                   'B': 'align_both'}
         message = ('Default alignment: [L]eft, [C]enter, [R]ight, [B]oth? ')
-        self.current_alignment = UI.simple_menu(message, options)
+        self.settings['current_alignment'] = UI.simple_menu(message, options)
 
-    def _choose_style(self):
-        """Parses the diecase for available styles and lets user choose one."""
-        available_styles = matrix_data.get_styles(self.diecase_layout)
-        options = {str(i): style for i, style in
-                   enumerate(available_styles, start=1)}
-        # Nothing to choose from? Don't display the menu
-        if len(options) == 1:
-            self.main_style = options['1']
-        # Otherwise, let user choose
-        styles_list = ['%s : %s' % (x, options[x]) for x in sorted(options)]
-        styles_list = ', '.join(styles_list)
-        prompt = 'Choose a dominant style: %s ' % styles_list
-        self.main_style = UI.simple_menu(prompt, options)
+    def translate(self, char):
+        """translate:
+
+        Translates the character to a combination of Monotype signals,
+        applying single or double justification whenever necessary.
+        Returns an unit value of the character, so that it can be added
+        to current line's unit length.
+        """
+        try:
+            # Is that a command?
+            self.typesetting_commands[char]()
+            # Return 0 unit increment
+            return 0
+        except KeyError:
+            # If not, then continue
+            pass
+        # Detect any spaces and quads
+        for name in self.spaces:
+            if char == self.spaces[name]['symbol']:
+                units = self.spaces[name]['units']
+                self.line_buffer.append((name, units,
+                                         self.spaces[name]['desc']))
+                if name == 'var':
+                    self.current_line_var_spaces += 1
+                return units
+        # Space not recognized - so this is a character.
+        # Get the matrix data: [char, style, column, row, units]
+        # First try custom-defined characters (overrides)
+        # If empty - try diecase layout
+        matches = ([mat for mat in self.custom_characters
+                    if mat[0] == char and self.current_style in mat[1]] or
+                   [mat for mat in self.diecase_layout if mat[0] == char and
+                    self.current_style in mat[1]])
+        while not matches:
+            # Nothing found in the diecase for this character?
+            # Define it then yourself!
+            matrix = []
+            UI.display('Enter the position for character %s, style: %s'
+                       % (char, self.current_style))
+            row = UI.enter_data('Column? ').upper
+            column = UI.enter_data('Row? ', int)
+            matrix = [mat for mat in self.diecase_layout
+                      if mat[2] == column and mat[3] == row]
+        if len(matches) == 1:
+            matrix = matches[0]
+        elif len(matches) > 1:
+            options = dict(enumerate(matches, start=1))
+            matrix = UI.simple_menu('Choose a matrix for the character %s, '
+                                    'style: %s' % (char, self.current_style),
+                                    options)
+            self.custom_characters.append(matrix)
+        # If char units is the same as the row units, no correction is needed
+        # Get coordinates
+        column = matrix[2]
+        row = matrix[3]
+        # Combination to be cast
+        combination = column + str(row)
+        normal_unit_width = matrix[4]
+        # Add or subtract current unit correction
+        char_units = normal_unit_width + self.unit_correction
+        # Finally add the translated character to output buffer
+        self.line_buffer.append((combination, char_units, char))
+        # Return the character's unit width
+        return char_units
 
     def _get_space_code(self, desired_unit_width, high_space=False):
         """get_space_code:
@@ -327,76 +468,9 @@ class Typesetter(object):
         # Finalize setup
         self.spaces = spaces
 
-    def translate(self, char):
-        """translate:
-
-        Translates the character to a combination of Monotype signals,
-        applying single or double justification whenever necessary.
-        Returns an unit value of the character, so that it can be added
-        to current line's unit length.
-        """
-        try:
-            # Is that a command?
-            self.typesetting_commands[char]()
-            # Return 0 unit increment
-            return 0
-        except KeyError:
-            # If not, then continue
-            pass
-        # Detect any spaces and quads
-        for name in self.spaces:
-            if char == self.spaces[name]['symbol']:
-                units = self.spaces[name]['units']
-                self.line_buffer.append((name, units,
-                                         self.spaces[name]['desc']))
-                if name == 'var':
-                    self.current_line_var_spaces += 1
-                return units
-        # Space not recognized - so this is a character.
-        # Get the matrix data: [char, style, column, row, units]
-        # First try custom-defined characters (overrides)
-        # If empty - try diecase layout
-        matches = ([mat for mat in self.custom_characters
-                    if mat[0] == char and self.current_style in mat[1]] or
-                   [mat for mat in self.diecase_layout if mat[0] == char and
-                    self.current_style in mat[1]])
-        while not matches:
-            # Nothing found in the diecase for this character?
-            # Define it then yourself!
-            matrix = []
-            UI.display('Enter the position for character %s, style: %s'
-                       % (char, self.current_style))
-            row = UI.enter_data('Column? ').upper
-            column = UI.enter_data('Row? ', int)
-            matrix = [mat for mat in self.diecase_layout
-                      if mat[2] == column and mat[3] == row]
-        if len(matches) == 1:
-            matrix = matches[0]
-        elif len(matches) > 1:
-            options = dict(enumerate(matches, start=1))
-            matrix = UI.simple_menu('Choose a matrix for the character %s, '
-                                    'style: %s' % (char, self.current_style),
-                                    options)
-            self.custom_characters.append(matrix)
-        # If char units is the same as the row units, no correction is needed
-        # Get coordinates
-        column = matrix[2]
-        row = matrix[3]
-        # Combination to be cast
-        combination = column + str(row)
-        normal_unit_width = matrix[4]
-        # Add or subtract current unit correction
-        char_units = normal_unit_width + self.unit_correction
-        # Finally add the translated character to output buffer
-        self.line_buffer.append((combination, char_units, char))
-        # Return the character's unit width
-        return char_units
-
     def manual_compose(self):
-        """manual_compose:
-
-        Reads text fragments from input, then composes them, and justifies to a
-        specified line length. Adds codes to the buffer.
+        """Reads text fragments from input, then composes them, and justifies
+        to a specified line length. Adds codes to the buffer.
         Text fragments is a list of tuples: ((text1, style1), ...)
         """
 
@@ -460,129 +534,6 @@ class Typesetter(object):
         self.unit_line_length = round(18 * picas * self.set_width / 12, 2)
         UI.display('Line length in %s-set units: %s' % (self.set_width,
                                                         self.unit_line_length))
-
-    # Define some parsing functions
-    def _style_roman(self):
-        """Sets roman for the following text."""
-        self.current_style = 'roman'
-
-    def _style_bold(self):
-        """Sets bold for the following text."""
-        self.current_style = 'bold'
-
-    def _style_italic(self):
-        """Sets italic for the following text."""
-        self.current_style = 'italic'
-
-    def _style_smallcaps(self):
-        """Sets small caps for the following text."""
-        self.current_style = 'smallcaps'
-
-    def _style_subscript(self):
-        """Sets subscript for the following text."""
-        self.current_style = 'subscript'
-
-    def _style_superscript(self):
-        """Sets superscript for the following text."""
-        self.current_style = 'superscript'
-
-    def _start_new_line(self, var_space_units):
-        """Starts a new line during typesetting"""
-        # Pass the unit width to the justify method later on
-        self.line_buffer.append(('newline', var_space_units, 'New line'))
-        self.buffer.extend(self.line_buffer)
-        self.line_buffer = []
-        self.current_units = 0
-        self.current_line_var_spaces = 0
-
-    def _justify_line(self, mode=1):
-        """justify_line(mode=1)
-
-        Justify the row; applies to all alignment routines.
-        This function supports various modes:
-        0: justification only by variable spaces
-        1: filling the line with one block of fixed spaces, then dividing
-           the remaining units among variable spaces
-        2: as above but with two blocks of fixed spaces
-        3, 4... - as above but with 3, 4... blocks of fixed spaces
-        Add fixed spaces only if mode is greater than 0
-        """
-        # Add as many fixed spaces as we can
-        # Don't exceed the line length (in units) specified in setup!
-        # Predict if the increment will exceed it or not
-        UI.debug_info('Justifying line...')
-        fill_spaces_number = 0
-        space_units = self.spaces['fixed']['units']
-        # Determine if we have to add any spaces (otherwise - skip the loop)
-        result_length = self.current_units + mode * space_units
-        # Start with no spaces
-        fill_spaces = []
-        while mode and result_length < self.unit_line_length:
-            # Add units
-            self.current_units += mode * self.spaces['fixed']['units']
-            # Add a mode-dictated number of fill spaces
-            fill_spaces_number += mode
-            # Determine and add the space code to the line
-            space = list(self.spaces['fixed']['code'])
-            space.append('Fixed space %i units wide'
-                         % self.spaces['fixed']['units'])
-            space = tuple(space)
-            # Add as many spaces as needed
-            fill_spaces = [space for i in range(fill_spaces_number)]
-            # Update resulting length
-            result_length = self.current_units + mode * space_units
-        # The remaining units must be divided among the justifying spaces
-        # Determine the unit width
-        remaining_units = self.unit_line_length - self.current_units
-        var_space_units = remaining_units / self.current_line_var_spaces
-        # Return the space chunk (that will be appended at the beginning
-        # or the end of the line, or both) and unit width
-        return (fill_spaces, var_space_units)
-
-    def _align_left(self):
-        """Aligns the previous chunk to the left."""
-        UI.debug_info('Aligning line to the left...')
-        (spaces, var_space_units) = self._justify_line(mode=1)
-        self.line_buffer.extend(spaces)
-        self._start_new_line(var_space_units)
-
-    def _align_right(self):
-        """Aligns the previous chunk to the right."""
-        UI.debug_info('Aligning line to the right...')
-        (spaces, var_space_units) = self._justify_line(mode=1)
-        self.line_buffer = spaces + self.line_buffer
-        self._start_new_line(var_space_units)
-
-    def _align_center(self):
-        """Aligns the previous chunk to the center."""
-        UI.debug_info('Aligning line to the center...')
-        (spaces, var_space_units) = self._justify_line(mode=2)
-        # Prepare the line: (content, wedge_positions)
-        self.line_buffer = spaces + self.line_buffer + spaces
-        self._start_new_line(var_space_units)
-
-    def _align_both(self):
-        """Aligns the previous chunk to both edges and ends the line."""
-        UI.debug_info('Aligning line to both edges...')
-        (_, var_space_units) = self._justify_line(mode=0)
-        self._start_new_line(var_space_units)
-
-    def convert_to_unit_shift(self):
-        """convert_to_unit_shift:
-
-        Sometimes using unit-shift is necessary to cast - i.e. we have to
-        access 16th row on a 16x17 matrix case. This function will activate
-        unit shift for the current typesetting session, but also convert
-        all codes in a buffer so that they use EF instead of D signals
-        in column number.
-        """
-        prompt = ('\nWARNING: You are trying to use 16th row on a matrix case.'
-                  '\nFor that you must use the unit-shift attachment. '
-                  'Do you wish to compose for unit-shift? \n')
-        self.unit_shift = UI.confirm(prompt)
-        if self.unit_shift:
-            for (combination, _, _) in self.buffer:
-                combination.replace('D', 'EF')
 
     def correct_units(self, combination, char_units, comment):
         """Determines if unit correction is needed for a character"""

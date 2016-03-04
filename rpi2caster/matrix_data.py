@@ -43,13 +43,12 @@ class Diecase(object):
         # Edit the layout
         UI.edit_diecase_layout(self)
 
-    def get_matrix(self, char='', *styles):
+    def get_matrix(self, char='', style='roman'):
         """Chooses a matrix manually"""
-        matrix = Matrix()
+        matrix = Matrix(char, [style])
         matrix.diecase = self
         if char:
             UI.display('Enter matrix data for character: %s' % char)
-        styles = styles
         prompt = 'Combination? (default: G5): '
         code_string = UI.enter_data_or_blank(prompt).upper() or 'G5'
         combination = p.parse_signals(code_string)
@@ -60,12 +59,16 @@ class Diecase(object):
         units = self.wedge.unit_arrangement[row]
         prompt = 'Unit width? (default: %s): ' % units
         units = abs(UI.enter_data_or_blank(prompt, int) or units)
-        matrix.char = char
-        matrix.styles = styles
         matrix.column = column
         matrix.row = row
         matrix.units = units
         return matrix
+
+    def decode_matrix(self, column, row):
+        """Finds the matrix character and style(s) from the layout"""
+        matrix = [mat for mat in self.matrices
+                  if mat.column == column and mat.row == row][0]
+        return matrix.char, matrix.styles
 
     def import_layout(self):
         """Imports a layout from file"""
@@ -118,6 +121,12 @@ class Diecase(object):
         layout = generate_empty_layout()
         if UI.confirm('Are you sure?'):
             self.layout = layout
+
+    @property
+    def matrices(self):
+        """Gets the layout as a list of matrix objects"""
+        return [Matrix(char, styles, (column, row), units)
+                for (char, styles, column, row, units) in self.layout]
 
     def set_diecase_id(self, diecase_id=None):
         """Sets a diecase ID"""
@@ -260,15 +269,27 @@ class SelectDiecase(Diecase):
         except (KeyError, TypeError, e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Diecase choice failed. Using empty one instead.')
 
+    def get_matrix(self, char='', style='roman'):
+        """Chooses a matrix automatically"""
+        candidates = [mat for mat in self.matrices
+                      if char == mat.char and style in mat.styles]
+        if not candidates:
+            return super().get_matrix(char, style)
+        elif len(candidates) == 1:
+            return candidates[0]
+        else:
+            # Show a menu with multiple candidates
+            pass
+
 
 class Matrix(object):
     """A class for single matrices - all matrix data"""
-    def __init__(self):
-        self.char = ''
-        self.styles = []
-        self.column = 'O'
-        self.row = 15
-        self.units = 18
+    def __init__(self, char=' ', styles=('roman'),
+                 coordinates=('O', 15), units=18):
+        self.char = char
+        self.styles = styles
+        (self.column, self.row) = coordinates
+        self.units = units
         self.diecase = Diecase()
 
     @property
