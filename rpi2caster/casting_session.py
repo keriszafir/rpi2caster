@@ -268,8 +268,8 @@ class Casting(object):
         for (char, style, qty) in casting_queue:
             # Make an infinite iterator when we call this function without
             # the list of character-style pairs
-            prompt = ('Character: %s\n'
-                      'Y: add to casting queue, N: skip it?' % char)
+            prompt = ('Character: %s %s\n'
+                      'Y: add to casting queue, N: skip it?' % (style, char))
             if not char:
                 casting_queue.append((char, style, 0))
             elif not UI.confirm(prompt):
@@ -278,15 +278,15 @@ class Casting(object):
             char = char or UI.enter_data_or_blank(prompt)
             if not char:
                 break
-            available_styles = {'r': 'roman', 'b': 'bold',
-                                'i': 'italic', 's': 'smallcaps',
-                                'l': 'subscript', 'u': 'superscript'}
-            style = style or (available_styles.get(UI.enter_data_or_blank(
-                'Styles: [r]oman, [b]old, [i]talic, [s]mall caps, '
-                '[l]ower index, [u]pper index (default: roman): ', str), 'r'))
+            style = style or UI.choose_one_style()
+            prompt = 'Unit correction (-2...+10, default 0) ?: '
+            correction = 20
+            while not -2 <= correction <= 10:
+                correction = UI.enter_data_or_blank(prompt) or 0
             matrix = self.diecase.get_matrix(char, style)
-            diff = matrix.units - matrix.row_units
-            wedge_positions = self._calculate_wedges(diff)
+            diff = matrix.units + correction - matrix.row_units(self.wedge)
+            # Calculate wedges
+            wedge_positions = matrix.wedge_positions(correction, self.wedge)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many sorts per line? (default: 10): '
             qty = qty or abs(UI.enter_data_or_blank(prompt, int) or 10)
@@ -365,8 +365,10 @@ class Casting(object):
             # How many spaces will fit in a line? Calculate it...
             qty = int(line_length // width)
             # Check if the corrections are needed at all
-            diff = width - matrix.row_units
-            wedge_positions = self._calculate_wedges(diff)
+            correction = width - matrix.units
+            wedge_positions = matrix.wedge_positions(correction, self.wedge)
+            # Any corrections needed?
+            diff = matrix.units + correction - matrix.row_units(self.wedge)
             # Add 'S' if there is width difference
             signals = matrix.code + (diff and 'S' or '') + '// ' + comment
             line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
@@ -380,33 +382,25 @@ class Casting(object):
 
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
-        scheme = typesetting_data.SelectFontScheme()
-        prompt = ('Scale in %, relative to 100 "a" characters:\n'
-                  '(leave blank to exit) ?: ')
-        scale = UI.enter_data_or_blank(prompt, float) / 100
-        if not scale:
-            return
-        available_styles = {'r': 'roman', 'b': 'bold',
-                            'i': 'italic', 's': 'smallcaps',
-                            'l': 'subscript', 'u': 'superscript'}
-        print('Styles to cast?\n'
-              'Available styles: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
-              '[l]ower index (a.k.a. subscript, inferior), '
-              '[u]pper index (a.k.a. superscript, superior).\n'
-              'Leave blank for roman.')
-        styles_string = UI.enter_data_or_blank('Styles?: ') or 'r'
-        styles = [available_styles.get(char, None) for char in styles_string]
-        styles = [style for style in styles if style is not None]
+        enter = UI.enter_data_or_blank
+        scheme = typesetting_data.SelectFontScheme().layout
+        scale_prompt = ('Scale for %s in %%, relative to 100 "a" characters:\n'
+                        '(default: 100%%) ?: ')
+        UI.display('Styles to cast?')
+        styles = UI.choose_styles()
         # Now generate and display the casting queue
-        sorts = {style: [(char, style, round(qty * scale))
-                         for (char, ch_style, qty) in scheme.layout
-                         if ch_style == style] for style in styles}
+        style_scales = {style: (enter(scale_prompt % style, float) / 100) or 1
+                        for style in styles}
+        # Get the char number from scheme, style scale from scales
+        queue = [(char, [style], int(scheme[char] * style_scales[style]))
+                 for style in styles for char in sorted(scheme)]
         queue = []
-        for style in sorts:
+        for style in styles:
             UI.display_header(style)
-            queue.extend(sorts[style])
-            for (char, _, qty) in sorts[style]:
+            for char in sorted(scheme):
+                qty = int(scheme[char] * style_scales[style])
                 UI.display('%s : %s' % (char, qty))
+                queue.append((char, style, qty))
         self.cast_sorts(queue)
 
     @cast_or_punch_result
@@ -472,6 +466,7 @@ class Casting(object):
         UI.display(intro)
         # We calculate the width of double 9 units = 18 units, i.e. 1 pica em
         em_width = self.wedge.pica * self.wedge.set_width / 12.0
+        UI.display_parameters({'Wedge data': self.wedge.parameters})
         UI.display('9 units (1en) is %s" wide' % round(0.5 * em_width, 4))
         UI.display('18 units (1em) is %s" wide' % round(em_width, 4))
         signals = 'G5'
@@ -637,35 +632,3 @@ class Casting(object):
                                'Matrix case data': self.diecase.parameters,
                                'Wedge data': self.wedge.parameters})
         UI.pause()
-
-    def _calculate_wedges(self, diff):
-        """calculate_wedges:
-
-        Calculates and returns wedge positions for character.
-        Uses pre-calculated unit width difference between row's unit width
-        and character's width (with optional corrections).
-        """
-        # Calculate the inch width of delta
-        # 1 pica = 18 units 12 set = 0.1667 (old British pica)
-        # or 0.1660 (Am. pica); unit_width = 12 * pica / (set width * 18)
-        steps_0005 = int(diff * 0.166 / self.wedge.pica *
-                         self.wedge.set_width * 2000 / 1296) + 53
-        # Adjust the wedges
-        # You do it in respect to the neutral position i.e. 3/8:
-        # 3 steps of 0075 and 8 steps of 0005 wedge.
-        # 3 / 8 = 1 * 15 + 8 = 53 - that would be 53 steps of 0005 wedge
-        # Add safeguards against wrong wedge positions
-        # Minimum wedge positions (0075/0005) are 1/1, maximum 15/15
-        # This is equivalent to min 1*15+1=16 steps and max 15*15+15=240 steps
-        # WARNING - the actual value when casting chars/high spaces must not be
-        # wider than the matrix (.2" for small composition, 0.4 for 2x2 etc),
-        # otherwise we get a splash between mats!
-        steps_0005 = min(steps_0005, 240)
-        # Lower limit: 1/1 wedge positions:
-        steps_0005 = max(16, steps_0005)
-        steps_0075 = 0
-        while steps_0005 > 15:
-            steps_0005 -= 15
-            steps_0075 += 1
-        # Got the wedge positions, return them
-        return {'0075': steps_0075, '0005': steps_0005}

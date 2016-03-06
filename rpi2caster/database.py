@@ -93,7 +93,7 @@ class Database(object):
                        'PRIMARY KEY (wedge_series, set_width, brit_pica))')
                 cursor.execute(sql)
                 # Then add an entry:
-                cursor.execute('INSERT INTO wedges ('
+                cursor.execute('INSERT OR REPLACE INTO wedges ('
                                'wedge_series, set_width, '
                                'brit_pica, unit_arrangement'
                                ') VALUES (?, ?, ?, ?)''', data)
@@ -221,7 +221,7 @@ class Database(object):
                                'typeface_name TEXT NOT NULL, '
                                'layout TEXT NOT NULL)')
                 # Then add an entry:
-                cursor.execute('INSERT INTO matrix_cases ('
+                cursor.execute('INSERT OR REPLACE INTO matrix_cases ('
                                'diecase_id, type_series, type_size,'
                                'wedge_series, set_width, typeface_name, layout'
                                ') VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
@@ -312,7 +312,7 @@ class Database(object):
                                'diecase_id TEXT NOT NULL, '
                                'contents TEXT NOT NULL)')
                 # Then add an entry:
-                cursor.execute('INSERT INTO ribbons ('
+                cursor.execute('INSERT OR REPLACE INTO ribbons ('
                                'title, author, customer, diecase_id, contents'
                                ') VALUES (?, ?, ?, ?)''', data)
                 self.db_connection.commit()
@@ -385,7 +385,7 @@ class Database(object):
                                'language TEXT NOT NULL, '
                                'scheme_layout TEXT NOT NULL)')
                 # Then add an entry:
-                cursor.execute('INSERT INTO font_schemes ('
+                cursor.execute('INSERT OR REPLACE INTO font_schemes ('
                                'scheme_id, description, language, '
                                'scheme_layout) VALUES (?, ?, ?, ?)''', data)
                 self.db_connection.commit()

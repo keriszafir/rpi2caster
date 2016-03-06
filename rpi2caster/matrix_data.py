@@ -6,8 +6,7 @@ diecase storing, parameter searches.
 import io
 import os
 import csv
-# Object copying
-from copy import deepcopy
+
 # Some functions raise custom exceptions
 from . import exceptions as e
 # Wedge operations for several matrix-case management functions
@@ -31,7 +30,14 @@ class Diecase(object):
         self.type_size = ''
         self.typeface_name = ''
         self.wedge = wedge_data.Wedge()
-        self.layout = generate_empty_layout(15, 17)
+        self.matrices = None
+        self.generate_empty_layout(15, 17)
+
+    def __iter__(self):
+        return iter(self.matrices)
+
+    def __next__(self):
+        yield from self.matrices
 
     def show_layout(self):
         """Shows the diecase layout"""
@@ -64,16 +70,12 @@ class Diecase(object):
         matrix.units = units
         return matrix
 
-    def decode_matrix(self, column, row):
-        """Finds the matrix character and style(s) from the layout"""
-        matrix = [mat for mat in self.matrices
-                  if mat.column == column and mat.row == row][0]
-        return matrix.char, matrix.styles
+    def decode_matrix(self, code):
+        """Finds the matrix based on the column and row in layout"""
+        return [mat for mat in self.matrices if mat.code == code.upper()][0]
 
     def import_layout(self):
         """Imports a layout from file"""
-        # Start with an empty layout
-        new_layout = generate_empty_layout()
         # Load the layout from file
         submitted_layout = import_layout_file()
         if not submitted_layout:
@@ -82,24 +84,17 @@ class Diecase(object):
         # Update the empty layout with characters read from file
         # record = (char, styles, column, row, units)
         try:
-            for position in new_layout:
+            self.generate_empty_layout()
+            for matrix in self.matrices:
                 for record in submitted_layout:
-                    if record[2] == position[2] and record[3] == position[3]:
-                        new_layout[new_layout.index(position)] = record
+                    (char, styles, column, row, units) = record
+                    if matrix.column == column and matrix.row == row:
+                        matrix.char = char
+                        matrix.styles = styles
+                        matrix.units = units
         except (TypeError, ValueError):
             UI.pause('Cannot process the uploaded layout!')
             return False
-        # Other positions will be empty but defined
-        # Now display the layout - need to use a temporary diecase for that
-        temp_diecase = Diecase()
-        temp_diecase.layout = new_layout
-        temp_diecase.wedge = self.wedge
-        UI.display('\nSubmitted layout:\n')
-        UI.display_diecase_layout(temp_diecase)
-        # Ask for confirmation
-        if UI.confirm('Save the changes?'):
-            self.layout = new_layout
-            return True
 
     def export_layout(self):
         """Exports the matrix case layout to file."""
@@ -109,24 +104,57 @@ class Diecase(object):
                                     quoting=csv.QUOTE_ALL)
             csv_writer.writerow(['Character', 'Style(s)', 'Column', 'Row',
                                  'Unit width'])
-            for record in self.layout:
-                (char, styles, column, row, units) = record
+            for matrix in self.matrices:
+                (char, styles, column, row, units) = matrix.record
                 csv_writer.writerow([char, ', '.join(styles),
                                      column, row, units])
         UI.pause('File %s successfully saved.' % filename)
         return True
 
-    def clear_layout(self):
-        """Clears a layout for the diecase"""
-        layout = generate_empty_layout()
-        if UI.confirm('Are you sure?'):
-            self.layout = layout
+    def generate_empty_layout(self, rows=None, columns=None):
+        """Makes a list of empty matrices, row for row, column for column"""
+        prompt = ('Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? '
+                  '(leave blank to cancel) : ')
+        options = {'1': (15, 15), '2': (15, 17), '3': (16, 17), '': ()}
+        if (rows, columns) not in options.values():
+            choice = UI.simple_menu(prompt, options)
+            if not choice:
+                return
+            (rows, columns) = choice
+        # Generate column numbers
+        columns_list = columns == 17 and c.COLUMNS_17 or c.COLUMNS_15
+        # Generate row numbers: 1...15 or 1...16
+        rows_list = [num + 1 for num in range(rows)]
+        self.matrices = [Matrix(coordinates=(column, row),
+                                units=self.wedge.unit_arrangement[row])
+                         for row in rows_list for column in columns_list]
+
+    @property
+    def layout(self):
+        """Gets a diecase layout as a list of lists"""
+        return [matrix.record for matrix in self.matrices]
+
+    @layout.setter
+    def layout(self, layout):
+        """Translates the layout to a list of matrix objects"""
+        self.matrices = [Matrix(char, styles, (column, row), units)
+                         for (char, styles, column, row, units) in layout]
 
     @property
     def matrices(self):
-        """Gets the layout as a list of matrix objects"""
-        return [Matrix(char, styles, (column, row), units)
-                for (char, styles, column, row, units) in self.layout]
+        """Gets a list of Matrix objects"""
+        return self.__dict__.get('_matrices')
+
+    @matrices.setter
+    def matrices(self, matrices):
+        """Sets a list of Matrix objects, used for storing the layout"""
+        if matrices:
+            for matrix in matrices:
+                matrix.diecase = self
+                # Set the unit width for chars with 0 value; correct for
+                # the wedge currently assigned to the diecase
+                matrix.units = matrix.units or matrix.row_units(self.wedge)
+            self.__dict__['_matrices'] = matrices
 
     def set_diecase_id(self, diecase_id=None):
         """Sets a diecase ID"""
@@ -135,11 +163,10 @@ class Diecase(object):
                       self.diecase_id)
         # Ask if we are sure we want to update this
         # if self.diecase_id was set earlier
-        condition = (not self.diecase_id or diecase_id != self.diecase_id and
-                     UI.confirm('Are you sure to change diecase ID?'))
-        if condition:
-            self.diecase_id = diecase_id
-            return True
+        if not self.diecase_id or diecase_id != self.diecase_id:
+            if UI.confirm('Are you sure to change diecase ID?'):
+                self.diecase_id = diecase_id
+                return True
 
     def set_typeface(self, type_series=None, type_size=None,
                      typeface_name=None):
@@ -203,10 +230,6 @@ class Diecase(object):
         except TypeError:
             return []
 
-    def copy(self):
-        """Copies itself and returns an independent object"""
-        return deepcopy(self)
-
     def manipulation_menu(self):
         """A menu with all operations on a diecase"""
         try:
@@ -219,13 +242,13 @@ class Diecase(object):
                            'W': self.assign_wedge,
                            'ID': self.set_diecase_id,
                            'E': self.edit_layout,
-                           'C': self.clear_layout,
+                           'N': self.generate_empty_layout,
                            'V': self.show_layout,
                            'I': self.import_layout,
                            'X': self.export_layout,
                            '': e.menu_level_up}
                 messages = ['\nMatrix case manipulation:\n\n'
-                            '[V]iew, [C]lear or resize, [E]dit, [I]mport '
+                            '[V]iew, [N]ew, [E]dit, [I]mport '
                             'or e[X]port layout\nAssign [W]edge, '
                             'change [T]ypeface or diecase [ID]\n\n']
                 # Save to database needs a complete set of metadata
@@ -279,23 +302,38 @@ class SelectDiecase(Diecase):
             return candidates[0]
         else:
             # Show a menu with multiple candidates
-            pass
+            hdr = (['Index'.ljust(10), 'Char'.ljust(10), 'Styles'.ljust(30),
+                    'Column'.ljust(10), 'Row'.ljust(10), 'Units'.ljust(10)])
+            mats = {i: mat for i, mat in enumerate(candidates, start=1)}
+            prompt = 'Choose matrix (leave blank to enter manually): '
+            choice = 0
+            UI.display(''.join(hdr))
+            for i, mat in mats.items():
+                record = [str(i).ljust(10), mat.char.ljust(10),
+                          ', '.join(mat.styles).ljust(30),
+                          mat.column.ljust(10), str(mat.row).ljust(10),
+                          str(mat.units).ljust(10)]
+                UI.display(''.join(record))
+            choice = UI.enter_data_or_blank(prompt, int)
+            matrix = mats.get(choice, Matrix(char, (style)))
+            matrix.diecase = self
+            return matrix
 
 
 class Matrix(object):
     """A class for single matrices - all matrix data"""
-    def __init__(self, char=' ', styles=('roman'),
-                 coordinates=('O', 15), units=18):
+    def __init__(self, char='', styles=('roman'),
+                 coordinates=('O', 15), units=None):
         self.char = char
         self.styles = styles
         (self.column, self.row) = coordinates
+        self.diecase = None
         self.units = units
-        self.diecase = Diecase()
 
-    @property
-    def row_units(self):
+    def row_units(self, alt_wedge=None):
         """Gets the row's unit width value for the diecase's wedge"""
-        return self.diecase.wedge.unit_arrangement[self.row]
+        wedge = alt_wedge or self.diecase.wedge
+        return wedge.unit_arrangement[self.row]
 
     @property
     def row(self):
@@ -311,9 +349,67 @@ class Matrix(object):
         self.__dict__['_row'] = value
 
     @property
+    def parameters(self):
+        """Gets all parameters for the matrix"""
+        return [(self.char, 'Character'),
+                (', '.join(list(self.styles)), 'Styles'),
+                (self.code, 'Coordinates'), (self.units, 'Unit width')]
+
+    @property
     def code(self):
         """Gets the matrix code"""
         return self.column + str(self.row)
+
+    @property
+    def units(self):
+        """Gets the specific or default number of units"""
+        units = self.__dict__.get('_units', None)
+        return units or self.row_units()
+
+    @units.setter
+    def units(self, units):
+        """Sets the unit width value"""
+        self.__dict__['_units'] = units
+
+    @property
+    def record(self):
+        """Returns a record suitable for JSON-dumping and storing in DB"""
+        return [self.char, self.styles, self.column, self.row, self.units]
+
+    @property
+    def diecase(self):
+        """Get a diecase or an empty one"""
+        return self.__dict__.get('_diecase', Diecase())
+
+    @diecase.setter
+    def diecase(self, diecase):
+        """Set a diecase"""
+        if diecase is not None:
+            self.__dict__['_diecase'] = diecase
+
+    def wedge_positions(self, unit_correction=0, alt_wedge=None):
+        """Calculates the 0075 and 0005 wedge positions for this matrix
+        based on the diecase's default wedge or specified one."""
+        wedge = alt_wedge or self.diecase.wedge
+        diff = self.units + unit_correction - self.row_units(wedge)
+        # 53 = neutral position where no corrections applied, i.e. 3/8
+        # diff in units of given set; wedge pica = 0.166 or 0.1667
+        steps_0005 = int(diff / wedge.pica * wedge.set_width * 0.25617) + 53
+        # Upper limit: 15/15 => 15*15=225 + 15 = 240
+        # (unsafe for casting from mats!)
+        steps_0005 = min(steps_0005, 240)
+        # Lower limit: 1/1 wedge positions => 15 + 1 = 16:
+        steps_0005 = max(16, steps_0005)
+        steps_0075 = 0
+        while steps_0005 > 15:
+            steps_0005 -= 15
+            steps_0075 += 1
+        # Got the wedge positions, return them
+        return {'0075': steps_0075, '0005': steps_0005}
+
+    def edit(self):
+        """Edits the matrix data"""
+        UI.edit_matrix(self)
 
 
 def diecase_operations():
@@ -417,22 +513,6 @@ def import_layout_file():
         return layout
     except (KeyError, ValueError, IndexError):
         return False
-
-
-def generate_empty_layout(rows=0, columns=0):
-    """Generates a table of empty values for matrix case layout"""
-    options = {'1': (15, 15), '2': (15, 17), '3': (16, 17)}
-    if (rows, columns) not in options.values():
-        prompt = "Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? "
-        (rows, columns) = UI.simple_menu(prompt, options)
-    # Generate column numbers
-    columns_list = columns == 17 and c.COLUMNS_17 or c.COLUMNS_15
-    # Generate row numbers: 1...15 or 1...16
-    rows_list = [num + 1 for num in range(rows)]
-    # Generate an empty layout with default row unit values
-    layout = [['', ['roman'], column, row, 0]
-              for row in rows_list for column in columns_list]
-    return layout
 
 
 def process_record(record):

@@ -347,12 +347,10 @@ def import_scheme_from_file(filename=None):
     # Ask if the first row is a header - if so, away with it
     if UI.confirm('Is the 1st row a table header? '):
         all_records.pop(0)
-        if not UI.confirm('Proceed?'):
-            return False
     try:
-        return [(char, style, int(qty)) for char, style, qty in all_records]
+        return {char: int(qty) for char, qty in all_records}
     except (KeyError, ValueError, IndexError):
-        return []
+        return {}
 
 
 def choose_ribbon_from_db():

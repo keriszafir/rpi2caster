@@ -535,58 +535,6 @@ class Translator(object):
         UI.display('Line length in %s-set units: %s' % (self.set_width,
                                                         self.unit_line_length))
 
-    def correct_units(self, combination, char_units, comment):
-        """Determines if unit correction is needed for a character"""
-        (column, row) = parse_combination(combination)
-        row_units = self.unit_arrangement[row]
-        # Is the character width correction needed at all?
-        unit_difference = char_units - row_units
-        # Tell us what we are translating
-        UI.debug_info('Character:', comment, 'style:', self.current_style)
-        UI.debug_info('Matrix at:', combination)
-        # Trying to access the 16th row with no unit shift activated
-        if row == 16 and not self.unit_shift:
-            self.convert_to_unit_shift()
-        # If we use unit shift, we can move the diecase one row further
-        # This would mean e.g. that when using the 5-series wedge, with UA:
-        # 5, 6, 7, 8, 9... - we can put the 8-unit character at A5
-        # (i.e. 9-unit position, normally), cast it with unit shift (add D
-        # to the column sequence) and have 8 units.
-        # Casting from column D will need us to replace the "D" signal,
-        # that we use normally, with combined "EF".
-        if self.unit_shift:
-            shifted_row = row - 1
-            column.replace('D', 'EF')
-            shifted_column = column + 'D'
-            shifted_row_units = self.unit_arrangement[shifted_row]
-            # Check if unit shift is needed for this character (if it's on)
-            if unit_difference and char_units == shifted_row_units:
-                # No unit difference between char and row
-                # (that's why we used unit shift)
-                unit_difference = 0
-                # Info for user
-                UI.debug_info('Correcting the width by unit shift...')
-                UI.debug_info('Character units:', char_units,
-                              'row units:', row_units)
-                # Override previous combination
-                combination = shifted_column + str(shifted_row)
-            elif row == 16:
-                # Use unit shift for these even if you have to add units
-                unit_difference = char_units - shifted_row_units
-                UI.debug_info('Casting from row 16 - unit shift is necessary')
-                UI.debug_info('Character units:', char_units,
-                              'row units:', shifted_row_units)
-                combination = shifted_column + str(shifted_row)
-            # Combination after corrections
-            UI.debug_info('Combination with unit shift:', combination, '')
-        # Check if we need unit corrections at all...
-        if not unit_difference:
-            UI.debug_info('No unit corrections needed.')
-        elif unit_difference << 0:
-            UI.debug_info('Taking away %s units' % -1 * unit_difference)
-        elif unit_difference >> 0:
-            UI.debug_info('Adding %s units' % unit_difference)
-
     def justify(self):
         """justify:
 
