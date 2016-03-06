@@ -85,7 +85,7 @@ class Diecase(object):
                           str(mat.units).ljust(10)]
                 UI.display(''.join(record))
             choice = UI.enter_data_or_blank(prompt, int)
-            matrix = mats.get(choice, Matrix(char, (style)))
+            matrix = mats.get(choice, Matrix(char, [style]))
             matrix.diecase = self
             return matrix
 
@@ -295,7 +295,7 @@ class SelectDiecase(Diecase):
 
 class Matrix(object):
     """A class for single matrices - all matrix data"""
-    def __init__(self, char='', styles=('roman'),
+    def __init__(self, char='', styles=('roman',),
                  coordinates=('O', 15), units=None):
         self.char = char
         self.styles = styles

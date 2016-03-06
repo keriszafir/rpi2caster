@@ -8,7 +8,7 @@ import readline
 import glob
 
 from . import exceptions as e
-from . import constants
+from . import constants as c
 
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
@@ -309,7 +309,7 @@ def display_diecase_layout(diecase):
     cols_set = {matrix.column for matrix in matrices}
     rows_set = {matrix.row for matrix in matrices}
     col_numbers = ((16 in rows_set or 'NI' in cols_set or 'NL' in cols_set) and
-                   constants.COLUMNS_17 or constants.COLUMNS_15)
+                   c.COLUMNS_17 or c.COLUMNS_15)
     # If row 16 found - generate 16 rows; else 15
     row_numbers = [x for x in range(1, 16 in rows_set and 17 or 16)]
     # Generate a header with column numbers
@@ -374,65 +374,51 @@ def edit_diecase_layout(diecase):
     def all_columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
         # Rearrange the layout so that it's read column by column
-        iter_mats = (mat for col in constants.COLUMNS_17
+        iter_mats = (mat for col in c.COLUMNS_17
                      for mat in diecase if mat.column == col)
         for mat in iter_mats:
             edit_matrix(mat)
 
-    def single_row_mode():
+    def single_row_mode(row):
         """Edits matrices found in a single row"""
-        prompt = 'Row (1 - 16, leave blank to exit)? : '
-        while True:
-            row = 0
-            while row not in range(1, 17):
-                row = enter_data_or_blank(prompt, int)
-                if not row:
-                    return
-            iter_mats = (mat for mat in diecase if mat.row == row)
-            for mat in iter_mats:
-                edit_matrix(mat)
+        iter_mats = (mat for mat in diecase if mat.row == row)
+        for mat in iter_mats:
+            edit_matrix(mat)
 
-    def single_column_mode():
+    def single_column_mode(column):
         """Edits matrices found in a single column"""
-        col_prompt = 'Column (NI, NL, A...O, leave blank to exit)? : '
-        while True:
-            column = ''
-            while column not in constants.COLUMNS_17:
-                column = enter_data_or_blank(col_prompt, str).upper()
-                if not column:
-                    return
-            iter_mats = (mat for mat in diecase if mat.column == column)
-            for mat in iter_mats:
-                edit_matrix(mat)
+        iter_mats = (mat for mat in diecase if mat.column == column)
+        for mat in iter_mats:
+            edit_matrix(mat)
 
     # Map unit values to rows
     # If the layout is empty, we need to initialize it
-    prompt = ('Enter matrix coordinates to edit or choose edit mode '
-              'from list below:\n'
-              'R - all matrices in a specified row, '
-              'C - all matrices in a specified column,\n'
-              'AR - all matrices row by row, '
+    prompt = ('Enter row number to edit all mats in a row,\n'
+              'column number to edit all mats in a column,\n'
+              'matrix coordinates to edit a single matrix,\n'
+              'or choose edit mode: AR - all matrices row by row, '
               'AC - all matrices column by column.'
               '\nYour choice (or leave blank to exit) : ')
-    options = {'AR': all_rows_mode,
-               'AC': all_columns_mode,
-               'R': single_row_mode,
-               'C': single_column_mode,
-               '': e.menu_level_up}
     while True:
         print('\nCurrent diecase layout:\n')
         display_diecase_layout(diecase)
         try:
             ans = input(prompt).upper()
-            if ans in options:
-                options.get(ans)()
-            else:
+            if ans == 'AR':
+                all_rows_mode()
+            elif ans == 'AC':
+                all_columns_mode()
+            elif ans in c.COLUMNS_17:
+                single_column_mode(ans)
+            elif ans in [str(x) for x in range(1, 17)]:
+                single_row_mode(int(ans))
+            elif ans:
                 mat = get_matrix(ans)
                 edit_matrix(mat)
-        except (IndexError, KeyboardInterrupt, AttributeError):
+            else:
+                return diecase.matrices
+        except (IndexError, KeyboardInterrupt, TypeError, AttributeError):
             pass
-        except e.MenuLevelUp:
-            return diecase.matrices
 
 
 def exit_program(*_):
