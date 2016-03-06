@@ -364,86 +364,58 @@ def edit_diecase_layout(diecase):
     Allows to enter a position to be edited. """
     def get_matrix(coordinates):
         """Gets matrix data for given coordinates."""
-        mats = [mat for mat in diecase if mat.code == coordinates.upper()]
-        try:
-            return mats[0]
-        except IndexError:
-            return None
-
-    def single_cell_mode():
-        """Allows to specify a cell by its coordinates and edit it."""
-        while True:
-            coordinates = input('Coordinates? (leave blank to finish) : ')
-            if not coordinates:
-                return
-            try:
-                mat = get_matrix(coordinates)
-                edit_matrix(mat)
-            except (IndexError, KeyboardInterrupt):
-                pass
+        return [mat for mat in diecase if mat.code == coordinates.upper()][0]
 
     def all_rows_mode():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
-        try:
-            for mat in diecase:
-                edit_matrix(mat)
-        except KeyboardInterrupt:
-            pass
+        for mat in diecase:
+            edit_matrix(mat)
 
     def all_columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
         # Rearrange the layout so that it's read column by column
-        try:
-            iter_mats = (mat for col in constants.COLUMNS_17
-                         for mat in diecase if mat.column == col)
-            for mat in iter_mats:
-                edit_matrix(mat)
-        except KeyboardInterrupt:
-            pass
+        iter_mats = (mat for col in constants.COLUMNS_17
+                     for mat in diecase if mat.column == col)
+        for mat in iter_mats:
+            edit_matrix(mat)
 
     def single_row_mode():
         """Edits matrices found in a single row"""
         prompt = 'Row (1 - 16, leave blank to exit)? : '
-        try:
-            while True:
-                row = 0
-                while row not in range(1, 17):
-                    row = enter_data_or_blank(prompt, int)
-                    if not row:
-                        return
-                iter_mats = (mat for mat in diecase if mat.row == row)
-                for mat in iter_mats:
-                    edit_matrix(mat)
-        except KeyboardInterrupt:
-            pass
+        while True:
+            row = 0
+            while row not in range(1, 17):
+                row = enter_data_or_blank(prompt, int)
+                if not row:
+                    return
+            iter_mats = (mat for mat in diecase if mat.row == row)
+            for mat in iter_mats:
+                edit_matrix(mat)
 
     def single_column_mode():
         """Edits matrices found in a single column"""
         col_prompt = 'Column (NI, NL, A...O, leave blank to exit)? : '
-        try:
-            while True:
-                column = ''
-                while column not in constants.COLUMNS_17:
-                    column = enter_data_or_blank(col_prompt, str).upper()
-                    if not column:
-                        return
-                iter_mats = (mat for mat in diecase if mat.column == column)
-                for mat in iter_mats:
-                    edit_matrix(mat)
-        except KeyboardInterrupt:
-            pass
+        while True:
+            column = ''
+            while column not in constants.COLUMNS_17:
+                column = enter_data_or_blank(col_prompt, str).upper()
+                if not column:
+                    return
+            iter_mats = (mat for mat in diecase if mat.column == column)
+            for mat in iter_mats:
+                edit_matrix(mat)
+
     # Map unit values to rows
     # If the layout is empty, we need to initialize it
-    prompt = ('Choose edit mode or press [Enter] to quit:\n'
-              'M - single matrix by coordinates,\n'
+    prompt = ('Enter matrix coordinates to edit or choose edit mode '
+              'from list below:\n'
               'R - all matrices in a specified row, '
               'C - all matrices in a specified column,\n'
               'AR - all matrices row by row, '
               'AC - all matrices column by column.'
-              '\nYour choice: ')
+              '\nYour choice (or leave blank to exit) : ')
     options = {'AR': all_rows_mode,
                'AC': all_columns_mode,
-               'M': single_cell_mode,
                'R': single_row_mode,
                'C': single_column_mode,
                '': e.menu_level_up}
@@ -451,7 +423,14 @@ def edit_diecase_layout(diecase):
         print('\nCurrent diecase layout:\n')
         display_diecase_layout(diecase)
         try:
-            simple_menu(prompt, options)()
+            ans = input(prompt).upper()
+            if ans in options:
+                options.get(ans)()
+            else:
+                mat = get_matrix(ans)
+                edit_matrix(mat)
+        except (IndexError, KeyboardInterrupt, AttributeError):
+            pass
         except e.MenuLevelUp:
             return diecase.matrices
 
