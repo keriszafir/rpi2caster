@@ -321,19 +321,10 @@ class Casting(object):
         Ask user about the space width and measurement unit.
         """
         queue = []
-        # Measurement system
-        prompt = ('Measurement unit to use? \n'
-                  '[A]merican Johnson pica = 0.166",'
-                  '[B]ritish pica = 0.1667",\n[D]idot cicero = 0.1776", '
-                  '[F]ournier cicero = 0.1629": ')
-        pica = UI.simple_menu(prompt, {'A': 0.1660, 'B': 0.1667,
-                                       'D': 0.1776, 'F': 0.1629})
-        # Ask about line length
-        prompt = 'Galley line length in above units? (default: 25) : '
-        line_length = abs(UI.enter_data_or_blank(prompt, int) or 25)*1.0
-        # We need 72 additional units for two quads before and after line
-        line_length = int(18 * pica / 0.1667 * line_length *
-                          self.wedge.set_width / 12) - 72
+        line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
+                       self.wedge.set_width / 12)
+        # We need 72 additional units for two quads before and after each line
+        line_length -= 72
         while True:
             matrix = self.diecase.get_matrix(' ')
             prompt = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
@@ -347,8 +338,8 @@ class Casting(object):
                 width = UI.enter_data_or_blank(prompt, float)
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
-            prompt = ('Casting %s lines of %s-point spaces from %s%s. OK?'
-                      % (lines, width, matrix.column, matrix.row))
+            prompt = ('Casting %s lines of %s-point spaces from %s. OK?'
+                      % (lines, width, matrix.code))
             # Save for later
             comment = '%s-point space' % width
             # Repeat
@@ -358,9 +349,9 @@ class Casting(object):
             # We do it this way:
             # units = picas * set_width/12 * 18
             # a pica is 12 points, so:
-            # units = points * set_width/12 * 1 / 12 * 18
+            # units = width (points) * set_width/12 * 1 / 12 * 18
             # 18 / (12*12) = 0.125, hence division by 8
-            width = round(width * pica / self.wedge.pica *
+            width = round(width * 0.1667 / self.wedge.pica *
                           self.wedge.set_width / 8, 2)
             # How many spaces will fit in a line? Calculate it...
             qty = int(line_length // width)
