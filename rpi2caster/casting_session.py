@@ -245,6 +245,7 @@ class Casting(object):
             string = UI.enter_data_or_blank('Signals? (leave blank to exit): ')
             signals = p.parse_signals(string)
             if signals:
+                self.caster.output.valves_off()
                 UI.display('Activating ' + ' '.join(signals))
                 self.caster.output.valves_on(signals)
             else:
@@ -274,16 +275,21 @@ class Casting(object):
                 casting_queue.append((char, style, 0))
             elif not UI.confirm(prompt):
                 continue
-            prompt = 'Character? (leave blank to end specifying characters): '
-            char = char or UI.enter_data_or_blank(prompt)
-            if not char:
-                break
-            style = style or UI.choose_one_style()
+            if self.diecase.diecase_id:
+                prompt = ('Character? (leave blank to end '
+                          'specifying characters): ')
+                char = char or UI.enter_data_or_blank(prompt)
+                if not char:
+                    break
+                style = style or UI.choose_one_style()
+            else:
+                char = ''
+                style = ''
             prompt = 'Unit correction (-2...+10, default 0) ?: '
             correction = 20
             while not -2 <= correction <= 10:
                 try:
-                    correction = abs(int(UI.enter_data_or_blank(prompt))) or 0
+                    correction = abs(int(UI.enter_data_or_blank(prompt) or 0))
                 except (ValueError, TypeError):
                     correction = 20
             matrix = self.diecase.get_matrix(char, style)
@@ -408,7 +414,7 @@ class Casting(object):
         This allows for quick typesetting of short texts, like names etc.
         """
         # Initialize the typesetter for a chosen diecase
-        typesetter = typesetting_funcs.Typesetter()
+        # typesetter = typesetting_funcs.Typesetter()
         # Supply the diecase id
         typesetter.session_setup(self.diecase)
         # Enter text
