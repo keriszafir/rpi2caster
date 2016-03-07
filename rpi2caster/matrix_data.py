@@ -48,14 +48,14 @@ class Diecase(object):
         # Edit the layout
         UI.edit_diecase_layout(self)
 
-    def get_matrix(self, char='', style='roman'):
+    def get_matrix(self, char=None, style='roman'):
         """Chooses a matrix automatically or manually (if multiple matches),
         allows to specify matrix data manually if no matches found"""
         candidates = [mat for mat in self.matrices
                       if mat.char == char and
                       (not any(mat.styles) or style in mat.styles)]
         if not candidates:
-            matrix = Matrix(char, [style])
+            matrix = Matrix(char or '', [style])
             matrix.diecase = self
             if char:
                 UI.display('Enter matrix data for character: %s' % char)

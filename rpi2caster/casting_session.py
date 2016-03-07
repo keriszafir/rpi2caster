@@ -277,14 +277,14 @@ class Casting(object):
                 continue
             if self.diecase.diecase_id:
                 prompt = ('Character? (leave blank to end '
-                          'specifying characters): ')
+                          'specifying characters and start casting): ')
                 char = char or UI.enter_data_or_blank(prompt)
                 if not char:
                     break
                 style = style or UI.choose_one_style()
+                matrix = self.diecase.get_matrix(char, style)
             else:
-                char = ''
-                style = ''
+                matrix = self.diecase.get_matrix()
             prompt = 'Unit correction (-2...+10, default 0) ?: '
             correction = 20
             while not -2 <= correction <= 10:
@@ -292,7 +292,6 @@ class Casting(object):
                     correction = abs(int(UI.enter_data_or_blank(prompt) or 0))
                 except (ValueError, TypeError):
                     correction = 20
-            matrix = self.diecase.get_matrix(char, style)
             diff = matrix.units + correction - matrix.row_units(self.wedge)
             # Calculate wedges
             wedge_positions = matrix.wedge_positions(correction, self.wedge)
@@ -316,8 +315,11 @@ class Casting(object):
             line_codes.extend(['O15'] * 2)
             # Ask for confirmation
             queue.extend(line_codes * lines)
+            if not (self.diecase.diecase_id or
+                    UI.confirm('Next character? (no = finish and cast) : ')):
+                break
         # No sequences? No casting.
-        if queue and UI.confirm('Cast the sequence?'):
+        if queue:
             UI.display('\nEach line will have two em-quads at the start '
                        'and at the end, to support the type.\n')
             return queue + [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
@@ -414,7 +416,7 @@ class Casting(object):
         This allows for quick typesetting of short texts, like names etc.
         """
         # Initialize the typesetter for a chosen diecase
-        # typesetter = typesetting_funcs.Typesetter()
+        typesetter = typesetting_funcs
         # Supply the diecase id
         typesetter.session_setup(self.diecase)
         # Enter text
