@@ -282,7 +282,10 @@ class Casting(object):
             prompt = 'Unit correction (-2...+10, default 0) ?: '
             correction = 20
             while not -2 <= correction <= 10:
-                correction = UI.enter_data_or_blank(prompt) or 0
+                try:
+                    correction = abs(int(UI.enter_data_or_blank(prompt))) or 0
+                except (ValueError, TypeError):
+                    correction = 20
             matrix = self.diecase.get_matrix(char, style)
             diff = matrix.units + correction - matrix.row_units(self.wedge)
             # Calculate wedges
