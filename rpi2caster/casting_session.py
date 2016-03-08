@@ -419,20 +419,7 @@ class Casting(object):
         This allows for quick typesetting of short texts, like names etc.
         """
         # Initialize the typesetter for a chosen diecase
-        typesetter = typesetting_funcs
-        # Supply the diecase id
-        typesetter.session_setup(self.diecase)
-        # Enter text
-        text = UI.enter_data("Enter text to compose: ")
-        typesetter.text_source = typesetter.parse_and_generate(text)
-        # Translate the text to Monotype signals
-        typesetter.compose()
-        queue = typesetter.justify()
-        self.ribbon.contents, old_ribbon = queue, self.ribbon.contents
-        if UI.confirm('Show the codes?'):
-            self.ribbon.display_contents()
-        self.ribbon.contents = old_ribbon
-        return queue
+        pass
 
     @cast_or_punch_result
     def _calibrate_wedges(self):
@@ -561,8 +548,8 @@ class Casting(object):
                  'Displays all sequences in a ribbon', ribbon),
                 (self.diecase.show_layout, 'Show diecase layout',
                  'Views the matrix case layout', diecase_selected),
-                (self.adhoc_typesetting, 'Ad-hoc typesetting',
-                 'Compose and cast a line of text', diecase_selected),
+                # (self.adhoc_typesetting, 'Ad-hoc typesetting',
+                # 'Compose and cast a line of text', diecase_selected),
                 (self.cast_sorts, 'Cast sorts',
                  'Cast from matrix with given coordinates', caster),
                 (self.cast_spaces, 'Cast spaces or quads',
