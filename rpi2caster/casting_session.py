@@ -37,6 +37,7 @@ from . import wedge_data
 GALLEY_TRIP = 'NKJS 0005 0075'
 PUMP_OFF = 'NJS 0005'
 PUMP_ON = 'NKS 0075'
+END_CASTING = [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
 
 
 def choose_sensor_and_driver(casting_routine):
@@ -238,11 +239,12 @@ class Casting(object):
     @choose_sensor_and_driver
     def _test_any_code(self):
         """Tests a user-specified combination of signals"""
-        self.caster.mode.testing = False
+        self.caster.mode.testing = True
         while True:
             UI.display('Enter the signals to send to the caster, '
                        'or leave empty to return to menu: ')
-            string = UI.enter_data_or_blank('Signals? (leave blank to exit): ')
+            prompt = 'Signals? (leave blank to exit): '
+            string = UI.enter_data_or_blank(prompt)
             signals = p.parse_signals(string)
             if signals:
                 self.caster.output.valves_off()
@@ -250,7 +252,6 @@ class Casting(object):
                 self.caster.output.valves_on(signals)
             else:
                 break
-        self.caster.output.valves_off()
         self.caster.mode.testing = False
 
     @cast_or_punch_result
@@ -272,6 +273,8 @@ class Casting(object):
             prompt = ('Character: %s %s\n'
                       'Y: add to casting queue, N: skip it?' % (style, char))
             if not char:
+                # Make it an infinite queue if no input specified
+                # (cast any number of sorts we want)
                 casting_queue.append((char, style, 0))
             elif not UI.confirm(prompt):
                 continue
@@ -322,7 +325,7 @@ class Casting(object):
         if queue:
             UI.display('\nEach line will have two em-quads at the start '
                        'and at the end, to support the type.\n')
-            return queue + [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
+            return queue + END_CASTING
         else:
             e.return_to_menu()
 
@@ -380,7 +383,7 @@ class Casting(object):
             # Ask for confirmation
             queue.extend(line_codes * lines)
             if queue and UI.confirm('Y to cast, N to add some more spaces?'):
-                return queue + [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
+                return queue + END_CASTING
 
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
@@ -444,16 +447,15 @@ class Casting(object):
         4. cast 10 spaces with the S-needle from the same matrix,
         5. put the line to the galley, then 0005 to turn the pump off.
         """
-        intro = ('Transfer wedge calibration:\n\n'
+        UI.pause('Transfer wedge calibration:\n\n'
                  'This function will cast two lines of 5 spaces: '
                  'first: G5, second: GS5 with wedges at 3/8. \n'
                  'Adjust the 52D space transfer wedge '
                  'until the lengths are the same.')
-        UI.display(intro)
         signals = 'G5'
         queue = [GALLEY_TRIP] + [signals] * 7
         queue.extend([GALLEY_TRIP + '8', PUMP_ON + '3'] + [signals + 'S'] * 7)
-        queue.extend([GALLEY_TRIP, PUMP_OFF, PUMP_OFF])
+        queue.extend(END_CASTING)
         self.caster.mode.calibration = True
         return queue
 
@@ -462,10 +464,9 @@ class Casting(object):
         """Calculates the width, displays it and casts some 9-unit characters.
         Then, the user measures the width and adjusts the mould opening width.
         """
-        intro = ('Mould blade opening calibration:\n'
+        UI.pause('Mould blade opening calibration:\n'
                  'Cast G5 (9-units wide on S5 wedge), then measure the width. '
                  'Adjust if needed.')
-        UI.display(intro)
         # We calculate the width of double 9 units = 18 units, i.e. 1 pica em
         em_width = self.wedge.pica * self.wedge.set_width / 12.0
         UI.display_parameters({'Wedge data': self.wedge.parameters})
@@ -473,18 +474,31 @@ class Casting(object):
         UI.display('18 units (1em) is %s" wide' % round(em_width, 4))
         signals = 'G5'
         self.caster.mode.calibration = True
-        return [GALLEY_TRIP] + [signals] * 7 + [GALLEY_TRIP] + [PUMP_OFF] * 2
+        return [GALLEY_TRIP] + [signals] * 7 + END_CASTING
 
     def _calibrate_diecase(self):
         """Casts the "en dash" characters for calibrating the character X-Y
         relative to type body."""
-        UI.display('X-Y character calibration:\n'
-                   'Cast some en-dashes and/or lowercase "n" letters, '
-                   'then check the position of the character relative to the '
-                   'type body.\nAdjust if needed.')
+        UI.pause('X-Y character calibration:\n'
+                 'Cast some en-dashes and/or lowercase "n" letters, '
+                 'then check the position of the character relative to the '
+                 'type body.\nAdjust if needed.')
         self.caster.mode.calibration = True
         self.cast_sorts([('–', 'roman', 7), ('n', 'roman', 7),
                          ('h', 'roman', 7)])
+
+    @choose_sensor_and_driver
+    def _calibrate_draw_rods(self):
+        """Keeps the diecase at G8 so that the operator can adjust
+        the diecase draw rods until the diecase stops moving sideways
+        when the centering pin is descending."""
+        UI.pause('Draw rods calibration:\n'
+                 'The diecase will be moved to the central position (G-8), '
+                 'turn on the machine\nand adjust the diecase draw rods '
+                 'until the diecase stops moving sideways as the\n'
+                 'centering pin is descending into the hole in the matrix.')
+        self.caster.output.valves_on(['G', '8'])
+        UI.pause('Sending G8, waiting for you to stop...')
 
     def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
@@ -508,6 +522,9 @@ class Casting(object):
                      caster),
                     (self._calibrate_mould, 'Calibrate mould opening',
                      'Casts 9-unit characters to adjust the type width',
+                     caster),
+                    (self._calibrate_draw_rods, 'Calibrate diecase draw rods',
+                     'Keep the matrix case at G8 and adjust the draw rods',
                      caster),
                     (self._calibrate_diecase, 'Calibrate matrix X-Y',
                      'Calibrate the character-to-body positioning', caster)]
@@ -634,3 +651,13 @@ class Casting(object):
                                'Matrix case data': self.diecase.parameters,
                                'Wedge data': self.wedge.parameters})
         UI.pause()
+
+
+def single_justification(pos_0075, pos_0005):
+    """Returns a single justification sequence"""
+    return [PUMP_OFF + str(pos_0005), PUMP_ON + str(pos_0075)]
+
+
+def double_justification(pos_0075, pos_0005):
+    """Returns a galley trip / double justification sequence"""
+    return [GALLEY_TRIP + str(pos_0005), PUMP_ON + str(pos_0075)]
