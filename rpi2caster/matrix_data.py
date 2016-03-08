@@ -248,7 +248,7 @@ class Diecase(object):
                            'V': self.show_layout,
                            'I': self.import_layout,
                            'X': self.export_layout,
-                           '': e.menu_level_up}
+                           'C': e.menu_level_up}
                 messages = ['\nMatrix case manipulation:\n\n'
                             '[V]iew, [N]ew, [E]dit, [I]mport '
                             'or e[X]port layout\nAssign [W]edge, '
@@ -268,8 +268,8 @@ class Diecase(object):
                     options['D'] = self.delete_from_db
                     messages.append(', [D]elete diecase from database')
                 # Options constructed
-                messages.append('\n[M] to exit to menu, or leave blank '
-                                'to choose/create another diecase.')
+                messages.append('\n[C] to choose/create another diecase, '
+                                '[M] to exit to menu.')
                 messages.append('\nYour choice: ')
                 message = ''.join(messages)
                 UI.simple_menu(message, options)()
