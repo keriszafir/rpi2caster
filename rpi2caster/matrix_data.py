@@ -290,6 +290,7 @@ class SelectDiecase(Diecase):
                             choose_diecase())
             (self.diecase_id, self.type_series, self.type_size, wedge_series,
              set_width, self.typeface_name, self.layout) = diecase_data
+            # Assign the correct wedge
             self.wedge = wedge_data.SelectWedge(wedge_series, set_width)
         except (KeyError, TypeError, e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Diecase choice failed. Using empty one instead.')
