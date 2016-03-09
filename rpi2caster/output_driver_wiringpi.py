@@ -3,9 +3,9 @@
 
 # WiringPi2 Python bindings: essential for controlling the MCP23017!
 try:
-    import wiringpi2 as wiringpi
+    import wiringpi
 except ImportError:
-    print('You must install wiringpi2!')
+    print('You must install wiringpi!')
 
 # Import mockup output driver from monotype
 from .monotype import SimulationOutput, SIGNALS
