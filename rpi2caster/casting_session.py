@@ -22,7 +22,7 @@ from . import exceptions as e
 # Constants shared between modules
 from . import constants as c
 # Typesetting functions module
-from . import typesetting_funcs
+# from . import typesetting_funcs
 # Caster backend
 from . import monotype
 # Casting stats
