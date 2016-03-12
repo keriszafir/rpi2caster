@@ -60,6 +60,7 @@ class Database(object):
         # Connect to the database
         for path in database_paths:
             try:
+                self.path = path
                 self.db_connection = sqlite3.connect(path)
                 # End on first successful find
                 break
@@ -73,118 +74,6 @@ class Database(object):
 
     def __enter__(self):
         return self
-
-    def add_wedge(self, wedge):
-        """Registers a wedge in our database."""
-        # data - a list with wedge parameters to be written,
-        # boolean is_brit_pica must be converted to int,
-        # a unit arrangement is a JSON-encoded list
-        data = [wedge.series, wedge.set_width, int(wedge.is_brit_pica),
-                json.dumps(wedge.unit_arrangement)]
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                # Create the table first:
-                sql = ('CREATE TABLE IF NOT EXISTS wedges ('
-                       'wedge_series TEXT NOT NULL, '
-                       'set_width REAL NOT NULL, '
-                       'brit_pica INTEGER NOT NULL, '
-                       'unit_arrangement TEXT NOT NULL, '
-                       'PRIMARY KEY (wedge_series, set_width, brit_pica))')
-                cursor.execute(sql)
-                # Then add an entry:
-                cursor.execute('INSERT OR REPLACE INTO wedges ('
-                               'wedge_series, set_width, '
-                               'brit_pica, unit_arrangement'
-                               ') VALUES (?, ?, ?, ?)''', data)
-                self.db_connection.commit()
-                return True
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Database failed
-                raise exceptions.DatabaseQueryError
-
-    def check_wedge(self, wedge):
-        """Checks if a wedge with given parameters is in database"""
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                sql = ('SELECT * FROM wedges WHERE wedge_series = ?'
-                       'AND set_width = ? AND brit_pica = ?')
-                data = [wedge.series, wedge.set_width, int(wedge.is_brit_pica)]
-                cursor.execute(sql, data)
-                data = cursor.fetchall()
-                # Empty list = False
-                return bool(data)
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                return False
-
-    def get_wedge(self, wedge_series, set_width):
-        """get_wedge(wedge_series, set_width):
-
-        Looks up a wedge with given ID and set width in database.
-        If found, returns (series, set_width, brit_pica, unit_arrangement)
-
-        series - string (e.g. S5) - wedge name
-        set_width - float (e.g. 9.75) - set width,
-        brit_pica - bool - whether this is an old-pica ("E") wedge or not,
-        unit_arrangement - list of unit values for all wedge's steps.
-
-        Else, function returns False.
-        """
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM wedges '
-                               'WHERE wedge_series = ? AND set_width = ?',
-                               [str(wedge_series), float(set_width)])
-                (wedge_series, set_width, is_brit_pica,
-                 raw_unit_arrangement) = cursor.fetchone()
-                # Change return value of steps to list:
-                wedge = [wedge_series, set_width, bool(is_brit_pica),
-                         [int(x) for x in json.loads(raw_unit_arrangement)]]
-                return wedge
-            except (TypeError, ValueError, IndexError):
-                # No data or cannot process it
-                raise exceptions.NoMatchingData
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Database failed
-                raise exceptions.DatabaseQueryError
-
-    def delete_wedge(self, wedge):
-        """Deletes a wedge from the database."""
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                sql = ('DELETE FROM wedges WHERE wedge_series = ? '
-                       'AND set_width = ? AND brit_pica = ?')
-                data = [wedge.series, wedge.set_width, wedge.is_brit_pica]
-                cursor.execute(sql, data)
-                return True
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Database failed
-                raise exceptions.DatabaseQueryError
-
-    def get_all_wedges(self):
-        """Gets all wedges stored in database."""
-        with self.db_connection:
-            try:
-                cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM wedges')
-                # Check if we got any:
-                all_wedges = cursor.fetchall()
-                processed_wedges = []
-                if not all_wedges:
-                    raise exceptions.NoMatchingData
-                for record in all_wedges:
-                    (wedge_series, set_width,
-                     is_brit_pica, unit_arrangement) = record
-                    record = [wedge_series, set_width, bool(is_brit_pica),
-                              [x for x in json.loads(unit_arrangement)]]
-                    processed_wedges.append(record)
-                return processed_wedges
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Database failed
-                raise exceptions.DatabaseQueryError
 
     def get_all_diecases(self):
         """Gets all diecases stored in database."""
@@ -205,26 +94,21 @@ class Database(object):
         """Registers a diecase in our database."""
         # data - a list with diecase parameters to be written,
         # layout is a JSON-dumped dictionary
-        data = [diecase.diecase_id, diecase.type_series, diecase.type_size,
-                diecase.wedge.series, diecase.wedge.set_width,
-                diecase.typeface_name, json.dumps(diecase.layout)]
+        data = [diecase.diecase_id, diecase.typeface, diecase.wedge.name,
+                json.dumps(diecase.layout)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
                 # Create the table first:
                 cursor.execute('CREATE TABLE IF NOT EXISTS matrix_cases ('
                                'diecase_id TEXT UNIQUE PRIMARY KEY, '
-                               'type_series TEXT NOT NULL, '
-                               'type_size TEXT NOT NULL, '
-                               'wedge_series TEXT NOT NULL, '
-                               'set_width REAL NOT NULL, '
-                               'typeface_name TEXT NOT NULL, '
+                               'typeface TEXT NOT NULL, '
+                               'wedge TEXT NOT NULL, '
                                'layout TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT OR REPLACE INTO matrix_cases ('
-                               'diecase_id, type_series, type_size,'
-                               'wedge_series, set_width, typeface_name, layout'
-                               ') VALUES (?, ?, ?, ?, ?, ?, ?)''', data)
+                               'diecase_id, typeface, wedge, layout'
+                               ') VALUES (?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
@@ -238,7 +122,6 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 sql = 'SELECT * FROM matrix_cases WHERE diecase_id = ?'
                 cursor.execute(sql, [diecase_id])
-                # Return diecase if found:
                 diecase = list(cursor.fetchone())
                 # De-serialize the diecase layout, convert it back to a list
                 raw_layout = json.loads(diecase.pop())

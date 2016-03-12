@@ -290,9 +290,8 @@ def confirm(question):
 
 
 def display_diecase_layout(diecase):
-    """Shows a layout for a given diecase ID.
-    Allows to specify a stopbar/wedge unit arrangement for this diecase,
-    or uses the typical S5 if not specified."""
+    """Shows a layout for a given diecase ID, unit values for its
+    assigned wedge, or the typical S5 if not specified."""
     def displayed_char(matrix):
         """Modifies matrix char for displaying"""
         spaces_symbols = {'_': '▣', ' ': '□', '': ' '}
@@ -303,7 +302,7 @@ def display_diecase_layout(diecase):
 
     def row_units(row):
         """Gets wedge unit value for the row"""
-        return str(diecase.wedge.unit_arrangement[row])
+        return str(diecase.wedge.units[row])
 
     matrices = [mat for mat in diecase]
     cols_set = {matrix.column for matrix in matrices}
@@ -335,6 +334,7 @@ def display_diecase_layout(diecase):
     # Add the header at the bottom
     table.extend([separator, header, separator])
     # We can display it now
+    print('\nStopbar / wedge: %s\n' % diecase.wedge.name)
     for row in table:
         print(row)
     # Explanation of symbols

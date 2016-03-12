@@ -26,9 +26,7 @@ class Diecase(object):
     """Diecase: matrix case attributes and operations"""
     def __init__(self):
         self.diecase_id = ''
-        self.type_series = ''
-        self.type_size = ''
-        self.typeface_name = ''
+        self.typeface = ''
         self.wedge = wedge_data.Wedge()
         self.matrices = generate_empty_layout(15, 17)
 
@@ -66,7 +64,7 @@ class Diecase(object):
             matrix.row = p.get_row(combination)
             matrix.column = p.get_column(combination)
             # Default unit width value = determine based on wedge
-            units = self.wedge.unit_arrangement[matrix.row]
+            units = self.wedge.units[matrix.row]
             prompt = 'Unit width? (default: %s): ' % units
             matrix.units = abs(UI.enter_data_or_blank(prompt, int) or units)
             return matrix
@@ -162,39 +160,27 @@ class Diecase(object):
                       self.diecase_id)
         # Ask if we are sure we want to update this
         # if self.diecase_id was set earlier
-        if not self.diecase_id or diecase_id != self.diecase_id:
-            if UI.confirm('Are you sure to change diecase ID?'):
-                self.diecase_id = diecase_id
-                return True
+        if not self.diecase_id or UI.confirm('Apply changes?'):
+            self.diecase_id = diecase_id
+            return True
 
-    def set_typeface(self, type_series=None, type_size=None,
-                     typeface_name=None):
+    def set_typeface(self, typeface=None):
         """Sets the type series, size and typeface name"""
-        prompt = 'Type series: '
-        type_series = (type_series or UI.enter_data_or_blank(prompt) or
-                       self.type_series)
-        type_size = (type_size or UI.enter_data('Type size in points: ') or
-                     self.type_size)
-        typeface_name = (typeface_name or UI.enter_data('Typeface name: ') or
-                         self.typeface_name)
-        # Validate data
-        current_data_not_set = not self.type_series and not self.type_size
-        if current_data_not_set or UI.confirm('Apply changes?'):
-            self.type_series = type_series
-            self.type_size = type_size
-            self.typeface_name = typeface_name
+        prompt = 'Typeface (series, size, name): '
+        typeface = typeface or UI.enter_data_or_blank(prompt) or self.typeface
+        if not self.typeface or UI.confirm('Apply changes?'):
+            self.typeface = typeface
+            return True
 
-    def assign_wedge(self, wedge_series=None, set_width=0):
+    def assign_wedge(self, wedge_name=None):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
-        self.wedge = wedge_data.SelectWedge(wedge_series, set_width)
+        self.wedge = wedge_data.SelectWedge(wedge_name)
 
     @property
     def parameters(self):
         """Gets a list of parameters"""
         return [(self.diecase_id, 'Diecase ID'),
-                (self.typeface_name, 'Typeface'),
-                (self.type_series, 'Type series'),
-                (self.type_size, 'Type size')]
+                (self.typeface, 'Typeface')]
 
     def save_to_db(self):
         """Stores the matrix case definition/layout in database"""
@@ -254,9 +240,7 @@ class Diecase(object):
                             'or e[X]port layout\nAssign [W]edge, '
                             'change [T]ypeface or diecase [ID]\n\n']
                 # Save to database needs a complete set of metadata
-                required = {'Type series': self.type_series,
-                            'Type size': self.type_size,
-                            'Typeface / font family name': self.typeface_name,
+                required = {'Typeface': self.typeface,
                             'Diecase ID': self.diecase_id}
                 missing = [item for item in required if not required[item]]
                 messages.extend([item + ' is not set\n' for item in missing])
@@ -286,12 +270,10 @@ class SelectDiecase(Diecase):
         super().__init__()
         # Diecases created with diecase_id will be set up automatically
         try:
-            diecase_data = (diecase_id and DB.get_diecase(diecase_id) or
-                            choose_diecase())
-            (self.diecase_id, self.type_series, self.type_size, wedge_series,
-             set_width, self.typeface_name, self.layout) = diecase_data
+            mcd = diecase_id and DB.get_diecase(diecase_id) or choose_diecase()
+            (self.diecase_id, self.typeface, wedge_name, self.layout) = mcd
             # Assign the correct wedge
-            self.wedge = wedge_data.SelectWedge(wedge_series, set_width)
+            self.wedge = wedge_data.SelectWedge(wedge_name)
         except (KeyError, TypeError, e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Diecase choice failed. Using empty one instead.')
 
@@ -309,7 +291,7 @@ class Matrix(object):
     def row_units(self, alt_wedge=None):
         """Gets the row's unit width value for the diecase's wedge"""
         wedge = alt_wedge or self.diecase.wedge
-        return wedge.unit_arrangement[self.row]
+        return wedge.units[self.row]
 
     @property
     def row(self):
@@ -405,23 +387,22 @@ def list_diecases():
     data = DB.get_all_diecases()
     results = {}
     UI.display('\n' +
-               'Index'.ljust(7) +
-               'Diecase ID'.ljust(20) +
-               'Type series'.ljust(15) +
-               'Type size'.ljust(15) +
-               'Wedge series'.ljust(15) +
-               'Set width'.ljust(15) +
-               'Typeface name' + '\n')
+               'No.'.ljust(4) +
+               'Diecase ID'.ljust(25) +
+               'Wedge'.ljust(12) +
+               'Typeface' + '\n')
     for index, diecase in enumerate(data, start=1):
-        # Collect diecase parameters
+        # Start each row with index
         index = str(index)
-        row = [index.ljust(7)]
-        row.append(str(diecase[0]).ljust(20))
-        row.extend([str(field).ljust(15) for field in diecase[1:-2]])
+        row = [index.ljust(4)]
+        # Collect the ciecase parameters: ID, typeface, wedge
+        # Leave the diecase layout out
+        row.append(diecase[0].ljust(25))
+        # Swap the wedge and typeface designations (more place for long names)
+        row.append(diecase[2].ljust(12))
+        row.append(diecase[1])
         # Add number and ID to the result that will be returned
         results[index] = diecase[0]
-        # Add typeface name - no justification!
-        row.append(diecase[-2])
         UI.display(''.join(row))
     UI.display('\n\n')
     # Now we can return the number - diecase ID pairs

@@ -47,6 +47,7 @@ class Settings(object):
         a ligature"""
         prompt = 'Ligature: how many characters? '
         self.ligatures = abs(UI.enter_data(prompt, int))
+
     def session_setup(self, diecase_id):
         """Sets up initial typesetting session parameters:
 
@@ -62,9 +63,8 @@ class Settings(object):
         (diecase_id, type_series, self.type_size,
          self.wedge_series, self.set_width,
          typeface_name, self.diecase_layout) = diecase
-        # Get unit arrangement for the wedge
-        self.unit_arrangement = wedge_data.get_unit_arrangement(
-            self.wedge_series, self.set_width)
+        # Get unit values for the wedge
+        self.units = wedge_data.get_units(self.wedge_series, self.set_width)
         # Warn if the wedge could be incompatible with the matrix case
         self._check_if_wedge_is_ok()
         # Enter the line length for typesetting, and calculate it
@@ -392,7 +392,7 @@ class Translator(object):
             column = space[2]
             row = space[3]
             if row < 16:
-                space_unit_width = self.unit_arrangement[row]
+                space_unit_width = self.units[row]
                 space_code = column + str(row)
                 spaces.append((space_unit_width, space_code))
         # Try matching a first available space
@@ -502,38 +502,6 @@ class Translator(object):
         UI.pause('Typesetting finished!')
         return True
 
-    def _enter_line_length(self):
-        """enter_line_length:
-
-        Asks user to enter line length and specify measurement units.
-        Returns line length in inches for further calculations.
-        """
-        line_length = UI.enter_data('Line length? : ', float)
-        # Choose the measurement unit - and its equivalent in inches
-        options = {'A': 0.1660,
-                   'B': 0.1667,
-                   'C': 0.3937,
-                   'D': 0.1776,
-                   'F': 0.1629}
-        message = ('Measurement? [A]merican pica = Johnson, '
-                   '[B]ritish pica = DTP, '
-                   '[C]entimeter, [D]idot cicero, [F]ournier cicero: ')
-        # Calculate the line length in inches
-        inches = UI.simple_menu(message, options) * line_length
-        # Choose pica based on wedge, calculate line length in picas
-        if self.is_brit_pica:
-            picas = inches / 0.1667
-        else:
-            picas = inches / 0.166
-        # Display the info
-        UI.display('Line length in inches: %s' % round(inches, 2))
-        UI.display('Line length in picas: %s' % round(picas, 2))
-        # 1 pica em is equal to 18 units 12-set
-        # Units of a given set = 18 * pica_length * set_width / 12
-        # Return the result
-        self.unit_line_length = round(18 * picas * self.set_width / 12, 2)
-        UI.display('Line length in %s-set units: %s' % (self.set_width,
-                                                        self.unit_line_length))
 
     def justify(self):
         """justify:
@@ -627,54 +595,6 @@ class Translator(object):
         # Add 0075-N-K-S-pos0075 next:
         self.output_buffer.append(str(pos0075) + 'NKS 0075' + comment2)
         return True
-
-# Functions needed elsewhere
-
-
-def calculate_wedges(difference, set_width, is_brit_pica=False):
-    """calculate_wedges:
-
-    Calculates and returns wedge positions for character.
-    Uses pre-calculated unit width difference between row's unit width
-    and character's width (with optional corrections).
-    """
-    # Delta is in units of a given set
-    # First, we must know whether pica = .1667" or .166" and correct the width
-    # if needed.
-    if is_brit_pica:
-        coefficient = 1
-    else:
-        coefficient = 0.1660 / 0.1667
-    # Calculate the inch width of delta
-    # 1 pica = 18 units 12 set = 0.1667 (old British pica) or 0.1660 (Am. pica)
-    # unit_width = 12 * pica / (set width * 18)
-    steps = difference * set_width * coefficient * 2000 / 1296
-    # Adjust the wedges
-    # You do it in respect to the neutral position i.e. 3/8:
-    # 3 steps of 0075 and 8 steps of 0005 wedge.
-    # You can get from 1 to 15 steps of each wedge.
-    # Example: 16 steps of 0005 = 1 step of 0075 and 1 step of 0005
-    # 3 / 8 = 1 * 15 + 8 = 53 "raw" steps of 0005 wedge
-    pos_0075 = 0
-    steps += 53
-    # Add safeguards against wrong wedge positions
-    # Minimum wedge positions (0075/0005) are 1/1, maximum 15/15
-    # This is equivalent to 1*15+1=16 steps (min) and 15*15+15=240 steps (max)
-    # Upper limit:
-    steps = min(steps, 240)
-    # Lower limit:
-    steps = max(16, steps)
-    # We're in these constraints now - but there is one more constraint:
-    # matrix size = .2x.2" (small composition)
-    # Opening the mould more than that will lead to lead splashes between mats
-    # (this is not a risk with low spaces, as the upper mould blade is closed)
-    while steps > 15:
-        steps -= 15
-        pos_0075 += 1
-    # Round the remainder down
-    pos_0005 = int(steps)
-    # We now can return the wedge positions
-    return (pos_0075, pos_0005)
 
 
 def parse_combination(combination):

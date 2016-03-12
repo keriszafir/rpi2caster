@@ -559,6 +559,8 @@ class Casting(object):
                  caster and diecase_selected),
                 (self._display_details, 'Show detailed info...',
                  'Displays caster, ribbon, diecase and wedge details', True),
+                (matrix_data.diecase_operations, 'Matrix manipulation...',
+                'Work on matrix cases', True),
                 (self.diagnostics_submenu, 'Service...',
                  'Interface and machine diagnostic functions', True)]
         # Built a list of menu options conditionally

@@ -23,14 +23,6 @@ def cast(args):
         session.main_menu()
 
 
-def inv(args):
-    """Inventory management"""
-    from rpi2caster import inventory
-    # Pass the debug mode flag to the UI
-    inventory.UI.DEBUG_MODE = args.debug
-    inventory.main_menu()
-
-
 def translate(args):
     """Text to ribbon translation and justification"""
     from rpi2caster import typesetting
@@ -70,8 +62,6 @@ def main_menu(args):
                     {True: 'Punch a ribbon with a keyboard\'s paper tower',
                      False: ('Cast composition, sorts or spaces; '
                              'test the machine')}[args.punching]),
-                   (inv, 'Inventory management...',
-                    'List, add and remove diecase or wedge definitions'),
                    (translate, 'Typesetting...',
                     'Compose text for casting'),
                    (update, 'Update the program',
@@ -146,15 +136,6 @@ def main():
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='ribbon file name')
     cast_parser.set_defaults(job=cast, ribbon_file=None)
-    #
-    # Inventory management subparser
-    #
-    inv_parser = jobs.add_parser('inventory', aliases=['i', 'inv'],
-                                 help='Wedge and matrix case management')
-    # Debug mode
-    inv_parser.add_argument('-d', '--debug', help='debug mode',
-                            action="store_true")
-    inv_parser.set_defaults(job=inv)
     #
     # Software update subparser
     #
