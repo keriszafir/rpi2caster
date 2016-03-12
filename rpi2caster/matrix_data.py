@@ -372,13 +372,12 @@ class Matrix(object):
 def diecase_operations():
     """Matrix case operations menu for inventory management"""
     try:
-        UI.display('Matrix case manipulation: '
-                   'choose a diecase or define a new one')
+        UI.display_header('Matrix case manipulation')
         while True:
-            # Choose a wedge or initialize a new one
+            # Choose a diecase or initialize a new one
             SelectDiecase().manipulation_menu()
     except e.ReturnToMenu:
-        # Exit wedge operations
+        # Exit diecase operations
         return True
 
 

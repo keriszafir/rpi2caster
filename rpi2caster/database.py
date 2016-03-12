@@ -183,7 +183,7 @@ class Database(object):
     def add_ribbon(self, ribbon):
         """Registers a ribbon in our database."""
         data = [ribbon.description, ribbon.customer, ribbon.diecase.diecase_id,
-                json.dumps(ribbon.contents)]
+                ribbon.wedge.name, json.dumps(ribbon.contents)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -193,11 +193,12 @@ class Database(object):
                                'description TEXT, '
                                'customer TEXT, '
                                'diecase_id TEXT NOT NULL, '
+                               'wedge TEXT, '
                                'contents TEXT NOT NULL)')
                 # Then add an entry:
                 cursor.execute('INSERT OR REPLACE INTO ribbons ('
                                'title, author, customer, diecase_id, contents'
-                               ') VALUES (?, ?, ?, ?)''', data)
+                               ') VALUES (?, ?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
             except (sqlite3.OperationalError, sqlite3.DatabaseError):

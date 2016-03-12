@@ -28,6 +28,7 @@ class Wedge(object):
         S (for stopbar) is prepended by convention.
         E is appended whenever the wedge is based on pica = .1667".
         """
+        # Avoid displaying ".0" in non-fractional set widths
         if self.set_width % 1 == 0:
             set_width = int(self.set_width)
         else:
@@ -43,26 +44,29 @@ class Wedge(object):
         For unknown wedges, the user has to enter the values manually."""
         # Ask for wedge name and set width as it is written on the wedge
         prompt = ('Wedge designation? (leave blank to choose default S5-12): ')
-        wedge_name = wedge_name or UI.enter_data_or_blank(prompt) or 'S5-12'
+        w_n = wedge_name or UI.enter_data_or_blank(prompt) or 'S5-12'
         # For countries that use comma as decimal delimiter, convert to point:
-        wedge_name = wedge_name.replace(',', '.').upper()
-        # Check if this is an European wedge - these were based on pica=.1667"
-        is_brit_pica = wedge_name.endswith('E')
+        w_n = w_n.replace(',', '.').upper()
         # Look for an alias wedge name, there were some of them - AK, BO etc.
         for name, number, description in wu.ALIASES:
-            if wedge_name.startswith(name) or wedge_name.endswith(name):
+            if (w_n.startswith(name) and name != 'S' or
+                    w_n.endswith(name) and name != 'E'):
                 UI.display('This is the %s.' % description)
                 series = number
                 # Double letter => pica = .1667"
                 # Source: "The Monotype casting machine manual" (UK, 1952),
                 # section "Normal wedge markings", p. 105
-                is_brit_pica = len(name) is 2
-                set_width = wedge_name.replace(name, '').strip()
+                is_brit_pica = (len(name) == 2 and
+                                all([x.isalpha() for x in name]))
+                set_width = w_n.replace(name, '').strip()
                 break
         else:
+            # Check if this is an European wedge
+            # (these were based on pica = .1667" )
+            is_brit_pica = w_n.endswith('E')
             # Away with the initial S, final E and any spaces before and after
             # Make it work with space or dash as delimiter
-            wedge = wedge_name.strip('SE ').replace('-', ' ').split(' ')
+            wedge = w_n.strip('SE ').replace('-', ' ').split(' ')
             try:
                 (series, set_width) = wedge
             except ValueError:

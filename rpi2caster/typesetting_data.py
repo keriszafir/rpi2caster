@@ -8,6 +8,7 @@ import csv
 from . import exceptions as e
 # Matrix data for diecases
 from . import matrix_data
+from . import wedge_data
 # Constants for rpi2caster
 from .constants import ASSIGNMENT_SYMBOLS
 # User interface
@@ -43,6 +44,7 @@ class Ribbon(object):
         self.filename = None
         self.contents = []
         self.diecase = matrix_data.Diecase()
+        self.wedge = wedge_data.Wedge()
 
     def set_ribbon_id(self, ribbon_id=None):
         """Sets the ribbon ID"""
@@ -51,7 +53,7 @@ class Ribbon(object):
                      self.ribbon_id)
         # Ask if we are sure we want to update this
         # if self.ribbon_id was set earlier
-        condition = (not self.ribbon_id or ribbon_id != self.ribbon_id and
+        condition = (not self.ribbon_id or
                      UI.confirm('Are you sure to change the ribbon ID?'))
         if condition:
             self.ribbon_id = ribbon_id
@@ -73,6 +75,10 @@ class Ribbon(object):
         """Chooses the diecase for this ribbon"""
         self.diecase = matrix_data.SelectDiecase(diecase_id)
 
+    def set_wedge(self, wedge_name=None):
+        """Sets a wedge for the ribbon"""
+        self.wedge = wedge_data.SelectWedge(wedge_name)
+
     @property
     def parameters(self):
         """Gets a list of parameters"""
@@ -80,7 +86,8 @@ class Ribbon(object):
                 (self.ribbon_id, 'Ribbon ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
-                (self.diecase.diecase_id, 'Matrix case ID')]
+                (self.diecase.diecase_id, 'Matrix case ID'),
+                (self.wedge.name, 'Wedge')]
 
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
@@ -100,10 +107,10 @@ class Ribbon(object):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
         if data and UI.confirm('Override current data?'):
-            (self.ribbon_id, self.description, diecase_id,
-             self.customer, self.contents) = data
-            self.diecase = (diecase_id and self.set_diecase(diecase_id) or
-                            self.diecase)
+            (self.ribbon_id, self.description, self.customer, dc_id, wedge,
+             self.contents) = data
+            self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
+            self.wedge = wedge and self.set_wedge(wedge) or self.wedge
             return True
 
     def store_in_db(self):
@@ -126,12 +133,12 @@ class Ribbon(object):
 
     def import_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
-        (self.ribbon_id, self.description, diecase_id,
-         self.customer, self.contents) = import_ribbon_from_file()
+        (self.ribbon_id, self.description, self.customer, dc_id, wedge,
+         self.contents) = import_ribbon_from_file()
         # Set filename as attribute
         self.filename = filename
-        self.diecase = (diecase_id and self.set_diecase(diecase_id) or
-                        self.diecase)
+        self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
+        self.wedge = wedge and self.set_wedge(wedge) or self.wedge
 
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
@@ -139,9 +146,10 @@ class Ribbon(object):
         # Choose file, write metadata, write contents
         filename = filename or UI.enter_output_filename()
         with io.open(filename, mode='w+') as ribbon_file:
-            ribbon_file.write('diecase: ' + self.diecase.diecase_id)
             ribbon_file.write('description: ' + self.description)
             ribbon_file.write('customer: ' + self.customer)
+            ribbon_file.write('diecase: ' + self.diecase.diecase_id)
+            ribbon_file.write('wedge: ' + self.wedge.name)
             for line in self.contents:
                 ribbon_file.write(line)
 
@@ -155,11 +163,11 @@ class SelectRibbon(Ribbon):
                            filename and import_ribbon_from_file(filename) or
                            choose_ribbon_from_db() or
                            import_ribbon_from_file())
-            (self.ribbon_id, self.description, diecase_id,
-             self.customer, self.contents) = ribbon_data
+            (self.ribbon_id, self.description, self.customer, dc_id, wedge,
+             self.contents) = ribbon_data
             # Update diecase if correct diecase_id found in ribbon
-            self.diecase = (diecase_id and self.set_diecase(diecase_id) or
-                            self.diecase)
+            self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
+            self.wedge = wedge and self.set_wedge(wedge) or self.wedge
         # Otherwise use empty ribbon
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Ribbon choice failed. Starting a new one.')
@@ -248,17 +256,18 @@ def list_ribbons():
     data = DB.get_all_ribbons()
     results = {}
     UI.display('\n' +
-               'Index'.ljust(7) +
+               'No.'.ljust(5) +
                'Ribbon name'.ljust(30) +
-               'Title'.ljust(30) +
-               'Author'.ljust(30) +
-               'Diecase'.ljust(30) + '\n')
+               'Description'.ljust(30) +
+               'Customer'.ljust(30) +
+               'Diecase'.ljust(30) +
+               'Wedge'.ljust(30) + '\n')
     for index, ribbon in enumerate(data, start=1):
         # Collect ribbon parameters
         index = str(index)
-        row = [index.ljust(7)]
+        row = [index.ljust(5)]
         # Add ribbon name, description, diecase ID
-        row.extend([str(field).ljust(30) for field in ribbon])
+        row.extend([str(field).ljust(30) for field in ribbon[:-1]])
         # Display it all
         UI.display(''.join(row))
         # Add number and ID to the result that will be returned
@@ -273,14 +282,14 @@ def list_schemes():
     data = DB.get_all_schemes()
     results = {}
     UI.display('\n' +
-               'Index'.ljust(7) +
+               'No.'.ljust(5) +
                'Scheme ID'.ljust(20) +
                'Description'.ljust(20) +
                'Language'.ljust(20))
     for index, scheme in enumerate(data, start=1):
         # Collect scheme parameters
         index = str(index)
-        row = [index.ljust(7)]
+        row = [index.ljust(5)]
         row.extend([str(field).ljust(20) for field in scheme[:-1]])
         UI.display(''.join(row))
         # Add number and ID to the result that will be returned
@@ -307,7 +316,8 @@ def import_ribbon_from_file(filename=None):
         UI.pause('Cannot open ribbon file %s' % filename)
         return False
     # What to look for
-    keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer']
+    keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer',
+                'wedge']
     # Metadata (anything found), contents (the rest)
     metadata = {}
     contents = []
@@ -328,9 +338,10 @@ def import_ribbon_from_file(filename=None):
     diecase_id = metadata.get('diecase', '') or metadata.get('diecase_id', '')
     description = metadata.get('description', '') or metadata.get('desc', '')
     customer = metadata.get('customer', '')
+    wedge = metadata.get('wedge', '')
     ribbon_id = None
     # Add the whole contents as the attribute
-    return (ribbon_id, description, diecase_id, customer, contents)
+    return (ribbon_id, description, customer, diecase_id, wedge, contents)
 
 
 def import_scheme_from_file(filename=None):
