@@ -14,6 +14,9 @@ class Wedge(object):
         self.is_brit_pica = True
         self.units = wu.S5
 
+    def __repr__(self):
+        return self.name
+
     @property
     def pica(self):
         """Get the pica value for the wedge. Can be .1667" (old British)
@@ -50,7 +53,7 @@ class Wedge(object):
         # Look for an alias wedge name, there were some of them - AK, BO etc.
         for name, number, description in wu.ALIASES:
             if (w_n.startswith(name) and name != 'S' or
-                    w_n.endswith(name) and name != 'E'):
+                    w_n.endswith(name) and not name.endswith('E')):
                 UI.display('This is the %s.' % description)
                 series = number
                 # Double letter => pica = .1667"
@@ -115,7 +118,7 @@ class Wedge(object):
     @property
     def parameters(self):
         """Gets a list of parameters"""
-        return [(self.name, 'Wedge designation'),
+        return [(self, 'Wedge designation'),
                 ('%.4f"' % self.pica, '18 units 12 set is'),
                 (' '.join([str(x) for x in self.units if x]),
                  'Row unit values for this wedge')]

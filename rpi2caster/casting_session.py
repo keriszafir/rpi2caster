@@ -256,9 +256,10 @@ class Casting(object):
 
     @cast_or_punch_result
     def cast_composition(self):
-        """Casts or punches the ribbon contents"""
-        ribbon = self.ribbon.contents
-        return ribbon and ribbon or e.return_to_menu()
+        """Casts or punches the ribbon contents if there are any"""
+        if not self.ribbon.contents:
+            e.return_to_menu()
+        return self.ribbon.contents
 
     @cast_or_punch_result
     def cast_sorts(self, source=()):
@@ -560,7 +561,7 @@ class Casting(object):
                 (self._display_details, 'Show detailed info...',
                  'Displays caster, ribbon, diecase and wedge details', True),
                 (matrix_data.diecase_operations, 'Matrix manipulation...',
-                'Work on matrix cases', True),
+                 'Work on matrix cases', True),
                 (self.diagnostics_submenu, 'Service...',
                  'Interface and machine diagnostic functions', True)]
         # Built a list of menu options conditionally
@@ -592,34 +593,30 @@ class Casting(object):
     @ribbon.setter
     def ribbon(self, ribbon):
         """Ribbon setter"""
-        rib = (isinstance(ribbon, typesetting_data.Ribbon) and ribbon or
-               typesetting_data.SelectRibbon())
-        self.__dict__['_ribbon'] = rib
-        self.diecase = self.ribbon.diecase
+        self.__dict__['_ribbon'] = ribbon or typesetting_data.Ribbon()
+        self.diecase = ribbon.diecase
+        self.wedge = ribbon.wedge
 
     @property
     def diecase(self):
-        """Ribbon for the casting session"""
+        """Diecase for the casting session"""
         return self.__dict__.get('_diecase', matrix_data.Diecase())
 
     @diecase.setter
     def diecase(self, diecase):
-        """Ribbon setter"""
-        case = (isinstance(diecase, matrix_data.Diecase) and diecase or
-                matrix_data.SelectDiecase())
-        self.__dict__['_diecase'] = case
-        self.wedge = self.diecase.wedge
+        """Diecase setter"""
+        self.__dict__['_diecase'] = diecase or matrix_data.Diecase()
+        self.wedge = diecase.wedge
 
     @property
     def wedge(self):
-        """Ribbon for the casting session"""
+        """Wedge for the casting session"""
         return self.__dict__.get('_wedge', wedge_data.Wedge())
 
     @wedge.setter
     def wedge(self, wedge):
-        """Ribbon setter"""
-        self.__dict__['_wedge'] = (isinstance(wedge, wedge_data.Wedge) and
-                                   wedge or wedge_data.SelectWedge())
+        """Wedge setter"""
+        self.__dict__['_wedge'] = wedge or wedge_data.SelectWedge()
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""

@@ -94,7 +94,7 @@ class Database(object):
         """Registers a diecase in our database."""
         # data - a list with diecase parameters to be written,
         # layout is a JSON-dumped dictionary
-        data = [diecase.diecase_id, diecase.typeface, diecase.wedge.name,
+        data = [diecase.diecase_id, diecase.typeface, diecase.wedge,
                 json.dumps(diecase.layout)]
         with self.db_connection:
             try:
@@ -183,7 +183,7 @@ class Database(object):
     def add_ribbon(self, ribbon):
         """Registers a ribbon in our database."""
         data = [ribbon.description, ribbon.customer, ribbon.diecase.diecase_id,
-                ribbon.wedge.name, json.dumps(ribbon.contents)]
+                ribbon.wedge, json.dumps(ribbon.contents)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()

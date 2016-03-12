@@ -180,7 +180,8 @@ class Diecase(object):
     def parameters(self):
         """Gets a list of parameters"""
         return [(self.diecase_id, 'Diecase ID'),
-                (self.typeface, 'Typeface')]
+                (self.typeface, 'Typeface'),
+                (self.wedge, 'Assigned wedge')]
 
     def save_to_db(self):
         """Stores the matrix case definition/layout in database"""
@@ -389,11 +390,11 @@ def list_diecases():
                'No.'.ljust(4) +
                'Diecase ID'.ljust(25) +
                'Wedge'.ljust(12) +
-               'Typeface' + '\n')
+               'Typeface' +
+               '\n\n0 - start a new empty diecase\n')
     for index, diecase in enumerate(data, start=1):
         # Start each row with index
-        index = str(index)
-        row = [index.ljust(4)]
+        row = [str(index).ljust(4)]
         # Collect the ciecase parameters: ID, typeface, wedge
         # Leave the diecase layout out
         row.append(diecase[0].ljust(25))
@@ -411,13 +412,18 @@ def list_diecases():
 def choose_diecase():
     """Lists diecases and lets the user choose one;
     returns the Diecase class object with all parameters set up."""
-    prompt = 'Number of a diecase or leave blank for an empty one: '
+    prompt = 'Number of a diecase (0 for a new one, leave blank to exit): '
     while True:
         try:
             UI.display('Choose a matrix case:', end='\n\n')
             data = list_diecases()
-            choice = UI.enter_data_or_blank(prompt)
-            return choice and DB.get_diecase(data[choice]) or None
+            choice = UI.enter_data_or_blank(prompt, int)
+            if choice == 0:
+                return None
+            elif not choice:
+                e.return_to_menu()
+            else:
+                return DB.get_diecase(data[choice])
         except KeyError:
             UI.pause('Diecase number is incorrect!')
         except (e.NoMatchingData, e.DatabaseQueryError):

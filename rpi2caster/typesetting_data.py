@@ -39,12 +39,12 @@ class Ribbon(object):
     set_[description, customer, diecase_id] - set parameters manually"""
     def __init__(self):
         self.ribbon_id = None
-        self.description = None
-        self.customer = None
-        self.filename = None
+        self.description = 'No Description'
+        self.customer = 'Default Customer'
+        self.filename = 'New Ribbon'
         self.contents = []
         self.diecase = matrix_data.Diecase()
-        self.wedge = wedge_data.Wedge()
+        self.wedge = None
 
     def set_ribbon_id(self, ribbon_id=None):
         """Sets the ribbon ID"""
@@ -77,7 +77,7 @@ class Ribbon(object):
 
     def set_wedge(self, wedge_name=None):
         """Sets a wedge for the ribbon"""
-        self.wedge = wedge_data.SelectWedge(wedge_name)
+        self.wedge = wedge_name
 
     @property
     def parameters(self):
@@ -87,7 +87,17 @@ class Ribbon(object):
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
                 (self.diecase.diecase_id, 'Matrix case ID'),
-                (self.wedge.name, 'Wedge')]
+                (self.wedge, 'Wedge')]
+
+    @property
+    def wedge(self):
+        """Gets the ribbon's wedge"""
+        return self.__dict__.get('_wedge', wedge_data.Wedge())
+
+    @wedge.setter
+    def wedge(self, wedge_name):
+        """Sets the wedge for this ribbon"""
+        self.__dict__['_wedge'] = wedge_data.SelectWedge(wedge_name or '5-12E')
 
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
@@ -107,10 +117,9 @@ class Ribbon(object):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
         if data and UI.confirm('Override current data?'):
-            (self.ribbon_id, self.description, self.customer, dc_id, wedge,
-             self.contents) = data
+            (self.ribbon_id, self.description, self.customer, dc_id,
+             self.wedge, self.contents) = data
             self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
-            self.wedge = wedge and self.set_wedge(wedge) or self.wedge
             return True
 
     def store_in_db(self):
@@ -133,12 +142,11 @@ class Ribbon(object):
 
     def import_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
-        (self.ribbon_id, self.description, self.customer, dc_id, wedge,
-         self.contents) = import_ribbon_from_file()
+        (self.ribbon_id, self.description, self.customer, dc_id,
+         self.wedge, self.contents) = import_ribbon_from_file()
         # Set filename as attribute
         self.filename = filename
         self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
-        self.wedge = wedge and self.set_wedge(wedge) or self.wedge
 
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
@@ -149,7 +157,7 @@ class Ribbon(object):
             ribbon_file.write('description: ' + self.description)
             ribbon_file.write('customer: ' + self.customer)
             ribbon_file.write('diecase: ' + self.diecase.diecase_id)
-            ribbon_file.write('wedge: ' + self.wedge.name)
+            ribbon_file.write('wedge: ' + self.wedge)
             for line in self.contents:
                 ribbon_file.write(line)
 
@@ -163,11 +171,10 @@ class SelectRibbon(Ribbon):
                            filename and import_ribbon_from_file(filename) or
                            choose_ribbon_from_db() or
                            import_ribbon_from_file())
-            (self.ribbon_id, self.description, self.customer, dc_id, wedge,
-             self.contents) = ribbon_data
+            (self.ribbon_id, self.description, self.customer, dc_id,
+             self.wedge, self.contents) = ribbon_data
             # Update diecase if correct diecase_id found in ribbon
             self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
-            self.wedge = wedge and self.set_wedge(wedge) or self.wedge
         # Otherwise use empty ribbon
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Ribbon choice failed. Starting a new one.')
@@ -261,13 +268,13 @@ def list_ribbons():
                'Description'.ljust(30) +
                'Customer'.ljust(30) +
                'Diecase'.ljust(30) +
-               'Wedge'.ljust(30) + '\n')
+               'Wedge'.ljust(30) +
+               '\n\n0 - start a new empty ribbon\n')
     for index, ribbon in enumerate(data, start=1):
         # Collect ribbon parameters
-        index = str(index)
-        row = [index.ljust(5)]
+        row = [str(index).ljust(5)]
         # Add ribbon name, description, diecase ID
-        row.extend([str(field).ljust(30) for field in ribbon[:-1]])
+        row.extend([field.ljust(30) for field in ribbon[:-1]])
         # Display it all
         UI.display(''.join(row))
         # Add number and ID to the result that will be returned
@@ -285,12 +292,12 @@ def list_schemes():
                'No.'.ljust(5) +
                'Scheme ID'.ljust(20) +
                'Description'.ljust(20) +
-               'Language'.ljust(20))
+               'Language'.ljust(20) +
+               '\n\n0 - start a new empty ribbon\n')
     for index, scheme in enumerate(data, start=1):
         # Collect scheme parameters
-        index = str(index)
-        row = [index.ljust(5)]
-        row.extend([str(field).ljust(20) for field in scheme[:-1]])
+        row = [str(index).ljust(5)]
+        row.extend([field.ljust(20) for field in scheme[:-1]])
         UI.display(''.join(row))
         # Add number and ID to the result that will be returned
         results[index] = scheme[0]
@@ -317,7 +324,7 @@ def import_ribbon_from_file(filename=None):
         return False
     # What to look for
     keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer',
-                'wedge']
+                'wedge', 'stopbar']
     # Metadata (anything found), contents (the rest)
     metadata = {}
     contents = []
@@ -335,11 +342,11 @@ def import_ribbon_from_file(filename=None):
         else:
             contents.append(line)
     # Metadata parsing
-    diecase_id = metadata.get('diecase', '') or metadata.get('diecase_id', '')
+    ribbon_id = None
     description = metadata.get('description', '') or metadata.get('desc', '')
     customer = metadata.get('customer', '')
-    wedge = metadata.get('wedge', '')
-    ribbon_id = None
+    diecase_id = metadata.get('diecase', '') or metadata.get('diecase_id', '')
+    wedge = metadata.get('wedge', '') or metadata.get('stopbar', '')
     # Add the whole contents as the attribute
     return (ribbon_id, description, customer, diecase_id, wedge, contents)
 
@@ -366,12 +373,17 @@ def import_scheme_from_file(filename=None):
 
 def choose_ribbon_from_db():
     """Chooses ribbon data from database"""
-    prompt = 'Number of a ribbon? (leave blank to exit): '
+    prompt = 'Number of a ribbon? (0 for a new one, leave blank to exit): '
     while True:
         try:
             data = list_ribbons()
             choice = UI.enter_data_or_blank(prompt, int)
-            return choice and DB.get_ribbon(data[choice]) or None
+            if choice == 0:
+                return None
+            elif not choice:
+                e.return_to_menu()
+            else:
+                return DB.get_ribbon(data[choice])
         except KeyError:
             UI.pause('Ribbon number is incorrect!')
         except (e.DatabaseQueryError, e.NoMatchingData):
@@ -381,12 +393,17 @@ def choose_ribbon_from_db():
 
 def choose_scheme_from_db():
     """Chooses scheme data from database"""
-    prompt = 'Number of a scheme? (leave blank to exit): '
+    prompt = 'Number of a scheme? (0 for a new one, leave blank to exit): '
     while True:
         try:
             data = list_schemes()
             choice = UI.enter_data_or_blank(prompt, int)
-            return choice and DB.get_scheme(data[choice]) or None
+            if choice == 0:
+                return None
+            elif not choice:
+                e.return_to_menu()
+            else:
+                return DB.get_scheme(data[choice])
         except KeyError:
             UI.pause('Font scheme number is incorrect!')
         except (e.DatabaseQueryError, e.NoMatchingData):
