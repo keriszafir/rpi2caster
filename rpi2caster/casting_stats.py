@@ -253,11 +253,14 @@ class Stats(object):
 
 def build_data(source, parameter, data_name=''):
     """Builds data to display based on the given parameter"""
+    try:
+        percentage = ((source.get('current_%s' % parameter, 1) - 1) /
+                      source.get('%ss' % parameter, 1) * 100)
+    except ZeroDivisionError:
+        percentage = 0
     return (('%s / %s [%.1f%% done], %s left'
              % (source.get('current_%s' % parameter, 0),
-                source.get('%ss' % parameter, 0),
-                (source.get('current_%s' % parameter, 1) - 1) /
-                source.get('%ss' % parameter, 1) * 100,
+                source.get('%ss' % parameter, 0), percentage,
                 source.get('%ss' % parameter, 1) -
                 source.get('current_%s' % parameter, 1) + 1),
              data_name or parameter.capitalize()))

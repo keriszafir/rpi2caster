@@ -36,6 +36,9 @@ class Diecase(object):
     def __next__(self):
         yield from self.matrices
 
+    def __repr__(self):
+        return self.diecase_id
+
     def show_layout(self):
         """Shows the diecase layout"""
         UI.display_diecase_layout(self)
@@ -91,7 +94,7 @@ class Diecase(object):
 
     def decode_matrix(self, code):
         """Finds the matrix based on the column and row in layout"""
-        return [mat for mat in self.matrices if mat.code == code.upper()][0]
+        return [mat for mat in self.matrices if mat == code.upper()][0]
 
     def import_layout(self):
         """Imports a layout from file"""
@@ -116,7 +119,7 @@ class Diecase(object):
 
     def export_layout(self):
         """Exports the matrix case layout to file."""
-        filename = os.path.expanduser('~') + '/%s.csv' % self.diecase_id
+        filename = os.path.expanduser('~') + '/%s.csv' % self
         with io.open(filename, 'a') as output_file:
             csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
                                     quoting=csv.QUOTE_ALL)
@@ -156,8 +159,7 @@ class Diecase(object):
     def set_diecase_id(self, diecase_id=None):
         """Sets a diecase ID"""
         prompt = 'Diecase ID? (leave blank to exit) : '
-        diecase_id = (diecase_id or UI.enter_data_or_blank(prompt) or
-                      self.diecase_id)
+        diecase_id = (diecase_id or UI.enter_data_or_blank(prompt) or self)
         # Ask if we are sure we want to update this
         # if self.diecase_id was set earlier
         if not self.diecase_id or UI.confirm('Apply changes?'):
@@ -289,6 +291,9 @@ class Matrix(object):
         self.diecase = None
         self.units = units
 
+    def __repr__(self):
+        return self.code
+
     def row_units(self, alt_wedge=None):
         """Gets the row's unit width value for the diecase's wedge"""
         wedge = alt_wedge or self.diecase.wedge
@@ -312,7 +317,7 @@ class Matrix(object):
         """Gets all parameters for the matrix"""
         return [(self.char, 'Character'),
                 (', '.join(list(self.styles)), 'Styles'),
-                (self.code, 'Coordinates'), (self.units, 'Unit width')]
+                (self, 'Coordinates'), (self.units, 'Unit width')]
 
     @property
     def code(self):

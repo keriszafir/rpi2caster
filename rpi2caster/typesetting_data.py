@@ -46,6 +46,15 @@ class Ribbon(object):
         self.diecase = matrix_data.Diecase()
         self.wedge = None
 
+    def __iter__(self):
+        return iter(self.contents)
+
+    def __next__(self):
+        yield from self.contents
+
+    def __repr__(self):
+        return self.ribbon_id or ''
+
     def set_ribbon_id(self, ribbon_id=None):
         """Sets the ribbon ID"""
         prompt = 'Ribbon ID? (leave blank to exit) : '
@@ -188,6 +197,15 @@ class FontScheme(object):
         self.description = None
         self.language = None
         self.layout = {}
+
+    def __iter__(self):
+        return iter(self.layout)
+
+    def __next__(self):
+        yield from self.layout
+
+    def __repr__(self):
+        return self.scheme_id or ''
 
     @property
     def parameters(self):

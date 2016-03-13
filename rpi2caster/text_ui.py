@@ -334,7 +334,8 @@ def display_diecase_layout(diecase):
     # Add the header at the bottom
     table.extend([separator, header, separator])
     # We can display it now
-    print('\nStopbar / wedge: %s\n' % diecase.wedge)
+    print('\nDiecase ID: %s' % diecase)
+    print('Stopbar / wedge: %s\n' % diecase.wedge)
     for row in table:
         print(row)
     # Explanation of symbols

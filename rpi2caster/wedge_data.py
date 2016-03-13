@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Wedge data model for rpi2caster"""
+from itertools import zip_longest
 # Default user interface
 from .global_settings import UI
 # Constants for known normal wedge unit values
@@ -26,6 +27,11 @@ class Wedge(object):
         return self.is_brit_pica and 0.1667 or 0.166
 
     @property
+    def em_width(self):
+        """Get the wedge em width (i.e. 18 units of wedge's set) in inches"""
+        return self.pica * self.set_width / 12
+
+    @property
     def name(self):
         """Gets a wedge name - for example S5-12.25E.
         S (for stopbar) is prepended by convention.
@@ -46,35 +52,25 @@ class Wedge(object):
         and some old-style (alphabetic) names, like AK, BO etc.
         For unknown wedges, the user has to enter the values manually."""
         # Ask for wedge name and set width as it is written on the wedge
-        prompt = ('Wedge designation? (leave blank to choose default S5-12): ')
-        w_n = wedge_name or UI.enter_data_or_blank(prompt) or 'S5-12'
+        prompt = ('\nSome old-style wedge designations:\n\n' +
+                  '\n'.join(['\t'.join(group)
+                             for group in grouper(wu.ALIASES, 3, '')]) +
+                  '\n\nIf you have one of those, enter number (like S5-xx.yE).'
+                  '\n\nWedge designation? (blank to choose default S5-12): ')
+        wedge_name = wedge_name or UI.enter_data_or_blank(prompt) or 'S5-12'
         # For countries that use comma as decimal delimiter, convert to point:
-        w_n = w_n.replace(',', '.').upper()
-        # Look for an alias wedge name, there were some of them - AK, BO etc.
-        for name, number, description in wu.ALIASES:
-            if (w_n.startswith(name) and name != 'S' or
-                    w_n.endswith(name) and not name.endswith('E')):
-                UI.display('This is the %s.' % description)
-                series = number
-                # Double letter => pica = .1667"
-                # Source: "The Monotype casting machine manual" (UK, 1952),
-                # section "Normal wedge markings", p. 105
-                is_brit_pica = (len(name) == 2 and
-                                all([x.isalpha() for x in name]))
-                set_width = w_n.replace(name, '').strip()
-                break
-        else:
-            # Check if this is an European wedge
-            # (these were based on pica = .1667" )
-            is_brit_pica = w_n.endswith('E')
-            # Away with the initial S, final E and any spaces before and after
-            # Make it work with space or dash as delimiter
-            wedge = w_n.strip('SE ').replace('-', ' ').split(' ')
-            try:
-                (series, set_width) = wedge
-            except ValueError:
-                series = wedge[0]
-                set_width = None
+        wedge_name = wedge_name.replace(',', '.').upper().strip()
+        # Check if this is an European wedge
+        # (these were based on pica = .1667" )
+        is_brit_pica = wedge_name.endswith('E')
+        # Away with the initial S, final E and any spaces before and after
+        # Make it work with space or dash as delimiter
+        wedge = wedge_name.strip('SE ').replace('-', ' ').split(' ')
+        try:
+            (series, set_width) = wedge
+        except ValueError:
+            series = wedge[0]
+            set_width = None
         # Now get the set width - ensure that it is float divisible by 0.25
         while True:
             try:
@@ -119,7 +115,7 @@ class Wedge(object):
     def parameters(self):
         """Gets a list of parameters"""
         return [(self, 'Wedge designation'),
-                ('%.4f"' % self.pica, '18 units 12 set is'),
+                ('%.4f"' % self.pica, 'Pica base is'),
                 (' '.join([str(x) for x in self.units if x]),
                  'Row unit values for this wedge')]
 
@@ -149,3 +145,10 @@ class SelectWedge(Wedge):
         super().__init__()
         self.name = wedge_name or (wedge_series and set_width and
                                    '%s-%s' % (wedge_series, set_width))
+
+
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    args = [iter(iterable)] * n
+    return zip_longest(*args, fillvalue=fillvalue)

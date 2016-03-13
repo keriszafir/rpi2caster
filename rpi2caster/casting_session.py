@@ -76,6 +76,9 @@ def prepare_job(ribbon_casting_workflow):
 
     def wrapper(self, ribbon):
         """Wrapper function"""
+        # Stop here if no ribbon
+        if not ribbon:
+            return
         # Mode aliases
         punching = self.caster.mode.punching
         diagnostics = self.caster.mode.diagnostics
@@ -162,13 +165,16 @@ class Casting(object):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
 
-    def __init__(self, ribbon_file=''):
+    def __init__(self, ribbon_file='', diecase='', wedge=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
         self.stats = Stats(self)
         self.ribbon = (ribbon_file and
                        typesetting_data.SelectRibbon(filename=ribbon_file) or
                        typesetting_data.Ribbon())
+        self.diecase = (diecase and
+                        matrix_data.SelectDiecase(diecase) or self.diecase)
+        self.wedge = wedge and wedge_data.SelectWedge(wedge) or self.wedge
 
     @choose_sensor_and_driver
     @prepare_job
@@ -279,7 +285,7 @@ class Casting(object):
                 casting_queue.append((char, style, 0))
             elif not UI.confirm(prompt):
                 continue
-            if self.diecase.diecase_id:
+            if self.diecase:
                 prompt = ('Character? (leave blank to end '
                           'specifying characters and start casting): ')
                 char = char or UI.enter_data_or_blank(prompt)
@@ -319,7 +325,7 @@ class Casting(object):
             line_codes.extend(['O15'] * 2)
             # Ask for confirmation
             queue.extend(line_codes * lines)
-            if not (self.diecase.diecase_id or
+            if not (self.diecase or
                     UI.confirm('Next character? (no = finish and cast) : ')):
                 break
         # No sequences? No casting.
@@ -354,7 +360,7 @@ class Casting(object):
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
             prompt = ('Casting %s lines of %s-point spaces from %s. OK?'
-                      % (lines, width, matrix.code))
+                      % (lines, width, matrix))
             # Save for later
             comment = '%s-point space' % width
             # Repeat
@@ -376,7 +382,7 @@ class Casting(object):
             # Any corrections needed?
             diff = matrix.units + correction - matrix.row_units(self.wedge)
             # Add 'S' if there is width difference
-            signals = matrix.code + (diff and 'S' or '') + '// ' + comment
+            signals = matrix + (diff and 'S' or '') + '// ' + comment
             line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
                           PUMP_ON + str(wedge_positions['0075'])]
             # 2 quads in the beginning, then spaces, then 2 quads in the end
@@ -452,14 +458,16 @@ class Casting(object):
         """Calculates the width, displays it and casts some 9-unit characters.
         Then, the user measures the width and adjusts the mould opening width.
         """
-        UI.pause('Mould blade opening calibration:\n'
-                 'Cast G5 (9-units wide on S5 wedge), then measure the width. '
-                 'Adjust if needed.')
-        # We calculate the width of double 9 units = 18 units, i.e. 1 pica em
-        em_width = self.wedge.pica * self.wedge.set_width / 12.0
+        UI.display('Mould blade opening calibration:\n'
+                   'Cast G5 (9-units wide on S5 wedge), then measure '
+                   'the width. Adjust if needed.')
         UI.display_parameters({'Wedge data': self.wedge.parameters})
-        UI.display('9 units (1en) is %s" wide' % round(0.5 * em_width, 4))
-        UI.display('18 units (1em) is %s" wide' % round(em_width, 4))
+        UI.display('\n9 units (1en) is %s" wide'
+                   % round(self.wedge.em_width / 2, 4))
+        UI.display('18 units (1em) is %s" wide\n'
+                   % round(self.wedge.em_width, 4))
+        if not UI.confirm('Proceed?'):
+            return None
         signals = 'G5'
         self.caster.mode.calibration = True
         return [GALLEY_TRIP] + [signals] * 7 + END_CASTING
@@ -534,8 +542,8 @@ class Casting(object):
         """Build a list of options, adding an option if condition is met"""
         # Options are described with tuples: (function, description, condition)
         caster = not self.caster.mode.punching
+        diecase = self.diecase.diecase_id
         ribbon = self.ribbon.contents
-        diecase_selected = self.diecase.diecase_id
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
                 (self.cast_composition, 'Cast or punch composition',
                  'Casts type or punch a ribbon', ribbon),
@@ -548,16 +556,16 @@ class Casting(object):
                 (self.ribbon.display_contents, 'View codes',
                  'Displays all sequences in a ribbon', ribbon),
                 (self.diecase.show_layout, 'Show diecase layout',
-                 'Views the matrix case layout', diecase_selected),
+                 'Views the matrix case layout', diecase),
                 # (self.adhoc_typesetting, 'Ad-hoc typesetting',
-                # 'Compose and cast a line of text', diecase_selected),
+                # 'Compose and cast a line of text', self.diecase),
                 (self.cast_sorts, 'Cast sorts',
                  'Cast from matrix with given coordinates', caster),
                 (self.cast_spaces, 'Cast spaces or quads',
                  'Casts spaces or quads of a specified width', caster),
                 (self.cast_typecases, 'Cast typecases',
                  'Casts a typecase based on a selected font scheme',
-                 caster and diecase_selected),
+                 caster and diecase),
                 (self._display_details, 'Show detailed info...',
                  'Displays caster, ribbon, diecase and wedge details', True),
                 (matrix_data.diecase_operations, 'Matrix manipulation...',

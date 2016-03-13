@@ -10,7 +10,8 @@ from .text_ui import confirm, menu, exit_program
 def cast(args):
     """Casting on an actual caster or simulation"""
     from . import casting_session
-    session = casting_session.Casting(args.ribbon_file)
+    session = casting_session.Casting(ribbon_file=args.ribbon_file,
+                                      diecase=args.diecase, wedge=args.wedge)
     session.caster.mode.simulation = args.simulation
     session.caster.mode.punching = args.punching
     casting_session.UI.DEBUG_MODE = args.debug
@@ -117,13 +118,16 @@ def main():
     # Debug mode
     cast_parser.add_argument('-d', '--debug', help='debug mode',
                              action="store_true")
-    # Simulation mode: casting/punching without the actual caster/interface
-    cast_parser.add_argument('-s', '--simulation', action='store_true',
-                             help='simulate casting instead of real casting')
+    # Choose specific diecase
+    cast_parser.add_argument('-m', '--diecase', help='diecase to use',
+                             metavar='diecase_id')
     # Punch ribbon: uses different sensor, always adds O+15 to combinations
     cast_parser.add_argument('-p', '--punch', action='store_true',
                              dest='punching',
                              help='ribbon punching (perforation) mode')
+    # Simulation mode: casting/punching without the actual caster/interface
+    cast_parser.add_argument('-s', '--simulation', action='store_true',
+                             help='simulate casting instead of real casting')
     test_or_cast = cast_parser.add_mutually_exclusive_group()
     # Starts in the diagnostics submenu of the casting program
     test_or_cast.add_argument('-t', '--test', action='store_true',
@@ -132,10 +136,14 @@ def main():
     # Allows to start casting right away without entering menu
     test_or_cast.add_argument('-D', '--direct', action="store_true",
                               help='direct casting - no menu',)
+    # Choose specific wedge
+    cast_parser.add_argument('-w', '--wedge', help='wedge to use',
+                             metavar='x-yy')
     # Ribbon - input file specification
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='ribbon file name')
-    cast_parser.set_defaults(job=cast, ribbon_file=None)
+    cast_parser.set_defaults(job=cast, ribbon_file=None, wedge=None,
+                             diecase=None)
     #
     # Software update subparser
     #

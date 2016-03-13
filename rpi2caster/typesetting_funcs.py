@@ -57,30 +57,12 @@ class Settings(object):
         -spaces
         -manual mode (more control) or automatic mode (less control, faster)
         """
-        # Choose a matrix case if ID not supplied
-        diecase = matrix_data.choose_diecase(diecase_id)
-        # Parse the matrix case parameters
-        (diecase_id, type_series, self.type_size,
-         self.wedge_series, self.set_width,
-         typeface_name, self.diecase_layout) = diecase
-        # Get unit values for the wedge
-        self.units = wedge_data.get_units(self.wedge_series, self.set_width)
-        # Warn if the wedge could be incompatible with the matrix case
-        self._check_if_wedge_is_ok()
-        # Enter the line length for typesetting, and calculate it
-        # into units of self.set_width
-        self._enter_line_length()
         # Ask if the composing mode is manual or automatic
         self._manual_or_automatic()
         # Choose dominant stype
         self._choose_style()
         # Set it as the current style
         self.current_style = self.main_style
-        # Display info for the user
-        UI.display('Composing for %s %s - %s' % (typeface_name, self.type_size,
-                                                 type_series))
-        UI.display('Wedge used: %s - %s set' % (self.wedge_series,
-                                                self.set_width))
 
     def _manual_or_automatic(self):
         """Allows to choose if typesetting will be done with more user control.
