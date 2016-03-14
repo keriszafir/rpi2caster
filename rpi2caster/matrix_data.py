@@ -45,14 +45,10 @@ class Diecase(object):
     def __getitem__(self, char_and_style):
         try:
             char, style = char_and_style
+            return self.get_matrix(char, style)
         except ValueError:
-            # Must work if we give it a character
-            char = char_and_style
-            if len(self.styles) == 1:
-                style = self.styles[0]
-            else:
-                style = 'roman'
-        return self.get_matrix(char, style)
+            # Must work if we give it a character only
+            return self.get_matrix(char_and_style)
 
     def show_layout(self):
         """Shows the diecase layout"""
