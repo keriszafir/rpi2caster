@@ -64,25 +64,42 @@ class Diecase(object):
         # Edit the layout
         UI.edit_diecase_layout(self)
 
-    def get_matrix(self, char='', style='roman'):
+    def get_matrix(self, char='', style=''):
         """Chooses a matrix automatically or manually (if multiple matches),
         allows to specify matrix data manually if no matches found"""
-        if not char or char in ' _':
+        spaces = {' ': 'low space', '_': 'high space'}
+        if char in spaces:
             style = ''
-        candidates = [mat for mat in self.matrices
-                      if mat.char == char and
-                      (not any(mat.styles) or style in mat.styles)]
+        # Find as many matches as we can:
+        # -all matrices for a given character for a given style
+        # -all matrices for a given style if char not specified
+        # -all matrices for a given character if style not specified
+        # -all matrices for spaces
+        # all matrices if no character and no style is specified
+        # Then choose from menu (if multiple match), automatically
+        # (single match) or enter manually (no matches)
+        if char and style:
+            candidates = [mat for mat in self.matrices
+                          if mat.char == char and style in mat.styles]
+        elif char:
+            candidates = [mat for mat in self.matrices if mat.char == char]
+        elif style:
+            candidates = [mat for mat in self.matrices
+                          if style in mat.styles or not self.styles]
+        else:
+            candidates = [mat for mat in self.matrices]
+        # Built the list of candidates...
         if not candidates:
             matrix = Matrix(char or '', [style])
             matrix.diecase = self
             if char:
                 UI.display('Enter matrix data for character: %s' % char)
             prompt = 'Combination? (default: G5): '
-            code_string = UI.enter_data_or_blank(prompt).upper() or 'G5'
-            combination = p.parse_signals(code_string)
+            codes = UI.enter_data_or_blank(prompt).upper() or 'G5'
+            codes = p.parse_signals(codes)
             # Got a list of signals
-            matrix.row = p.get_row(combination)
-            matrix.column = p.get_column(combination)
+            matrix.row = p.get_row(codes)
+            matrix.column = p.get_column(codes)
             # Default unit width value = determine based on wedge
             units = self.wedge.units[matrix.row]
             prompt = 'Unit width? (default: %s): ' % units
@@ -91,22 +108,22 @@ class Diecase(object):
         elif len(candidates) == 1:
             return candidates[0]
         else:
-            pr_char = {' ': 'low space', '_': 'high space'}.get(char, char)
+            # Multiple matches found = let user choose
+            pr_char = spaces.get(char, char)
             UI.display_header('Multiple matrices for %s %s' % (style, pr_char))
             # Show a menu with multiple candidates
-            hdr = (['Index'.ljust(10), 'Char'.ljust(10), 'Styles'.ljust(30),
-                    'Column'.ljust(10), 'Row'.ljust(10), 'Units'.ljust(10)])
             mats = {i: mat for i, mat in enumerate(candidates, start=1)}
             prompt = 'Choose matrix (leave blank to enter manually): '
-            choice = 0
-            UI.display(''.join(hdr))
+            UI.display(''.join(['Index'.ljust(10), 'Char'.ljust(10),
+                                'Styles'.ljust(30), 'Column'.ljust(10),
+                                'Row'.ljust(10), 'Units'.ljust(10)]))
             for i, mat in mats.items():
                 record = [str(i).ljust(10), mat.char.ljust(10),
                           ', '.join(mat.styles).ljust(30),
                           mat.column.ljust(10), str(mat.row).ljust(10),
                           str(mat.units).ljust(10)]
                 UI.display(''.join(record))
-            choice = UI.enter_data_or_blank(prompt, int)
+            choice = UI.enter_data_or_blank(prompt, int) or 0
             matrix = mats.get(choice, Matrix(char, [style]))
             matrix.diecase = self
             return matrix
