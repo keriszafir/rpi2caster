@@ -366,10 +366,6 @@ def edit_matrix(matrix):
 def edit_diecase_layout(diecase):
     """Edits a matrix case layout, row by row, matrix by matrix.
     Allows to enter a position to be edited. """
-    def get_matrix(coordinates):
-        """Gets matrix data for given coordinates."""
-        return [mat for mat in diecase if mat.code == coordinates.upper()][0]
-
     def all_rows_mode():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
         for mat in diecase:
@@ -417,7 +413,7 @@ def edit_diecase_layout(diecase):
             elif ans in [str(x) for x in range(1, 17)]:
                 single_row_mode(int(ans))
             elif ans:
-                mat = get_matrix(ans)
+                mat = diecase.decode_matrix(ans)
                 edit_matrix(mat)
             else:
                 return diecase.matrices

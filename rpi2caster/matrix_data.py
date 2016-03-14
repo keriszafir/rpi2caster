@@ -126,7 +126,7 @@ class Diecase(object):
 
     def decode_matrix(self, code):
         """Finds the matrix based on the column and row in layout"""
-        return [mat for mat in self.matrices if mat == code.upper()][0]
+        return [mat for mat in self.matrices if mat.code == code.upper()][0]
 
     def import_layout(self):
         """Imports a layout from file"""
@@ -224,43 +224,6 @@ class Diecase(object):
         except (e.DatabaseQueryError, e.NoMatchingData):
             return False
 
-    @property
-    def layout(self):
-        """Gets a diecase layout as a list of lists"""
-        return [matrix.record for matrix in self.matrices]
-
-    @layout.setter
-    def layout(self, layout):
-        """Translates the layout to a list of matrix objects"""
-        self.matrices = [Matrix(char, styles, (column, row), units)
-                         for (char, styles, column, row, units) in layout]
-
-    @property
-    def matrices(self):
-        """Gets a list of Matrix objects"""
-        return self.__dict__.get('_matrices')
-
-    @matrices.setter
-    def matrices(self, matrices):
-        """Sets a list of Matrix objects, used for storing the layout"""
-        if matrices:
-            for matrix in matrices:
-                matrix.diecase = self
-            self.__dict__['_matrices'] = matrices
-
-    @property
-    def parameters(self):
-        """Gets a list of parameters"""
-        return [(self.diecase_id, 'Diecase ID'),
-                (self.typeface, 'Typeface'),
-                (self.wedge, 'Assigned wedge')]
-
-    @property
-    def styles(self):
-        """Parses the diecase layout and gets available typeface styles.
-        Returns a list of them."""
-        return list({style for mat in self for style in mat.styles if style})
-
     def manipulation_menu(self):
         """A menu with all operations on a diecase"""
         def clear_layout():
@@ -306,6 +269,43 @@ class Diecase(object):
         except e.MenuLevelUp:
             # Exit matrix case manipulation menu
             return True
+
+    @property
+    def layout(self):
+        """Gets a diecase layout as a list of lists"""
+        return [matrix.record for matrix in self.matrices]
+
+    @layout.setter
+    def layout(self, layout):
+        """Translates the layout to a list of matrix objects"""
+        self.matrices = [Matrix(char, styles, (column, row), units)
+                         for (char, styles, column, row, units) in layout]
+
+    @property
+    def matrices(self):
+        """Gets a list of Matrix objects"""
+        return self.__dict__.get('_matrices')
+
+    @matrices.setter
+    def matrices(self, matrices):
+        """Sets a list of Matrix objects, used for storing the layout"""
+        if matrices:
+            for matrix in matrices:
+                matrix.diecase = self
+            self.__dict__['_matrices'] = matrices
+
+    @property
+    def parameters(self):
+        """Gets a list of parameters"""
+        return [(self.diecase_id, 'Diecase ID'),
+                (self.typeface, 'Typeface'),
+                (self.wedge, 'Assigned wedge')]
+
+    @property
+    def styles(self):
+        """Parses the diecase layout and gets available typeface styles.
+        Returns a list of them."""
+        return list({style for mat in self for style in mat.styles if style})
 
 
 class SelectDiecase(Diecase):
