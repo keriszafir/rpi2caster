@@ -1,3 +1,4 @@
+v0.3dev2 - bugfix release
 v0.3dev1 - change diecase storage format (diecase_id, typeface, wedge, layout)
 	   ditch wedge storage in db; use wedges specified by name
 	   LOTS of new stopbar/wedge definitions

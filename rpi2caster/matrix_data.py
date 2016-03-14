@@ -64,10 +64,10 @@ class Diecase(object):
         # Edit the layout
         UI.edit_diecase_layout(self)
 
-    def get_matrix(self, char=None, style='roman'):
+    def get_matrix(self, char='', style='roman'):
         """Chooses a matrix automatically or manually (if multiple matches),
         allows to specify matrix data manually if no matches found"""
-        if char in ' _':
+        if not char or char in ' _':
             style = ''
         candidates = [mat for mat in self.matrices
                       if mat.char == char and

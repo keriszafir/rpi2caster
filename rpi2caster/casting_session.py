@@ -487,12 +487,12 @@ class Casting(object):
     def _calibrate_diecase(self):
         """Casts the "en dash" characters for calibrating the character X-Y
         relative to type body."""
-        UI.pause('X-Y character calibration:\n'
-                 'Cast some en-dashes and/or lowercase "n" letters, '
-                 'then check the position of the character relative to the '
-                 'type body.\nAdjust if needed.')
+        UI.display('X-Y character calibration:\n'
+                   'Cast some en-dashes and/or lowercase "n" letters, '
+                   'then check the position of the character relative to the '
+                   'type body.\nAdjust if needed.')
         self.caster.mode.calibration = True
-        self.cast_sorts([('–', 'roman', 7), ('n', 'roman', 7),
+        self.cast_sorts([('--', 'roman', 7), ('n', 'roman', 7),
                          ('h', 'roman', 7)])
 
     @choose_sensor_and_driver
