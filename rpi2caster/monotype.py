@@ -213,8 +213,8 @@ class SimulationSensor(object):
                     cycles -= 1
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                if not UI.confirm('Machine not running - continue? '
-                                  '[Y] to retry, or [N] to abort?'):
+                if not UI.confirm('Machine not running - do you want to '
+                                  'continue? ', default=False):
                     e.return_to_menu()
 
     def wait_for(self, new_state, timeout=30, time_on=0.1, time_off=0.1):

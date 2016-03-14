@@ -62,8 +62,8 @@ class Ribbon(object):
                      self.ribbon_id)
         # Ask if we are sure we want to update this
         # if self.ribbon_id was set earlier
-        condition = (not self.ribbon_id or
-                     UI.confirm('Are you sure to change the ribbon ID?'))
+        prompt = 'Are you sure to change the ribbon ID?'
+        condition = not self.ribbon_id or UI.confirm(prompt, default=False)
         if condition:
             self.ribbon_id = ribbon_id
             return True
@@ -125,7 +125,7 @@ class Ribbon(object):
     def get_from_db(self):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
-        if data and UI.confirm('Override current data?'):
+        if data and UI.confirm('Override current data?', default=False):
             (self.ribbon_id, self.description, self.customer, dc_id,
              self.wedge, self.contents) = data
             self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
@@ -145,7 +145,7 @@ class Ribbon(object):
 
     def delete_from_db(self):
         """Deletes a ribbon from database."""
-        if UI.confirm('Are you sure?'):
+        if UI.confirm('Are you sure?', default=False):
             DB.delete_ribbon(self)
             UI.display('Ribbon deleted successfully.')
 
@@ -221,8 +221,9 @@ class FontScheme(object):
                      self.scheme_id)
         # Ask if we are sure we want to update this
         # if self.scheme_id was set earlier
+        prompt = 'Are you sure to change the scheme ID?'
         condition = (not self.scheme_id or scheme_id != self.scheme_id and
-                     UI.confirm('Are you sure to change the scheme ID?'))
+                     UI.confirm(prompt, default=False))
         if condition:
             self.scheme_id = scheme_id
             return True
@@ -245,7 +246,7 @@ class FontScheme(object):
 
     def delete_from_db(self):
         """Deletes a scheme from database."""
-        if UI.confirm('Are you sure?'):
+        if UI.confirm('Are you sure?', default=False):
             try:
                 DB.delete_scheme(self)
                 UI.display('Font scheme definition deleted successfully.')
@@ -381,7 +382,7 @@ def import_scheme_from_file(filename=None):
     UI.display('File preview: displaying first 5 rows:\n')
     UI.display('\n'.join(displayed_lines), end='\n\n')
     # Ask if the first row is a header - if so, away with it
-    if UI.confirm('Is the 1st row a table header? '):
+    if UI.confirm('Is the 1st row a table header? ', default=True):
         all_records.pop(0)
     try:
         return {char: int(qty) for char, qty in all_records}

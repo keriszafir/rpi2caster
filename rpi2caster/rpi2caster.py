@@ -34,7 +34,7 @@ def translate(args):
 def update(args):
     """Updates the software"""
     # Upgrade routine
-    if confirm('Update the software?'):
+    if confirm('Update the software?', default=False):
         pre = args.unstable and '--pre' or ''
         print('You may be asked for the admin password...')
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)

@@ -171,7 +171,7 @@ class Diecase(object):
         diecase_id = (diecase_id or UI.enter_data_or_blank(prompt) or self)
         # Ask if we are sure we want to update this
         # if self.diecase_id was set earlier
-        if not self.diecase_id or UI.confirm('Apply changes?'):
+        if not self.diecase_id or UI.confirm('Apply changes?', default=False):
             self.diecase_id = diecase_id
             return True
 
@@ -179,7 +179,7 @@ class Diecase(object):
         """Sets the type series, size and typeface name"""
         prompt = 'Typeface (series, size, name): '
         typeface = typeface or UI.enter_data_or_blank(prompt) or self.typeface
-        if not self.typeface or UI.confirm('Apply changes?'):
+        if not self.typeface or UI.confirm('Apply changes?', default=False):
             self.typeface = typeface
             return True
 
@@ -198,7 +198,7 @@ class Diecase(object):
 
     def delete_from_db(self):
         """Deletes a diecase from database"""
-        ans = UI.confirm('Are you sure?')
+        ans = UI.confirm('Are you sure?', default=False)
         if ans and DB.delete_diecase(self):
             UI.display('Matrix case deleted successfully.')
             return True
@@ -490,9 +490,9 @@ def import_layout_file():
         UI.display('File preview: displaying first 5 rows:\n')
         UI.display('\n'.join(displayed_lines), end='\n\n')
         # Ask if the first row is a header - if so, away with it
-        if UI.confirm('Is the 1st row a table header? '):
+        if UI.confirm('Is the 1st row a table header? ', default=True):
             all_records.pop(0)
-    if not UI.confirm('Proceed?'):
+    if not UI.confirm('Proceed?', default=True):
         return False
     try:
         # Process the records
