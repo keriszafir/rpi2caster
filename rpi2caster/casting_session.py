@@ -81,6 +81,7 @@ def prepare_job(ribbon_casting_workflow):
             return
         # Mode aliases
         punching = self.caster.mode.punching
+        casting = self.caster.mode.casting
         diagnostics = self.caster.mode.diagnostics
         line_of_quads = ['O15'] * 20 + ['NKJS 0005 0075']
         # Rewind the ribbon if 0005 is found before 0005+0075
@@ -106,7 +107,8 @@ def prepare_job(ribbon_casting_workflow):
             quad_lines = 0
             if (not punching and not diagnostics and
                     self.stats.get_current_run() < 2 and
-                    UI.confirm('Cast 2 extra lines to heat up the mould?')):
+                    UI.confirm('Cast 2 extra lines to heat up the mould?',
+                               default=False)):
                 l_skipped -= 2
                 # When less than 2 lines can be skipped, we'll cast quads
                 quad_lines = max(-l_skipped, 0)
@@ -133,18 +135,20 @@ def prepare_job(ribbon_casting_workflow):
                 # Casting successful - ready to cast next run - ask to repeat
                 # after the last run is completed (because user may want to
                 # cast / punch once more?)
-                if self.stats.all_done() and UI.confirm('One more run?'):
+                if (self.stats.all_done() and
+                        UI.confirm('One more run?', default=False)):
                     self.stats.add_one_more_run()
-            elif self.caster.mode.casting and UI.confirm('Retry this run?'):
+            elif casting and UI.confirm('Retry this run?', default=True):
                 # Casting aborted - ask if user wants to repeat
                 self.stats.undo_last_run()
                 self.stats.add_one_more_run()
                 lines_ok = self.stats.get_lines_done()
                 prompt = 'Skip %s lines successfully cast?' % lines_ok
-                if lines_ok > 0 and UI.confirm(prompt):
+                if lines_ok > 0 and UI.confirm(prompt, default=True):
                     l_skipped = lines_ok
                 # Start this run again
-            elif not self.stats.all_done() and UI.confirm(exit_prompt):
+            elif (not self.stats.all_done() and
+                    UI.confirm(exit_prompt, default=True)):
                 # There are some more runs to do - go on?
                 self.stats.undo_last_run()
             else:
@@ -204,7 +208,7 @@ class Casting(object):
                 # Allow resume in punching mode
                 if (self.caster.mode.punching and not
                         self.caster.mode.diagnostics and
-                        UI.confirm('Continue?')):
+                        UI.confirm('Continue?', default=True)):
                     self.caster.process(signals)
                 else:
                     self.stats.end_run()
@@ -283,7 +287,7 @@ class Casting(object):
                 # Make it an infinite queue if no input specified
                 # (cast any number of sorts we want)
                 casting_queue.append((char, style, 0))
-            elif not UI.confirm(prompt):
+            elif not UI.confirm(prompt, default=True):
                 continue
             if self.diecase:
                 prompt = ('Character? (leave blank to end '
@@ -325,8 +329,9 @@ class Casting(object):
             line_codes.extend(['O15'] * 2)
             # Ask for confirmation
             queue.extend(line_codes * lines)
+            prompt = 'Add next character? If not, cast the queue...'
             if not (self.diecase or
-                    UI.confirm('Next character? (no = finish and cast) : ')):
+                    UI.confirm(prompt, default=True)):
                 break
         # No sequences? No casting.
         if queue:
@@ -364,7 +369,7 @@ class Casting(object):
             # Save for later
             comment = '%s-point space' % width
             # Repeat
-            if not UI.confirm(prompt):
+            if not UI.confirm(prompt, default=True):
                 continue
             # Calculate unit width of said number of points
             # We do it this way:
@@ -382,15 +387,20 @@ class Casting(object):
             # Any corrections needed?
             diff = matrix.units + correction - matrix.row_units(self.wedge)
             # Add 'S' if there is width difference
-            signals = matrix + (diff and 'S' or '') + '// ' + comment
+            signals = matrix.code + (diff and 'S' or '') + '// ' + comment
             line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
                           PUMP_ON + str(wedge_positions['0075'])]
             # 2 quads in the beginning, then spaces, then 2 quads in the end
             line_codes.extend(['O15'] * 2 + [signals] * qty + ['O15'] * 2)
             # Ask for confirmation
             queue.extend(line_codes * lines)
-            if queue and UI.confirm('Y to cast, N to add some more spaces?'):
-                return queue + END_CASTING
+            prompt = 'More spaces? Otherwise, start casting'
+            if queue and not UI.confirm(prompt, default=True):
+                break
+        if queue:
+            return queue + END_CASTING
+        else:
+            e.return_to_menu()
 
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
@@ -441,11 +451,13 @@ class Casting(object):
         4. cast 10 spaces with the S-needle from the same matrix,
         5. put the line to the galley, then 0005 to turn the pump off.
         """
-        UI.pause('Transfer wedge calibration:\n\n'
-                 'This function will cast two lines of 5 spaces: '
-                 'first: G5, second: GS5 with wedges at 3/8. \n'
-                 'Adjust the 52D space transfer wedge '
-                 'until the lengths are the same.')
+        UI.display('Transfer wedge calibration:\n\n'
+                   'This function will cast two lines of 5 spaces: '
+                   'first: G5, second: GS5 with wedges at 3/8. \n'
+                   'Adjust the 52D space transfer wedge '
+                   'until the lengths are the same.')
+        if not UI.confirm('\nProceed?', default=True):
+            return None
         signals = 'G5'
         queue = [GALLEY_TRIP] + [signals] * 7
         queue.extend([GALLEY_TRIP + '8', PUMP_ON + '3'] + [signals + 'S'] * 7)
@@ -466,7 +478,7 @@ class Casting(object):
                    % round(self.wedge.em_width / 2, 4))
         UI.display('18 units (1em) is %s" wide\n'
                    % round(self.wedge.em_width, 4))
-        if not UI.confirm('Proceed?'):
+        if not UI.confirm('\nProceed?', default=True):
             return None
         signals = 'G5'
         self.caster.mode.calibration = True
@@ -488,11 +500,13 @@ class Casting(object):
         """Keeps the diecase at G8 so that the operator can adjust
         the diecase draw rods until the diecase stops moving sideways
         when the centering pin is descending."""
-        UI.pause('Draw rods calibration:\n'
-                 'The diecase will be moved to the central position (G-8), '
-                 'turn on the machine\nand adjust the diecase draw rods '
-                 'until the diecase stops moving sideways as the\n'
-                 'centering pin is descending into the hole in the matrix.')
+        UI.display('Draw rods calibration:\n'
+                   'The diecase will be moved to the central position (G-8), '
+                   'turn on the machine\nand adjust the diecase draw rods '
+                   'until the diecase stops moving sideways as the\n'
+                   'centering pin is descending into the hole in the matrix.')
+        if not UI.confirm('\nProceed?', default=True):
+            return None
         self.caster.output.valves_on(['G', '8'])
         UI.pause('Sending G8, waiting for you to stop...')
 

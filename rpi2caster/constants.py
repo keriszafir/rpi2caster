@@ -12,6 +12,10 @@ ALNUM_ARR = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
 COLUMNS_15 = [x for x in 'ABCDEFGHIJKLMNO']
 COLUMNS_17 = ['NI', 'NL'] + COLUMNS_15
 
+# Styles
+STYLES = {'r': 'roman', 'b': 'bold', 'i': 'italic',
+          's': 'smallcaps', 'l': 'subscript', 'u': 'superscript'}
+
 # For parsing lines in ribbon files
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 ASSIGNMENT_SYMBOLS = ['=', ':', ' ']

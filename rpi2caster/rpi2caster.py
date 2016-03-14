@@ -119,8 +119,8 @@ def main():
     cast_parser.add_argument('-d', '--debug', help='debug mode',
                              action="store_true")
     # Choose specific diecase
-    cast_parser.add_argument('-m', '--diecase', help='diecase to use',
-                             metavar='diecase_id')
+    cast_parser.add_argument('-m', '--diecase', metavar='ID',
+                             help='diecase ID to use')
     # Punch ribbon: uses different sensor, always adds O+15 to combinations
     cast_parser.add_argument('-p', '--punch', action='store_true',
                              dest='punching',
@@ -130,15 +130,15 @@ def main():
                              help='simulate casting instead of real casting')
     test_or_cast = cast_parser.add_mutually_exclusive_group()
     # Starts in the diagnostics submenu of the casting program
-    test_or_cast.add_argument('-t', '--test', action='store_true',
+    test_or_cast.add_argument('-T', '--test', action='store_true',
                               dest='testing',
                               help='caster / interface diagnostics')
     # Allows to start casting right away without entering menu
     test_or_cast.add_argument('-D', '--direct', action="store_true",
                               help='direct casting - no menu',)
     # Choose specific wedge
-    cast_parser.add_argument('-w', '--wedge', help='wedge to use',
-                             metavar='x-yy')
+    cast_parser.add_argument('-w', '--wedge', metavar='W',
+                             help='wedge to use: [s]series-set_width[e]')
     # Ribbon - input file specification
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='ribbon file name')

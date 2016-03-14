@@ -19,8 +19,6 @@ STYLE_MODIFIERS = {'roman': ' ',
                    'smallcaps': '#',
                    'subscript': '_',
                    'superscript': '^'}
-STYLES = {'r': 'roman', 'b': 'bold', 'i': 'italic',
-          's': 'smallcaps', 'l': 'subscript', 'u': 'superscript'}
 # Some standard prompts
 MSG_MENU = '[Enter] to go back to main menu...'
 MSG_CONTINUE = '[Enter] to continue...'
@@ -203,7 +201,7 @@ def choose_one_style():
           '[l]ower index (a.k.a. subscript, inferior), '
           '[u]pper index (a.k.a. superscript, superior).')
     style = enter_data_or_blank('Style?: ', str) or 'r'
-    return STYLES.get(style, 'roman')
+    return c.STYLES.get(style, 'roman')
 
 
 def choose_styles():
@@ -214,7 +212,7 @@ def choose_styles():
           '[u]pper index (a.k.a. superscript, superior).\n'
           'Leave blank for roman only.')
     styles_string = enter_data_or_blank('Styles?: ', str) or 'r'
-    return list({STYLES[char] for char in styles_string if char in STYLES})
+    return list({c.STYLES[char] for char in styles_string if char in c.STYLES})
 
 
 def tab_complete(text, state):
@@ -283,10 +281,15 @@ def simple_menu(message, options):
             pass
 
 
-def confirm(question):
+def confirm(question, default=None):
     """Asks a simple question with yes or no answers.
     Returns True for yes and False for no."""
-    return simple_menu('%s [Y / N]: ' % question, {'Y': True, 'N': False})
+    options = {'Y': True, 'N': False}
+    def_string = ''
+    if default is True or default is False:
+        options[''] = default
+        def_string = ', default: %s' % (default and 'Y' or 'N')
+    return simple_menu('%s [Y / N%s]: ' % (question, def_string), options)
 
 
 def display_diecase_layout(diecase):
@@ -430,7 +433,7 @@ def enter_line_length():
               'c - cicero (.1776"), p - pica (.166"), dtp - DTP pica (.1667"),'
               '\n", in - inch, mm - millimeter, cm - centimeter?\n'
               '(default: c) : ')
-    factor = 1
+    factor = 1.0
     # We need an ordered sequence here
     symbols = ['dtp', 'p', 'cm', 'c', 'mm', 'in', '"', '']
     units = {'dtp': 0.1667, 'p': 0.166, 'cm': 0.3937, 'mm': 0.03937,
