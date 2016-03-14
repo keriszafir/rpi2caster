@@ -1,8 +1,16 @@
+v0.3dev1 - change diecase storage format (diecase_id, typeface, wedge, layout)
+	   ditch wedge storage in db; use wedges specified by name
+	   LOTS of new stopbar/wedge definitions
+	   new diecase methods for matrix lookup
+	   new command line parameters (see rpi2caster --help)
+           move matrix manipulation to casting and (later) typesetting utilities
+           UX: confirmation prompts with default options
+
+	   BREAKS old databases - necessary fix at https://gist.github.com/elegantandrogyne/52c9e89ed9c16f39b356
+
 v0.2dev17 - sorts casting no longer asks for char and style when no matrix case is selected
 v0.2dev16 - unit correction bugfix
 v0.2dev15 - diecase and matrix remodelling, matrix manipulation utility changes
 v0.2dev14 - workflow fixes and code cleanup
 v0.2dev13 - better stats display during casting and punching
 v0.2dev12 - casting program has typecase casting option and allows user to choose 16th row addressing
-
-
