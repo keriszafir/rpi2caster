@@ -72,7 +72,7 @@ class Diecase(object):
         # Got a list of signals
         matrix.row = p.get_row(codes)
         matrix.column = p.get_column(codes)
-        matrix.units = self.wedge.units[matrix.row]
+        matrix.units = self.wedge[matrix.row]
         return matrix
 
     def decode_matrix(self, code):
@@ -344,7 +344,7 @@ class Matrix(object):
     def row_units(self, alt_wedge=None):
         """Gets the row's unit width value for the diecase's wedge"""
         wedge = alt_wedge or self.diecase.wedge
-        return wedge.units[self.row]
+        return wedge[self.row]
 
     @property
     def row(self):
@@ -397,6 +397,14 @@ class Matrix(object):
         if diecase is not None:
             self.__dict__['_diecase'] = diecase
 
+    def get_code(self, unit_correction=0, alt_wedge=None):
+        """Gets the code for the matrix - with or without S, depending on
+        whether justification wedges need to be in action."""
+        if self.wedge_positions(unit_correction, alt_wedge) == (3, 8):
+            return self.code + 'S'
+        else:
+            return self.code
+
     def wedge_positions(self, unit_correction=0, alt_wedge=None):
         """Calculates the 0075 and 0005 wedge positions for this matrix
         based on the diecase's default wedge or specified one."""
@@ -415,7 +423,7 @@ class Matrix(object):
             steps_0005 -= 15
             steps_0075 += 1
         # Got the wedge positions, return them
-        return {'0075': steps_0075, '0005': steps_0005}
+        return (steps_0075, steps_0005)
 
     def edit(self):
         """Edits the matrix data"""

@@ -272,68 +272,124 @@ class Casting(object):
         return self.ribbon.contents
 
     @cast_or_punch_result
-    def cast_sorts(self, source=()):
+    def cast_sorts(self):
         """Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
         """
         queue = []
-        casting_queue = [x for x in source] or [(None, None, 0)]
-        for (char, style, qty) in casting_queue:
-            # Make an infinite iterator when we call this function without
-            # the list of character-style pairs
-            prompt = ('Character: %s %s\n'
-                      'Y: add to casting queue, N: skip it?' % (style, char))
-            if not char:
-                # Make it an infinite queue if no input specified
-                # (cast any number of sorts we want)
-                casting_queue.append((char, style, 0))
-            elif not UI.confirm(prompt, default=True):
-                continue
+        while True:
             if self.diecase:
-                prompt = ('Character? (leave blank to end '
-                          'specifying characters and start casting): ')
-                char = char or UI.enter_data_or_blank(prompt)
-                if not char:
-                    break
-                style = style or UI.choose_one_style()
+                char = UI.enter_data_or_blank('Character? ')
+                style = UI.choose_one_style()
                 matrix = self.diecase.lookup_matrix(char, style)
-                prompt = 'Unit correction (-2...+10, default 0) ?: '
-                correction = 20
-                while not -2 <= correction <= 10:
-                    try:
-                        correction = int(UI.enter_data_or_blank(prompt) or 0)
-                    except (ValueError, TypeError):
-                        correction = 20
             else:
                 matrix = self.diecase.lookup_matrix()
-                correction = 0
-            diff = matrix.units + correction - matrix.row_units(self.wedge)
-            # Calculate wedges
-            wedge_positions = matrix.wedge_positions(correction, self.wedge)
+            # Unit width correction
+            delta = unit_correction()
+            pos_0075, pos_0005 = matrix.wedge_positions(delta, self.wedge)
             # Ask for number of sorts and lines, no negative numbers here
-            prompt = '\nHow many sorts per line? (default: 10): '
-            qty = qty or abs(UI.enter_data_or_blank(prompt, int) or 10)
             prompt = '\nHow many lines? (default: 1): '
             lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
-            UI.display('\n')
-            # Warn if we want to cast too many sorts from a single matrix
-            warning = ('Warning: you want to cast a single character more than'
-                       ' 10 times. This may lead to matrix overheating!\n')
-            if qty > 10:
-                UI.display(warning)
-            UI.display('\n')
-            line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
-                          PUMP_ON + str(wedge_positions['0075'])] + ['O15'] * 2
+            line_codes = [GALLEY_TRIP + str(pos_0075),
+                          PUMP_ON + str(pos_0005)] + ['O15'] * 2
             # 2 quads in the beginning, then spaces, then 2 quads in the end
-            line_codes.extend([matrix.code + (diff and 'S' or '') +
-                               '// ' + matrix.char] * qty)
+            prompt = 'How many sorts per line? (default: 10)'
+            qty = UI.enter_data_or_blank(prompt, int) or 10
+            code = matrix.get_code(delta, self.wedge)
+            if qty > 10:
+                line_codes.extend([code, 'G2'] * qty)
+                UI.display('Characters will be separated with spaces '
+                           'to prevent matrix overheating.\n'
+                           'After casting, discard the spaces.')
+            else:
+                line_codes.extend([code] * qty)
             line_codes.extend(['O15'] * 2)
             # Ask for confirmation
             queue.extend(line_codes * lines)
             prompt = 'Add next character? If not, cast the queue...'
-            if not (self.diecase or
-                    UI.confirm(prompt, default=True)):
+            if not UI.confirm(prompt, default=True):
                 break
+        # No sequences? No casting.
+        if queue:
+            UI.display('\nEach line will have two em-quads at the start '
+                       'and at the end, to support the type.\n')
+            return queue + END_CASTING
+        else:
+            e.return_to_menu()
+
+    def cast_typecases(self):
+        """Casting typecases according to supplied font scheme."""
+        enter = UI.enter_data_or_blank
+        scheme = typesetting_data.SelectFontScheme().layout
+        scale_prompt = ('Scale for %s in %%, relative to 100 "a" characters:\n'
+                        '(default: 100%%) ?: ')
+        UI.display('Styles to cast?')
+        styles = UI.choose_styles()
+        # Now generate and display the casting queue
+        style_scales = {style: (enter(scale_prompt % style, float) / 100) or 1
+                        for style in styles}
+        # Get the char number from scheme, style scale from scales
+        queue = [(char, [style], int(scheme[char] * style_scales[style]))
+                 for style in styles for char in sorted(scheme)]
+        queue = []
+        for style in styles:
+            UI.display_header(style)
+            for char in sorted(scheme):
+                qty = int(scheme[char] * style_scales[style])
+                UI.display('%s : %s' % (char, qty))
+                queue.append((char, style, qty))
+        self.cast_batch(queue)
+
+    @cast_or_punch_result
+    def cast_batch(self, order=()):
+        """Sorts casting routine, based on the position in diecase.
+        Ask user about the diecase row & column, as well as number of sorts.
+        """
+        queue = []
+        if not order:
+            return
+        # Two quads before and after makes 72 - make line shorter
+        line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
+                       self.wedge.set_width / 12) - 72
+        for (char, style, qty) in order:
+            # Make an infinite iterator when we call this function without
+            # the list of character-style pairs
+            prompt = ('Character: %s %s\n'
+                      'Y: add to casting queue, N: skip it?' % (style, char))
+            if not UI.confirm(prompt, default=True):
+                continue
+            style = style or UI.choose_one_style()
+            matrix = self.diecase.lookup_matrix(char, style)
+            delta = unit_correction()
+            (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)
+            mat_code = matrix.get_code(delta, self.wedge) + ' // %s' % char
+            units_left = 0
+            line_codes = []
+            while qty > 0:
+                # Start the line
+                line_codes = [GALLEY_TRIP + str(pos_0075),
+                              PUMP_ON + str(pos_0005)] + ['O15'] * 2
+                units_left = line_length
+                # Fill line with sorts and spaces (to slow down casting
+                # and prevent matrix overheating)
+                while (units_left > matrix.units + delta + self.wedge[2] and
+                       qty > 0):
+                    line_codes.append(mat_code)
+                    units_left -= (matrix.units + delta)
+                    line_codes.append('G2')
+                    units_left -= self.wedge[2]
+                    qty -= 1
+                while units_left > self.wedge[15] and not qty:
+                    # Fill with quads first...
+                    line_codes.append('O15')
+                    units_left -= self.wedge[15]
+                while units_left > self.wedge[2] and not qty:
+                    # ...later with spaces...
+                    line_codes.append('G2')
+                    units_left -= self.wedge[2]
+                # Finally add two quads at the end and add to queue
+                line_codes.extend(['O15'] * 2)
+                queue.extend(line_codes)
         # No sequences? No casting.
         if queue:
             UI.display('\nEach line will have two em-quads at the start '
@@ -348,10 +404,9 @@ class Casting(object):
         Ask user about the space width and measurement unit.
         """
         queue = []
+        # Two quads before and after makes 72 - make line shorter
         line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
-                       self.wedge.set_width / 12)
-        # We need 72 additional units for two quads before and after each line
-        line_length -= 72
+                       self.wedge.set_width / 12) - 72
         while True:
             matrix = self.diecase.lookup_matrix(' ')
             prompt = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
@@ -378,19 +433,16 @@ class Casting(object):
             # a pica is 12 points, so:
             # units = width (points) * set_width/12 * 1 / 12 * 18
             # 18 / (12*12) = 0.125, hence division by 8
-            width = round(width * 0.1667 / self.wedge.pica *
+            width = round(width * self.wedge.pica / 0.1667 *
                           self.wedge.set_width / 8, 2)
             # How many spaces will fit in a line? Calculate it...
             qty = int(line_length // width)
             # Check if the corrections are needed at all
-            correction = width - matrix.units
-            wedge_positions = matrix.wedge_positions(correction, self.wedge)
-            # Any corrections needed?
-            diff = matrix.units + correction - matrix.row_units(self.wedge)
-            # Add 'S' if there is width difference
-            signals = matrix.code + (diff and 'S' or '') + '// ' + comment
-            line_codes = [GALLEY_TRIP + str(wedge_positions['0005']),
-                          PUMP_ON + str(wedge_positions['0075'])]
+            delta = width - matrix.units
+            (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)
+            signals = matrix.get_code(delta, self.wedge) + '// ' + comment
+            line_codes = [GALLEY_TRIP + str(pos_0075),
+                          PUMP_ON + str(pos_0005)]
             # 2 quads in the beginning, then spaces, then 2 quads in the end
             line_codes.extend(['O15'] * 2 + [signals] * qty + ['O15'] * 2)
             # Ask for confirmation
@@ -402,29 +454,6 @@ class Casting(object):
             return queue + END_CASTING
         else:
             e.return_to_menu()
-
-    def cast_typecases(self):
-        """Casting typecases according to supplied font scheme."""
-        enter = UI.enter_data_or_blank
-        scheme = typesetting_data.SelectFontScheme().layout
-        scale_prompt = ('Scale for %s in %%, relative to 100 "a" characters:\n'
-                        '(default: 100%%) ?: ')
-        UI.display('Styles to cast?')
-        styles = UI.choose_styles()
-        # Now generate and display the casting queue
-        style_scales = {style: (enter(scale_prompt % style, float) / 100) or 1
-                        for style in styles}
-        # Get the char number from scheme, style scale from scales
-        queue = [(char, [style], int(scheme[char] * style_scales[style]))
-                 for style in styles for char in sorted(scheme)]
-        queue = []
-        for style in styles:
-            UI.display_header(style)
-            for char in sorted(scheme):
-                qty = int(scheme[char] * style_scales[style])
-                UI.display('%s : %s' % (char, qty))
-                queue.append((char, style, qty))
-        self.cast_sorts(queue)
 
     @cast_or_punch_result
     def adhoc_typesetting(self):
@@ -493,7 +522,7 @@ class Casting(object):
                    'then check the position of the character relative to the '
                    'type body.\nAdjust if needed.')
         self.caster.mode.calibration = True
-        self.cast_sorts([('--', 'roman', 7), ('n', 'roman', 7),
+        self.cast_batch([('--', 'roman', 7), ('n', 'roman', 7),
                          ('h', 'roman', 7)])
 
     @choose_sensor_and_driver
@@ -670,3 +699,15 @@ def single_justification(pos_0075, pos_0005):
 def double_justification(pos_0075, pos_0005):
     """Returns a galley trip / double justification sequence"""
     return [GALLEY_TRIP + str(pos_0005), PUMP_ON + str(pos_0075)]
+
+
+def unit_correction():
+    """Set the unit correction for the character"""
+    prompt = 'Unit correction (-2...+10, default 0) ?: '
+    correction = 20
+    while not -2 <= correction <= 10:
+        try:
+            correction = UI.enter_data_or_blank(prompt, int) or 0
+        except (ValueError, TypeError):
+            correction = 20
+    return correction

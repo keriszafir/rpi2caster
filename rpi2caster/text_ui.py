@@ -304,7 +304,7 @@ def display_diecase_layout(diecase):
 
     def row_units(row):
         """Gets wedge unit value for the row"""
-        return str(diecase.wedge.units[row])
+        return str(diecase.wedge[row])
 
     matrices = [mat for mat in diecase]
     cols_set = {matrix.column for matrix in matrices}
@@ -424,7 +424,7 @@ def enter_line_length():
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system). Return length in
     12-set units e.g. the standard Monotype measure."""
-    prompt = ('Enter the desired line length and measurement unit:\nb'
+    prompt = ('Enter the desired line length and measurement unit:\n'
               'c - cicero (.1776"), p - pica (.166"), dtp - DTP pica (.1667"),'
               '\n", in - inch, mm - millimeter, cm - centimeter?\n'
               '(default: c) : ')
