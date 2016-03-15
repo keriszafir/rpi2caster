@@ -45,7 +45,7 @@ class SysfsSensor(SimulationSensor):
         timeout means that if no signals in given time, raise MachineStopped.
         force_cycle means that if last_state == new_state, a full cycle must
         pass before exit.
-        Uses software debouncing set at 50ms
+        Uses software debouncing set at 5ms
         """
         def get_state():
             """Reads current input state"""
@@ -65,7 +65,7 @@ class SysfsSensor(SimulationSensor):
             while self.last_state != new_state:
                 if signals.poll(timeout):
                     state = get_state()
-                    if time() - debounce > 0.05:
+                    if time() - debounce > 0.005:
                         self.last_state = state
                     debounce = time()
                 else:
