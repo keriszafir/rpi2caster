@@ -405,6 +405,12 @@ class Matrix(object):
         else:
             return self.code
 
+    def specify_units(self):
+        """Give an alternative unit value for the matrix"""
+        row_units = self.row_units()
+        prompt = 'Unit value for the matrix? (default: %s) : ' % row_units
+        self.units = UI.enter_data_or_blank(prompt, int) or row_units
+
     def wedge_positions(self, unit_correction=0, alt_wedge=None):
         """Calculates the 0075 and 0005 wedge positions for this matrix
         based on the diecase's default wedge or specified one."""

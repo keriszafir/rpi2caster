@@ -282,10 +282,11 @@ class Casting(object):
                 char = UI.enter_data_or_blank('Character? ')
                 style = UI.choose_one_style()
                 matrix = self.diecase.lookup_matrix(char, style)
+                delta = unit_correction()
             else:
                 matrix = self.diecase.lookup_matrix()
-            # Unit width correction
-            delta = unit_correction()
+                matrix.specify_units()
+                delta = 0
             pos_0075, pos_0005 = matrix.wedge_positions(delta, self.wedge)
             # Ask for number of sorts and lines, no negative numbers here
             prompt = '\nHow many lines? (default: 1): '
@@ -328,23 +329,18 @@ class Casting(object):
         # Now generate and display the casting queue
         style_scales = {style: (enter(scale_prompt % style, float) / 100) or 1
                         for style in styles}
-        # Get the char number from scheme, style scale from scales
-        queue = [(char, [style], int(scheme[char] * style_scales[style]))
+        batch = [(char, style, int(scheme[char] * style_scales[style]))
                  for style in styles for char in sorted(scheme)]
-        queue = []
         for style in styles:
             UI.display_header(style)
-            for char in sorted(scheme):
-                qty = int(scheme[char] * style_scales[style])
-                UI.display('%s : %s' % (char, qty))
-                queue.append((char, style, qty))
-        self.cast_batch(queue)
+            UI.display('\n'.join(['%s: %s' % (char, qty)
+                                  for (char, c_style, qty) in batch
+                                  if c_style == style]))
+        self.cast_batch(batch)
 
     @cast_or_punch_result
     def cast_batch(self, order=()):
-        """Sorts casting routine, based on the position in diecase.
-        Ask user about the diecase row & column, as well as number of sorts.
-        """
+        """Cast a batch of characters, filling the line"""
         queue = []
         if not order:
             return
@@ -407,8 +403,13 @@ class Casting(object):
         # Two quads before and after makes 72 - make line shorter
         line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
                        self.wedge.set_width / 12) - 72
+        # Auto-select or choose the matrix from menu if we have a layout
+        if self.diecase:
+            matrix = self.diecase.lookup_matrix(high_or_low_space())
+        else:
+            # Enter coordinates manually
+            matrix = self.diecase.lookup_matrix()
         while True:
-            matrix = self.diecase.lookup_matrix(' ')
             prompt = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
                       '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
             # Width in points
@@ -514,6 +515,7 @@ class Casting(object):
         self.caster.mode.calibration = True
         return [GALLEY_TRIP] + [signals] * 7 + END_CASTING
 
+    @cast_or_punch_result
     def _calibrate_diecase(self):
         """Casts the "en dash" characters for calibrating the character X-Y
         relative to type body."""
@@ -522,8 +524,21 @@ class Casting(object):
                    'then check the position of the character relative to the '
                    'type body.\nAdjust if needed.')
         self.caster.mode.calibration = True
-        self.cast_batch([('--', 'roman', 7), ('n', 'roman', 7),
-                         ('h', 'roman', 7)])
+        # Build character list
+        queue = []
+        for char in ('--', 'n', 'h'):
+            mat = self.diecase.lookup_matrix(char)
+            if not self.diecase:
+                mat.specify_units()
+            pos_0075, pos_0005 = mat.wedge_positions(alt_wedge=self.wedge)
+            if not queue:
+                queue.extend(double_justification(pos_0075, pos_0005))
+            elif (pos_0075, pos_0005) != (3, 8):
+                queue.extend(single_justification(pos_0075, pos_0005))
+            char = [mat.get_code(alt_wedge=self.wedge) + ' // ' + mat.char]
+            queue.extend(char * 3)
+        queue.extend(END_CASTING)
+        return queue
 
     @choose_sensor_and_driver
     def _calibrate_draw_rods(self):
@@ -711,3 +726,10 @@ def unit_correction():
         except (ValueError, TypeError):
             correction = 20
     return correction
+
+
+def high_or_low_space():
+    """Chooses high or low space"""
+    spaces = {True: '_', False: ' '}
+    high_or_low = UI.confirm('High space?', default=False)
+    return spaces[high_or_low]
