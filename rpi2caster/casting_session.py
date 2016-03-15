@@ -136,7 +136,7 @@ def prepare_job(ribbon_casting_workflow):
                 # after the last run is completed (because user may want to
                 # cast / punch once more?)
                 if (self.stats.all_done() and
-                        UI.confirm('One more run?', default=False)):
+                        UI.confirm('One more run?', default=diagnostics)):
                     self.stats.add_one_more_run()
             elif casting and UI.confirm('Retry this run?', default=True):
                 # Casting aborted - ask if user wants to repeat
@@ -148,7 +148,7 @@ def prepare_job(ribbon_casting_workflow):
                     l_skipped = lines_ok
                 # Start this run again
             elif (not self.stats.all_done() and
-                    UI.confirm(exit_prompt, default=True)):
+                  UI.confirm(exit_prompt, default=True)):
                 # There are some more runs to do - go on?
                 self.stats.undo_last_run()
             else:
@@ -296,16 +296,17 @@ class Casting(object):
                 if not char:
                     break
                 style = style or UI.choose_one_style()
-                matrix = self.diecase.get_matrix(char, style)
+                matrix = self.diecase.lookup_matrix(char, style)
+                prompt = 'Unit correction (-2...+10, default 0) ?: '
+                correction = 20
+                while not -2 <= correction <= 10:
+                    try:
+                        correction = int(UI.enter_data_or_blank(prompt) or 0)
+                    except (ValueError, TypeError):
+                        correction = 20
             else:
-                matrix = self.diecase.get_matrix()
-            prompt = 'Unit correction (-2...+10, default 0) ?: '
-            correction = 20
-            while not -2 <= correction <= 10:
-                try:
-                    correction = abs(int(UI.enter_data_or_blank(prompt) or 0))
-                except (ValueError, TypeError):
-                    correction = 20
+                matrix = self.diecase.lookup_matrix()
+                correction = 0
             diff = matrix.units + correction - matrix.row_units(self.wedge)
             # Calculate wedges
             wedge_positions = matrix.wedge_positions(correction, self.wedge)
@@ -352,7 +353,7 @@ class Casting(object):
         # We need 72 additional units for two quads before and after each line
         line_length -= 72
         while True:
-            matrix = self.diecase.get_matrix(' ')
+            matrix = self.diecase.lookup_matrix(' ')
             prompt = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
                       '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
             # Width in points

@@ -13,8 +13,7 @@ from . import constants as c
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
 # Style modifiers for displaying bold, italic, smallcaps, inferior, superior
-STYLE_MODIFIERS = {'roman': ' ',
-                   'bold': '*',
+STYLE_MODIFIERS = {'bold': '*',
                    'italic': '/',
                    'smallcaps': '#',
                    'subscript': '_',
