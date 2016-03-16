@@ -84,7 +84,6 @@ def prepare_job(ribbon_casting_workflow):
         punching = self.caster.mode.punching
         casting = self.caster.mode.casting
         diagnostics = self.caster.mode.diagnostics
-        line_of_quads = ['O15'] * 20 + ['NKJS 0005 0075']
         # Rewind the ribbon if 0005 is found before 0005+0075
         if not diagnostics and not punching and p.stop_comes_first(ribbon):
             ribbon = [x for x in reversed(ribbon)]
@@ -92,43 +91,32 @@ def prepare_job(ribbon_casting_workflow):
         self.stats.ribbon = ribbon
         UI.display_parameters({'Ribbon info': self.stats.ribbon_parameters})
         # Always 1 run for calibrating and punching
-        prompt = 'How many times do you want to cast it? (default: 1)'
-        self.stats.runs = abs(not diagnostics and not punching and
-                              UI.enter_data_or_blank(prompt, int) or 1)
-        # Line skipping - ask user if they want to skip any initial line(s)
-        prompt = 'How many initial lines do you want to skip?  (default: 0)'
-        l_skipped = abs(not diagnostics and not punching and
-                        UI.enter_data_or_blank(prompt, int) or 0)
-        # Leave at least one line in the ribbon to cast
-        l_skipped = min(l_skipped, self.stats.get_ribbon_lines() - 1)
+        if diagnostics or punching:
+            self.stats.runs = 1
+            l_skipped = 0
+        else:
+            prompt = 'How many times do you want to cast it?'
+            self.stats.runs = abs(UI.enter_data_or_default(prompt, 1, int))
+            # Line skipping - ask user if they want to skip any initial line(s)
+            prompt = 'How many initial lines do you want to skip?'
+            l_skipped = abs(UI.enter_data_or_default(prompt, 0, int))
         UI.display_parameters({'Session info': self.stats.session_parameters})
         # For each casting run repeat
         while self.stats.get_runs_left():
             queue = deque(ribbon)
-            quad_lines = 0
-            if (not punching and not diagnostics and
-                    self.stats.get_current_run() < 2 and
-                    UI.confirm('Cast 2 extra lines to heat up the mould?',
-                               default=False)):
-                l_skipped -= 2
-                # When less than 2 lines can be skipped, we'll cast quads
-                quad_lines = max(-l_skipped, 0)
             # Apply constraints: 0 <= lines_skipped < lines in ribbon
             l_skipped = max(0, l_skipped)
-            UI.display(l_skipped and ('Skipping %s lines' % l_skipped) or '')
-            prompt = 'Casting %s line(s) of 20 quads' % quad_lines
-            UI.display(quad_lines and prompt or '')
-            # Make sure we take off lines from the beginning of the
-            # casting job - i.e. last lines of text; count the lines
+            l_skipped = min(l_skipped, self.stats.get_ribbon_lines() - 1)
+            if l_skipped:
+                UI.display('Skipping %s lines' % l_skipped)
+            # Take away combinations until we skip the desired number of lines
+            # BEWARE: ribbon starts with galley trip!
+            # We must give it back after lines are taken away
             code = ''
-            # Add one more line to skip - because ribbon starts with 0075-0005
-            # Guard against negative infinite loop if l_skipped == -2
             while l_skipped + 1 > 0 and not diagnostics:
                 code = queue.popleft()
                 l_skipped -= 1 * p.check_newline(code)
-            # Add it back, then add those quads
             queue.appendleft(code)
-            queue.extendleft(quad_lines * line_of_quads)
             # The ribbon is ready for casting / punching
             self.stats.queue = queue
             exit_prompt = '[Y] to start next run or [N] to exit?'
