@@ -320,7 +320,8 @@ class SelectDiecase(Diecase):
                 UI.display(''.join(record))
             prompt = 'Choose matrix (leave blank to enter manually)'
             choice = UI.enter_data_or_blank(prompt, int)
-            matrix = mats.get(choice, super().lookup_matrix(char, style))
+            matrix = (mats.get(choice, None) or
+                      super().lookup_matrix(char, style))
             matrix.diecase = self
             return matrix
 
