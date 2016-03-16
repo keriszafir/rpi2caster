@@ -370,7 +370,10 @@ def edit_matrix(matrix):
     matrix.char = enter_data_or_default(prompt, matrix.char)
     if not matrix.char:
         return matrix
-    matrix.styles = choose_styles()
+    if matrix.isspace():
+        matrix.styles = []
+    else:
+        matrix.styles = choose_styles()
     matrix.units = enter_data_or_default('Unit width?', matrix.units, int)
     return matrix
 
