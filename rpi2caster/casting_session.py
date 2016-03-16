@@ -345,11 +345,15 @@ class Casting(object):
         queue = []
         if not order:
             e.return_to_menu()
-        UI.display('Each line will have two em-quads at the start '
-                   'and at the end, to support the type.')
         # Two quads before and after makes 72 - make line shorter
         line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
                        self.wedge.set_width / 12) - 72
+        UI.display('Each line will have two em-quads at the start '
+                   'and at the end, to support the type.\n'
+                   'Starting with two lines of quads to heat up the mould.')
+        quad_matrix = matrix_data.Matrix(' ')
+        quad_matrix.diecase = self.diecase
+        order = [(quad_matrix, 0, 0)] * 2 + list(order)
         for (matrix, delta, qty) in order:
             char_width = matrix.units + delta
             (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)

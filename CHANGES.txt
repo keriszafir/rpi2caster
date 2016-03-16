@@ -1,6 +1,8 @@
+v0.3dev4 - mould preheat before batch casting
 v0.3dev3 - cast sorts/spaces/typecases rework
            diecase selected: choose mats automatically or from menu (for multiple matches),
            diecase not selected: enter coordinates and unit width for each mat
+           ditch mould preheat during casting (simple is better than complex)
            HW driver: input sensor debounce delay changed from 50ms to 5ms (may help with slow NI pin)
            UX: unify input prompts
 v0.3dev2 - bugfix release
