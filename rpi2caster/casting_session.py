@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-casting:
+casting_session:
 
 A module for everything related to working on a Monotype composition caster:
 -casting composed type,
 -punching paper tape (ribbon) for casters without interfaces,
--casting l lines of m sorts from matrix with x, y coordinates,
--composing and casting a line of text
--testing all valves, lines and pinblock,
--calibrating the space transfer wedge,
--heating the mould up,
--sending any codes/combinations to the caster and keeping them on.
+-casting typecases based on character frequencies,
+-casting a desired number of characters from matrix with x, y coordinates,
+-composing and casting a line of text (not there yet)
+-testing all valves, lines and pinblocks,
+-calibrating the space transfer wedge, mould opening, diecase draw rods,
+ position of character on type body
+-sending any codes/combinations to the caster.
 """
 
 # IMPORTS:
