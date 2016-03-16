@@ -59,8 +59,8 @@ class Wedge(object):
                   '\n'.join(['\t'.join(group)
                              for group in grouper(wu.ALIASES, 3, '')]) +
                   '\n\nIf you have one of those, enter number (like S5-xx.yE).'
-                  '\n\nWedge designation? (blank to choose default S5-12): ')
-        wedge_name = wedge_name or UI.enter_data_or_blank(prompt) or 'S5-12'
+                  '\n\nWedge designation?')
+        wedge_name = wedge_name or UI.enter_data_or_default(prompt, 'S5-12')
         # For countries that use comma as decimal delimiter, convert to point:
         wedge_name = wedge_name.replace(',', '.').upper().strip()
         # Check if this is an European wedge
@@ -75,14 +75,13 @@ class Wedge(object):
             series = wedge[0]
             set_width = None
         # Now get the set width - ensure that it is float divisible by 0.25
+        # no smaller than 5 (narrowest type), no wider than 20 (large comp)
         while True:
             try:
                 set_width = float(set_width)
-                if not set_width % 0.25:
-                    # Correct value, finish here
+                if not set_width % 0.25 and 5 <= set_width <= 20:
                     break
                 else:
-                    # Not divisible by 0.25 => wrong value, re-enter
                     raise ValueError
             except (TypeError, ValueError):
                 prompt = ('Enter the set width as a decimal fraction '

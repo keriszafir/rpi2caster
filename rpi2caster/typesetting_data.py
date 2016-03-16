@@ -160,8 +160,11 @@ class Ribbon(object):
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
         UI.display_parameters({'Ribbon data': self.parameters})
-        # Choose file, write metadata, write contents
-        filename = filename or UI.enter_output_filename()
+        try:
+            # Choose file, write metadata, write contents
+            filename = filename or UI.enter_output_filename()
+        except e.ReturnToMenu:
+            return
         with io.open(filename, mode='w+') as ribbon_file:
             ribbon_file.write('description: ' + self.description)
             ribbon_file.write('customer: ' + self.customer)
@@ -341,6 +344,8 @@ def import_ribbon_from_file(filename=None):
     except (FileNotFoundError, IOError):
         UI.pause('Cannot open ribbon file %s' % filename)
         return False
+    except e.ReturnToMenu:
+        return False
     # What to look for
     keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer',
                 'wedge', 'stopbar']
@@ -396,11 +401,9 @@ def choose_ribbon_from_db():
     while True:
         try:
             data = list_ribbons()
-            choice = UI.enter_data_or_blank(prompt, int)
-            if choice == 0:
+            choice = UI.enter_data_or_exception(prompt, e.ReturnToMenu, int)
+            if not choice:
                 return None
-            elif not choice:
-                e.return_to_menu()
             else:
                 return DB.get_ribbon(data[choice])
         except KeyError:
@@ -416,11 +419,9 @@ def choose_scheme_from_db():
     while True:
         try:
             data = list_schemes()
-            choice = UI.enter_data_or_blank(prompt, int)
-            if choice == 0:
+            choice = UI.enter_data_or_exception(prompt, e.ReturnToMenu, int)
+            if not choice:
                 return None
-            elif not choice:
-                e.return_to_menu()
             else:
                 return DB.get_scheme(data[choice])
         except KeyError:

@@ -62,16 +62,15 @@ class Diecase(object):
 
     def lookup_matrix(self, char='', style=''):
         """Enter coordinates and unit value"""
-        matrix = Matrix(char or '', [style])
-        matrix.diecase = self
         if char:
             UI.display('Enter matrix data for character: %s' % char)
-        prompt = 'Combination? (default: G5): '
-        codes = UI.enter_data_or_blank(prompt).upper() or 'G5'
+        codes = UI.enter_data_or_default('Combination?', 'G5').upper()
         codes = p.parse_signals(codes)
         # Got a list of signals
-        matrix.row = p.get_row(codes)
-        matrix.column = p.get_column(codes)
+        row = p.get_row(codes)
+        column = p.get_column(codes)
+        matrix = Matrix(char or '', [style], (column, row))
+        matrix.diecase = self
         matrix.units = self.wedge[matrix.row]
         return matrix
 
@@ -118,7 +117,7 @@ class Diecase(object):
     def check_missing_characters(self, input_string='', style='roman'):
         """Enter the string and parse the diecase to see if any of the
         specified characters are missing."""
-        input_string = input_string or UI.enter_data('Text to check: ')
+        input_string = input_string or UI.enter_data('Text to check?')
         charset = {char for char in input_string}
         chars_found = {mat.char for mat in self for char in charset
                        if char == mat.char and
@@ -131,8 +130,9 @@ class Diecase(object):
 
     def set_diecase_id(self, diecase_id=None):
         """Sets a diecase ID"""
-        prompt = 'Diecase ID? (leave blank to exit) : '
-        diecase_id = (diecase_id or UI.enter_data_or_blank(prompt) or self)
+        prompt = 'Diecase ID? (leave blank to exit)'
+        diecase_id = (diecase_id or UI.enter_data_or_blank(prompt) or
+                      self.diecase_id)
         # Ask if we are sure we want to update this
         # if self.diecase_id was set earlier
         if not self.diecase_id or UI.confirm('Apply changes?', default=False):
@@ -141,7 +141,7 @@ class Diecase(object):
 
     def set_typeface(self, typeface=None):
         """Sets the type series, size and typeface name"""
-        prompt = 'Typeface (series, size, name): '
+        prompt = 'Typeface (series, size, name)?'
         typeface = typeface or UI.enter_data_or_blank(prompt) or self.typeface
         if not self.typeface or UI.confirm('Apply changes?', default=False):
             self.typeface = typeface
@@ -309,7 +309,6 @@ class SelectDiecase(Diecase):
             UI.display_header('Multiple matrices for %s %s' % (style, pr_char))
             # Show a menu with multiple candidates
             mats = {i: mat for i, mat in enumerate(candidates, start=1)}
-            prompt = 'Choose matrix (leave blank to enter manually): '
             UI.display(''.join(['Index'.ljust(10), 'Char'.ljust(10),
                                 'Styles'.ljust(30), 'Column'.ljust(10),
                                 'Row'.ljust(10), 'Units'.ljust(10)]))
@@ -319,8 +318,9 @@ class SelectDiecase(Diecase):
                           mat.column.ljust(10), str(mat.row).ljust(10),
                           str(mat.units).ljust(10)]
                 UI.display(''.join(record))
-            choice = UI.enter_data_or_blank(prompt, int) or 0
-            matrix = mats.get(choice, Matrix(char, [style]))
+            prompt = 'Choose matrix (leave blank to enter manually)'
+            choice = UI.enter_data_or_blank(prompt, int)
+            matrix = mats.get(choice, super().lookup_matrix(char, style))
             matrix.diecase = self
             return matrix
 
@@ -379,7 +379,8 @@ class Matrix(object):
     @units.setter
     def units(self, units):
         """Sets the unit width value"""
-        self.__dict__['_units'] = units
+        if units:
+            self.__dict__['_units'] = units
 
     @property
     def record(self):
@@ -397,10 +398,26 @@ class Matrix(object):
         if diecase is not None:
             self.__dict__['_diecase'] = diecase
 
+    def isspace(self):
+        """Checks whether the mat is space or not"""
+        return self.islowspace() or self.ishighspace()
+
+    def islowspace(self):
+        """Checks whether the mat is low space"""
+        return self.char == ' '
+
+    def ishighspace(self):
+        """Checks whether the mat is high space"""
+        return self.char == '_'
+
+    def isempty(self):
+        """Check whether the mat is empty"""
+        return not self.char
+
     def get_code(self, unit_correction=0, alt_wedge=None):
         """Gets the code for the matrix - with or without S, depending on
         whether justification wedges need to be in action."""
-        if self.wedge_positions(unit_correction, alt_wedge) == (3, 8):
+        if self.wedge_positions(unit_correction, alt_wedge) != (3, 8):
             return self.code + 'S'
         else:
             return self.code
@@ -408,8 +425,8 @@ class Matrix(object):
     def specify_units(self):
         """Give an alternative unit value for the matrix"""
         row_units = self.row_units()
-        prompt = 'Unit value for the matrix? (default: %s) : ' % row_units
-        self.units = UI.enter_data_or_blank(prompt, int) or row_units
+        prompt = 'Unit value for the matrix?'
+        self.units = UI.enter_data_or_default(prompt, row_units, int)
 
     def wedge_positions(self, unit_correction=0, alt_wedge=None):
         """Calculates the 0075 and 0005 wedge positions for this matrix
@@ -483,11 +500,9 @@ def choose_diecase():
         try:
             UI.display('Choose a matrix case:', end='\n\n')
             data = list_diecases()
-            choice = UI.enter_data_or_blank(prompt, int)
-            if choice == 0:
+            choice = UI.enter_data_or_exception(prompt, e.ReturnToMenu, int)
+            if not choice:
                 return None
-            elif not choice:
-                e.return_to_menu()
             else:
                 return DB.get_diecase(data[choice])
         except KeyError:
@@ -503,8 +518,9 @@ def import_layout_file():
     "character";"style1,style2...";"column";"row";"unit_width"
     """
     # Give us a file or end here
-    filename = UI.enter_input_filename()
-    if not filename:
+    try:
+        filename = UI.enter_input_filename()
+    except e.ReturnToMenu:
         return False
     # Initialize the records list
     all_records = []

@@ -225,8 +225,8 @@ class SimulationSensor(object):
         if self.manual_mode:
             start_time = time()
             # Ask whether to cast or simulate machine stop
-            prompt = ('[Enter] to continue, [S] to stop '
-                      'or [A] to switch to automatic mode? ')
+            prompt = ('[A] to switch to automatic mode, [S] to stop\n'
+                      'or leave blank to continue?')
             answer = UI.enter_data_or_blank(prompt) or ' '
             if answer in 'aA':
                 self.manual_mode = False

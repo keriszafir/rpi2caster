@@ -91,11 +91,11 @@ def prepare_job(ribbon_casting_workflow):
         self.stats.ribbon = ribbon
         UI.display_parameters({'Ribbon info': self.stats.ribbon_parameters})
         # Always 1 run for calibrating and punching
-        prompt = 'How many times do you want to cast it? (default: 1) : '
+        prompt = 'How many times do you want to cast it? (default: 1)'
         self.stats.runs = abs(not diagnostics and not punching and
                               UI.enter_data_or_blank(prompt, int) or 1)
         # Line skipping - ask user if they want to skip any initial line(s)
-        prompt = 'How many initial lines do you want to skip?  (default: 0): '
+        prompt = 'How many initial lines do you want to skip?  (default: 0)'
         l_skipped = abs(not diagnostics and not punching and
                         UI.enter_data_or_blank(prompt, int) or 0)
         # Leave at least one line in the ribbon to cast
@@ -187,8 +187,9 @@ class Casting(object):
         displaying the statistics (depending on context:
         casting, punching or testing)
         """
+        mode = self.caster.mode
         generator = (p.parse_record(record) for record in casting_queue)
-        if not self.caster.mode.testing:
+        if not mode.testing:
             self.caster.sensor.check_if_machine_is_working()
         while True:
             try:
@@ -206,8 +207,7 @@ class Casting(object):
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Allow resume in punching mode
-                if (self.caster.mode.punching and not
-                        self.caster.mode.diagnostics and
+                if (mode.punching and not mode.diagnostics and
                         UI.confirm('Continue?', default=True)):
                     self.caster.process(signals)
                 else:
@@ -253,9 +253,8 @@ class Casting(object):
         while True:
             UI.display('Enter the signals to send to the caster, '
                        'or leave empty to return to menu: ')
-            prompt = 'Signals? (leave blank to exit): '
-            string = UI.enter_data_or_blank(prompt)
-            signals = p.parse_signals(string)
+            prompt = 'Signals? (leave blank to exit)'
+            signals = p.parse_signals(UI.enter_data_or_blank(prompt))
             if signals:
                 self.caster.output.valves_off()
                 UI.display('Activating ' + ' '.join(signals))
@@ -271,144 +270,53 @@ class Casting(object):
             e.return_to_menu()
         return self.ribbon.contents
 
-    @cast_or_punch_result
     def cast_sorts(self):
         """Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
         """
-        queue = []
+        order = []
         while True:
             if self.diecase:
-                char = UI.enter_data_or_blank('Character? ')
-                style = UI.choose_one_style()
-                matrix = self.diecase.lookup_matrix(char, style)
+                char = UI.enter_data_or_blank('Character?')
+                matrix = self.diecase.lookup_matrix(char)
                 delta = unit_correction()
             else:
                 matrix = self.diecase.lookup_matrix()
                 matrix.specify_units()
                 delta = 0
-            pos_0075, pos_0005 = matrix.wedge_positions(delta, self.wedge)
-            # Ask for number of sorts and lines, no negative numbers here
-            prompt = '\nHow many lines? (default: 1): '
-            lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
-            line_codes = [GALLEY_TRIP + str(pos_0075),
-                          PUMP_ON + str(pos_0005)] + ['O15'] * 2
-            # 2 quads in the beginning, then spaces, then 2 quads in the end
-            prompt = 'How many sorts per line? (default: 10)'
-            qty = UI.enter_data_or_blank(prompt, int) or 10
-            code = matrix.get_code(delta, self.wedge)
-            if qty > 10:
-                line_codes.extend([code, 'G2'] * qty)
-                UI.display('Characters will be separated with spaces '
-                           'to prevent matrix overheating.\n'
-                           'After casting, discard the spaces.')
-            else:
-                line_codes.extend([code] * qty)
-            line_codes.extend(['O15'] * 2)
-            # Ask for confirmation
-            queue.extend(line_codes * lines)
-            prompt = 'Add next character? If not, cast the queue...'
+            qty = UI.enter_data_or_default('How many sorts?', 10, int)
+            order.append((matrix, delta, qty))
+            prompt = 'More sorts? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
                 break
-        # No sequences? No casting.
-        if queue:
-            UI.display('\nEach line will have two em-quads at the start '
-                       'and at the end, to support the type.\n')
-            return queue + END_CASTING
-        else:
-            e.return_to_menu()
+        # Now let's calculate and cast it...
+        self.cast_batch(order)
 
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
-        enter = UI.enter_data_or_blank
+        enter = UI.enter_data_or_default
         scheme = typesetting_data.SelectFontScheme().layout
-        scale_prompt = ('Scale for %s in %%, relative to 100 "a" characters:\n'
-                        '(default: 100%%) ?: ')
+        prompt = 'Scale for %s in %%, relative to 100 "a" characters?'
         UI.display('Styles to cast?')
         styles = UI.choose_styles()
-        # Now generate and display the casting queue
-        style_scales = {style: (enter(scale_prompt % style, float) / 100) or 1
-                        for style in styles}
-        batch = [(char, style, int(scheme[char] * style_scales[style]))
-                 for style in styles for char in sorted(scheme)]
+        order = []
         for style in styles:
             UI.display_header(style)
-            UI.display('\n'.join(['%s: %s' % (char, qty)
-                                  for (char, c_style, qty) in batch
-                                  if c_style == style]))
-        self.cast_batch(batch)
+            scale = enter(prompt % style, 100, int) / 100.0
+            for char in sorted(scheme):
+                qty = int(scale * scheme[char])
+                UI.display('%s: %s' % (char, qty))
+                matrix = self.diecase.lookup_matrix(char, style)
+                order.append((matrix, 0, qty))
+            UI.pause()
+        self.cast_batch(order)
 
-    @cast_or_punch_result
-    def cast_batch(self, order=()):
-        """Cast a batch of characters, filling the line"""
-        queue = []
-        if not order:
-            return
-        # Two quads before and after makes 72 - make line shorter
-        line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
-                       self.wedge.set_width / 12) - 72
-        for (char, style, qty) in order:
-            # Make an infinite iterator when we call this function without
-            # the list of character-style pairs
-            prompt = ('Character: %s %s\n'
-                      'Y: add to casting queue, N: skip it?' % (style, char))
-            if not UI.confirm(prompt, default=True):
-                continue
-            style = style or UI.choose_one_style()
-            matrix = self.diecase.lookup_matrix(char, style)
-            delta = unit_correction()
-            (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)
-            mat_code = matrix.get_code(delta, self.wedge) + ' // %s' % char
-            units_left = 0
-            line_codes = []
-            while qty > 0:
-                # Start the line
-                line_codes = [GALLEY_TRIP + str(pos_0075),
-                              PUMP_ON + str(pos_0005)] + ['O15'] * 2
-                units_left = line_length
-                # Fill line with sorts and spaces (to slow down casting
-                # and prevent matrix overheating)
-                while (units_left > matrix.units + delta + self.wedge[2] and
-                       qty > 0):
-                    line_codes.append(mat_code)
-                    units_left -= (matrix.units + delta)
-                    line_codes.append('G2')
-                    units_left -= self.wedge[2]
-                    qty -= 1
-                while units_left > self.wedge[15] and not qty:
-                    # Fill with quads first...
-                    line_codes.append('O15')
-                    units_left -= self.wedge[15]
-                while units_left > self.wedge[2] and not qty:
-                    # ...later with spaces...
-                    line_codes.append('G2')
-                    units_left -= self.wedge[2]
-                # Finally add two quads at the end and add to queue
-                line_codes.extend(['O15'] * 2)
-                queue.extend(line_codes)
-        # No sequences? No casting.
-        if queue:
-            UI.display('\nEach line will have two em-quads at the start '
-                       'and at the end, to support the type.\n')
-            return queue + END_CASTING
-        else:
-            e.return_to_menu()
-
-    @cast_or_punch_result
     def cast_spaces(self):
         """Spaces casting routine, based on the position in diecase.
         Ask user about the space width and measurement unit.
         """
-        queue = []
-        # Two quads before and after makes 72 - make line shorter
-        line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
-                       self.wedge.set_width / 12) - 72
-        # Auto-select or choose the matrix from menu if we have a layout
-        if self.diecase:
-            matrix = self.diecase.lookup_matrix(high_or_low_space())
-        else:
-            # Enter coordinates manually
-            matrix = self.diecase.lookup_matrix()
+        order = []
+        matrix = self.diecase.lookup_matrix(high_or_low_space())
         while True:
             prompt = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
                       '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
@@ -417,44 +325,87 @@ class Casting(object):
                                             '2': 1/2, '1': 1, 'C': 0}) * 12.0
             # Ask about custom value, then specify units
             while not 2 <= width <= 20:
-                prompt = 'Custom width in points (decimal, 2...20) ? : '
+                prompt = 'Custom width in points (decimal, 2...20)?'
                 width = UI.enter_data_or_blank(prompt, float)
-            prompt = '\nHow many lines? (default: 1): '
-            lines = abs(UI.enter_data_or_blank(prompt, int) or 1)
-            prompt = ('Casting %s lines of %s-point spaces from %s. OK?'
-                      % (lines, width, matrix))
-            # Save for later
-            comment = '%s-point space' % width
-            # Repeat
-            if not UI.confirm(prompt, default=True):
-                continue
-            # Calculate unit width of said number of points
-            # We do it this way:
-            # units = picas * set_width/12 * 18
-            # a pica is 12 points, so:
-            # units = width (points) * set_width/12 * 1 / 12 * 18
-            # 18 / (12*12) = 0.125, hence division by 8
             width = round(width * self.wedge.pica / 0.1667 *
                           self.wedge.set_width / 8, 2)
-            # How many spaces will fit in a line? Calculate it...
-            qty = int(line_length // width)
-            # Check if the corrections are needed at all
             delta = width - matrix.units
-            (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)
-            signals = matrix.get_code(delta, self.wedge) + '// ' + comment
-            line_codes = [GALLEY_TRIP + str(pos_0075),
-                          PUMP_ON + str(pos_0005)]
-            # 2 quads in the beginning, then spaces, then 2 quads in the end
-            line_codes.extend(['O15'] * 2 + [signals] * qty + ['O15'] * 2)
-            # Ask for confirmation
-            queue.extend(line_codes * lines)
+            prompt = 'How many lines?'
+            lines = UI.enter_data_or_default(prompt, 1, int)
+            order.extend([(matrix, delta, 0)] * lines)
             prompt = 'More spaces? Otherwise, start casting'
-            if queue and not UI.confirm(prompt, default=True):
+            if not UI.confirm(prompt, default=True):
                 break
-        if queue:
-            return queue + END_CASTING
-        else:
+        self.cast_batch(order)
+
+    @cast_or_punch_result
+    def cast_batch(self, order=()):
+        """Cast a batch of characters, to a given galley width.
+
+        Each character is specified by a tuple:
+            (matrix, delta, qty),   where:
+        matrix is a matrix_data.Matrix object,
+        delta is unit width correction (-2...+10),
+        qty is quantity (0 for a filled line, >0 for a given number of chars).
+
+        If there is too many chars for a single line - will cast more lines.
+        Not enough to fill the line - will quad out.
+        Characters other than low spaces will be separated by double G2 spaces
+        to prevent matrices from overheating.
+        """
+        queue = []
+        if not order:
             e.return_to_menu()
+        UI.display('Each line will have two em-quads at the start '
+                   'and at the end, to support the type.')
+        # Two quads before and after makes 72 - make line shorter
+        line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
+                       self.wedge.set_width / 12) - 72
+        for (matrix, delta, qty) in order:
+            char_width = matrix.units + delta
+            (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)
+            # Add comment if mat has a char specified
+            comment = (matrix.islowspace() and ' // low space' or
+                       matrix.ishighspace() and ' // high space' or
+                       matrix.char and ' // ' + matrix.char or '')
+            mat_code = matrix.get_code(delta, self.wedge) + comment
+            units_left = 0
+            line_codes = []
+            # Qty = 0 means that we fill the line to the brim
+            # (cast single line)
+            if not qty and matrix.islowspace():
+                # Low spaces - fill the line with them
+                qty = line_length // char_width
+            elif not qty:
+                # Chars separated by G-2 spaces - count these units too
+                qty = line_length // (char_width + self.wedge[2])
+            while qty > 0:
+                # Start the line
+                line_codes = [GALLEY_TRIP + str(pos_0075),
+                              PUMP_ON + str(pos_0005)] + ['O15'] * 2
+                units_left = line_length
+                # Fill line with sorts and spaces (to slow down casting
+                # and prevent matrix overheating)
+                while units_left > char_width and qty > 0:
+                    line_codes.append(mat_code)
+                    units_left -= char_width
+                    qty -= 1
+                    # For low spaces and quads, we can cast one after another
+                    if not matrix.islowspace():
+                        line_codes.extend(['G2'])
+                        units_left -= self.wedge[2]
+                while not qty and units_left > self.wedge[15]:
+                    # Fill with quads first...
+                    line_codes.append('O15')
+                    units_left -= self.wedge[15]
+                while not qty and units_left > self.wedge[2]:
+                    # ...later with spaces...
+                    line_codes.append('G2')
+                    units_left -= self.wedge[2]
+                # Finally add two quads at the end and add to queue
+                line_codes.extend(['O15'] * 2)
+                queue.extend(line_codes)
+        return queue + END_CASTING
 
     @cast_or_punch_result
     def adhoc_typesetting(self):
@@ -718,11 +669,11 @@ def double_justification(pos_0075, pos_0005):
 
 def unit_correction():
     """Set the unit correction for the character"""
-    prompt = 'Unit correction (-2...+10, default 0) ?: '
+    prompt = 'Unit correction: -2...10?'
     correction = 20
     while not -2 <= correction <= 10:
         try:
-            correction = UI.enter_data_or_blank(prompt, int) or 0
+            correction = UI.enter_data_or_default(prompt, 0, int)
         except (ValueError, TypeError):
             correction = 20
     return correction

@@ -122,10 +122,10 @@ def debug_info(*args, **kwargs):
         print('DEBUG: ', *args, **kwargs)
 
 
-def debug_enter_data(prompt):
+def debug_enter_data(prompt, datatype=str):
     """For debug-specific data"""
     if DEBUG_MODE:
-        return input('DEBUG: ' + prompt)
+        return enter_data('DEBUG: ' + prompt + ' : ', datatype)
 
 
 def debug_pause(msg1='', msg2=MSG_CONTINUE):
@@ -143,7 +143,7 @@ def enter_data(prompt, datatype=str):
     """Enter a value and convert it to the specific datatype"""
     value = ''
     while not value:
-        value = input(prompt)
+        value = input(prompt + ' : ')
         try:
             value = datatype(value)
         except ValueError:
@@ -153,13 +153,13 @@ def enter_data(prompt, datatype=str):
 
 
 def enter_data_or_blank(prompt, datatype=str):
-    """enter_data_or_blank:
-
-    Enter a value or leave blank, try to convert to the specified datatype
+    """Enter a value or leave blank, try to convert to the specified datatype
     """
     while True:
-        value = input(prompt)
-        if not value:
+        value = input(prompt + ' : ')
+        if not value and datatype in (int, float, bool):
+            return datatype(0)
+        elif not value:
             return value
         try:
             return datatype(value)
@@ -167,10 +167,34 @@ def enter_data_or_blank(prompt, datatype=str):
             print('Incorrect value or data type!')
 
 
-def _format_display(character, style):
-    """format_display:
+def enter_data_or_default(prompt, default=1, datatype=str):
+    """Enter a value and return default if not given anything,
+    or try to convert to the specified datatype."""
+    while True:
+        value = input(prompt + ' (default: %s) : ' % default)
+        if not value:
+            return default
+        try:
+            return datatype(value)
+        except ValueError:
+            print('Incorrect value or data type!')
 
-    Uses ANSI escape sequences to alter the appearance of the character
+
+def enter_data_or_exception(prompt, exception=ValueError, datatype=str):
+    """Enter a value and raise an exception if it is blank,
+    or try to convert to the specified datatype."""
+    while True:
+        value = input(prompt + ' : ')
+        if not value:
+            raise exception
+        try:
+            return datatype(value)
+        except ValueError:
+            print('Incorrect value or data type!')
+
+
+def _format_display(character, style):
+    """Uses ANSI escape sequences to alter the appearance of the character
     displayed in the matrix case layout.
 
     Temporarily unused - until bugfix for 24574.
@@ -199,7 +223,7 @@ def choose_one_style():
           'Available options: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
           '[l]ower index (a.k.a. subscript, inferior), '
           '[u]pper index (a.k.a. superscript, superior).')
-    style = enter_data_or_blank('Style?: ', str) or 'r'
+    style = enter_data_or_default('Style?', 'r')
     return c.STYLES.get(style, 'roman')
 
 
@@ -210,31 +234,27 @@ def choose_styles():
           '[l]ower index (a.k.a. subscript, inferior), '
           '[u]pper index (a.k.a. superscript, superior).\n'
           'Leave blank for roman only.')
-    styles_string = enter_data_or_blank('Styles?: ', str) or 'r'
+    styles_string = enter_data_or_default('Styles?', 'r')
     return list({c.STYLES[char] for char in styles_string if char in c.STYLES})
 
 
 def tab_complete(text, state):
-    """tab_complete(text, state):
-
-    This function enables tab key auto-completion when you
-    enter the filename.
-    """
+    """Enables tab key auto-completion when you enter the filename."""
     return (glob.glob(text+'*')+[None])[state]
 
 
 def enter_input_filename():
-    """Allows to enter the input filename and checks if it is readable"""
+    """Allows to enter the input filename and checks if it is readable.
+    Repeats until proper filename or nothing is given.
+    Raises ReturnToMenu if filename not specified."""
     # Set readline parameters
     readline.set_completer_delims(' \t\n;')
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the input filename; check if the file is readable
     while True:
-        prompt = '\nEnter the input file name (leave blank to abort): '
-        filename = enter_data_or_blank(prompt)
-        if not filename:
-            return False
+        prompt = 'Enter the input file name (leave blank to abort)'
+        filename = enter_data_or_exception(prompt, e.ReturnToMenu)
         filename = os.path.realpath(filename)
         try:
             with io.open(filename, 'r'):
@@ -244,24 +264,20 @@ def enter_input_filename():
 
 
 def enter_output_filename():
-    """Allows user to enter output filename (without checking if readable)"""
+    """Allows user to enter output filename (without checking if readable).
+    Raises ReturnToMenu if filename not specified."""
     # Set readline parameters
     readline.set_completer_delims(' \t\n;')
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the output filename; no check here
-    prompt = '\nEnter the input file name (leave blank to abort): '
-    filename = enter_data_or_blank(prompt)
-    if filename:
-        return os.path.realpath(filename)
-    else:
-        return False
+    prompt = 'Enter the input file name (leave blank to abort)'
+    filename = enter_data_or_exception(prompt, e.ReturnToMenu)
+    return os.path.realpath(filename)
 
 
 def simple_menu(message, options):
-    """Simple menu:
-
-    A simple menu where user is asked what to do.
+    """A simple menu where user is asked what to do.
     Wrong choice points back to the menu.
 
     Message: prompt - string displayed on screen;
@@ -350,15 +366,12 @@ def display_diecase_layout(diecase):
 def edit_matrix(matrix):
     """Edits the matrix data"""
     display_parameters({'Matrix details': matrix.parameters})
-    prompt = ('Character (" "=low space, "_"=high space, '
-              'blank to leave unchanged, ctrl-C to exit) ? : ')
-    matrix.char = enter_data_or_blank(prompt) or matrix.char
+    prompt = 'Character (" "=low space, "_"=high space, ctrl-C to exit)?'
+    matrix.char = enter_data_or_default(prompt, matrix.char)
     if not matrix.char:
         return matrix
     matrix.styles = choose_styles()
-    units = matrix.units or matrix.row_units()
-    prompt = 'Unit width? (current: %s) : ' % units
-    matrix.units = enter_data_or_blank(prompt, int) or units
+    matrix.units = enter_data_or_default('Unit width?', matrix.units, int)
     return matrix
 
 
