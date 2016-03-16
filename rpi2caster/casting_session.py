@@ -367,10 +367,10 @@ class Casting(object):
             # (cast single line)
             if not qty and matrix.islowspace():
                 # Low spaces - fill the line with them
-                qty = line_length // char_width
+                qty = max(line_length // char_width - 1, 0)
             elif not qty:
                 # Chars separated by G-2 spaces - count these units too
-                qty = line_length // (char_width + self.wedge[2])
+                qty = max(line_length // (char_width + self.wedge[2]) - 1, 0)
             while qty > 0:
                 # Start the line
                 codes = double_justification(pos_0075, pos_0005) + ['O15'] * 2
