@@ -359,7 +359,7 @@ class Casting(object):
                        matrix.char and ' // ' + matrix.char or '')
             mat_code = matrix.get_code(delta, self.wedge) + comment
             units_left = 0
-            line_codes = []
+            codes = []
             # Qty = 0 means that we fill the line to the brim
             # (cast single line)
             if not qty and matrix.islowspace():
@@ -370,30 +370,29 @@ class Casting(object):
                 qty = line_length // (char_width + self.wedge[2])
             while qty > 0:
                 # Start the line
-                line_codes = [GALLEY_TRIP + str(pos_0075),
-                              PUMP_ON + str(pos_0005)] + ['O15'] * 2
+                codes = double_justification(pos_0075, pos_0005) + ['O15'] * 2
                 units_left = line_length
                 # Fill line with sorts and spaces (to slow down casting
                 # and prevent matrix overheating)
                 while units_left > char_width and qty > 0:
-                    line_codes.append(mat_code)
+                    codes.append(mat_code)
                     units_left -= char_width
                     qty -= 1
                     # For low spaces and quads, we can cast one after another
                     if not matrix.islowspace():
-                        line_codes.extend(['G2'])
+                        codes.extend(['G2'])
                         units_left -= self.wedge[2]
                 while not qty and units_left > self.wedge[15]:
                     # Fill with quads first...
-                    line_codes.append('O15')
+                    codes.append('O15')
                     units_left -= self.wedge[15]
                 while not qty and units_left > self.wedge[2]:
                     # ...later with spaces...
-                    line_codes.append('G2')
+                    codes.append('G2')
                     units_left -= self.wedge[2]
                 # Finally add two quads at the end and add to queue
-                line_codes.extend(['O15'] * 2)
-                queue.extend(line_codes)
+                codes.extend(['O15'] * 2)
+                queue.extend(codes)
         return queue + END_CASTING
 
     @cast_or_punch_result
