@@ -107,8 +107,7 @@ def prepare_job(ribbon_casting_workflow):
             # Apply constraints: 0 <= lines_skipped < lines in ribbon
             l_skipped = max(0, l_skipped)
             l_skipped = min(l_skipped, self.stats.get_ribbon_lines() - 1)
-            if l_skipped:
-                UI.display('Skipping %s lines' % l_skipped)
+            UI.display('Skipping %s lines' % l_skipped)
             # Take away combinations until we skip the desired number of lines
             # BEWARE: ribbon starts with galley trip!
             # We must give it back after lines are taken away
@@ -345,15 +344,15 @@ class Casting(object):
         queue = []
         if not order:
             e.return_to_menu()
+        quad = self.diecase.decode_matrix('O15')
+        quad.char = ' '
+        order = [(quad, 0, 0)] * 2 + list(order)
         # Two quads before and after makes 72 - make line shorter
         line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
                        self.wedge.set_width / 12) - 72
         UI.display('Each line will have two em-quads at the start '
                    'and at the end, to support the type.\n'
                    'Starting with two lines of quads to heat up the mould.')
-        quad_matrix = matrix_data.Matrix(' ')
-        quad_matrix.diecase = self.diecase
-        order = [(quad_matrix, 0, 0)] * 2 + list(order)
         for (matrix, delta, qty) in order:
             char_width = matrix.units + delta
             (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)

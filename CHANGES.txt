@@ -1,3 +1,4 @@
+v0.3dev5 - mqtrix selection regression fix
 v0.3dev4 - mould preheat before batch casting
 v0.3dev3 - cast sorts/spaces/typecases rework
            diecase selected: choose mats automatically or from menu (for multiple matches),
