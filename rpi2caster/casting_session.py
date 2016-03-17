@@ -30,6 +30,8 @@ from . import monotype
 from .casting_stats import Stats
 # Globally selected UI
 from .global_settings import UI
+# Typecase casting needs this
+from . import letter_frequencies
 # Matrix, wedge and typesetting data models
 from . import typesetting_data
 from . import matrix_data
@@ -505,20 +507,20 @@ class Casting(object):
             opts = [(e.menu_level_up, 'Back',
                      'Returns to main menu', True),
                     (self._test_all, 'Test outputs',
-                     'Tests all the air outputs one by one', True),
-                    (self._test_front_pinblock, 'Test the front pinblock',
-                     'Tests the pins 1...14', caster),
-                    (self._test_rear_pinblock, 'Test the rear pinblock',
-                     'Tests the pins NI, NL, A...N one by one', caster),
-                    (self._test_justification, 'Test the 0075-S-0005 pinblock',
-                     'Tests the pins for justification wedges', caster),
-                    (self._test_any_code, 'Send specified signals',
-                     'Sends the specified signal combination', True),
+                     'Test all the air outputs N...O15, one by one', True),
+                    (self._test_front_pinblock, 'Test the front pin block',
+                     'Test the pins 1...14', caster),
+                    (self._test_rear_pinblock, 'Test the rear pin block',
+                     'Test the pins NI, NL, A...N, one by one', caster),
+                    (self._test_justification, 'Test the justification block',
+                     'Test the pins for 0075, S and 0005, one by one', caster),
+                    (self._test_any_code, 'Send specified signal combination',
+                     'Send the specified signals to the machine', True),
                     (self._calibrate_wedges, 'Calibrate the 52D wedge',
                      'Calibrate the space transfer wedge for correct width',
                      caster),
                     (self._calibrate_mould, 'Calibrate mould opening',
-                     'Casts 9-unit characters to adjust the type width',
+                     'Cast 9-unit characters to adjust the type width',
                      caster),
                     (self._calibrate_draw_rods, 'Calibrate diecase draw rods',
                      'Keep the matrix case at G8 and adjust the draw rods',
@@ -547,28 +549,30 @@ class Casting(object):
         ribbon = self.ribbon.contents
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
                 (self.cast_composition, 'Cast or punch composition',
-                 'Casts type or punch a ribbon', ribbon),
+                 'Cast type or punch a ribbon', ribbon),
                 (self._choose_ribbon, 'Select ribbon',
-                 'Selects a ribbon from database or file', True),
+                 'Select a ribbon from database or file', True),
                 (self._choose_diecase, 'Select diecase',
-                 'Selects a matrix case from database', True),
+                 'Select a matrix case from database', True),
                 (self._choose_wedge, 'Select wedge',
-                 'Selects a wedge from database', True),
+                 'Enter a wedge designation', True),
                 (self.ribbon.display_contents, 'View codes',
-                 'Displays all sequences in a ribbon', ribbon),
+                 'Display all codes in the selected ribbon', ribbon),
                 (self.diecase.show_layout, 'Show diecase layout',
-                 'Views the matrix case layout', diecase),
+                 'View the matrix case layout', diecase),
                 # (self.adhoc_typesetting, 'Ad-hoc typesetting',
                 # 'Compose and cast a line of text', self.diecase),
-                (self.cast_sorts, 'Cast sorts',
-                 'Cast from matrix with given coordinates', caster),
+                (self.cast_sorts, 'Cast sorts from character',
+                 'Cast from matrix based on a character', caster and diecase),
+                (self.cast_sorts, 'Cast sorts from coordinates',
+                 'Cast from matrix at given position', caster and not diecase),
                 (self.cast_spaces, 'Cast spaces or quads',
-                 'Casts spaces or quads of a specified width', caster),
+                 'Cast spaces or quads of a specified width', caster),
                 (self.cast_typecases, 'Cast typecases',
-                 'Casts a typecase based on a selected font scheme',
+                 'Cast a typecase based on a selected font scheme',
                  caster and diecase),
                 (self._display_details, 'Show detailed info...',
-                 'Displays caster, ribbon, diecase and wedge details', True),
+                 'Display caster, ribbon, diecase and wedge details', True),
                 (matrix_data.diecase_operations, 'Matrix manipulation...',
                  'Work on matrix cases', True),
                 (self.diagnostics_submenu, 'Service...',
@@ -590,7 +594,7 @@ class Casting(object):
             # Catch any known exceptions here
             try:
                 UI.menu(self._main_menu_options(), header=header, footer='')()
-            except (e.ReturnToMenu, e.MenuLevelUp):
+            except (e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
                 # Will skip to the end of the loop, and start all over
                 pass
 

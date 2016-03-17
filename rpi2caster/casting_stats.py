@@ -151,17 +151,17 @@ class Stats(object):
         self.__dict__['_current'] = {}
         self.__dict__['_previous'] = {}
         ribbon = self.__dict__['_ribbon']
-        generator = (p.parse_record(x) for x in ribbon_contents)
-        for (signals, _) in generator:
-            if signals:
-                # Guards against empty combination i.e. line with comment only
-                ribbon['codes'] += 1
-            if '16' in signals and not mode.hmn and not mode.unitshift:
+        code_generator = (code for (code, _) in
+                          (p.parse_record(x) for x in ribbon_contents) if code)
+        for code in code_generator:
+            # Guards against empty combination i.e. line with comment only
+            ribbon['codes'] += 1
+            if not mode.hmn and not mode.unitshift and '16' in code:
                 # Do it now - before casting starts!
                 mode.choose_row16_addressing()
-            if p.check_newline(signals):
+            if p.check_newline(code):
                 ribbon['lines'] += 1
-            elif p.check_character(signals):
+            elif p.check_character(code):
                 ribbon['chars'] += 1
 
     @ribbon_parameters.setter
@@ -174,14 +174,14 @@ class Stats(object):
         # (the session current run will be unset yet, so default)
         session = self.__dict__['_session']
         session['current_run'] = session.get('current_run', 1)
-        generator = (p.parse_record(x) for x in queue)
-        for (combination, _) in generator:
-            if combination:
-                # Guards against empty combination i.e. line with comment only
-                run['codes'] += 1
-            if p.check_newline(combination):
+        code_generator = (code for (code, _) in
+                          (p.parse_record(x) for x in queue) if code)
+        for code in code_generator:
+            # Guards against empty combination i.e. line with comment only
+            run['codes'] += 1
+            if p.check_newline(code):
                 run['lines'] += 1
-            elif p.check_character(combination):
+            elif p.check_character(code):
                 run['chars'] += 1
 
     @code_parameters.setter
