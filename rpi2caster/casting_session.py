@@ -547,7 +547,7 @@ class Casting(object):
         caster = not self.caster.mode.punching
         diecase = self.diecase.diecase_id
         ribbon = self.ribbon.contents
-        diecase_string = diecase and ' (current: %s)' % diecase or ''
+        diecase_info = diecase and ' (current: %s)' % diecase or ''
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
                 (self.cast_composition, 'Cast composition',
                  'Cast type from a selected ribbon', ribbon and caster),
@@ -557,14 +557,14 @@ class Casting(object):
                 (self._choose_ribbon, 'Select ribbon',
                  'Select a ribbon from database or file', True),
                 (self._choose_diecase, 'Select diecase',
-                 'Select a matrix case from database' + diecase_string, True),
+                 'Select a matrix case from database' + diecase_info, caster),
                 (self._choose_wedge, 'Select wedge',
                  'Enter a wedge designation (current: %s)' % self.wedge.name,
-                 True),
+                 caster),
                 (self.ribbon.display_contents, 'View codes',
                  'Display all codes in the selected ribbon', ribbon),
                 (self.diecase.show_layout, 'Show diecase layout',
-                 'View the matrix case layout', diecase),
+                 'View the matrix case layout', diecase and caster),
                 # (self.adhoc_typesetting, 'Ad-hoc typesetting',
                 # 'Compose and cast a line of text', self.diecase),
                 (self.cast_sorts, 'Cast sorts for given characters',
@@ -577,7 +577,11 @@ class Casting(object):
                  'Cast a typecase based on a selected font scheme',
                  caster and diecase),
                 (self._display_details, 'Show detailed info...',
-                 'Display caster, ribbon, diecase and wedge details', True),
+                 'Display ribbon, diecase, wedge and interface details',
+                 caster),
+                (self._display_details, 'Show detailed info...',
+                 'Display ribbon and interface details',
+                 not caster),
                 (matrix_data.diecase_operations, 'Matrix manipulation...',
                  'Work on matrix cases', True),
                 (self.diagnostics_submenu, 'Service...',
@@ -650,10 +654,15 @@ class Casting(object):
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
-        UI.display_parameters({'Caster data': self.caster.parameters,
-                               'Ribbon data': self.ribbon.parameters,
-                               'Matrix case data': self.diecase.parameters,
-                               'Wedge data': self.wedge.parameters})
+        display = UI.display_parameters
+        punching = self.caster.mode.punching
+        if self.ribbon:
+            display({'Ribbon data': self.ribbon.parameters})
+        if self.diecase and not punching:
+            display({'Matrix case data': self.diecase.parameters})
+        if self.wedge and not punching:
+            display({'Wedge data': self.wedge.parameters})
+        display({'Caster data': self.caster.parameters})
         UI.pause()
 
 

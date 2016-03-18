@@ -55,6 +55,9 @@ class Ribbon(object):
     def __repr__(self):
         return self.ribbon_id or ''
 
+    def __bool__(self):
+        return False
+
     def set_ribbon_id(self, ribbon_id=None):
         """Sets the ribbon ID"""
         prompt = 'Ribbon ID? (leave blank to exit) : '
@@ -190,6 +193,9 @@ class SelectRibbon(Ribbon):
         # Otherwise use empty ribbon
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('Ribbon choice failed. Starting a new one.')
+
+    def __bool__(self):
+        return True
 
 
 class FontScheme(object):
