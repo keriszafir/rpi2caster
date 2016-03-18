@@ -545,12 +545,12 @@ class Casting(object):
         """Build a list of options, adding an option if condition is met"""
         # Options are described with tuples: (function, description, condition)
         caster = not self.caster.mode.punching
-        diecase = self.diecase.diecase_id
-        ribbon = self.ribbon.contents
+        diecase = self.diecase
+        ribbon = self.ribbon
         diecase_info = diecase and ' (current: %s)' % diecase or ''
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
                 (self.cast_composition, 'Cast composition',
-                 'Cast type from a selected ribbon', ribbon and caster),
+                 'Cast type from a selected ribbon',  ribbon and caster),
                 (self.cast_composition, 'Punch ribbon',
                  'Punch a paper ribbon for casting without the interface',
                  ribbon and not caster),
@@ -576,12 +576,10 @@ class Casting(object):
                 (self.cast_typecases, 'Cast typecases',
                  'Cast a typecase based on a selected font scheme',
                  caster and diecase),
-                (self._display_details, 'Show detailed info...',
-                 'Display ribbon, diecase, wedge and interface details',
-                 caster),
-                (self._display_details, 'Show detailed info...',
-                 'Display ribbon and interface details',
-                 not caster),
+                (self._display_details, 'Show details...',
+                 'Display ribbon, diecase, wedge and interface info', caster),
+                (self._display_details, 'Show details...',
+                 'Display ribbon and interface details', not caster),
                 (matrix_data.diecase_operations, 'Matrix manipulation...',
                  'Work on matrix cases', True),
                 (self.diagnostics_submenu, 'Service...',
