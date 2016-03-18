@@ -11,7 +11,6 @@ You can also start in the casting or inventory management mode.
 To do it, enter:
 
 ./rpi2caster.py c (or ./rpi2caster.py cast)
-./rpi2caster.py i (or ./rpi2caster.py inv)
 
 If you want to start in casting mode - you can specify the file to cast
 in the command line:
