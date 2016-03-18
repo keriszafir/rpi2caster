@@ -547,24 +547,29 @@ class Casting(object):
         caster = not self.caster.mode.punching
         diecase = self.diecase.diecase_id
         ribbon = self.ribbon.contents
+        diecase_string = diecase and ' (current: %s)' % diecase or ''
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
-                (self.cast_composition, 'Cast or punch composition',
-                 'Cast type or punch a ribbon', ribbon),
+                (self.cast_composition, 'Cast composition',
+                 'Cast type from a selected ribbon', ribbon and caster),
+                (self.cast_composition, 'Punch ribbon',
+                 'Punch a paper ribbon for casting without the interface',
+                 ribbon and not caster),
                 (self._choose_ribbon, 'Select ribbon',
                  'Select a ribbon from database or file', True),
                 (self._choose_diecase, 'Select diecase',
-                 'Select a matrix case from database', True),
+                 'Select a matrix case from database' + diecase_string, True),
                 (self._choose_wedge, 'Select wedge',
-                 'Enter a wedge designation', True),
+                 'Enter a wedge designation (current: %s)' % self.wedge.name,
+                 True),
                 (self.ribbon.display_contents, 'View codes',
                  'Display all codes in the selected ribbon', ribbon),
                 (self.diecase.show_layout, 'Show diecase layout',
                  'View the matrix case layout', diecase),
                 # (self.adhoc_typesetting, 'Ad-hoc typesetting',
                 # 'Compose and cast a line of text', self.diecase),
-                (self.cast_sorts, 'Cast sorts from character',
+                (self.cast_sorts, 'Cast sorts for given characters',
                  'Cast from matrix based on a character', caster and diecase),
-                (self.cast_sorts, 'Cast sorts from coordinates',
+                (self.cast_sorts, 'Cast sorts from matrix coordinates',
                  'Cast from matrix at given position', caster and not diecase),
                 (self.cast_spaces, 'Cast spaces or quads',
                  'Cast spaces or quads of a specified width', caster),
@@ -679,3 +684,14 @@ def high_or_low_space():
     spaces = {True: '_', False: ' '}
     high_or_low = UI.confirm('High space?', default=False)
     return spaces[high_or_low]
+
+def choose_lang():
+    """Chooses a language from a list"""
+    for code, lang in sorted(letter_frequencies.LANGS).items():
+        UI.display('%s - %s' % (code, lang))
+    lang_code = ''
+    while lang_code not in letter_frequencies.LANGS:
+        lang_code = UI.enter_data_or_exception('Language?', e.return_to_menu)
+    letter_freqs = letter_frequencies.FREQS[lang_code]
+    # Normalize the letter frequencies to the number of "a"
+
