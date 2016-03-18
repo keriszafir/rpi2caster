@@ -357,7 +357,7 @@ class Casting(object):
                    'Starting with two lines of quads to heat up the mould.')
         for (matrix, delta, qty) in order:
             char_width = matrix.units + delta
-            (pos_0075, pos_0005) = matrix.wedge_positions(delta, self.wedge)
+            (pos_0075, pos_0005) = matrix.wedge_positions(delta)
             # Add comment if mat has a char specified
             comment = (matrix.islowspace() and ' // low space' or
                        matrix.ishighspace() and ' // high space' or
@@ -474,12 +474,12 @@ class Casting(object):
             mat = self.diecase.lookup_matrix(char)
             if not self.diecase:
                 mat.specify_units()
-            pos_0075, pos_0005 = mat.wedge_positions(alt_wedge=self.wedge)
+            pos_0075, pos_0005 = mat.wedge_positions()
             if not queue:
                 queue.extend(double_justification(pos_0075, pos_0005))
             elif (pos_0075, pos_0005) != (3, 8):
                 queue.extend(single_justification(pos_0075, pos_0005))
-            char = [mat.get_code(alt_wedge=self.wedge) + ' // ' + mat.char]
+            char = [mat.get_code() + ' // ' + mat.char]
             queue.extend(char * 3)
         queue.extend(END_CASTING)
         return queue
@@ -637,6 +637,7 @@ class Casting(object):
     def wedge(self, wedge):
         """Wedge setter"""
         self.__dict__['_wedge'] = wedge or wedge_data.SelectWedge()
+        self.diecase.alternative_wedge = wedge
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""

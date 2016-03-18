@@ -246,6 +246,17 @@ class Diecase(object):
             self.__dict__['_matrices'] = matrices
 
     @property
+    def alternative_wedge(self):
+        """Get values for temporary, alternative wedge assigned at
+        typesetting or casting time, for re-calculating matrix unit widths."""
+        self.__dict__.get('_alt_wedge', self.wedge)
+
+    @alternative_wedge.setter
+    def alternative_wedge(self, alt_wedge):
+        """Set the alternative wedge"""
+        self.__dict__['_alt_wedge'] = alt_wedge
+
+    @property
     def parameters(self):
         """Gets a list of parameters"""
         return [(self.diecase_id, 'Diecase ID'),
@@ -415,10 +426,14 @@ class Matrix(object):
         """Check whether the mat is empty"""
         return not self.char
 
-    def get_code(self, unit_correction=0, alt_wedge=None):
+    def edit(self):
+        """Edits the matrix data"""
+        UI.edit_matrix(self)
+
+    def get_code(self, unit_correction=0):
         """Gets the code for the matrix - with or without S, depending on
         whether justification wedges need to be in action."""
-        if self.wedge_positions(unit_correction, alt_wedge) != (3, 8):
+        if self.wedge_positions(unit_correction) != (3, 8):
             return self.code + 'S'
         else:
             return self.code
@@ -429,10 +444,10 @@ class Matrix(object):
         prompt = 'Unit value for the matrix?'
         self.units = UI.enter_data_or_default(prompt, row_units, int)
 
-    def wedge_positions(self, unit_correction=0, alt_wedge=None):
+    def wedge_positions(self, unit_correction=0):
         """Calculates the 0075 and 0005 wedge positions for this matrix
         based on the diecase's default wedge or specified one."""
-        wedge = alt_wedge or self.diecase.wedge
+        wedge = self.diecase.alternative_wedge
         diff = self.units + unit_correction - self.row_units(wedge)
         # 53 = neutral position where no corrections applied, i.e. 3/8
         # diff in units of given set; wedge pica = 0.166 or 0.1667
@@ -449,9 +464,10 @@ class Matrix(object):
         # Got the wedge positions, return them
         return (steps_0075, steps_0005)
 
-    def edit(self):
-        """Edits the matrix data"""
-        UI.edit_matrix(self)
+    def recalculate_units(self):
+        """Recalculates the units for an alternative wedge (with different
+        unit values or set width)"""
+
 
 
 def diecase_operations():
