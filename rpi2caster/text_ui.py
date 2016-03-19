@@ -318,10 +318,6 @@ def display_diecase_layout(diecase):
             formatted_char = format_display(formatted_char, style)
         return spaces_symbols.get(matrix.char, formatted_char)
 
-    def row_units(row):
-        """Gets wedge unit value for the row"""
-        return str(diecase.wedge[row])
-
     matrices = [mat for mat in diecase]
     cols_set = {matrix.column for matrix in matrices}
     rows_set = {matrix.row for matrix in matrices}
@@ -347,7 +343,8 @@ def display_diecase_layout(diecase):
         row.extend([displayed_char(mat).center(4)
                     for column_num in col_numbers for mat in matrices
                     if mat.column == column_num and mat.row == row_num])
-        table.append(''.join(row) + '|' + row_units(row_num).center(7) + '|')
+        row.append('|%s|' % str(diecase.wedge[row_num]).center(7))
+        table.append(''.join(row))
         table.append(empty_row)
     # Add the header at the bottom
     table.extend([separator, header, separator])
