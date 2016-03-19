@@ -101,7 +101,7 @@ def main():
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
                              source=None, simulation=False, punching=False,
                              unstable=False, manual=False, diecase=False,
-                             direct=False, testing=False)
+                             wedge=None, direct=False, testing=False)
     #
     # Define commands
     #
@@ -142,8 +142,7 @@ def main():
     # Ribbon - input file specification
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='ribbon file name')
-    cast_parser.set_defaults(job=cast, ribbon_file=None, wedge=None,
-                             diecase=None)
+    cast_parser.set_defaults(job=cast)
     #
     # Software update subparser
     #

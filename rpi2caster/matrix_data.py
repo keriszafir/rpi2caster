@@ -353,10 +353,40 @@ class Matrix(object):
     def __repr__(self):
         return self.code
 
-    def row_units(self, alt_wedge=None):
-        """Gets the row's unit width value for the diecase's wedge"""
-        wedge = alt_wedge or self.diecase.wedge
-        return wedge[self.row]
+    @property
+    def row_units(self):
+        """Gets the row's unit width value for the wedge assigned
+        to the diecase."""
+        return self.diecase.wedge[self.row]
+
+    @property
+    def alt_row_units(self):
+        """Gets the unit width value calculated for alternative wedge.
+        If no alt. wedge is specified, units are calculated for the
+        diecase's assigned wedge."""
+        return self.diecase.alternative_wedge[self.row]
+
+    @property
+    def units(self):
+        """Gets the specific or default number of units"""
+        return self.__dict__.get('_units', self.row_units())
+
+    @units.setter
+    def units(self, units):
+        """Sets the unit width value"""
+        if units:
+            self.__dict__['_units'] = units
+
+    @property
+    def alt_units(self):
+        """Recalculates the units for an alternative wedge (with different
+        unit values or set width)"""
+        # Normally we give the unit value for diecase's assigned wedge
+        wedge = self.diecase.wedge
+        alt_wedge = self.diecase.alternative_wedge
+        return (self.units * wedge.pica / alt_wedge.pica *
+                wedge.set_width / alt_wedge.set_width *
+                wedge[self.row] / alt_wedge[self.row])
 
     @property
     def row(self):
@@ -382,17 +412,6 @@ class Matrix(object):
     def code(self):
         """Gets the matrix code"""
         return self.column + str(self.row)
-
-    @property
-    def units(self):
-        """Gets the specific or default number of units"""
-        return self.__dict__.get('_units', self.row_units())
-
-    @units.setter
-    def units(self, units):
-        """Sets the unit width value"""
-        if units:
-            self.__dict__['_units'] = units
 
     @property
     def record(self):
@@ -440,15 +459,14 @@ class Matrix(object):
 
     def specify_units(self):
         """Give an alternative unit value for the matrix"""
-        row_units = self.row_units()
         prompt = 'Unit value for the matrix?'
-        self.units = UI.enter_data_or_default(prompt, row_units, int)
+        self.units = UI.enter_data_or_default(prompt, self.row_units, int)
 
     def wedge_positions(self, unit_correction=0):
         """Calculates the 0075 and 0005 wedge positions for this matrix
         based on the diecase's default wedge or specified one."""
         wedge = self.diecase.alternative_wedge
-        diff = self.units + unit_correction - self.row_units(wedge)
+        diff = self.alt_units + unit_correction - self.alt_row_units
         # 53 = neutral position where no corrections applied, i.e. 3/8
         # diff in units of given set; wedge pica = 0.166 or 0.1667
         steps_0005 = int(diff / wedge.pica * wedge.set_width * 0.25617) + 53
@@ -463,11 +481,6 @@ class Matrix(object):
             steps_0075 += 1
         # Got the wedge positions, return them
         return (steps_0075, steps_0005)
-
-    def recalculate_units(self):
-        """Recalculates the units for an alternative wedge (with different
-        unit values or set width)"""
-
 
 
 def diecase_operations():
