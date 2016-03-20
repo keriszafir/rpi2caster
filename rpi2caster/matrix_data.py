@@ -384,9 +384,11 @@ class Matrix(object):
         # Normally we give the unit value for diecase's assigned wedge
         wedge = self.diecase.wedge
         alt_wedge = self.diecase.alternative_wedge
-        return (self.units * wedge.pica / alt_wedge.pica *
-                wedge.set_width / alt_wedge.set_width *
-                wedge[self.row] / alt_wedge[self.row])
+        # Recalculating for narrower set will make more units of that set
+        # Correct for different pica value too
+        # (less units for .1667 than .1660 type if both are the same width)
+        return round(self.units * wedge.pica / alt_wedge.pica *
+                     wedge.set_width / alt_wedge.set_width, 0)
 
     @property
     def row(self):
@@ -395,7 +397,7 @@ class Matrix(object):
 
     @row.setter
     def row(self, value):
-        """Gets the row number"""
+        """Sets the row number"""
         value = int(value)
         value = max(1, value)
         value = min(value, 16)
@@ -420,25 +422,26 @@ class Matrix(object):
 
     @property
     def diecase(self):
-        """Get a diecase or an empty one"""
+        """Get a diecase the matrix belongs to, or an empty one"""
         return self.__dict__.get('_diecase', Diecase())
 
     @diecase.setter
     def diecase(self, diecase):
-        """Set a diecase"""
+        """Assign a diecase to the matrix (done on instantiation of Matrix,
+        required for accessing wedge for calculations)"""
         if diecase is not None:
             self.__dict__['_diecase'] = diecase
 
     def isspace(self):
-        """Checks whether the mat is space or not"""
+        """Check whether the mat is space or not"""
         return self.islowspace() or self.ishighspace()
 
     def islowspace(self):
-        """Checks whether the mat is low space"""
+        """Check whether the mat is low space"""
         return self.char == ' '
 
     def ishighspace(self):
-        """Checks whether the mat is high space"""
+        """Check whether the mat is high space"""
         return self.char == '_'
 
     def isempty(self):
@@ -446,11 +449,11 @@ class Matrix(object):
         return not self.char
 
     def edit(self):
-        """Edits the matrix data"""
+        """Edit the matrix data - this depends on the user interface"""
         UI.edit_matrix(self)
 
     def get_code(self, unit_correction=0):
-        """Gets the code for the matrix - with or without S, depending on
+        """Get the code for the matrix - with or without S, depending on
         whether justification wedges need to be in action."""
         if self.wedge_positions(unit_correction) != (3, 8):
             return self.code + 'S'
@@ -458,13 +461,16 @@ class Matrix(object):
             return self.code
 
     def specify_units(self):
-        """Give an alternative unit value for the matrix"""
+        """Give a user-defined unit value for the matrix;
+        mostly used for matrices placed in a different row than the
+        unit arrangement indicates; this will make the program set the
+        justification wedges and cast the character with the S-needle"""
         prompt = 'Unit value for the matrix?'
         self.units = UI.enter_data_or_default(prompt, self.row_units, int)
 
     def wedge_positions(self, unit_correction=0):
-        """Calculates the 0075 and 0005 wedge positions for this matrix
-        based on the diecase's default wedge or specified one."""
+        """Calculate the 0075 and 0005 wedge positions for this matrix
+        based on the current wedge used"""
         wedge = self.diecase.alternative_wedge
         diff = self.alt_units + unit_correction - self.alt_row_units
         # 53 = neutral position where no corrections applied, i.e. 3/8
