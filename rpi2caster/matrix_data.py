@@ -249,7 +249,7 @@ class Diecase(object):
     def alternative_wedge(self):
         """Get values for temporary, alternative wedge assigned at
         typesetting or casting time, for re-calculating matrix unit widths."""
-        self.__dict__.get('_alt_wedge', self.wedge)
+        return self.__dict__.get('_alt_wedge', self.wedge)
 
     @alternative_wedge.setter
     def alternative_wedge(self, alt_wedge):
@@ -369,7 +369,7 @@ class Matrix(object):
     @property
     def units(self):
         """Gets the specific or default number of units"""
-        return self.__dict__.get('_units', self.row_units())
+        return self.__dict__.get('_units', self.row_units)
 
     @units.setter
     def units(self, units):
