@@ -387,8 +387,8 @@ class Matrix(object):
         # Recalculating for narrower set will make more units of that set
         # Correct for different pica value too
         # (less units for .1667 than .1660 type if both are the same width)
-        return round(self.units * wedge.pica / alt_wedge.pica *
-                     wedge.set_width / alt_wedge.set_width, 0)
+        return int(round(self.units * wedge.pica / alt_wedge.pica *
+                         wedge.set_width / alt_wedge.set_width, 0))
 
     @property
     def row(self):

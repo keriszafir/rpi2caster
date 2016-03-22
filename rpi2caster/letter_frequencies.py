@@ -4,6 +4,8 @@
 Data obtained from https://en.wikipedia.org/wiki/Letter_frequency
 All data is letter occurences relative to all letters in a sample of text.
 """
+from .global_settings import UI
+from math import ceil
 
 FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'f': 2.027, 'v': 2.415, 'n': 8.542, 'å': 1.338, 'g': 2.862,
@@ -111,3 +113,41 @@ LANGS = {'en': 'English', 'nl': 'Dutch', 'pl': 'Polish', 'de': 'German',
          'eo': 'Esperanto', 'tr': 'Turkish', 'it': 'Italian', 'cz': 'Czech',
          'fr': 'French', 'es': 'Spanish', 'pt': 'Portugese', 'da': 'Danish',
          'fi': 'Finnish', 'sv': 'Swedish'}
+
+
+class LetterFrequency(object):
+    """Read and calculate letter frequencies, translate that to
+    casting order"""
+    def __init__(self, lang):
+        try:
+            UI.display('Calculating for %s' % LANGS[lang])
+            self.freqs = FREQS[lang]
+        except KeyError:
+            self.freqs = choose_language()
+
+    def chars_for_100_a(self, char):
+        """Get a number of characters normalized to 100 "a"."""
+        a_freq = self.freqs.get('a', 10.0)
+        char_freq = self.freqs.get(char, 0)
+        return 100.0 * char_freq / a_freq
+
+    def chars_for_1000_chars(self, char):
+        """Get a number of chars for 1000 characters overall"""
+        char_freq = self.freqs.get(char, 0)
+        return ceil(10 * char_freq)
+
+    def define_scale(self):
+        """Define scale of production"""
+        scale = 0
+        while not scale:
+            prompt = ('How much type do you want to cast?\n'
+                      'Enter a number (e.g. 10000) for a ')
+            scale_string = UI.enter_data_or_default(prompt)
+
+
+def choose_language():
+    """Display available languages and let user choose one"""
+    # No zeroth option
+    options = [('', '', '', False)]
+    options.extend([(FREQS[lang], LANGS[lang], '', True) for lang in LANGS])
+    return UI.menu('Choose language', options)
