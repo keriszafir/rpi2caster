@@ -36,11 +36,6 @@ from . import letter_frequencies
 from . import typesetting_data
 from . import matrix_data
 from . import wedge_data
-# Constants for control sequences
-GALLEY_TRIP = 'NKJS 0005 0075'
-PUMP_OFF = 'NJS 0005'
-PUMP_ON = 'NKS 0075'
-END_CASTING = [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
 
 
 def choose_sensor_and_driver(casting_routine):
@@ -437,9 +432,10 @@ class Casting(object):
         if not UI.confirm('\nProceed?', default=True):
             return None
         signals = 'G5'
-        queue = [GALLEY_TRIP] + [signals] * 7
-        queue.extend([GALLEY_TRIP + '8', PUMP_ON + '3'] + [signals + 'S'] * 7)
-        queue.extend(END_CASTING)
+        queue = [c.GALLEY_TRIP] + [signals] * 7
+        queue.extend([c.GALLEY_TRIP + '8', c.PUMP_ON + '3'])
+        queue.extend([signals + 'S'] * 7)
+        queue.extend(c.END_CASTING)
         self.caster.mode.calibration = True
         return queue
 
@@ -460,7 +456,7 @@ class Casting(object):
             return None
         signals = 'G5'
         self.caster.mode.calibration = True
-        return [GALLEY_TRIP] + [signals] * 7 + END_CASTING
+        return [c.GALLEY_TRIP] + [signals] * 7 + c.END_CASTING
 
     @cast_or_punch_result
     def _calibrate_diecase(self):
@@ -477,14 +473,16 @@ class Casting(object):
             mat = self.diecase.lookup_matrix(char)
             if not self.diecase:
                 mat.specify_units()
-            pos_0075, pos_0005 = mat.wedge_positions()
+            wedge_positions = mat.wedge_positions()
+            corrected = wedge_positions != (3, 8)
             if not queue:
-                queue.extend(double_justification(pos_0075, pos_0005))
-            elif (pos_0075, pos_0005) != (3, 8):
-                queue.extend(single_justification(pos_0075, pos_0005))
-            char = [mat.get_code() + ' // ' + mat.char]
+                queue.extend(double_justification(wedge_positions))
+            elif corrected:
+                queue.extend(single_justification(wedge_positions))
+            # Add S signal if width correction is in action
+            char = [(corrected and 'S' or '') + mat.code + ' // ' + mat.char]
             queue.extend(char * 3)
-        queue.extend(END_CASTING)
+        queue.extend(c.END_CASTING)
         return queue
 
     @choose_sensor_and_driver
@@ -668,26 +666,16 @@ class Casting(object):
         UI.pause()
 
 
-def single_justification(pos_0075, pos_0005):
+def single_justification(wedge_positions):
     """Returns a single justification sequence"""
-    return [PUMP_OFF + str(pos_0005), PUMP_ON + str(pos_0075)]
+    pos_0075, pos_0005 = wedge_positions
+    return [c.PUMP_OFF + str(pos_0005), c.PUMP_ON + str(pos_0075)]
 
 
-def double_justification(pos_0075, pos_0005):
+def double_justification(wedge_positions):
     """Returns a galley trip / double justification sequence"""
-    return [GALLEY_TRIP + str(pos_0005), PUMP_ON + str(pos_0075)]
-
-
-def unit_correction():
-    """Set the unit correction for the character"""
-    prompt = 'Unit correction: -2...10?'
-    correction = 20
-    while not -2 <= correction <= 10:
-        try:
-            correction = UI.enter_data_or_default(prompt, 0, int)
-        except (ValueError, TypeError):
-            correction = 20
-    return correction
+    pos_0075, pos_0005 = wedge_positions
+    return [c.GALLEY_TRIP + str(pos_0005), c.PUMP_ON + str(pos_0075)]
 
 
 def high_or_low_space():

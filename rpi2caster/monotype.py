@@ -165,7 +165,7 @@ class MonotypeCaster(object):
             try:
                 # Run a full machine cycle to turn the pump off
                 self.sensor.wait_for(True, 30)
-                self.output.valves_on(c.PUMP_STOP)
+                self.output.valves_on(['N', 'J', 'S', '0005'])
                 self.sensor.wait_for(False, 30)
                 self.output.valves_off()
                 UI.display('Pump is now off.')

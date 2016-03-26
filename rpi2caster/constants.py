@@ -31,7 +31,8 @@ DEFAULT_DATABASE_PATHS = ['/var/local/rpi2caster/monotype.db',
                           '/var/local/rpi2caster/rpi2caster.db',
                           'data/rpi2caster.db']
 
-# Control codes
-PUMP_STOP = ['N', 'J', '0005', 'S']
-PUMP_START = ['N', 'K', '0075', 'S']
-GALLEY_TRIP = ['N', 'K', 'J', '0005', '0075', 'S']
+# Constants for control sequences
+GALLEY_TRIP = 'NKJS 0005 0075'
+PUMP_OFF = 'NJS 0005'
+PUMP_ON = 'NKS 0075'
+END_CASTING = [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]
