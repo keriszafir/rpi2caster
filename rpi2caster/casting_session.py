@@ -310,18 +310,10 @@ class Casting(object):
         order = []
         matrix = self.diecase.lookup_matrix(high_or_low_space())
         while True:
-            prompt = ('Space width? [6] = 1/6em, [4] = 1/4em, [3] = 1/3em, '
-                      '[2] = 1/2em, [1] = 1em, [C] for custom width: ')
-            # Width in points
-            width = UI.simple_menu(prompt, {'6': 1/6, '4': 1/4, '3': 1/3,
-                                            '2': 1/2, '1': 1, 'C': 0}) * 12.0
-            # Ask about custom value, then specify units
-            while not 2 <= width <= 20:
-                prompt = 'Custom width in points (decimal, 2...20)?'
-                width = UI.enter_data_or_blank(prompt, float)
-            width = round(width * self.wedge.pica / 0.1667 *
-                          self.wedge.set_width / 8, 2)
-            delta = width - matrix.units
+            UI.display('\nWidth for this matrix: %spt min - %spt max\n'
+                       % (matrix.min_points, matrix.max_points))
+            width = tsf.enter_measure('space width')
+            delta = width - matrix.points
             prompt = 'How many lines?'
             lines = UI.enter_data_or_default(prompt, 1, int)
             order.extend([(matrix, delta, 0)] * lines)
