@@ -534,75 +534,43 @@ class Translator(object):
         return self.output_buffer
 
     def single_justification(self, wedge_positions):
-        """single_justification:
-
-        Single justification: the caster sets 0005, then 0075 + pump resumes.
-        Function adds a 0075-b, then 0005-a combination to buffer.
-        Supports both normal (0075, 0005, 0005+0075) and alternate
-        (NK, NJ, NKJ) justification modes. Adds an extra "S" signal
-        to assist setting the 0005 and 0075 levers in place (some machines
-        have a problem with that).
-        """
-        # This function is used during backwards-parsing and converting
-        # the combinations sequence after typesetting
-        # Codes are placed in the sequence that will be read by the caster
-        # So, we get 0005 first, then 0075
-        (pos0075, pos0005) = wedge_positions
-        # Inform the user about wedge positions
-        comment1 = ' // Pump off; setting 0005 to ' + str(pos0005)
-        comment2 = ' // Setting 0075 wedge to ' + str(pos0075) + ', pump on...'
-        # Add 0005-N-J-S-pos0005 first:
-        self.output_buffer.append(str(pos0005) + 'NJS 0005' + comment1)
-        # Add 0075-N-K-S-pos0075 next:
-        self.output_buffer.append(str(pos0075) + 'NKS 0075' + comment2)
-        return True
+        """Add 0075 + pos_0075, then 0005 + pos_0005"""
+        (pos_0075, pos_0005) = wedge_positions
+        return ['NKS 0075 %s' % pos_0075, 'NJS 0005 %s' % pos_0005]
 
     def double_justification(self, wedge_positions):
-        """double_justification:
-
-        Double justification: the caster sets 0005+0075 and puts the line
-        to the galley, then sets 0075 and pump resumes.
-        Function adds a 0075-b, then 0005-a combination to buffer.
-        Supports both normal (0075, 0005, 0005+0075)
-        and alternate (NK, NJ, NKJ) justification modes.
-        Adds an "S" signal also - to help delivering the suitable force
-        to the 0005 and 0075 levers (some machines have a problem with that).
-        """
-        (pos0075, pos0005) = wedge_positions
-        # Inform the user about the wedge positions
-        comment1 = ' // Line to the galley, setting 0005 to ' + str(pos0005)
-        comment2 = ' // Setting 0075 to ' + str(pos0075) + ', pump on...'
-        # Add 0005-N-J-S-pos0005 first:
-        self.output_buffer.append(str(pos0005) + 'NKJS 0005 0075' + comment1)
-        # Add 0075-N-K-S-pos0075 next:
-        self.output_buffer.append(str(pos0075) + 'NKS 0075' + comment2)
-        return True
+        """Add 0075 + pos_0075, then 0005-0075 + pos_0005"""
+        (pos_0075, pos_0005) = wedge_positions
+        return ['NKS 0075 %s' % pos_0075, 'NKJS 0005 0075 %s' % pos_0005]
 
 
-def parse_combination(combination):
-    """Simple function that gets the row and column from combination string."""
-    combination = str(combination).upper()
-    rows = []
-    # Look for column numbers from earliest to latest
-    column_numbers = ['NI', 'NL'] + list('ABCDEFGHIJKLMNO')
-    for num in column_numbers:
-        if num in combination:
-            column = num
-            break
-    else:
-        # No signal for column means we go all the way to "O" pin
-        column = 'O'
-    # Now look for a row number
-    # We can't look for them in ascending order though
-    for num in range(16, 0, -1):
-        if str(num) in combination:
-            combination = combination.replace(str(num), '')
-            rows.append(num)
-    # Get the minimum number
-    print(rows)
-    try:
-        row = min(rows)
-    except ValueError:
-        # This happens if no rows found - default to 15
-        row = 15
-    return (column, row)
+def enter_measure(meas = 'line length'):
+    """Enter the line length, choose measurement units
+    (for e.g. British or European measurement system).
+    Return length in DTP points."""
+    prompt = ('Enter the desired value for %s and measurement unit:\n'
+              'cc - cicero (.1776"), dd - Didot point, '
+              'Pp - printer\'s pica (.166"), pp - pica point,\n'
+              'Pc - DTP pica (.1667"), pt - DTP point,\n", in - inch, '
+              'mm - millimeter, cm - centimeter?\n (default: cc) : ' % meas)
+    factor = 1.0
+    # We need an ordered sequence here
+    symbols = ['Pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cm' 'mm', 'in', '"', '']
+    units = {'Pc': 12.0, 'pt': 1.0,
+             'Pp': 12*0.166/0.1667, 'pp': 0.166/0.1667,
+             'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667, '': 12*0.1776/0.1667,
+             'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
+    while True:
+        raw_string = input(prompt).lower()
+        try:
+            for symbol in symbols:
+                # Get the units
+                if raw_string.endswith(symbol):
+                    factor = units[symbol]
+                    input_string = raw_string.replace(symbol, '')
+                    input_string = input_string.strip()
+                    break
+            # Calculate length in DTP points and finish
+            return round(float(input_string) * factor, 2)
+        except (TypeError, ValueError):
+            print('Incorrect value - enter again...')

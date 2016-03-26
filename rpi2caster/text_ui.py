@@ -436,39 +436,6 @@ def edit_diecase_layout(diecase):
             pass
 
 
-def enter_line_length():
-    """Enter the line length, choose measurement units
-    (for e.g. British or European measurement system). Return length in
-    12-set units e.g. the standard Monotype measure."""
-    prompt = ('Enter the desired line length and measurement unit:\n'
-              'c - cicero (.1776"), p - pica (.166"), dtp - DTP pica (.1667"),'
-              '\n", in - inch, mm - millimeter, cm - centimeter?\n'
-              '(default: c) : ')
-    factor = 1.0
-    # We need an ordered sequence here
-    symbols = ['dtp', 'p', 'cm', 'c', 'mm', 'in', '"', '']
-    units = {'dtp': 0.1667, 'p': 0.166, 'cm': 0.3937, 'mm': 0.03937,
-             'c': 0.1776, '"': 1, 'in': 1, '': 0.1776}
-    while True:
-        raw_string = input(prompt).lower()
-        try:
-            for symbol in symbols:
-                # Get the units
-                if raw_string.endswith(symbol):
-                    factor = units[symbol]
-                    input_string = raw_string.replace(symbol, '')
-                    input_string = input_string.strip()
-                    break
-            # Calculate length in inches and go on
-            inches_length = float(input_string) * factor
-            break
-        except (TypeError, ValueError):
-            print('Incorrect value - enter again...')
-    # Return line length in 12-set units based on .1667" pica
-    # Will be normalized in the typesetting routines
-    return round(18 * 6 * inches_length)
-
-
 def exit_program(*_):
     """Exit program:
 
