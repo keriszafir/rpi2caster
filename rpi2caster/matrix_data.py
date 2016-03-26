@@ -340,12 +340,11 @@ class SelectDiecase(Diecase):
             mats = {i: mat for i, mat in enumerate(candidates, start=1)}
             UI.display(''.join(['Index'.ljust(10), 'Char'.ljust(10),
                                 'Styles'.ljust(30), 'Column'.ljust(10),
-                                'Row'.ljust(10), 'Units'.ljust(10)]))
+                                'Row'.ljust(10)]))
             for i, mat in mats.items():
                 record = [str(i).ljust(10), mat.char.ljust(10),
                           ', '.join(mat.styles).ljust(30),
-                          mat.column.ljust(10), str(mat.row).ljust(10),
-                          str(mat.units).ljust(10)]
+                          mat.column.ljust(10), str(mat.row).ljust(10)]
                 UI.display(''.join(record))
             prompt = 'Choose matrix (leave blank to enter manually)'
             choice = UI.enter_data_or_blank(prompt, int)
