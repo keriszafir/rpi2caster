@@ -550,7 +550,7 @@ class Casting(object):
         diecase_info = diecase and ' (current: %s)' % diecase or ''
         opts = [(e.exit_program, 'Exit', 'Exits the program', True),
                 (self.cast_composition, 'Cast composition',
-                 'Cast type from a selected ribbon',  ribbon and caster),
+                 'Cast type from a selected ribbon', ribbon and caster),
                 (self.cast_composition, 'Punch ribbon',
                  'Punch a paper ribbon for casting without the interface',
                  ribbon and not caster),

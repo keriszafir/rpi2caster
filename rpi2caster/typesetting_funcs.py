@@ -36,6 +36,7 @@ class TypesettingSession(object):
         """Sets up the parameters for the session"""
         pass
 
+
 class Settings(object):
     """Typesetting job settings"""
     def __init__(self):
@@ -483,7 +484,6 @@ class Translator(object):
         # Now we're done typesetting
         UI.pause('Typesetting finished!')
         return True
-
 
     def justify(self):
         """justify:
