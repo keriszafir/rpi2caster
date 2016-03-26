@@ -198,94 +198,6 @@ class SelectRibbon(Ribbon):
         return True
 
 
-class FontScheme(object):
-    """Font schemes store information about how many of each character is to be
-    cast when casting typecases. Each language has its own."""
-    def __init__(self):
-        self.scheme_id = None
-        self.description = None
-        self.language = None
-        self.layout = {}
-
-    def __iter__(self):
-        return iter(self.layout)
-
-    def __next__(self):
-        yield from self.layout
-
-    def __repr__(self):
-        return self.scheme_id or ''
-
-    @property
-    def parameters(self):
-        """Gets a list of parameters"""
-        return [(self.scheme_id, 'Font scheme ID'),
-                (self.description, 'Description'),
-                (self.language, 'Language')]
-
-    def set_scheme_id(self, scheme_id=None):
-        """Sets the scheme ID"""
-        prompt = 'Scheme ID? (leave blank to exit) : '
-        scheme_id = (scheme_id or UI.enter_data_or_blank(prompt) or
-                     self.scheme_id)
-        # Ask if we are sure we want to update this
-        # if self.scheme_id was set earlier
-        prompt = 'Are you sure to change the scheme ID?'
-        condition = (not self.scheme_id or scheme_id != self.scheme_id and
-                     UI.confirm(prompt, default=False))
-        if condition:
-            self.scheme_id = scheme_id
-            return True
-
-    def set_description(self, description=None):
-        """Manually sets the scheme's description"""
-        prompt = 'Enter the title: '
-        self.description = (description or UI.enter_data_or_blank(prompt) or
-                            self.description)
-
-    def set_language(self, language=None):
-        """Manually sets the language"""
-        prompt = 'Enter the language for this font scheme: '
-        self.language = (language or UI.enter_data_or_blank(prompt) or
-                         self.language)
-
-    def import_from_file(self, filename=None):
-        """Reads a text file and sets contents."""
-        self.layout = import_scheme_from_file(filename)
-
-    def delete_from_db(self):
-        """Deletes a scheme from database."""
-        if UI.confirm('Are you sure?', default=False):
-            try:
-                DB.delete_scheme(self)
-                UI.display('Font scheme definition deleted successfully.')
-            except (e.NoMatchingData, e.DatabaseQueryError):
-                UI.display('Cannot delete scheme from database!')
-
-    def store_in_db(self):
-        """Stores the scheme in database"""
-        try:
-            DB.add_scheme(self)
-            UI.pause('Data added successfully.')
-            return True
-        except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.pause('Cannot store scheme in database!')
-
-
-class SelectFontScheme(FontScheme):
-    """A class for font schemes selected from database or file"""
-    def __init__(self, scheme_id=None, filename=None):
-        super().__init__()
-        try:
-            scheme_data = (scheme_id and DB.get_scheme(scheme_id) or
-                           choose_scheme_from_db())
-            (self.scheme_id, self.description, self.language,
-             self.layout) = scheme_data
-        except (TypeError, e.NoMatchingData, e.DatabaseQueryError):
-            UI.display('Scheme choice failed. Starting a new one.')
-            self.layout = import_scheme_from_file(filename)
-
-
 def list_ribbons():
     """Lists all ribbons in the database."""
     data = DB.get_all_ribbons()
@@ -309,28 +221,6 @@ def list_ribbons():
         results[index] = ribbon[0]
     UI.display('\n\n')
     # Now we can return the number - ribbon ID pairs
-    return results
-
-
-def list_schemes():
-    """Lists all font schemes in the database."""
-    data = DB.get_all_schemes()
-    results = {}
-    UI.display('\n' +
-               'No.'.ljust(5) +
-               'Scheme ID'.ljust(20) +
-               'Description'.ljust(20) +
-               'Language'.ljust(20) +
-               '\n\n0 - start a new empty ribbon\n')
-    for index, scheme in enumerate(data, start=1):
-        # Collect scheme parameters
-        row = [str(index).ljust(5)]
-        row.extend([field.ljust(20) for field in scheme[:-1]])
-        UI.display(''.join(row))
-        # Add number and ID to the result that will be returned
-        results[index] = scheme[0]
-    UI.display('\n\n')
-    # Now we can return the number - scheme ID pairs
     return results
 
 
@@ -381,26 +271,6 @@ def import_ribbon_from_file(filename=None):
     return (ribbon_id, description, customer, diecase_id, wedge, contents)
 
 
-def import_scheme_from_file(filename=None):
-    """Imports scheme text from file"""
-    filename = filename or UI.enter_input_filename()
-    # Initialize the contents
-    with io.open(filename, mode='r') as scheme_file:
-        input_data = csv.reader(scheme_file, delimiter=';', quotechar='"')
-        all_records = [record for record in input_data]
-    displayed_lines = [' '.join(record) for record in all_records[:5]]
-    # Preview file
-    UI.display('File preview: displaying first 5 rows:\n')
-    UI.display('\n'.join(displayed_lines), end='\n\n')
-    # Ask if the first row is a header - if so, away with it
-    if UI.confirm('Is the 1st row a table header? ', default=True):
-        all_records.pop(0)
-    try:
-        return {char: int(qty) for char, qty in all_records}
-    except (KeyError, ValueError, IndexError):
-        return {}
-
-
 def choose_ribbon_from_db():
     """Chooses ribbon data from database"""
     prompt = 'Number of a ribbon? (0 for a new one, leave blank to exit): '
@@ -416,22 +286,4 @@ def choose_ribbon_from_db():
             UI.pause('Ribbon number is incorrect!')
         except (e.DatabaseQueryError, e.NoMatchingData):
             UI.display('No ribbons found in database')
-            return None
-
-
-def choose_scheme_from_db():
-    """Chooses scheme data from database"""
-    prompt = 'Number of a scheme? (0 for a new one, leave blank to exit): '
-    while True:
-        try:
-            data = list_schemes()
-            choice = UI.enter_data_or_exception(prompt, e.ReturnToMenu, int)
-            if not choice:
-                return None
-            else:
-                return DB.get_scheme(data[choice])
-        except KeyError:
-            UI.pause('Font scheme number is incorrect!')
-        except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.display('No font schemes found in database')
             return None
