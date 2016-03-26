@@ -358,7 +358,7 @@ class Casting(object):
                        matrix.char and ' // ' + matrix.char or '')
             # Get wedge positions. If correction needs to be applied
             # (positions other than 3/8), add "S"; add comment here too.
-            wedge_positions = matrix.wedge_positions(correction)
+            wedge_positions = matrix.wedge_positions
             mat_code = ((wedge_positions != (3, 8) and 'S' or '') +
                         matrix.code + comment)
             points_left = 0
@@ -474,7 +474,7 @@ class Casting(object):
             mat = self.diecase.lookup_matrix(char)
             if not self.diecase:
                 mat.specify_units()
-            wedge_positions = mat.wedge_positions()
+            wedge_positions = mat.wedge_positions
             corrected = wedge_positions != (3, 8)
             if not queue:
                 queue.extend(double_justification(wedge_positions))

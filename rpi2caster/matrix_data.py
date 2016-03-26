@@ -392,7 +392,7 @@ class Matrix(object):
         """Gets a DTP point (=.1667"/12) width for the matrix"""
         wedge = self.diecase.wedge
         points = self.units * wedge.set_width * wedge.pica / 18 / 0.1667
-        return round(points, 2)
+        return round(points, 3)
 
     @points.setter
     def points(self, points):
@@ -414,7 +414,7 @@ class Matrix(object):
         matrix row and wedge unit value, for wedges at 1/1"""
         # 3/8 - 1/1 = 2/7 so 2*15 + 7 = 37
         # 37 * 0.0005 = 0.0185 i.e. max inches we can take away
-        return round(max(self.row_points - 0.0185 * 72, 0), 2)
+        return round(max(self.row_points - 0.0185 * 72, 0), 3)
 
     @property
     def max_points(self):
@@ -424,7 +424,31 @@ class Matrix(object):
         # 187 * 0.0005 = 0.0935 i.e. max inches we can add
         # Matrix is typically .2 x .2 - anything wider will lead to a splash!
         # Safe limit is .19" and we don't let the mould open further
-        return round(min(self.row_points + 0.0935 * 72, 0.19 * 72), 2)
+        return round(min(self.row_points + 0.0935 * 72, 0.19 * 72), 3)
+
+    @property
+    def wedge_positions(self):
+        """Calculate the 0075 and 0005 wedge positions for this matrix
+        based on the current wedge used"""
+        diff = self.points - self.row_points
+        # The following calculations are done in 0005 wedge steps
+        # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
+        # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
+        # Add or take away a number of inches; diff is in points i.e. 1/72"
+        steps_0005 = int(diff * 2000 / 72) + 53
+        # Upper limit: 15/15 => 15*15=225 + 15 = 240
+        # Unsafe for casting from mats - .2x.2 size - larger leads to splash!
+        # Adding a high space for overhanging character is the way to do it
+        # Space casting is fine, we can open the mould as far as possible
+        steps_0005 = min(steps_0005, 240)
+        # Lower limit: 1/1 wedge positions => 15 + 1 = 16:
+        steps_0005 = max(16, steps_0005)
+        steps_0075 = 0
+        while steps_0005 > 15:
+            steps_0005 -= 15
+            steps_0075 += 1
+        # Got the wedge positions, return them
+        return (steps_0075, steps_0005)
 
     @property
     def row(self):
@@ -495,29 +519,6 @@ class Matrix(object):
         justification wedges and cast the character with the S-needle"""
         prompt = 'Unit value for the matrix?'
         self.units = UI.enter_data_or_default(prompt, self.row_units, int)
-
-    def wedge_positions(self, point_correction=0):
-        """Calculate the 0075 and 0005 wedge positions for this matrix
-        based on the current wedge used"""
-        diff = self.points + point_correction - self.row_points
-        # The following calculations are done in 0005 wedge steps
-        # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
-        # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
-        # Add or take away a number of inches; diff is in points i.e. 1/72"
-        steps_0005 = int(diff * 2000 / 72) + 53
-        # Upper limit: 15/15 => 15*15=225 + 15 = 240
-        # Unsafe for casting from mats - .2x.2 size - larger leads to splash!
-        # Adding a high space for overhanging character is the way to do it
-        # Space casting is fine, we can open the mould as far as possible
-        steps_0005 = min(steps_0005, 240)
-        # Lower limit: 1/1 wedge positions => 15 + 1 = 16:
-        steps_0005 = max(16, steps_0005)
-        steps_0075 = 0
-        while steps_0005 > 15:
-            steps_0005 -= 15
-            steps_0075 += 1
-        # Got the wedge positions, return them
-        return (steps_0075, steps_0005)
 
 
 def diecase_operations():

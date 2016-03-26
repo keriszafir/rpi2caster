@@ -135,16 +135,15 @@ class Wedge(object):
             units.append(units[-1])
         return units
 
-    @property
-    def points(self):
-        """Gets the point values for the wedge's rows"""
-        return [round(units * self.set_width * self.pica / 18 / 0.1667, 2)
-                for units in self.units]
-
     @units.setter
     def units(self, units):
         """Sets the wedge unit values"""
         self.__dict__['_units'] = units
+
+    @property
+    def points(self):
+        """Gets the point values for the wedge's rows"""
+        return [round(self.units_to_points(units), 3) for units in self.units]
 
     def units_to_points(self, units):
         """Gets a dtp point value for specified units"""
