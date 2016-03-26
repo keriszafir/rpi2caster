@@ -440,7 +440,7 @@ class Translator(object):
         return ['NKS 0075 %s' % pos_0075, 'NKJS 0005 0075 %s' % pos_0005]
 
 
-def enter_measure(meas = 'line length'):
+def enter_measure(name='line length'):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).
     Return length in DTP points."""
@@ -448,7 +448,7 @@ def enter_measure(meas = 'line length'):
               'cc - cicero (.1776"), dd - Didot point, '
               'Pp - printer\'s pica (.166"), pp - pica point,\n'
               'Pc - DTP pica (.1667"), pt - DTP point,\n", in - inch, '
-              'mm - millimeter, cm - centimeter?\n (default: cc) : ' % meas)
+              'mm - millimeter, cm - centimeter?\n (default: cc) : ' % name)
     factor = 1.0
     # We need an ordered sequence here
     symbols = ['Pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cm' 'mm', 'in', '"', '']
