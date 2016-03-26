@@ -4,8 +4,8 @@
 Data obtained from https://en.wikipedia.org/wiki/Letter_frequency
 All data is letter occurences relative to all letters in a sample of text.
 """
-from .global_settings import UI
 from math import ceil
+from .global_settings import UI
 
 FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'f': 2.027, 'v': 2.415, 'n': 8.542, 'å': 1.338, 'g': 2.862,
@@ -107,23 +107,47 @@ FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'i': 7.578, 'ð': 4.393, 'g': 4.241, 'p': 0.789, 'y': 0.9,
                 'h': 1.871, 'm': 4.041, 'ó': 0.994, 'j': 1.144, 'a': 10.11,
                 't': 4.953, 'ö': 0.777, 'l': 4.532, 'e': 6.418, 'æ': 0.867,
-                'k': 3.314, 'á': 1.799}}
+                'k': 3.314, 'á': 1.799},
+         '#': {'1': 10, '2': 10, '3': 10, '4': 10, '5': 10, '6': 10,
+               '7': 10, '8': 10, '9': 10, '0': 10}}
 
 LANGS = {'en': 'English', 'nl': 'Dutch', 'pl': 'Polish', 'de': 'German',
          'eo': 'Esperanto', 'tr': 'Turkish', 'it': 'Italian', 'cz': 'Czech',
          'fr': 'French', 'es': 'Spanish', 'pt': 'Portugese', 'da': 'Danish',
-         'fi': 'Finnish', 'sv': 'Swedish'}
+         'fi': 'Finnish', 'sv': 'Swedish', '#': 'numbers'}
 
 
-class LetterFrequency(object):
-    """Read and calculate letter frequencies, translate that to
-    casting order"""
-    def __init__(self, lang):
-        try:
-            UI.display('Calculating for %s' % LANGS[lang])
-            self.freqs = FREQS[lang]
-        except KeyError:
-            self.freqs = choose_language()
+class CharFreqs(object):
+    """Read and calculate char frequencies, translate that to casting order"""
+    def __init__(self, lang=None):
+        self.lang = lang in LANGS and lang or self.choose_language()
+        self.scale = self.define_scale()
+        self.upper_to_lower = self.define_ratio()
+
+    def __getitem__(self, item):
+        return self.freqs.get(item, 0)
+
+    def __repr__(self):
+        return self.lang
+
+    @property
+    def freqs(self):
+        return FREQS.get(self.lang, FREQS['en'])
+
+    @property
+    def type_bill(self):
+        """Returns an arranged list of tuples:
+        (char, points_correction, qty)
+        for each character."""
+        # Start with lowercase
+        bill = [(char, 0, ceil(self.chars_for_100_a(char) * self.scale))
+                for char in sorted(self.freqs)]
+        # Add uppercase
+        bill.extend([(char.upper(), 0,
+                      ceil(self.chars_for_100_a(char) * self.scale *
+                      self.upper_to_lower))
+                     for char in sorted(self.freqs) if char.isalpha()])
+        return bill
 
     def chars_for_100_a(self, char):
         """Get a number of characters normalized to 100 "a"."""
@@ -131,23 +155,23 @@ class LetterFrequency(object):
         char_freq = self.freqs.get(char, 0)
         return 100.0 * char_freq / a_freq
 
-    def chars_for_1000_chars(self, char):
-        """Get a number of chars for 1000 characters overall"""
-        char_freq = self.freqs.get(char, 0)
-        return ceil(10 * char_freq)
-
     def define_scale(self):
         """Define scale of production"""
-        scale = 0
-        while not scale:
-            prompt = ('How much type do you want to cast?\n'
-                      'Enter a number (e.g. 10000) for a ')
-            scale_string = UI.enter_data_or_default(prompt)
+        prompt = ('How much "a" characters do you want to cast?\n'
+                  'The quantities of other characters will be calculated '
+                  'based on the letter frequency of the language.')
+        return UI.enter_data_or_default(prompt, 100, int) / 100
 
+    def define_ratio(self):
+        """Define uppercase to lowercase ratio"""
+        prompt = ('Uppercase to lowercase ratio in %?')
+        return UI.enter_data_or_default(prompt, 100, float) / 100.0
 
-def choose_language():
-    """Display available languages and let user choose one"""
-    # No zeroth option
-    options = [('', '', '', False)]
-    options.extend([(FREQS[lang], LANGS[lang], '', True) for lang in LANGS])
-    return UI.menu('Choose language', options)
+    def choose_language(self):
+        """Display available languages and let user choose one/
+        Returns a string with language code (e.g. en, nl, de)."""
+        # No zeroth option
+        options = [('', '', '')]
+        options.extend([(lang, '%s - %s' % (lang, LANGS[lang]), '')
+                        for lang in sorted(LANGS)])
+        return UI.menu(options, header='Choose language')

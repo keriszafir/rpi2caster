@@ -23,7 +23,7 @@ from . import exceptions as e
 # Constants shared between modules
 from . import constants as c
 # Typesetting functions module
-# from . import typesetting_funcs
+from . import typesetting_funcs as tsf
 # Caster backend
 from . import monotype
 # Casting stats
@@ -285,17 +285,20 @@ class Casting(object):
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
         enter = UI.enter_data_or_default
-        scheme = typesetting_data.SelectFontScheme().layout
-        prompt = 'Scale for %s in %%, relative to 100 "a" characters?'
+        freqs = letter_frequencies.CharFreqs()
+        bill = freqs.type_bill
         UI.display('Styles to cast?')
         styles = UI.choose_styles()
         order = []
         for style in styles:
             UI.display_header(style)
-            scale = enter(prompt % style, 100, int) / 100.0
-            for char in sorted(scheme):
-                qty = int(scale * scheme[char])
-                UI.display('%s: %s' % (char, qty))
+            if len(styles) == 1 or style == 'roman':
+                scale = 1
+            else:
+                scale = enter('Scale for %s?' % style, 100, int) / 100.0
+            for char, correction, chars_qty in bill:
+                qty = int(scale * chars_qty)
+                UI.display('%s: %s' % (char, chars_qty))
                 matrix = self.diecase.lookup_matrix(char, style)
                 order.append((matrix, 0, qty))
             UI.pause()
@@ -692,14 +695,3 @@ def high_or_low_space():
     spaces = {True: '_', False: ' '}
     high_or_low = UI.confirm('High space?', default=False)
     return spaces[high_or_low]
-
-def choose_lang():
-    """Chooses a language from a list"""
-    for code, lang in sorted(letter_frequencies.LANGS).items():
-        UI.display('%s - %s' % (code, lang))
-    lang_code = ''
-    while lang_code not in letter_frequencies.LANGS:
-        lang_code = UI.enter_data_or_exception('Language?', e.return_to_menu)
-    letter_freqs = letter_frequencies.FREQS[lang_code]
-    # Normalize the letter frequencies to the number of "a"
-
