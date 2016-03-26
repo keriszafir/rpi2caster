@@ -360,13 +360,6 @@ class Matrix(object):
         return self.diecase.wedge[self.row]
 
     @property
-    def alt_row_units(self):
-        """Gets the unit width value calculated for alternative wedge.
-        If no alt. wedge is specified, units are calculated for the
-        diecase's assigned wedge."""
-        return self.diecase.alternative_wedge[self.row]
-
-    @property
     def units(self):
         """Gets the specific or default number of units"""
         return self.__dict__.get('_units', self.row_units)
@@ -378,17 +371,40 @@ class Matrix(object):
             self.__dict__['_units'] = units
 
     @property
-    def alt_units(self):
-        """Recalculates the units for an alternative wedge (with different
-        unit values or set width)"""
-        # Normally we give the unit value for diecase's assigned wedge
+    def points(self):
+        """Gets a DTP point (=.1667"/12) width for the matrix"""
         wedge = self.diecase.wedge
-        alt_wedge = self.diecase.alternative_wedge
-        # Recalculating for narrower set will make more units of that set
-        # Correct for different pica value too
-        # (less units for .1667 than .1660 type if both are the same width)
-        return int(round(self.units * wedge.pica / alt_wedge.pica *
-                         wedge.set_width / alt_wedge.set_width, 0))
+        points = self.units * wedge.set_width * wedge.pica / 18 / 0.1667
+        return round(points, 2)
+
+    @points.setter
+    def points(self, points):
+        """Sets a DTP point value for the mat and updates the unit value"""
+        wedge = self.diecase.wedge
+        self.units = 18 * 0.1667 * points / wedge.set_width / wedge.pica
+
+    @property
+    def row_points(self):
+        """Gets a number of points for characters in the diecase row"""
+        return self.diecase.alternative_wedge.points[self.row]
+
+    @property
+    def min_points(self):
+        """Gets the minimum unit value for a given wedge, based on the
+        matrix row and wedge unit value, for wedges at 1/1"""
+        # 3/8 - 1/1 = 2/7 so 2*15 + 7 = 37
+        # 37 * 0.0005 = 0.0185 i.e. max inches we can take away
+        return round(max(self.row_points - 0.0185 * 72, 0), 2)
+
+    @property
+    def max_points(self):
+        """Gets the minimum unit value for a given wedge, based on the
+        matrix row and wedge unit value, for wedges at 1/1"""
+        # 15/15 - 3/8 = 12/7 so 12*15 + 7 = 187
+        # 187 * 0.0005 = 0.0935 i.e. max inches we can add
+        # Matrix is typically .2 x .2 - anything wider will lead to a splash!
+        # Safe limit is .19" and we don't let the mould open further
+        return round(min(self.row_points + 0.0935 * 72, 0.19 * 72), 2)
 
     @property
     def row(self):
@@ -452,14 +468,6 @@ class Matrix(object):
         """Edit the matrix data - this depends on the user interface"""
         UI.edit_matrix(self)
 
-    def get_code(self, unit_correction=0):
-        """Get the code for the matrix - with or without S, depending on
-        whether justification wedges need to be in action."""
-        if self.wedge_positions(unit_correction) != (3, 8):
-            return self.code + 'S'
-        else:
-            return self.code
-
     def specify_units(self):
         """Give a user-defined unit value for the matrix;
         mostly used for matrices placed in a different row than the
@@ -468,16 +476,19 @@ class Matrix(object):
         prompt = 'Unit value for the matrix?'
         self.units = UI.enter_data_or_default(prompt, self.row_units, int)
 
-    def wedge_positions(self, unit_correction=0):
+    def wedge_positions(self, point_correction=0):
         """Calculate the 0075 and 0005 wedge positions for this matrix
         based on the current wedge used"""
-        wedge = self.diecase.alternative_wedge
-        diff = self.alt_units + unit_correction - self.alt_row_units
-        # 53 = neutral position where no corrections applied, i.e. 3/8
-        # diff in units of given set; wedge pica = 0.166 or 0.1667
-        steps_0005 = int(diff / wedge.pica * wedge.set_width * 0.25617) + 53
+        diff = self.points + point_correction - self.row_points
+        # The following calculations are done in 0005 wedge steps
+        # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
+        # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
+        # Add or take away a number of inches; diff is in points i.e. 1/72"
+        steps_0005 = int(diff * 2000 / 72) + 53
         # Upper limit: 15/15 => 15*15=225 + 15 = 240
-        # (unsafe for casting from mats!)
+        # Unsafe for casting from mats - .2x.2 size - larger leads to splash!
+        # Adding a high space for overhanging character is the way to do it
+        # Space casting is fine, we can open the mould as far as possible
         steps_0005 = min(steps_0005, 240)
         # Lower limit: 1/1 wedge positions => 15 + 1 = 16:
         steps_0005 = max(16, steps_0005)

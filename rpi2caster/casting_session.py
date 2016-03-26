@@ -265,7 +265,10 @@ class Casting(object):
             if self.diecase:
                 char = UI.enter_data_or_blank('Character?')
                 matrix = self.diecase.lookup_matrix(char)
-                delta = unit_correction()
+                prompt = ('Width correction? (%.2f...%.2f points)'
+                          % (matrix.min_points - matrix.points,
+                             matrix.max_points - matrix.points))
+                delta = UI.enter_data_or_default(prompt, 0, float)
             else:
                 matrix = self.diecase.lookup_matrix()
                 matrix.specify_units()
@@ -334,7 +337,7 @@ class Casting(object):
         Each character is specified by a tuple:
             (matrix, delta, qty),   where:
         matrix is a matrix_data.Matrix object,
-        delta is unit width correction (-2...+10),
+        delta is point correction,
         qty is quantity (0 for a filled line, >0 for a given number of chars).
 
         If there is too many chars for a single line - will cast more lines.
@@ -346,58 +349,61 @@ class Casting(object):
         if not order:
             e.return_to_menu()
         quad = self.diecase.decode_matrix('O15')
-        quad.char = ' '
-        order = [(quad, 0, 0)] * 2 + list(order)
-        # Two quads before and after makes 72 - make line shorter
-        line_length = (UI.enter_line_length() * 0.1667 / self.wedge.pica *
-                       self.wedge.set_width / 12) - 72
+        space = self.diecase.decode_matrix('G2')
+        space.char = quad.char = ' '
+        # Add two lines of quads to pre-heat the mould
+        order = [(quad, 0, 0)] * 2 + [x for x in order]
+        # Enter line length, in points
+        measure = tsf.enter_measure('galley width') - 4 * quad.points
         UI.display('Each line will have two em-quads at the start '
                    'and at the end, to support the type.\n'
                    'Starting with two lines of quads to heat up the mould.')
         for (matrix, delta, qty) in order:
-            char_width = matrix.units + delta
-            (pos_0075, pos_0005) = matrix.wedge_positions(delta)
+            char_width = matrix.points + delta
+            wedge_positions = matrix.wedge_positions(delta)
             # Add comment if mat has a char specified
             comment = (matrix.islowspace() and ' // low space' or
                        matrix.ishighspace() and ' // high space' or
                        matrix.char and ' // ' + matrix.char or '')
-            mat_code = matrix.get_code(delta, self.wedge) + comment
-            units_left = 0
+            mat_code = ((wedge_positions != (3, 8) and 'S' or '') +
+                        matrix.code + comment)
+            points_left = 0
             codes = []
             # Qty = 0 means that we fill the line to the brim
             # (cast single line)
             if not qty and matrix.islowspace():
                 # Low spaces - fill the line with them
-                qty = max(line_length // char_width - 1, 0)
+                qty = max(measure // char_width - 1, 0)
             elif not qty:
                 # Chars separated by G-2 spaces - count these units too
-                qty = max(line_length // (char_width + self.wedge[2]) - 1, 0)
+                qty = measure // (char_width + space.points) - 1
             while qty > 0:
                 # Start the line
-                codes = double_justification(pos_0075, pos_0005) + ['O15'] * 2
-                units_left = line_length
+                codes = double_justification(wedge_positions)
+                codes.extend([quad.code] * 2)
+                points_left = measure
                 # Fill line with sorts and spaces (to slow down casting
                 # and prevent matrix overheating)
-                while units_left > char_width and qty > 0:
+                while points_left > char_width and qty > 0:
                     codes.append(mat_code)
-                    units_left -= char_width
+                    points_left -= char_width
                     qty -= 1
                     # For low spaces and quads, we can cast one after another
                     if not matrix.islowspace():
-                        codes.extend(['G2'])
-                        units_left -= self.wedge[2]
-                while not qty and units_left > self.wedge[15]:
+                        codes.extend([space.code])
+                        points_left -= space.points
+                while not qty and points_left > quad.points:
                     # Fill with quads first...
-                    codes.append('O15')
-                    units_left -= self.wedge[15]
-                while not qty and units_left > self.wedge[2]:
+                    codes.append(quad.code)
+                    points_left -= quad.points
+                while not qty and points_left > space.points:
                     # ...later with spaces...
-                    codes.append('G2')
-                    units_left -= self.wedge[2]
+                    codes.append(space.code)
+                    points_left -= space.points
                 # Finally add two quads at the end and add to queue
-                codes.extend(['O15'] * 2)
+                codes.extend([quad.code] * 2)
                 queue.extend(codes)
-        return queue + END_CASTING
+        return queue + c.END_CASTING
 
     @cast_or_punch_result
     def adhoc_typesetting(self):
