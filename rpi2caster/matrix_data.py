@@ -398,7 +398,10 @@ class Matrix(object):
     def points(self, points):
         """Sets a DTP point value for the mat and updates the unit value"""
         wedge = self.diecase.wedge
-        self.units = 18 * 0.1667 * points / wedge.set_width / wedge.pica
+        # Set constraints on width
+        lim_points = min(points, self.max_points)
+        lim_points = max(lim_points, self.min_points)
+        self.units = 18 * 0.1667 * lim_points / wedge.set_width / wedge.pica
 
     @property
     def row_points(self):

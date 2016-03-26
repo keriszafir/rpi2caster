@@ -269,12 +269,12 @@ class Casting(object):
                           % (matrix.min_points - matrix.points,
                              matrix.max_points - matrix.points))
                 delta = UI.enter_data_or_default(prompt, 0, float)
+                matrix.points += delta
             else:
                 matrix = self.diecase.lookup_matrix()
                 matrix.specify_units()
-                delta = 0
             qty = UI.enter_data_or_default('How many sorts?', 10, int)
-            order.append((matrix, delta, qty))
+            order.append((matrix, qty))
             prompt = 'More sorts? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
                 break
@@ -292,14 +292,14 @@ class Casting(object):
         for style in styles:
             UI.display_header(style)
             if len(styles) == 1 or style == 'roman':
-                scale = 1
+                scale = 1.0
             else:
-                scale = enter('Scale for %s?' % style, 100, int) / 100.0
-            for char, correction, chars_qty in bill:
+                scale = enter('Scale for %s?' % style, 100, float) / 100.0
+            for char, chars_qty in bill:
                 qty = int(scale * chars_qty)
                 UI.display('%s: %s' % (char, chars_qty))
                 matrix = self.diecase.lookup_matrix(char, style)
-                order.append((matrix, 0, qty))
+                order.append((matrix, qty))
             UI.pause()
         self.cast_batch(order)
 
@@ -313,10 +313,10 @@ class Casting(object):
             UI.display('\nWidth for this matrix: %spt min - %spt max\n'
                        % (matrix.min_points, matrix.max_points))
             width = tsf.enter_measure('space width')
-            delta = width - matrix.points
+            matrix.points = width
             prompt = 'How many lines?'
             lines = UI.enter_data_or_default(prompt, 1, int)
-            order.extend([(matrix, delta, 0)] * lines)
+            order.extend([(matrix, 0)] * lines)
             prompt = 'More spaces? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
                 break
@@ -342,21 +342,23 @@ class Casting(object):
             e.return_to_menu()
         quad = self.diecase.decode_matrix('O15')
         space = self.diecase.decode_matrix('G2')
+        space.points = 3
         space.char = quad.char = ' '
         # Add two lines of quads to pre-heat the mould
-        order = [(quad, 0, 0)] * 2 + [x for x in order]
+        order = [(quad, 0)] * 2 + [x for x in order]
         # Enter line length, in points
         measure = tsf.enter_measure('galley width') - 4 * quad.points
         UI.display('Each line will have two em-quads at the start '
                    'and at the end, to support the type.\n'
                    'Starting with two lines of quads to heat up the mould.')
-        for (matrix, delta, qty) in order:
-            char_width = matrix.points + delta
-            wedge_positions = matrix.wedge_positions(delta)
+        for (matrix, qty) in order:
             # Add comment if mat has a char specified
             comment = (matrix.islowspace() and ' // low space' or
                        matrix.ishighspace() and ' // high space' or
                        matrix.char and ' // ' + matrix.char or '')
+            # Get wedge positions. If correction needs to be applied
+            # (positions other than 3/8), add "S"; add comment here too.
+            wedge_positions = matrix.wedge_positions(correction)
             mat_code = ((wedge_positions != (3, 8) and 'S' or '') +
                         matrix.code + comment)
             points_left = 0
@@ -365,10 +367,10 @@ class Casting(object):
             # (cast single line)
             if not qty and matrix.islowspace():
                 # Low spaces - fill the line with them
-                qty = max(measure // char_width - 1, 0)
+                qty = max(measure // matrix.points - 1, 0)
             elif not qty:
                 # Chars separated by G-2 spaces - count these units too
-                qty = measure // (char_width + space.points) - 1
+                qty = measure // (matrix.points + space.points) - 1
             while qty > 0:
                 # Start the line
                 codes = double_justification(wedge_positions)
@@ -376,9 +378,9 @@ class Casting(object):
                 points_left = measure
                 # Fill line with sorts and spaces (to slow down casting
                 # and prevent matrix overheating)
-                while points_left > char_width and qty > 0:
+                while points_left > matrix.points and qty > 0:
                     codes.append(mat_code)
-                    points_left -= char_width
+                    points_left -= matrix.points
                     qty -= 1
                     # For low spaces and quads, we can cast one after another
                     if not matrix.islowspace():

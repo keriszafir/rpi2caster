@@ -143,9 +143,8 @@ class CharFreqs(object):
         bill = [(char, 0, ceil(self.chars_for_100_a(char) * self.scale))
                 for char in sorted(self.freqs)]
         # Add uppercase
-        bill.extend([(char.upper(), 0,
-                      ceil(self.chars_for_100_a(char) * self.scale *
-                      self.upper_to_lower))
+        bill.extend([(char.upper(), ceil(self.chars_for_100_a(char) *
+                      self.scale * self.upper_to_lower))
                      for char in sorted(self.freqs) if char.isalpha()])
         return bill
 
