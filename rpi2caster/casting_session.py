@@ -96,7 +96,8 @@ def prepare_job(ribbon_casting_workflow):
             self.stats.runs = abs(UI.enter_data_or_default(prompt, 1, int))
             # Line skipping - ask user if they want to skip any initial line(s)
             prompt = 'How many initial lines do you want to skip?'
-            l_skipped = abs(UI.enter_data_or_default(prompt, 0, int))
+            l_skipped = (self.stats.get_ribbon_lines() > 1 and
+                         abs(UI.enter_data_or_default(prompt, 0, int)) or 0)
         UI.display_parameters({'Session info': self.stats.session_parameters})
         # For each casting run repeat
         while self.stats.get_runs_left():
