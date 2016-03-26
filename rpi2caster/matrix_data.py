@@ -19,6 +19,9 @@ from . import parsing as p
 from . import database
 # User interface
 from .global_settings import UI
+# Letter frequency for completeness testing
+from . import letter_frequencies as lf
+# Make or use existing database instance
 DB = database.Database()
 
 
@@ -126,7 +129,20 @@ class Diecase(object):
         if missing:
             UI.display('Missing mats for %s: %s' % (style, ', '.join(missing)))
         else:
-            UI.display('The diecase has all characters we need.')
+            UI.display('All characters for %s are present.' % style)
+
+    def test_completeness(self):
+        """Choose a language and test whether the diecase contains all
+        characters, and if not, list them"""
+        charset = [x for x in lf.CharFreqs()]
+        uppercase = [char.upper() for char in charset]
+        lowercase = [char.lower() for char in charset]
+        all_chars = ''.join(list(sorted(set(uppercase + lowercase))))
+        UI.display('\nCharacters: %s\n' % all_chars)
+        styles = UI.choose_styles()
+        for style in styles:
+            self.check_missing_characters(all_chars, style)
+        UI.pause()
 
     def set_diecase_id(self, diecase_id=None):
         """Sets a diecase ID"""
@@ -187,6 +203,7 @@ class Diecase(object):
                                        'Wedge data': self.wedge.parameters})
                 options = {'M': e.return_to_menu,
                            'T': self.set_typeface,
+                           'A': self.test_completeness,
                            'W': self.assign_wedge,
                            'ID': self.set_diecase_id,
                            'E': self.edit_layout,
@@ -198,7 +215,8 @@ class Diecase(object):
                 messages = ['\nMatrix case manipulation:\n\n'
                             '[V]iew, [N]ew, [E]dit, [I]mport '
                             'or e[X]port layout\nAssign [W]edge, '
-                            'change [T]ypeface or diecase [ID]\n\n']
+                            'change [T]ypeface or diecase [ID]\n'
+                            '[A] - check if all characters are in diecase\n\n']
                 # Save to database needs a complete set of metadata
                 required = {'Typeface': self.typeface,
                             'Diecase ID': self.diecase_id}
