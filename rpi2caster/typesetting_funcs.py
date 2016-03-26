@@ -446,13 +446,13 @@ def enter_measure(name='line length'):
     Return length in DTP points."""
     prompt = ('Enter the desired value for %s and measurement unit:\n'
               'cc - cicero (.1776"), dd - Didot point, '
-              'Pp - printer\'s pica (.166"), pp - pica point,\n'
-              'Pc - DTP pica (.1667"), pt - DTP point,\n", in - inch, '
+              'Pp - printer\'s pica (.1660"), pp - American pica point,\n'
+              'Pt - DTP pica (.1667"), pt - DTP point,\n", in - inch, '
               'mm - millimeter, cm - centimeter?\n (default: cc) : ' % name)
     factor = 1.0
     # We need an ordered sequence here
-    symbols = ['Pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cm' 'mm', 'in', '"', '']
-    units = {'Pc': 12.0, 'pt': 1.0,
+    symbols = ['Pt', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cm' 'mm', 'in', '"', '']
+    units = {'Pt': 12.0, 'pt': 1.0,
              'Pp': 12*0.166/0.1667, 'pp': 0.166/0.1667,
              'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667, '': 12*0.1776/0.1667,
              'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
