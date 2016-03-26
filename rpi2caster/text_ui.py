@@ -59,9 +59,12 @@ def menu(options, header='', footer='', no_debug=False):
     for i, (function, desc, long_desc) in enumerate(options):
         if i > 0:
             functions.append(function)
-            print('\t %i : %s \n\t\t %s \n' % (i, desc, long_desc))
+            if long_desc:
+                long_desc = '\n\t\t %s ' % long_desc
+            print('\t %i : %s%s\n' % (i, desc, long_desc))
     # Option 0 is displayed last, add some whitespace around it
-    print('\n\t %i : %s \n\t\t %s \n' % (0, zero_desc, zero_long_desc))
+    if zero_desc:
+        print('\n\t %i : %s \n\t\t %s \n' % (0, zero_desc, zero_long_desc))
     # Print footer, if defined
     if footer:
         print(footer, end='\n\n')
