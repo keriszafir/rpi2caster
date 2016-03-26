@@ -134,10 +134,6 @@ class InputData(object):
         # This variable will prevent yielding a number of subsequent chars
         # after a ligature or command has been found and yielded.
         skip_steps = 0
-        spaces_names = {self.spaces[name]['symbol']: name
-                        for name in self.spaces}
-        # Construct a list of characters that the diecase contains
-        spaces = [space for space in spaces_names]
         available_characters = COMMANDS + matrices + spaces
         # Characters which will be skipped
         ignored = ('\n',)
@@ -157,7 +153,7 @@ class InputData(object):
                         yield spaces_names.get(char, char)
                         # End on first (largest) combination found
                         break
-                except IndexError:
+                except:
                     # Cannot generate a ligature (no more characters in input)
                     # Iterate further
                     pass
@@ -350,106 +346,6 @@ class Translator(object):
         self.line_buffer.append((combination, char_units, char))
         # Return the character's unit width
         return char_units
-
-    def _get_space_code(self, desired_unit_width, high_space=False):
-        """get_space_code:
-
-        Gets coordinates for the space of a desired unit width.
-        First, looks for spaces of matching width. If it fails,
-        uses unit-shift (if available) for a broader choice of spaces,
-        and if this fails too, applies justification with the S-needle.
-
-        Returns (space_code, wedge_positions).
-        Adds 'S' to the space code if justification is applied. In this case,
-        wedge_positions are (pos0075, pos0005) - min. (1, 1), max (15, 15).
-        Wedge positions are (None, None) if justification is not applied.
-        """
-        # Space style: " " for low space and "_" for high space
-        space_symbols = {'□': False, ' ': False, '_': True, '▣': True}
-        available_spaces = [sp for sp in self.diecase_layout if
-                            sp[0] == space_symbols[high_space]]
-        spaces = []
-        # Gather non-shifted spaces
-        for space in available_spaces:
-            # Get the unit value for this space
-            column = space[2]
-            row = space[3]
-            if row < 16:
-                space_unit_width = self.units[row]
-                space_code = column + str(row)
-                spaces.append((space_unit_width, space_code))
-        # Try matching a first available space
-        for (space_unit_width, space_code) in spaces:
-            unit_difference = desired_unit_width - space_unit_width
-            if 0 <= unit_difference < 10:
-                # Unit correction: add max 10
-                return space_code
-        else:
-            # Return the space that is narrower and units can be added
-            return False
-
-    def _configure_spaces(self):
-        """Chooses the spaces that will be used in typesetting."""
-        # To make lines shorter
-        enter = UI.enter_data_or_blank
-        enter_type = UI.enter_data_or_blank
-        get_space_code = self._get_space_code
-        y_n = UI.confirm
-        # List available spaces
-        # Matrix in layout is defined as follows:
-        # (character, (style1, style2...)) : (column, row, unit_width)
-        var_units_prompt = 'How many units min. (default: 4)? '
-        var_symbol_prompt = ('Variable space symbol in text file? '
-                             '(default: " ") ? ')
-        fixed_units_prompt = 'How many units (default: 9)? '
-        fixed_symbol_prompt = ('Fixed space symbol in text file? '
-                               '(default: "_") ? ')
-        nbsp_units_prompt = 'How many units (default: 9)? '
-        nbsp_symbol_prompt = ('Non-breaking space symbol in text file? '
-                              '(default: "~") ? ')
-        quad_symbol_prompt = ('Em-quad symbol in text file? '
-                              '(default: "\\t") ? ')
-        # Choose spaces
-        spaces = {}
-        # Variable space (justified) - minimum units
-        # Ask if low or high and save the choice
-        variable_space = y_n('Variable: is a high space? ')
-        spaces['var']['high'] = variable_space
-        # Ask for minimum number of units of given set for the variable space
-        spaces['var']['units'] = enter_type(var_units_prompt, int) or 4
-        # Variable space code will be determined during justification
-        # Don't do it now yet - we don't know the wedge positions
-        spaces['var']['code'] = 'GS2'
-        # Ask for the symbol representing the space in text
-        spaces['var']['symbol'] = enter(var_symbol_prompt) or ' '
-        # Fixed space (allows line-breaking)
-        # Ask if low or high and save the choice
-        spaces['fixed']['high'] = y_n('Fixed: is a high space? ')
-        # Ask for unit-width of this space
-        spaces['fixed']['units'] = enter_type(fixed_units_prompt, int) or 9
-        # Determine fixed space code
-        spaces['fixed']['code'] = get_space_code(spaces['fixed']['high'],
-                                                 spaces['fixed']['units'])
-        # Ask for the symbol representing the space in text
-        spaces['fixed']['symbol'] = enter(fixed_symbol_prompt) or '_'
-        # Non-breaking space
-        # Ask if low or high and save the choice
-        spaces['nb']['high'] = y_n('Non-breaking: is a high space? ')
-        # Ask for unit-width of this space
-        spaces['nb']['units'] = enter_type(nbsp_units_prompt, int) or 9
-        # Determine non-breaking space code
-        spaces['nb']['code'] = get_space_code(spaces['nb']['high'],
-                                              spaces['nb']['units'])
-        # Ask for the symbol representing the space in text
-        spaces['nb']['symbol'] = enter(nbsp_symbol_prompt) or '~'
-        # Set up the quad code arbitrarily
-        spaces['quad']['code'] = 'O15'
-        spaces['quad']['high'] = False
-        spaces['quad']['units'] = 18
-        # Em quad symbol choice
-        spaces['quad']['symbol'] = enter(quad_symbol_prompt) or '\t'
-        # Finalize setup
-        self.spaces = spaces
 
     def manual_compose(self):
         """Reads text fragments from input, then composes them, and justifies
