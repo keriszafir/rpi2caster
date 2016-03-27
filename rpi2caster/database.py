@@ -85,10 +85,11 @@ class Database(object):
         """Gets all diecases stored in database."""
         with self.db_connection:
             try:
+                sql_query = 'SELECT * FROM matrix_cases ORDER BY diecase_id'
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM matrix_cases')
-                # Check if we got any:
+                cursor.execute(sql_query)
                 results = cursor.fetchall()
+                # Check if we got any:
                 if not results:
                     raise exceptions.NoMatchingData
                 return results
@@ -131,25 +132,16 @@ class Database(object):
                 diecase = list(cursor.fetchone())
                 # De-serialize the diecase layout, convert it back to a list
                 raw_layout = json.loads(diecase.pop())
-                # Convert the layout
-                # Record is now 'character style1,style2... column row units'
-                # Make it a list
+                # Make sure the layout has specified units
                 layout = []
                 for record in raw_layout:
-                    # Make a tuple of styles
-                    (char, styles, column, row, units) = record
-                    # Last field - unit width - was not mandatory
-                    # Try to convert it to int
-                    # If no unit width is specified, use None instead
+                    (char, styles, coordinates, units) = record
                     try:
                         units = int(units)
                     except (IndexError, ValueError):
-                        record.append(0)
-                    record = (char, tuple(styles), column, int(row), units)
+                        units = 0
+                    record = (char, styles, coordinates, units)
                     layout.append(record)
-                    # Record is now:
-                    # [character, (style1, style2...), column, row, units]
-                # Add the layout back to diecase and return the data
                 diecase.append(layout)
                 return diecase
             except (TypeError, ValueError, IndexError):
@@ -176,7 +168,7 @@ class Database(object):
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
-                cursor.execute('SELECT * FROM ribbons')
+                cursor.execute('SELECT * FROM ribbons ORDER BY ribbon_id')
                 # Check if we got any:
                 results = cursor.fetchall()
                 if not results:
@@ -245,3 +237,39 @@ class Database(object):
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
+
+    def correct_diecase_layout(self):
+        """Applies diecase layout correction for rpi2caster 0.4"""
+        st_dict = {'roman': 'r', 'bold': 'b', 'italic': 'i', 'smallcaps': 's',
+                   'small caps': 's', 'small_caps': 's', 'subscript': 'l',
+                   'superscript': 'u', 'lower': 'l', 'upper': 'u',
+                   'superior': 'u', 'inferior': 'l'}
+        with self.db_connection:
+            sql_query = 'SELECT * FROM matrix_cases ORDER BY diecase_id'
+            cursor = self.db_connection.cursor()
+            cursor.execute(sql_query)
+            results = cursor.fetchall()
+            # Check if we got any:
+            if not results:
+                print('No results found in database')
+                return
+            for row in results:
+                (diecase_id, _, _, layout) = row
+                try:
+                    layout = json.loads(layout)
+                    mangled_layout = []
+                    for matrix in layout:
+                        (char, styles, column, row, units) = matrix
+                        coordinates = '%s%s' % (column, row)
+                        mangled_styles = ''.join([st_dict.get(style, '')
+                                                  for style in styles])
+                        mangled_matrix = (char, mangled_styles,
+                                          coordinates, units)
+                        mangled_layout.append(mangled_matrix)
+                    jsoned_layout = json.dumps(mangled_layout)
+                    cursor.execute(('UPDATE matrix_cases SET layout=?'
+                                    'WHERE diecase_id=?'),
+                                   (jsoned_layout, diecase_id))
+                except (ValueError, TypeError, IndexError):
+                    print('Diecase %s: nothing to do' % diecase_id)
+                    continue

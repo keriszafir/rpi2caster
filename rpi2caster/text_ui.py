@@ -13,11 +13,7 @@ from . import constants as c
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
 # Style modifiers for displaying bold, italic, smallcaps, inferior, superior
-STYLE_MODIFIERS = {'bold': '*',
-                   'italic': '/',
-                   'smallcaps': '#',
-                   'subscript': '_',
-                   'superscript': '^'}
+STYLE_MODIFIERS = {'r': '', 'b': '*', 'i': '/', 's': '#', 'u': '_', 'l': '^'}
 # Some standard prompts
 MSG_MENU = '[Enter] to go back to main menu...'
 MSG_CONTINUE = '[Enter] to continue...'
@@ -220,25 +216,19 @@ def format_display(character, style):
     return STYLE_MODIFIERS.get(style, '') + character
 
 
-def choose_one_style():
-    """Chooses one style from available ones"""
-    print('Choose a text style. Leave blank for roman.'
-          'Available options: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
-          '[l]ower index (a.k.a. subscript, inferior), '
-          '[u]pper index (a.k.a. superscript, superior).')
-    style = enter_data_or_default('Style?', 'r')
-    return c.STYLES.get(style, 'roman')
-
-
-def choose_styles():
+def choose_styles(default='r', multiple=True):
     """Chooses one or more styles and returns a list of them"""
-    print('Choose one or more text styles, e.g. roman and small caps.\n'
-          'Available options: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
+    if multiple:
+        header = 'Choose one or more text styles, e.g. roman and small caps.'
+    else:
+        header = 'Choose a text style.'
+    print(header +
+          '\nAvailable options: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
           '[l]ower index (a.k.a. subscript, inferior), '
           '[u]pper index (a.k.a. superscript, superior).\n'
-          'Leave blank for roman only.')
-    styles_string = enter_data_or_default('Styles?', 'r')
-    return list({c.STYLES[char] for char in styles_string if char in c.STYLES})
+          'Leave blank for roman.')
+    choice = enter_data_or_default('Styles?', default)
+    return ''.join([char for char in c.STYLES if char in choice])
 
 
 def tab_complete(text, state):
@@ -321,13 +311,15 @@ def display_diecase_layout(diecase):
             formatted_char = format_display(formatted_char, style)
         return spaces_symbols.get(matrix.char, formatted_char)
 
-    matrices = [mat for mat in diecase]
-    cols_set = {matrix.column for matrix in matrices}
-    rows_set = {matrix.row for matrix in matrices}
-    col_numbers = ((16 in rows_set or 'NI' in cols_set or 'NL' in cols_set) and
-                   c.COLUMNS_17 or c.COLUMNS_15)
-    # If row 16 found - generate 16 rows; else 15
-    row_numbers = [x for x in range(1, 16 in rows_set and 17 or 16)]
+    col_numbers = c.COLUMNS_15
+    row_numbers = [x for x in range(1, 16)]
+    for mat in diecase:
+        if '16' in mat.code:
+            col_numbers = c.COLUMNS_17
+            row_numbers = [x for x in range(1, 17)]
+            break
+        elif 'NI' in mat.code or 'NL' in mat.code:
+            col_numbers = c.COLUMNS_17
     # Generate a header with column numbers
     header = ('|Row|' + ''.join([col.center(4) for col in col_numbers]) +
               '|' + 'Units'.center(7) + '|')
@@ -344,7 +336,7 @@ def display_diecase_layout(diecase):
         row = ['|' + str(row_num).center(3) + '|']
         # Add only characters and styles, center chars to 4
         row.extend([displayed_char(mat).center(4)
-                    for column_num in col_numbers for mat in matrices
+                    for column_num in col_numbers for mat in diecase
                     if mat.column == column_num and mat.row == row_num])
         row.append('|%s|' % str(diecase.wedge[row_num]).center(7))
         table.append(''.join(row))
@@ -366,14 +358,12 @@ def display_diecase_layout(diecase):
 def edit_matrix(matrix):
     """Edits the matrix data"""
     display_parameters({'Matrix details': matrix.parameters})
-    prompt = 'Character (" "=low space, "_"=high space, ctrl-C to exit)?'
+    prompt = 'Character (" " is low space, "_" is high space, ctrl-C to exit)?'
     matrix.char = enter_data_or_default(prompt, matrix.char)
     if not matrix.char:
         return matrix
-    if matrix.isspace():
-        matrix.styles = []
-    else:
-        matrix.styles = choose_styles()
+    if not matrix.isspace():
+        matrix.styles = choose_styles(matrix.styles)
     matrix.units = enter_data_or_default('Unit width?', matrix.units, int)
     return matrix
 

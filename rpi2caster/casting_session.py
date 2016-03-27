@@ -290,8 +290,9 @@ class Casting(object):
         styles = UI.choose_styles()
         order = []
         for style in styles:
-            UI.display_header(style)
-            if len(styles) == 1 or style == 'roman':
+            # Display style name
+            UI.display_header(c.STYLES.get(style, ''))
+            if len(styles) == 1 or style == 'r':
                 scale = 1.0
             else:
                 scale = enter('Scale for %s?' % style, 100, float) / 100.0

@@ -63,12 +63,12 @@ class Diecase(object):
         # Edit the layout
         UI.edit_diecase_layout(self)
 
-    def lookup_matrix(self, char='', style=''):
+    def lookup_matrix(self, char='', styles=''):
         """Enter coordinates and unit value"""
         if char:
             UI.display('Enter matrix data for character: %s' % char)
         code = UI.enter_data_or_default('Combination?', 'G5').upper()
-        matrix = Matrix(char or '', [style], code)
+        matrix = Matrix(char or '', styles, code)
         matrix.diecase = self
         matrix.units = self.wedge[matrix.row]
         return matrix
@@ -85,12 +85,12 @@ class Diecase(object):
             UI.pause('File does not contain a proper layout!')
             return False
         # Update the empty layout with characters read from file
-        # record = (char, styles, column, row, units)
+        # record = (char, styles, coordinates, units)
         try:
             self.matrices = generate_empty_layout()
             for matrix in self.matrices:
-                for (char, styles, column, row, units) in submitted_layout:
-                    if matrix.column == column and matrix.row == row:
+                for (char, styles, coordinates, units) in submitted_layout:
+                    if matrix.code == coordinates:
                         matrix.char = char
                         matrix.styles = styles
                         matrix.units = units
@@ -104,28 +104,29 @@ class Diecase(object):
         with io.open(filename, 'a') as output_file:
             csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
                                     quoting=csv.QUOTE_ALL)
-            csv_writer.writerow(['Character', 'Style(s)', 'Column', 'Row',
-                                 'Unit width'])
+            csv_writer.writerow(['Char', 'Styles', 'Coordinates', 'Units'])
             for matrix in self.matrices:
-                (char, styles, column, row, units) = matrix.record
-                csv_writer.writerow([char, ', '.join(list(styles)),
-                                     column, row, units])
+                csv_writer.writerow(matrix.record)
         UI.pause('File %s successfully saved.' % filename)
         return True
 
-    def check_missing_characters(self, input_string='', style='roman'):
+    def check_missing_characters(self, input_string='', style='r'):
         """Enter the string and parse the diecase to see if any of the
         specified characters are missing."""
         input_string = input_string or UI.enter_data('Text to check?')
         charset = {char for char in input_string}
-        chars_found = {mat.char for mat in self for char in charset
-                       if char == mat.char and
-                       (char in ' _' or style in mat.styles)}
-        missing = sorted(charset.difference(chars_found))
-        if missing:
-            UI.display('Missing mats for %s: %s' % (style, ', '.join(missing)))
-        else:
-            UI.display('All characters for %s are present.' % style)
+        for style in styles:
+            # Style description
+            style_desc = c.STYLES.get(style, '')
+            chars_found = {mat.char for mat in self for char in charset
+                           if char == mat.char and
+                           (mat.isspace() or style in mat.styles)}
+            missing = sorted(charset.difference(chars_found))
+            if missing:
+                UI.display('Missing mats for %s: %s'
+                           % (style_desc, ', '.join(missing)))
+            else:
+                UI.display('All characters for %s are present.' % style_desc)
 
     def test_completeness(self):
         """Choose a language and test whether the diecase contains all
@@ -136,8 +137,7 @@ class Diecase(object):
         all_chars = ''.join(list(sorted(set(uppercase + lowercase))))
         UI.display('\nCharacters: %s\n' % all_chars)
         styles = UI.choose_styles()
-        for style in styles:
-            self.check_missing_characters(all_chars, style)
+        self.check_missing_characters(all_chars, styles)
         UI.pause()
 
     def set_diecase_id(self, diecase_id=None):
@@ -243,8 +243,8 @@ class Diecase(object):
     @layout.setter
     def layout(self, layout):
         """Translates the layout to a list of matrix objects"""
-        self.matrices = [Matrix(char, styles, '%s%s' % (column, row), units)
-                         for (char, styles, column, row, units) in layout]
+        self.matrices = [Matrix(char, styles, coordinates, units)
+                         for (char, styles, coordinates, units) in layout]
 
     @property
     def matrices(self):
@@ -281,7 +281,8 @@ class Diecase(object):
     def styles(self):
         """Parses the diecase layout and gets available typeface styles.
         Returns a list of them."""
-        return list({style for mat in self for style in mat.styles if style})
+        all_styles = set(''.join([mat.styles for mat in self]))
+        return [st for st in c.STYLES if st in all_styles]
 
 
 class SelectDiecase(Diecase):
@@ -330,17 +331,19 @@ class SelectDiecase(Diecase):
             return candidates[0]
         else:
             # Multiple matches found = let user choose
-            pr_char = spaces.get(char, char)
-            UI.display_header('Multiple matrices for %s %s' % (style, pr_char))
+            char_description = spaces.get(char, char)
+            style_description = c.STYLES.get(style)
+            UI.display_header('Multiple matrices for %s %s'
+                              % (style_description, char_description))
             # Show a menu with multiple candidates
             mats = {i: mat for i, mat in enumerate(candidates, start=1)}
             UI.display(''.join(['Index'.ljust(10), 'Char'.ljust(10),
-                                'Styles'.ljust(30), 'Column'.ljust(10),
-                                'Row'.ljust(10)]))
+                                'Styles'.ljust(30), 'Coordinates']))
             for i, mat in mats.items():
+                styles = ', '.join([c.STYLES.get(style, '')
+                                    for style in mat.styles])
                 record = [str(i).ljust(10), mat.char.ljust(10),
-                          ', '.join(mat.styles).ljust(30),
-                          mat.column.ljust(10), str(mat.row).ljust(10)]
+                          styles.ljust(30), mat.code]
                 UI.display(''.join(record))
             prompt = 'Choose matrix (leave blank to enter manually)'
             choice = UI.enter_data_or_blank(prompt, int)
@@ -352,7 +355,7 @@ class SelectDiecase(Diecase):
 
 class Matrix(object):
     """A class for single matrices - all matrix data"""
-    def __init__(self, char='', styles=('roman',), code='O15', units=0):
+    def __init__(self, char='', styles='r', code='O15', units=0):
         self.diecase = None
         self.char = char
         self.styles = styles
@@ -364,16 +367,18 @@ class Matrix(object):
 
     @property
     def styles(self):
-        """Get the matrix's styles or an empty list if matrix has no char"""
+        """Get the matrix's styles or an empty string if matrix has no char"""
         if not self.char or self.isspace():
-            return []
+            return ''
         else:
-            return self.__dict__.get('_styles', ['roman'])
+            return self.__dict__.get('_styles', 'r')
 
     @styles.setter
     def styles(self, styles):
-        """Sets the matrix's style list"""
-        self.__dict__['_styles'] = styles
+        """Sets the matrix's style string, filters out unknown styles,
+        cares about the sequence - rbisul"""
+        self.__dict__['_styles'] = ''.join([char for char in c.STYLES
+                                            if char in styles])
 
     @property
     def row_units(self):
@@ -477,8 +482,9 @@ class Matrix(object):
     def parameters(self):
         """Gets all parameters for the matrix"""
         return [(self.char, 'Character'),
-                (', '.join(list(self.styles)), 'Styles'),
-                (self, 'Coordinates'), (self.units, 'Unit width')]
+                (', '.join([c.STYLES.get(style, '')
+                            for style in self.styles]), 'Styles'),
+                (self.code, 'Coordinates'), (self.units, 'Unit width')]
 
     @property
     def code(self):
@@ -495,7 +501,7 @@ class Matrix(object):
     @property
     def record(self):
         """Returns a record suitable for JSON-dumping and storing in DB"""
-        return [self.char, self.styles, self.column, self.row, self.units]
+        return [self.char, self.styles, self.code, self.units]
 
     @property
     def diecase(self):
@@ -599,9 +605,7 @@ def choose_diecase():
 
 def import_layout_file():
     """Reads a matrix case arrangement from a text or csv file.
-    The format should be:
-    "character";"style1,style2...";"column";"row";"unit_width"
-    """
+    The format should be: "character";"styles";"coordinates";"unit_width"."""
     # Give us a file or end here
     try:
         filename = UI.enter_input_filename()
@@ -627,16 +631,16 @@ def import_layout_file():
         # Process the records
         processed_records = [process_record(record) for record in all_records]
         # Determine the diecase size based on row and column
-        # Get columns and rows lists
-        columns = {record[2] for record in processed_records}
-        rows = sorted({record[3] for record in processed_records})
-        # Check if 17 columns (15x17, 16x17), else 15 columns (old 15x15)
-        big_layout = 'NI' in columns or 'NL' in columns or 16 in rows
+        big_layout = False
+        for record in processed_records:
+            if 'NI' in record[2] or 'NL' in record[2] or '16' in record[2]:
+                big_layout = True
+                break
         columns_list = big_layout and c.COLUMNS_17 or c.COLUMNS_15
         # We now have completed uploading a layout and making a list out of it
         layout = [record for row in rows for col in columns_list
                   for record in processed_records
-                  if record[2] == col and record[3] == row]
+                  if record[2] == '%s%s' % (column, row)]
         # Show the uploaded layout
         return layout
     except (KeyError, ValueError, IndexError):
@@ -646,25 +650,26 @@ def import_layout_file():
 def process_record(record):
     """Prepares the record found in file for adding to the layout"""
     # A record is a list with all diecase data:
-    # [character, (style1, style2...), column, row, units]
+    # [character, styles, coordinates, units]
     # Add a character - first item; if it's a space, don't change it
     try:
         # 5 fields in a record = unit value given
-        # Unit value must be converted to int
-        (char, styles, column, row, units) = record
+        # Unit value must be converted to int; strip any whitespace
+        (char, styles, coordinates, units) = record
         units = int(units.strip())
     except (ValueError, AttributeError):
         # 4 fields = unit value not given
         # (or unit value cannot be converted to int)
         (char, styles, column, row) = record
         units = 0
-    if char != ' ':
+    # Convert multiple spaces to single space
+    if char.isspace():
+        char = ' '
+    else:
         char = char.strip()
-    styles = [style.strip() for style in styles.split(',')]
-    row = int(row.strip())
-    column = column.strip()
+    styles = ''.join([style for style in c.STYLES if style in styles])
     # Pack it again
-    return (char, styles, column, row, units)
+    return (char, styles, coordinates, units)
 
 
 def generate_empty_layout(rows=None, columns=None):
