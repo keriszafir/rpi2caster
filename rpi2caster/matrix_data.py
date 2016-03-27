@@ -356,19 +356,28 @@ class SelectDiecase(Diecase):
 
 class Matrix(object):
     """A class for single matrices - all matrix data"""
-    def __init__(self, char='', styles=('roman',),
-                 coordinates=('O', 15), units=None):
+    def __init__(self, char='', styles=('roman',), code='O15', units=0):
+        self.diecase = None
         self.char = char
         self.styles = styles
-        # Spaces (low and high) have every style
-        if char in ' _':
-            styles = []
-        (self.column, self.row) = coordinates
-        self.diecase = None
+        self.code = code
         self.units = units
 
     def __repr__(self):
         return self.code
+
+    @property
+    def styles(self):
+        """Get the matrix's styles or an empty list if matrix has no char"""
+        if not self.char or self.isspace():
+            return []
+        else:
+            return self.__dict__.get('_styles', ['roman'])
+
+    @styles.setter
+    def styles(self, styles):
+        """Sets the matrix's style list"""
+        self.__dict__['_styles'] = styles
 
     @property
     def row_units(self):
@@ -423,8 +432,13 @@ class Matrix(object):
         # 15/15 - 3/8 = 12/7 so 12*15 + 7 = 187
         # 187 * 0.0005 = 0.0935 i.e. max inches we can add
         # Matrix is typically .2 x .2 - anything wider will lead to a splash!
-        # Safe limit is .19" and we don't let the mould open further
-        return round(min(self.row_points + 0.0935 * 72, 0.19 * 72), 3)
+        # Safe limit is .19" = 13.680" and we don't let the mould open further
+        full_width = round(self.row_points + 0.0935 * 72, 3)
+        width_cap = 13.680
+        if self.islowspace():
+            return full_width
+        else:
+            return min(full_width, width_cap)
 
     @property
     def wedge_positions(self):
