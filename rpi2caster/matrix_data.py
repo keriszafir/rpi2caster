@@ -110,7 +110,7 @@ class Diecase(object):
         UI.pause('File %s successfully saved.' % filename)
         return True
 
-    def check_missing_characters(self, input_string='', style='r'):
+    def check_missing_characters(self, input_string='', styles='r'):
         """Enter the string and parse the diecase to see if any of the
         specified characters are missing."""
         input_string = input_string or UI.enter_data('Text to check?')
@@ -468,7 +468,7 @@ class Matrix(object):
     @property
     def row(self):
         """Gets the row number"""
-        return self.__dict__.get('_row', 5)
+        return self.__dict__.get('_row', 15)
 
     @row.setter
     def row(self, value):
@@ -477,6 +477,20 @@ class Matrix(object):
         value = max(1, value)
         value = min(value, 16)
         self.__dict__['_row'] = value
+
+    @property
+    def column(self):
+        """Gets the matrix column"""
+        return self.__dict__.get('_column', 'O')
+
+    @column.setter
+    def column(self, value):
+        """Sets the column"""
+        column = value.upper()
+        if column in c.COLUMNS_17:
+            self.__dict__['_column'] = column
+        else:
+            self.__dict__['column'] = 'O'
 
     @property
     def parameters(self):
@@ -631,16 +645,19 @@ def import_layout_file():
         # Process the records
         processed_records = [process_record(record) for record in all_records]
         # Determine the diecase size based on row and column
-        big_layout = False
+        columns = c.COLUMNS_15
+        rows = range(1, 16)
         for record in processed_records:
-            if 'NI' in record[2] or 'NL' in record[2] or '16' in record[2]:
-                big_layout = True
+            if '16' in record[2]:
+                columns = c.COLUMNS_17
+                rows = range(1, 17)
                 break
-        columns_list = big_layout and c.COLUMNS_17 or c.COLUMNS_15
+            elif 'NI' in record[2] or 'NL' in record[2]:
+                columns = c.COLUMNS_17
         # We now have completed uploading a layout and making a list out of it
-        layout = [record for row in rows for col in columns_list
+        layout = [record for row in rows for col in columns
                   for record in processed_records
-                  if record[2] == '%s%s' % (column, row)]
+                  if record[2] == '%s%s' % (col, row)]
         # Show the uploaded layout
         return layout
     except (KeyError, ValueError, IndexError):
@@ -660,7 +677,7 @@ def process_record(record):
     except (ValueError, AttributeError):
         # 4 fields = unit value not given
         # (or unit value cannot be converted to int)
-        (char, styles, column, row) = record
+        (char, styles, coordinates) = record
         units = 0
     # Convert multiple spaces to single space
     if char.isspace():
