@@ -67,12 +67,8 @@ class Diecase(object):
         """Enter coordinates and unit value"""
         if char:
             UI.display('Enter matrix data for character: %s' % char)
-        codes = UI.enter_data_or_default('Combination?', 'G5').upper()
-        codes = p.parse_signals(codes)
-        # Got a list of signals
-        row = p.get_row(codes)
-        column = p.get_column(codes)
-        matrix = Matrix(char or '', [style], (column, row))
+        code = UI.enter_data_or_default('Combination?', 'G5').upper()
+        matrix = Matrix(char or '', [style], code)
         matrix.diecase = self
         matrix.units = self.wedge[matrix.row]
         return matrix
@@ -247,7 +243,7 @@ class Diecase(object):
     @layout.setter
     def layout(self, layout):
         """Translates the layout to a list of matrix objects"""
-        self.matrices = [Matrix(char, styles, (column, row), units)
+        self.matrices = [Matrix(char, styles, '%s%s' % (column, row), units)
                          for (char, styles, column, row, units) in layout]
 
     @property
@@ -685,5 +681,5 @@ def generate_empty_layout(rows=None, columns=None):
     columns_list = columns == 17 and c.COLUMNS_17 or c.COLUMNS_15
     # Generate row numbers: 1...15 or 1...16
     rows_list = [num + 1 for num in range(rows)]
-    return [Matrix(coordinates=(column, row), units=0)
+    return [Matrix(code='%s%s' % (column, row))
             for row in rows_list for column in columns_list]
