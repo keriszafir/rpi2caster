@@ -62,7 +62,7 @@ def parse_record(input_data):
     return [parse_signals(raw_signals), comment.strip()]
 
 
-def parse_signals(signals):
+def parse_signals(input_signals):
     """Parses a string with Monotype signals on input.
     Skips all but the "useful" signals: A...O, 1...15, 0005, S, 0075.
     Outputs a list of signals to be processed by the machine control routines.
@@ -70,7 +70,7 @@ def parse_signals(signals):
     Convert to uppercase.
     """
     col_sigs = 'ABCDEFGHIJKLMNS'
-    signals = (x.upper().strip() for x in signals)
+    signals = (str(x).upper().strip() for x in input_signals)
     signals = (x for x in signals if x.isdigit() or x in col_sigs + 'O')
     signals = ''.join(signals)
     # Find O+15 or 16th row

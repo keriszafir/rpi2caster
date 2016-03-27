@@ -489,6 +489,13 @@ class Matrix(object):
         """Gets the matrix code"""
         return self.column + str(self.row)
 
+    @code.setter
+    def code(self, code_string):
+        """Sets the coordinates for the matrix"""
+        signals = p.parse_signals(code_string)
+        self.row = p.get_row(signals)
+        self.column = p.get_column(signals)
+
     @property
     def record(self):
         """Returns a record suitable for JSON-dumping and storing in DB"""
