@@ -67,8 +67,9 @@ def cast_or_punch_result(ribbon_source):
             self.cast_queue(ribbon_source(self, *args, **kwargs))
         except e.CastingAborted:
             pass
-        self.caster.mode.diagnostics = False
-        self.caster.mode.hmn, self.caster.mode.unitshift = False, False
+        finally:
+            self.caster.mode.diagnostics = False
+            self.caster.mode.hmn, self.caster.mode.unitshift = False, False
     return wrapper
 
 
