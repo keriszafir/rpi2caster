@@ -6,6 +6,7 @@ diecase storing, parameter searches.
 import io
 import os
 import csv
+from copy import copy
 
 # Some functions raise custom exceptions
 from . import exceptions as e
@@ -412,6 +413,12 @@ class Matrix(object):
                    self.char and
                    ' // %s %s' % (st.Styles(self.styles), self.char) or '')
         return '%s%s%s%s' % (self.column, s_signal, self.row, comment)
+
+    def __call__(self, points):
+        """Returns a copy of self with a corrected width"""
+        new_mat = copy(self)
+        new_mat.points += points
+        return new_mat
 
     @property
     def styles(self):
