@@ -169,8 +169,8 @@ class Casting(object):
         if wedge:
             self.wedge = wedge_data.Wedge(wedge)
 
-    @choose_sensor_and_driver
     @prepare_job
+    @choose_sensor_and_driver
     def cast_queue(self, casting_queue):
         """Casts the sequence of codes in ribbon or self.ribbon.contents,
         displaying the statistics (depending on context:
@@ -344,7 +344,7 @@ class Casting(object):
         """
         if not order:
             e.return_to_menu()
-        measure = tsf.enter_measure(default='cc')
+        measure = tsf.enter_measure()
         # 1 quad before and after the line
         quad_padding = 1
         quad = self.diecase.decode_matrix('O15')
@@ -370,7 +370,7 @@ class Casting(object):
         return queue
 
     @cast_or_punch_result
-    def adhoc_typesetting(self):
+    def quick_typesetting(self):
         """Allows us to use caster for casting single lines.
         This means that the user enters a text to be cast,
         gives the line length, chooses alignment and diecase.
@@ -379,8 +379,21 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        measure = tsf.enter_measure(default='cc')
+        style = st.Styles(allow_multiple=False)()
         text = UI.enter_data('Text to compose?')
+        if not self.diecase.test_characters(text, style):
+            UI.display('WARNING: Some characters are missing!')
+        space = self.diecase.decode_matrix('G2')
+        matrix_stream = (self.diecase.lookup_matrix(char, style) if char != ' '
+                         else space for char in text)
+        measure = tsf.enter_measure()
+        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, measure)
+        builder.mould_heatup = False
+        queue = builder.build_galley()
+        UI.display('Each line will have two em-quads at the start '
+                   'and at the end, to support the type.\n'
+                   'Starting with two lines of quads to heat up the mould.\n')
+        return queue
 
     @cast_or_punch_result
     def _calibrate_wedges(self):
@@ -555,8 +568,8 @@ class Casting(object):
                      'Display all codes in the selected ribbon', ribbon),
                     (self.diecase.show_layout, 'Show diecase layout',
                      'View the matrix case layout', diecase and caster),
-                    # (self.adhoc_typesetting, 'Ad-hoc typesetting',
-                    # 'Compose and cast a line of text', self.diecase),
+                    (self.quick_typesetting, 'Quick typesetting',
+                     'Compose and cast a line of text', self.diecase),
                     (self.cast_sorts, 'Cast sorts for given characters',
                      'Cast from matrix based on a character',
                      caster and diecase),

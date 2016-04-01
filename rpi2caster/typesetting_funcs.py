@@ -492,9 +492,7 @@ class GalleyBuilder(object):
                 # (not needed if wedge positions were 3, 8)
                 if current_wedges != new_wedges:
                     if current_wedges and current_wedges != (3, 8):
-                        comment = 'Adjusting wedges for character'
-                        queue.extend(single_justification(current_wedges,
-                                                          comment=comment))
+                        queue.extend(single_justification(current_wedges))
                     current_wedges = new_wedges
                 # Add the mat
                 queue.append(working_mat['code'])
@@ -526,14 +524,13 @@ class GalleyBuilder(object):
             if points_left >= var_sp.get_min_points():
                 # Put an adjustable space if possible to keep lines equal
                 if wedges:
-                    comment = 'Adjusting line length'
-                    queue.extend(single_justification(wedges, comment))
+                    queue.extend(single_justification(wedges))
                 var_sp.points = points_left
                 queue.append(str(var_sp))
                 wedges = var_sp.wedge_positions()
             # Always cast as many quads as needed, then put the line out
             queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
-            queue.extend(double_justification(wedges, 'Ending line'))
+            queue.extend(double_justification(wedges))
             points_left = 0
 
         # Store the code and wedge positions to speed up the process
@@ -550,34 +547,36 @@ class GalleyBuilder(object):
         return queue + self.preheat_mould()
 
 
-def single_justification(wedge_positions=(3, 8), comment=''):
+def single_justification(wedge_positions=(3, 8),
+                         comment='Single justification'):
     """Add 0075 + pos_0075, then 0005 + pos_0005"""
     (pos_0075, pos_0005) = wedge_positions
     return pump_start(pos_0075, comment) + pump_stop(pos_0005)
 
 
-def double_justification(wedge_positions=(3, 8), comment=''):
+def double_justification(wedge_positions=(3, 8),
+                         comment='Double justification'):
     """Add 0075 + pos_0075, then 0005-0075 + pos_0005"""
     (pos_0075, pos_0005) = wedge_positions
     return pump_start(pos_0075, comment) + galley_trip(pos_0005)
 
 
-def galley_trip(pos_0005=8, comment=''):
+def galley_trip(pos_0005=8, comment='Line to the galley'):
     """Put the line to the galley"""
     attach = comment and (' // ' + comment) or ''
     return ['NKJS 0075 0005 %s%s' % (pos_0005, attach)]
 
 
-def pump_start(pos_0075=3, comment=''):
+def pump_start(pos_0075=3, comment='Starting the pump'):
     """Start the pump and set 0075 wedge"""
     attach = comment and (' // ' + comment) or ''
     return ['NKS 0075 %s%s' % (pos_0075, attach)]
 
 
-def pump_stop(pos_0005=8, comment=''):
+def pump_stop(pos_0005=8, comment='Stopping the pump'):
     """Stop the pump"""
     attach = comment and (' // ' + comment) or ''
-    return ['NKJ 0005 %s%s' % (pos_0005, attach)]
+    return ['NJS 0005 %s%s' % (pos_0005, attach)]
 
 
 def end_casting():
@@ -586,7 +585,8 @@ def end_casting():
             galley_trip(comment='Last line out'))
 
 
-def enter_measure(name='line length', default='cc'):
+def enter_measure(name='line length', default_length='25cc',
+                  default_unit='cc'):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).
     Return length in DTP points."""
@@ -595,7 +595,7 @@ def enter_measure(name='line length', default='cc'):
               'Pp - US printer\'s pica (.1660"), pp - US pica point,\n'
               'Pt - DTP pica (.1667"), pt - DTP pica point,\n'
               '", in - inch, mm - millimeter, cm - centimeter?\n '
-              '(default: %s) : ' % (name, default))
+              '(default: %s) : ' % (name, default_unit))
     factor = 1.0
     # We need an ordered sequence here
     symbols = ['Pt', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cm' 'mm', 'in', '"', '']
@@ -604,13 +604,13 @@ def enter_measure(name='line length', default='cc'):
              'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667,
              'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
     while True:
-        raw_string = input(prompt).lower()
+        raw_string = UI.enter_data_or_default(prompt, default_length).lower()
         try:
             for symbol in symbols:
                 # Get the units
                 if raw_string.endswith(symbol):
                     if not symbol:
-                        symbol = default
+                        symbol = default_unit
                     factor = units.get(symbol, 1)
                     input_string = raw_string.replace(symbol, '')
                     input_string = input_string.strip()

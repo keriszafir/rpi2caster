@@ -259,11 +259,13 @@ class Diecase(object):
         UI.pause('File %s successfully saved.' % filename)
         return True
 
-    def check_missing_characters(self, input_string='', styles='r'):
+    def test_characters(self, input_string='', styles='r'):
         """Enter the string and parse the diecase to see if any of the
         specified characters are missing."""
         input_string = input_string or UI.enter_data('Text to check?')
         charset = {char for char in input_string}
+        # Return True unless any characters are missing
+        retval = True
         for style, description in st.Styles(styles).items():
             chars_found = {mat.char for mat in self for char in charset
                            if char == mat.char and
@@ -272,10 +274,12 @@ class Diecase(object):
             if missing:
                 UI.display('Missing mats for %s: %s'
                            % (description, ', '.join(missing)))
+                retval = False
             else:
                 UI.display('All characters for %s are present.' % description)
+        return retval
 
-    def _test_completeness(self):
+    def _test_lang_completeness(self):
         """Choose a language and test whether the diecase contains all
         characters, and if not, list them"""
         char_backend = lf.CharFreqs()
@@ -285,7 +289,7 @@ class Diecase(object):
         all_chars = ''.join(list(sorted(set(uppercase + lowercase))))
         UI.display('\nCharacters: %s\n' % all_chars)
         styles = st.Styles()()
-        self.check_missing_characters(all_chars, styles)
+        self.test_characters(all_chars, styles)
         UI.pause()
 
     def _set_diecase_id(self, diecase_id=None):
@@ -347,7 +351,7 @@ class Diecase(object):
                                        'Wedge data': self.wedge.parameters})
                 options = {'M': e.return_to_menu,
                            'T': self._set_typeface,
-                           'A': self._test_completeness,
+                           'A': self._test_lang_completeness,
                            'W': self._assign_wedge,
                            'ID': self._set_diecase_id,
                            'E': self.edit_layout,
