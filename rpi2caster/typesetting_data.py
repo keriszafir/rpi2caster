@@ -2,13 +2,8 @@
 """Operations on ribbon and scheme objects: creating, editing and deleting. """
 # File operations
 import io
-# CSV reader/writer
-import csv
 # Some functions raise custom exceptions
 from . import exceptions as e
-# Matrix data for diecases
-from . import matrix_data
-from . import wedge_data
 # Constants for rpi2caster
 from .constants import ASSIGNMENT_SYMBOLS
 # User interface
@@ -37,14 +32,22 @@ class Ribbon(object):
     export_to_file - store the metadata and contents in text file
     store_in_db - store the metadata and contents in db
     set_[description, customer, diecase_id] - set parameters manually"""
-    def __init__(self):
-        self.ribbon_id = None
-        self.description = 'No Description'
-        self.customer = 'Default Customer'
-        self.filename = 'New Ribbon'
-        self.contents = []
-        self.diecase = matrix_data.Diecase()
-        self.wedge = None
+    def __init__(self, ribbon_id='', filename='', manual_choice=False):
+        data = ['', 'New ribbon', 'No customer', '', 'S5-12E', []]
+        self.filename = ''
+        if ribbon_id:
+            try:
+                data = DB.get_ribbon(ribbon_id)
+            except (e.NoMatchingData, e.DatabaseQueryError):
+                UI.display('Ribbon choice failed. Starting a new one.')
+        elif filename:
+            self.filename = filename
+            data = import_ribbon_from_file(filename)
+        elif manual_choice:
+            data = choose_ribbon_from_db() or import_ribbon_from_file()
+        # Got data - unpack them, set the attributes
+        (self.ribbon_id, self.description, self.customer, self.diecase_id,
+         self.wedge_name, self.contents) = data
 
     def __iter__(self):
         return iter(self.contents)
@@ -56,7 +59,7 @@ class Ribbon(object):
         return self.ribbon_id or ''
 
     def __bool__(self):
-        return False
+        return bool(self.contents)
 
     def set_ribbon_id(self, ribbon_id=None):
         """Sets the ribbon ID"""
@@ -83,13 +86,13 @@ class Ribbon(object):
         self.customer = (customer or
                          UI.enter_data_or_blank(prompt) or self.customer)
 
-    def set_diecase(self, diecase_id=None):
+    def set_diecase(self, diecase_id=''):
         """Chooses the diecase for this ribbon"""
-        self.diecase = matrix_data.SelectDiecase(diecase_id)
+        self.diecase_id = diecase_id
 
     def set_wedge(self, wedge_name=None):
         """Sets a wedge for the ribbon"""
-        self.wedge = wedge_name
+        self.wedge_name = wedge_name
 
     @property
     def parameters(self):
@@ -98,18 +101,8 @@ class Ribbon(object):
                 (self.ribbon_id, 'Ribbon ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
-                (self.diecase.diecase_id, 'Matrix case ID'),
-                (self.wedge, 'Wedge')]
-
-    @property
-    def wedge(self):
-        """Gets the ribbon's wedge"""
-        return self.__dict__.get('_wedge', wedge_data.Wedge())
-
-    @wedge.setter
-    def wedge(self, wedge_name):
-        """Sets the wedge for this ribbon"""
-        self.__dict__['_wedge'] = wedge_data.SelectWedge(wedge_name or '5-12E')
+                (self.diecase_id, 'Matrix case ID'),
+                (self.wedge_name, 'Wedge')]
 
     def display_contents(self):
         """Displays the ribbon's contents, line after line"""
@@ -129,10 +122,8 @@ class Ribbon(object):
         """Gets the ribbon from database"""
         data = choose_ribbon_from_db()
         if data and UI.confirm('Override current data?', default=False):
-            (self.ribbon_id, self.description, self.customer, dc_id,
-             self.wedge, self.contents) = data
-            self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
-            return True
+            (self.ribbon_id, self.description, self.customer, self.diecase_id,
+             self.wedge_name, self.contents) = data
 
     def store_in_db(self):
         """Stores the ribbon in database"""
@@ -154,11 +145,9 @@ class Ribbon(object):
 
     def import_from_file(self, filename=None):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
-        (self.ribbon_id, self.description, self.customer, dc_id,
-         self.wedge, self.contents) = import_ribbon_from_file()
-        # Set filename as attribute
         self.filename = filename
-        self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
+        (self.ribbon_id, self.description, self.customer, self.diecase_id,
+         self.wedge_name, self.contents) = import_ribbon_from_file()
 
     def export_to_file(self, filename=None):
         """Exports the ribbon to a text file"""
@@ -171,31 +160,10 @@ class Ribbon(object):
         with io.open(filename, mode='w+') as ribbon_file:
             ribbon_file.write('description: ' + self.description)
             ribbon_file.write('customer: ' + self.customer)
-            ribbon_file.write('diecase: ' + self.diecase.diecase_id)
-            ribbon_file.write('wedge: ' + self.wedge)
+            ribbon_file.write('diecase: ' + self.diecase_id)
+            ribbon_file.write('wedge: ' + self.wedge_name)
             for line in self.contents:
                 ribbon_file.write(line)
-
-
-class SelectRibbon(Ribbon):
-    """A class for ribbons chosen from database or file"""
-    def __init__(self, ribbon_id=None, filename=None):
-        super().__init__()
-        try:
-            ribbon_data = (ribbon_id and DB.get_ribbon(ribbon_id) or
-                           filename and import_ribbon_from_file(filename) or
-                           choose_ribbon_from_db() or
-                           import_ribbon_from_file())
-            (self.ribbon_id, self.description, self.customer, dc_id,
-             self.wedge, self.contents) = ribbon_data
-            # Update diecase if correct diecase_id found in ribbon
-            self.diecase = dc_id and self.set_diecase(dc_id) or self.diecase
-        # Otherwise use empty ribbon
-        except (e.NoMatchingData, e.DatabaseQueryError):
-            UI.display('Ribbon choice failed. Starting a new one.')
-
-    def __bool__(self):
-        return True
 
 
 def list_ribbons():

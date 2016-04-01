@@ -16,6 +16,7 @@ A module for everything related to working on a Monotype composition caster:
 
 # IMPORTS:
 from collections import deque
+from copy import copy
 # Signals parsing methods for rpi2caster
 from . import parsing as p
 # Custom exceptions
@@ -24,6 +25,8 @@ from . import exceptions as e
 from . import constants as c
 # Typesetting functions module
 from . import typesetting_funcs as tsf
+# Style manager
+from . import styles as st
 # Caster backend
 from . import monotype
 # Casting stats
@@ -155,16 +158,16 @@ class Casting(object):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
 
-    def __init__(self, ribbon_file='', diecase='', wedge=''):
+    def __init__(self, ribbon_file='', ribbon_id='', diecase_id='', wedge=''):
         # Caster for this job
         self.caster = monotype.MonotypeCaster()
         self.stats = Stats(self)
-        self.ribbon = (ribbon_file and
-                       typesetting_data.SelectRibbon(filename=ribbon_file) or
-                       typesetting_data.Ribbon())
-        self.diecase = (diecase and
-                        matrix_data.SelectDiecase(diecase) or self.diecase)
-        self.wedge = wedge and wedge_data.SelectWedge(wedge) or self.wedge
+        self.ribbon = typesetting_data.Ribbon(filename=ribbon_file,
+                                              ribbon_id=ribbon_id)
+        if diecase_id:
+            self.diecase = matrix_data.Diecase(diecase_id)
+        if wedge:
+            self.wedge = wedge_data.Wedge(wedge)
 
     @choose_sensor_and_driver
     @prepare_job
@@ -266,8 +269,8 @@ class Casting(object):
                 char = UI.enter_data_or_blank('Character?')
                 matrix = self.diecase.lookup_matrix(char)
                 prompt = ('Width correction? (%.2f...%.2f points)'
-                          % (matrix.min_points - matrix.points,
-                             matrix.max_points - matrix.points))
+                          % (matrix.get_min_points() - matrix.points,
+                             matrix.get_max_points() - matrix.points))
                 delta = UI.enter_data_or_default(prompt, 0, float)
                 matrix.points += delta
             else:
@@ -285,23 +288,24 @@ class Casting(object):
         """Casting typecases according to supplied font scheme."""
         enter = UI.enter_data_or_default
         freqs = letter_frequencies.CharFreqs()
-        bill = freqs.type_bill
+        freqs.define_case_ratio()
+        freqs.define_scale()
         UI.display('Styles to cast?')
-        styles = UI.choose_styles()
         order = []
-        for style in styles:
+        style_manager = st.Styles()
+        styles = style_manager.keys()
+        for style, name in style_manager.items():
             # Display style name
-            UI.display_header(c.STYLES.get(style, ''))
+            UI.display_header(name)
             if len(styles) == 1 or style == 'r':
                 scale = 1.0
             else:
-                scale = enter('Scale for %s?' % style, 100, float) / 100.0
-            for char, chars_qty in bill:
+                scale = enter('Scale for %s?' % name, 100, float) / 100.0
+            for char, chars_qty in freqs.type_bill:
                 qty = int(scale * chars_qty)
                 UI.display('%s: %s' % (char, chars_qty))
                 matrix = self.diecase.lookup_matrix(char, style)
                 order.append((matrix, qty))
-            UI.pause()
         self.cast_batch(order)
 
     def cast_spaces(self):
@@ -309,11 +313,12 @@ class Casting(object):
         Ask user about the space width and measurement unit.
         """
         order = []
-        matrix = self.diecase.lookup_matrix(high_or_low_space())
+        master = self.diecase.lookup_matrix(matrix_data.high_or_low_space())
         while True:
+            matrix = copy(master)
             UI.display('\nWidth for this matrix: %spt min - %spt max\n'
-                       % (matrix.min_points, matrix.max_points))
-            width = tsf.enter_measure('space width')
+                       % (matrix.get_min_points(), matrix.get_max_points()))
+            width = tsf.enter_measure('space width', 'pt')
             matrix.points = width
             prompt = 'How many lines?'
             lines = UI.enter_data_or_default(prompt, 1, int)
@@ -327,78 +332,42 @@ class Casting(object):
     def cast_batch(self, order=()):
         """Cast a batch of characters, to a given galley width.
 
-        Each character is specified by a tuple:
-            (matrix, delta, qty),   where:
-        matrix is a matrix_data.Matrix object,
-        delta is point correction,
-        qty is quantity (0 for a filled line, >0 for a given number of chars).
+        Each character is specified by a tuple: (matrix, qty)
+            where matrix is a matrix_data.Matrix object,
+            qty is quantity (0 for a filled line,
+                             >0 for a given number of chars).
 
         If there is too many chars for a single line - will cast more lines.
-        Not enough to fill the line - will quad out.
+        Last line will be quadded out.
         Characters other than low spaces will be separated by double G2 spaces
         to prevent matrices from overheating.
         """
-        queue = []
         if not order:
             e.return_to_menu()
+        measure = tsf.enter_measure(default='cc')
+        # 1 quad before and after the line
+        quad_padding = 1
         quad = self.diecase.decode_matrix('O15')
-        space = self.diecase.decode_matrix('G2')
-        space.points = 3
-        space.char = quad.char = ' '
-        # Add two lines of quads to pre-heat the mould
-        order = [(quad, 0)] * 2 + [x for x in order]
-        # Enter line length, in points
-        measure = tsf.enter_measure('galley width') - 4 * quad.points
+        # Leave some slack to adjust the line
+        length = measure - 2 * quad_padding * quad.points
+        # Build a sequence of matrices for casting
+        # If n is 0, we fill the line to the brim
+        queues = ([mat] * n if n else [mat] * int((length // mat.points) - 1)
+                  for (mat, n) in order)
+        matrix_stream = (mat for batch in queues for mat in batch)
+        # Initialize the galley-constructor
+        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, measure)
+        builder.quad_padding = quad_padding
+        builder.cooldown = True
+        builder.mould_heatup = UI.confirm('Pre-heat the mould?', True)
+        job = self.caster.mode.punching and 'punching' or 'casting'
+        UI.display('Generating a sequence for %s...' % job)
+        queue = builder.build_galley()
+        UI.display('\nReady for %s...\n\n' % job)
         UI.display('Each line will have two em-quads at the start '
                    'and at the end, to support the type.\n'
-                   'Starting with two lines of quads to heat up the mould.')
-        for (matrix, qty) in order:
-            # Add comment if mat has a char specified
-            comment = (matrix.islowspace() and ' // low space' or
-                       matrix.ishighspace() and ' // high space' or
-                       matrix.char and ' // ' + matrix.char or '')
-            # Get wedge positions. If correction needs to be applied
-            # (positions other than 3/8), add "S"; add comment here too.
-            wedge_positions = matrix.wedge_positions
-            mat_code = ((wedge_positions != (3, 8) and 'S' or '') +
-                        matrix.code + comment)
-            points_left = 0
-            codes = []
-            # Qty = 0 means that we fill the line to the brim
-            # (cast single line)
-            if not qty and matrix.islowspace():
-                # Low spaces - fill the line with them
-                qty = max(measure // matrix.points - 1, 0)
-            elif not qty:
-                # Chars separated by G-2 spaces - count these units too
-                qty = measure // (matrix.points + space.points) - 1
-            while qty > 0:
-                # Start the line
-                codes = double_justification(wedge_positions)
-                codes.extend([quad.code] * 2)
-                points_left = measure
-                # Fill line with sorts and spaces (to slow down casting
-                # and prevent matrix overheating)
-                while points_left > matrix.points and qty > 0:
-                    codes.append(mat_code)
-                    points_left -= matrix.points
-                    qty -= 1
-                    # For low spaces and quads, we can cast one after another
-                    if not matrix.islowspace():
-                        codes.extend([space.code])
-                        points_left -= space.points
-                while not qty and points_left > quad.points:
-                    # Fill with quads first...
-                    codes.append(quad.code)
-                    points_left -= quad.points
-                while not qty and points_left > space.points:
-                    # ...later with spaces...
-                    codes.append(space.code)
-                    points_left -= space.points
-                # Finally add two quads at the end and add to queue
-                codes.extend([quad.code] * 2)
-                queue.extend(codes)
-        return queue + c.END_CASTING
+                   'Starting with two lines of quads to heat up the mould.\n')
+        return queue
 
     @cast_or_punch_result
     def adhoc_typesetting(self):
@@ -410,8 +379,8 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        # Initialize the typesetter for a chosen diecase
-        pass
+        measure = tsf.enter_measure(default='cc')
+        text = UI.enter_data('Text to compose?')
 
     @cast_or_punch_result
     def _calibrate_wedges(self):
@@ -433,13 +402,13 @@ class Casting(object):
                    'until the lengths are the same.')
         if not UI.confirm('\nProceed?', default=True):
             return None
-        signals = 'G5'
-        queue = [c.GALLEY_TRIP] + [signals] * 7
-        queue.extend([c.GALLEY_TRIP + '8', c.PUMP_ON + '3'])
-        queue.extend([signals + 'S'] * 7)
-        queue.extend(c.END_CASTING)
+        mat = matrix_data.Matrix(code='G5', diecase=self.diecase)
         self.caster.mode.calibration = True
-        return queue
+        sequence = tsf.end_casting()
+        sequence.extend(['S %s with S-needle' % mat] * 7)
+        sequence.extend(['%s' % mat] * 7)
+        sequence.extend(tsf.double_justification())
+        return sequence
 
     @cast_or_punch_result
     def _calibrate_mould(self):
@@ -456,9 +425,11 @@ class Casting(object):
                    % round(self.wedge.em_width, 4))
         if not UI.confirm('\nProceed?', default=True):
             return None
-        signals = 'G5'
+        mat = matrix_data.Matrix(code='G5', diecase=self.diecase)
         self.caster.mode.calibration = True
-        return [c.GALLEY_TRIP] + [signals] * 7 + c.END_CASTING
+        sequence = tsf.end_casting() + [mat.code] * 7
+        sequence.extend(tsf.double_justification())
+        return sequence
 
     @cast_or_punch_result
     def _calibrate_diecase(self):
@@ -470,21 +441,23 @@ class Casting(object):
                    'type body.\nAdjust if needed.')
         self.caster.mode.calibration = True
         # Build character list
-        queue = []
+        queue = tsf.end_casting()
+        wedge_positions = (3, 8)
         for char in ('--', 'n', 'h'):
             mat = self.diecase.lookup_matrix(char)
             if not self.diecase:
                 mat.specify_units()
-            wedge_positions = mat.wedge_positions
-            corrected = wedge_positions != (3, 8)
-            if not queue:
-                queue.extend(double_justification(wedge_positions))
-            elif corrected:
-                queue.extend(single_justification(wedge_positions))
-            # Add S signal if width correction is in action
-            char = [(corrected and 'S' or '') + mat.code + ' // ' + mat.char]
-            queue.extend(char * 3)
-        queue.extend(c.END_CASTING)
+            # Change justification wedge positions if they are different
+            # (only if the type was cast with corrections)
+            prev_wedge_positions = wedge_positions
+            wedge_positions = mat.wedge_positions()
+            wedges_change = wedge_positions != prev_wedge_positions
+            if prev_wedge_positions != (3, 8) and wedges_change:
+                queue.extend(tsf.single_justification(prev_wedge_positions))
+            # Add the characters to the queue
+            queue.extend([str(mat)] * 3)
+        # Set the initial wedge positions
+        queue.extend(tsf.double_justification(wedge_positions))
         return queue
 
     @choose_sensor_and_driver
@@ -504,11 +477,15 @@ class Casting(object):
 
     def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
+        def finish():
+            """Sets the flag to True"""
+            nonlocal finished
+            finished = True
+
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
             caster = not self.caster.mode.punching
-            opts = [(e.menu_level_up, 'Back',
-                     'Returns to main menu', True),
+            opts = [(finish, 'Back', 'Returns to main menu', True),
                     (self._test_all, 'Test outputs',
                      'Test all the air outputs N...O15, one by one', True),
                     (self._test_front_pinblock, 'Test the front pin block',
@@ -536,7 +513,8 @@ class Casting(object):
 
         header = ('Diagnostics and machine calibration menu:\n\n')
         # Keep displaying the menu and go back here after any method ends
-        while True:
+        finished = False
+        while not finished:
             try:
                 # Catch "return to menu" and "exit program" exceptions here
                 UI.menu(menu_options(), header=header)()
@@ -544,66 +522,77 @@ class Casting(object):
                 # Stay in the menu
                 pass
 
-    def _main_menu_options(self):
-        """Build a list of options, adding an option if condition is met"""
-        # Options are described with tuples: (function, description, condition)
-        caster = not self.caster.mode.punching
-        diecase = self.diecase
-        ribbon = self.ribbon
-        diecase_info = diecase and ' (current: %s)' % diecase or ''
-        opts = [(e.exit_program, 'Exit', 'Exits the program', True),
-                (self.cast_composition, 'Cast composition',
-                 'Cast type from a selected ribbon', ribbon and caster),
-                (self.cast_composition, 'Punch ribbon',
-                 'Punch a paper ribbon for casting without the interface',
-                 ribbon and not caster),
-                (self._choose_ribbon, 'Select ribbon',
-                 'Select a ribbon from database or file', True),
-                (self._choose_diecase, 'Select diecase',
-                 'Select a matrix case from database' + diecase_info, caster),
-                (self._choose_wedge, 'Select wedge',
-                 'Enter a wedge designation (current: %s)' % self.wedge.name,
-                 caster),
-                (self.ribbon.display_contents, 'View codes',
-                 'Display all codes in the selected ribbon', ribbon),
-                (self.diecase.show_layout, 'Show diecase layout',
-                 'View the matrix case layout', diecase and caster),
-                # (self.adhoc_typesetting, 'Ad-hoc typesetting',
-                # 'Compose and cast a line of text', self.diecase),
-                (self.cast_sorts, 'Cast sorts for given characters',
-                 'Cast from matrix based on a character', caster and diecase),
-                (self.cast_sorts, 'Cast sorts from matrix coordinates',
-                 'Cast from matrix at given position', caster and not diecase),
-                (self.cast_spaces, 'Cast spaces or quads',
-                 'Cast spaces or quads of a specified width', caster),
-                (self.cast_typecases, 'Cast typecases',
-                 'Cast a typecase based on a selected font scheme',
-                 caster and diecase),
-                (self._display_details, 'Show details...',
-                 'Display ribbon, diecase, wedge and interface info', caster),
-                (self._display_details, 'Show details...',
-                 'Display ribbon and interface details', not caster),
-                (matrix_data.diecase_operations, 'Matrix manipulation...',
-                 'Work on matrix cases', True),
-                (self.diagnostics_submenu, 'Service...',
-                 'Interface and machine diagnostic functions', True)]
-        # Built a list of menu options conditionally
-        return [(function, description, long_description)
-                for (function, description, long_description, condition)
-                in opts if condition]
-
     def main_menu(self):
         """Main menu for the type casting utility."""
+        def finish():
+            """Sets the flag to True"""
+            nonlocal finished
+            finished = True
+
+        def menu_options():
+            """Build a list of options, adding an option if condition is met"""
+            # Options are described with tuples:
+            # (function, description, condition)
+            caster = not self.caster.mode.punching
+            diecase = bool(self.diecase)
+            ribbon = bool(self.ribbon)
+            diecase_info = diecase and ' (current: %s)' % diecase or ''
+            opts = [(finish, 'Exit', 'Exits the program', True),
+                    (self.cast_composition, 'Cast composition',
+                     'Cast type from a selected ribbon', ribbon and caster),
+                    (self.cast_composition, 'Punch ribbon',
+                     'Punch a paper ribbon for casting without the interface',
+                     ribbon and not caster),
+                    (self._choose_ribbon, 'Select ribbon',
+                     'Select a ribbon from database or file', True),
+                    (self._choose_diecase, 'Select diecase',
+                     'Select a matrix case from database' + diecase_info,
+                     caster),
+                    (self._choose_wedge, 'Select wedge',
+                     'Enter a wedge designation (current: %s)' % self.wedge,
+                     caster),
+                    (self.ribbon.display_contents, 'View codes',
+                     'Display all codes in the selected ribbon', ribbon),
+                    (self.diecase.show_layout, 'Show diecase layout',
+                     'View the matrix case layout', diecase and caster),
+                    # (self.adhoc_typesetting, 'Ad-hoc typesetting',
+                    # 'Compose and cast a line of text', self.diecase),
+                    (self.cast_sorts, 'Cast sorts for given characters',
+                     'Cast from matrix based on a character',
+                     caster and diecase),
+                    (self.cast_sorts, 'Cast sorts from matrix coordinates',
+                     'Cast from matrix at given position',
+                     caster and not diecase),
+                    (self.cast_spaces, 'Cast spaces or quads',
+                     'Cast spaces or quads of a specified width', caster),
+                    (self.cast_typecases, 'Cast typecases',
+                     'Cast a typecase based on a selected font scheme',
+                     caster and diecase),
+                    (self._display_details, 'Show details...',
+                     'Display ribbon, diecase, wedge and interface info',
+                     caster),
+                    (self._display_details, 'Show details...',
+                     'Display ribbon and interface details', not caster),
+                    (matrix_data.diecase_operations, 'Matrix manipulation...',
+                     'Work on matrix cases', True),
+                    (self.diagnostics_submenu, 'Service...',
+                     'Interface and machine diagnostic functions', True)]
+            # Built a list of menu options conditionally
+            return [(function, description, long_description)
+                    for (function, description, long_description, condition)
+                    in opts if condition]
+
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.\n\n'
                   'This program reads a ribbon (from file or database) '
                   'and casts the type on a composition caster.'
                   '\n\nCasting / Punching Menu:')
         # Keep displaying the menu and go back here after any method ends
-        while True:
+        finished = False
+        while not finished:
             # Catch any known exceptions here
             try:
-                UI.menu(self._main_menu_options(), header=header, footer='')()
+                UI.menu(menu_options(), header=header, footer='')()
             except (e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
                 # Will skip to the end of the loop, and start all over
                 pass
@@ -611,48 +600,51 @@ class Casting(object):
     @property
     def ribbon(self):
         """Ribbon for the casting session"""
-        return self.__dict__.get('_ribbon', typesetting_data.Ribbon())
+        return self.__dict__.get('_ribbon') or typesetting_data.Ribbon()
 
     @ribbon.setter
     def ribbon(self, ribbon):
         """Ribbon setter"""
         self.__dict__['_ribbon'] = ribbon or typesetting_data.Ribbon()
-        self.diecase = ribbon.diecase
-        self.wedge = ribbon.wedge
+        if ribbon.diecase_id:
+            self.diecase = matrix_data.Diecase(ribbon.diecase_id)
+            self.wedge = self.diecase.wedge
+        if ribbon.wedge_name:
+            self.wedge = wedge_data.Wedge(ribbon.wedge_name)
 
     @property
     def diecase(self):
         """Diecase for the casting session"""
-        return self.__dict__.get('_diecase', matrix_data.Diecase())
+        return self.__dict__.get('_diecase') or matrix_data.Diecase()
 
     @diecase.setter
     def diecase(self, diecase):
         """Diecase setter"""
-        self.__dict__['_diecase'] = diecase or matrix_data.Diecase()
-        self.wedge = diecase.wedge
+        self.__dict__['_diecase'] = diecase
 
     @property
     def wedge(self):
         """Wedge for the casting session"""
-        return self.__dict__.get('_wedge', wedge_data.Wedge())
+        return self.__dict__.get('_wedge') or wedge_data.Wedge()
 
     @wedge.setter
     def wedge(self, wedge):
         """Wedge setter"""
-        self.__dict__['_wedge'] = wedge or wedge_data.SelectWedge()
-        self.diecase.alternative_wedge = wedge
+        self.__dict__['_wedge'] = wedge
+        self.diecase.alt_wedge = wedge
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
-        self.ribbon = typesetting_data.SelectRibbon()
+        self.ribbon = typesetting_data.Ribbon(manual_choice=True)
 
     def _choose_diecase(self):
         """Chooses a diecase from database"""
-        self.diecase = matrix_data.SelectDiecase()
+        self.diecase = matrix_data.Diecase(manual_choice=True)
+        self.wedge = self.diecase.wedge
 
     def _choose_wedge(self):
         """Chooses a wedge from registered ones"""
-        self.wedge = wedge_data.SelectWedge()
+        self.wedge = wedge_data.Wedge(manual_choice=True)
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
@@ -666,22 +658,3 @@ class Casting(object):
             display({'Wedge data': self.wedge.parameters})
         display({'Caster data': self.caster.parameters})
         UI.pause()
-
-
-def single_justification(wedge_positions):
-    """Returns a single justification sequence"""
-    pos_0075, pos_0005 = wedge_positions
-    return [c.PUMP_OFF + str(pos_0005), c.PUMP_ON + str(pos_0075)]
-
-
-def double_justification(wedge_positions):
-    """Returns a galley trip / double justification sequence"""
-    pos_0075, pos_0005 = wedge_positions
-    return [c.GALLEY_TRIP + str(pos_0005), c.PUMP_ON + str(pos_0075)]
-
-
-def high_or_low_space():
-    """Chooses high or low space"""
-    spaces = {True: '_', False: ' '}
-    high_or_low = UI.confirm('High space?', default=False)
-    return spaces[high_or_low]

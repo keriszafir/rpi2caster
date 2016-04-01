@@ -9,11 +9,15 @@ from . import wedge_unit_values as wu
 
 class Wedge(object):
     """Default S5-12E wedge"""
-    def __init__(self):
-        self.series = '5'
-        self.set_width = 12
-        self.is_brit_pica = True
-        self.units = wu.S5
+    def __init__(self, wedge_name='', manual_choice=False):
+        if wedge_name or manual_choice:
+            self.name = wedge_name
+        else:
+            # Default S5-12E
+            self.series = '5'
+            self.set_width = 12
+            self.is_brit_pica = True
+            self.units = wu.S5
 
     def __repr__(self):
         return self.name
@@ -55,11 +59,13 @@ class Wedge(object):
         and some old-style (alphabetic) names, like AK, BO etc.
         For unknown wedges, the user has to enter the values manually."""
         # Ask for wedge name and set width as it is written on the wedge
-        prompt = ('\nSome old-style wedge designations:\n\n' +
-                  '\n'.join(['\t'.join(group)
-                             for group in grouper(wu.ALIASES, 3, '')]) +
+        al_it = iter(wu.ALIASES)
+        # Group by three
+        grouper = zip_longest(al_it, al_it, al_it, fillvalue='')
+        old_wedges = '\n'.join('\t'.join(z) for z in grouper)
+        prompt = ('\nSome old-style wedge designations:\n\n%s'
                   '\n\nIf you have one of those, enter number (like S5-xx.yE).'
-                  '\n\nWedge designation?')
+                  '\n\nWedge designation?' % old_wedges)
         wedge_name = wedge_name or UI.enter_data_or_default(prompt, 'S5-12')
         # For countries that use comma as decimal delimiter, convert to point:
         wedge_name = wedge_name.replace(',', '.').upper().strip()
@@ -143,29 +149,10 @@ class Wedge(object):
     @property
     def points(self):
         """Gets the point values for the wedge's rows"""
-        return [round(self.units_to_points(units), 3) for units in self.units]
+        return [round(self.units_to_points_factor * units, 2)
+                for units in self.units]
 
-    def units_to_points(self, units):
-        """Gets a dtp point value for specified units"""
-        points = units * self.set_width * self.pica / 18 / 0.1667
-        return round(points, 2)
-
-    def points_to_units(self, points):
-        """Gets a number of units of self.set_width for a given point value"""
-        units = 18 * 0.1667 * points / self.set_width / self.pica
-        return int(round(units, 0))
-
-
-class SelectWedge(Wedge):
-    """Selects a wedge automatically or manually"""
-    def __init__(self, wedge_name=None, wedge_series=None, set_width=None):
-        super().__init__()
-        self.name = wedge_name or (wedge_series and set_width and
-                                   '%s-%s' % (wedge_series, set_width))
-
-
-def grouper(iterable, n, fillvalue=None):
-    "Collect data into fixed-length chunks or blocks"
-    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
-    args = [iter(iterable)] * n
-    return zip_longest(*args, fillvalue=fillvalue)
+    @property
+    def units_to_points_factor(self):
+        """Gets the factor for converting points to units and vice versa"""
+        return self.set_width * self.pica / 18 / 0.1667

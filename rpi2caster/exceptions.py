@@ -36,9 +36,11 @@ class CastingAborted(CastingOops):
     """Raised when casting is aborted due to machine stop."""
     pass
 
+
 class CastingFinished(CastingOops):
     """Raised when casting is finished normally because ribbon runs out."""
     pass
+
 
 class MachineStopped(CastingOops):
     """Raised by the caster control routines, when the machine stops."""
@@ -57,11 +59,6 @@ class ReturnToMenu(UIOops):
 
 class MenuLevelUp(UIOops):
     """Raised in submenus, to go up to a higher level"""
-    pass
-
-
-class ExitProgram(UIOops):
-    """Raised when user decides to exit program."""
     pass
 
 
@@ -118,26 +115,21 @@ class DuplicateError(TypesettingOops):
 # Little helper functions that raise the exceptions
 
 
-def return_to_menu():
+def return_to_menu(*_):
     """Wrapper for raising ReturnToMenu where a function is needed"""
     raise ReturnToMenu
 
 
-def abort_casting():
+def abort_casting(*_):
     """Wrapper for raising CastingAborted where a function is needed"""
     raise CastingAborted
 
 
-def menu_level_up():
+def menu_level_up(*_):
     """Wrapper for raising MenuLevelUp where a function is needed"""
     raise MenuLevelUp
 
 
-def exit_program():
-    """Wrapper for raising ReturnToMenu where a function is needed"""
-    raise ExitProgram
-
-
-def change_parameters():
+def change_parameters(*_):
     """Wrapper for raising ChangeParameters where a function is needed"""
     raise ChangeParameters

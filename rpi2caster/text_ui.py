@@ -12,8 +12,6 @@ from . import constants as c
 
 # Whether the debug mode is on (can be changed by setting module's attribute)
 DEBUG_MODE = False
-# Style modifiers for displaying bold, italic, smallcaps, inferior, superior
-STYLE_MODIFIERS = {'r': '', 'b': '*', 'i': '/', 's': '#', 'u': '_', 'l': '^'}
 # Some standard prompts
 MSG_MENU = '[Enter] to go back to main menu...'
 MSG_CONTINUE = '[Enter] to continue...'
@@ -192,45 +190,6 @@ def enter_data_or_exception(prompt, exception=ValueError, datatype=str):
             print('Incorrect value or data type!')
 
 
-def _format_display(character, style):
-    """Uses ANSI escape sequences to alter the appearance of the character
-    displayed in the matrix case layout.
-
-    Temporarily unused - until bugfix for 24574.
-    """
-    style_codes = {'roman': 0,
-                   'bold': 1,
-                   'italic': 33,
-                   'smallcaps': 34,
-                   'subscript': 35,
-                   'superscript': 36}
-    closing_sequence = '\033[0m'
-    starting_sequence = '\033[' + str(style_codes.get(style, 0)) + 'm'
-    character = starting_sequence + character + closing_sequence
-    print(character)
-    return character
-
-
-def format_display(character, style):
-    """This is a placeholder to be used until Python bug 24574 is fixed"""
-    return STYLE_MODIFIERS.get(style, '') + character
-
-
-def choose_styles(default='r', multiple=True):
-    """Chooses one or more styles and returns a list of them"""
-    if multiple:
-        header = 'Choose one or more text styles, e.g. roman and small caps.'
-    else:
-        header = 'Choose a text style.'
-    print(header +
-          '\nAvailable options: [r]oman, [b]old, [i]talic, [s]mall caps,\n'
-          '[l]ower index (a.k.a. subscript, inferior), '
-          '[u]pper index (a.k.a. superscript, superior).\n'
-          'Leave blank for roman.')
-    choice = enter_data_or_default('Styles?', default)
-    return ''.join([char for char in c.STYLES if char in choice])
-
-
 def tab_complete(text, state):
     """Enables tab key auto-completion when you enter the filename."""
     return (glob.glob(text+'*')+[None])[state]
@@ -305,10 +264,14 @@ def display_diecase_layout(diecase):
     assigned wedge, or the typical S5 if not specified."""
     def displayed_char(matrix):
         """Modifies matrix char for displaying"""
+        # Style modifiers for displaying roman, bold, italic,
+        # smallcaps, inferior, superior
+        style_modifiers = {'r': '', 'b': '*', 'i': '/',
+                           's': '#', 'u': '_', 'l': '^'}
         spaces_symbols = {'_': '▣', ' ': '□', '': ' '}
         formatted_char = matrix.char
         for style in matrix.styles:
-            formatted_char = format_display(formatted_char, style)
+            formatted_char = style_modifiers.get(style, '') + formatted_char
         return spaces_symbols.get(matrix.char, formatted_char)
 
     col_numbers = c.COLUMNS_15
@@ -355,26 +318,13 @@ def display_diecase_layout(diecase):
           sep='\n', end='\n\n')
 
 
-def edit_matrix(matrix):
-    """Edits the matrix data"""
-    display_parameters({'Matrix details': matrix.parameters})
-    prompt = 'Character (" " is low space, "_" is high space, ctrl-C to exit)?'
-    matrix.char = enter_data_or_default(prompt, matrix.char)
-    if not matrix.char:
-        return matrix
-    if not matrix.isspace():
-        matrix.styles = choose_styles(matrix.styles)
-    matrix.units = enter_data_or_default('Unit width?', matrix.units, int)
-    return matrix
-
-
 def edit_diecase_layout(diecase):
     """Edits a matrix case layout, row by row, matrix by matrix.
     Allows to enter a position to be edited. """
     def all_rows_mode():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
         for mat in diecase:
-            edit_matrix(mat)
+            mat.edit_matrix()
 
     def all_columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
@@ -382,19 +332,19 @@ def edit_diecase_layout(diecase):
         iter_mats = (mat for col in c.COLUMNS_17
                      for mat in diecase if mat.column == col)
         for mat in iter_mats:
-            edit_matrix(mat)
+            mat.edit_matrix()
 
     def single_row_mode(row):
         """Edits matrices found in a single row"""
         iter_mats = (mat for mat in diecase if mat.row == row)
         for mat in iter_mats:
-            edit_matrix(mat)
+            mat.edit_matrix()
 
     def single_column_mode(column):
         """Edits matrices found in a single column"""
         iter_mats = (mat for mat in diecase if mat.column == column)
         for mat in iter_mats:
-            edit_matrix(mat)
+            mat.edit_matrix()
 
     # Map unit values to rows
     # If the layout is empty, we need to initialize it
@@ -419,19 +369,8 @@ def edit_diecase_layout(diecase):
                 single_row_mode(int(ans))
             elif ans:
                 mat = diecase.decode_matrix(ans)
-                edit_matrix(mat)
+                mat.edit_matrix()
             else:
                 return diecase.matrices
         except (IndexError, KeyboardInterrupt, TypeError, AttributeError):
             pass
-
-
-def exit_program(*_):
-    """Exit program:
-
-    All objects call this method whenever they want to exit program.
-    This is because we may do something specific in different UIs,
-    so an abstraction layer may come in handy.
-    """
-    print('\n\nGoodbye!\n')
-    exit()

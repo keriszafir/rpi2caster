@@ -39,9 +39,10 @@ class TypesettingSession(object):
 
 class Settings(object):
     """Typesetting job settings"""
-    def __init__(self):
+    def __init__(self, diecase_id=''):
         self.wedge = wedge_data.Wedge()
-        self.diecase = matrix_data.SelectDiecase()
+        self.diecase = matrix_data.Diecase(diecase_id,
+                                           manual_choice=not diecase_id)
 
     def set_ligatures(self):
         """Chooses the max ligature size i.e. how many characters can form
@@ -415,7 +416,7 @@ class Translator(object):
                 if current_wedge_positions != line_wedge_positions:
                     # Set the line justification
                     current_wedge_positions = line_wedge_positions
-                    self.single_justification(current_wedge_positions)
+                    single_justification(current_wedge_positions)
                 self.output_buffer.append(self.spaces['var']['code'] + comment)
             elif combination == 'fixed_space':
                 pass
@@ -424,37 +425,183 @@ class Translator(object):
                 self.output_buffer.append(combination + comment)
             if wedge_positions != current_wedge_positions:
                 # Correction needed - determine if wedges are already set
-                self.single_justification(wedge_positions)
+                single_justification(wedge_positions)
                 current_wedge_positions = wedge_positions
                 self.output_buffer.append(combination + comment)
         return self.output_buffer
 
-    def single_justification(self, wedge_positions):
-        """Add 0075 + pos_0075, then 0005 + pos_0005"""
-        (pos_0075, pos_0005) = wedge_positions
-        return ['NKS 0075 %s' % pos_0075, 'NJS 0005 %s' % pos_0005]
 
-    def double_justification(self, wedge_positions):
-        """Add 0075 + pos_0075, then 0005-0075 + pos_0005"""
-        (pos_0075, pos_0005) = wedge_positions
-        return ['NKS 0075 %s' % pos_0075, 'NKJS 0005 0075 %s' % pos_0005]
+class GalleyBuilder(object):
+    """Builds a galley from input sequence"""
+    def __init__(self, source, diecase=None, measure=0):
+        self.source = (x for x in source)
+        self.measure = measure or enter_measure('galley width')
+        self.diecase = diecase or matrix_data.Diecase()
+        self.cooldown = False
+        self.mould_heatup = True
+        self.quad_padding = 1
+
+    def preheat_mould(self):
+        """Appends two lines of em-quads at the end"""
+        chunk = []
+        if self.mould_heatup:
+            quad = self.diecase.decode_matrix('O15')
+            quad_qty = int(self.measure // quad.points)
+            chunk = ['%s preheat' % quad] * quad_qty
+            comment = 'Casting quads for mould heatup'
+            chunk.extend(double_justification(comment=comment))
+        return chunk * 2
+
+    def make_ribbon(self):
+        """Instantiates a Ribbon() object from whatever we've generated"""
+        pass
+
+    def build_galley(self):
+        """Builds a line of characters from source"""
+        def decode_mat(mat):
+            """Gets the mat's parameters and stores them
+            to avoid recalculation"""
+            parameters = {}
+            if mat:
+                parameters['wedges'] = mat.wedge_positions()
+                parameters['points'] = mat.points
+                parameters['code'] = str(mat)
+                parameters['lowspace'] = mat.islowspace()
+            return parameters
+
+        def start_line():
+            """Starts a new line"""
+            nonlocal points_left, queue
+            points_left = self.measure - 2 * self.quad_padding * quad['points']
+            quads = [quad['code'] + ' quad padding'] * self.quad_padding
+            queue.extend(quads)
+
+        def build_line():
+            """Puts the matrix in the queue, changing the justification
+            wedges if needed, and adding a space for cooldown, if needed."""
+            # Declare variables in non-local scope to preserve them
+            # after the function exits
+            nonlocal queue, points_left, working_mat, current_wedges
+            # Take a mat from stash if there is any
+            working_mat = working_mat or decode_mat(next(self.source, None))
+            # Try to add another character to the line
+            if points_left > working_mat['points']:
+                # Store wedge positions
+                new_wedges = working_mat.get('wedges', (3, 8))
+                # Wedges change? Drop in some single justification
+                # (not needed if wedge positions were 3, 8)
+                if current_wedges != new_wedges:
+                    if current_wedges and current_wedges != (3, 8):
+                        comment = 'Adjusting wedges for character'
+                        queue.extend(single_justification(current_wedges,
+                                                          comment=comment))
+                    current_wedges = new_wedges
+                # Add the mat
+                queue.append(working_mat['code'])
+                points_left -= working_mat['points']
+                # We need to know what comes next
+                working_mat = decode_mat(next(self.source, None))
+                if working_mat:
+                    next_points = space['points'] + working_mat['points']
+                    space_needed = (points_left > next_points and not
+                                    working_mat.get('lowspace', True))
+                    if self.cooldown and space_needed:
+                        # Add a space for matrix cooldown
+                        queue.append(space['code'] + ' for cooldown')
+                        points_left -= space['points']
+                    # Exit and loop further
+                    return
+            # Finish the line
+            var_sp = self.diecase.decode_matrix('G1')
+            wedges = current_wedges
+            current_wedges = None
+            while points_left > quad['points']:
+                # Coarse fill with quads
+                queue.append(quad['code'] + ' coarse filling line')
+                points_left -= quad['points']
+            while points_left > space['points'] * 2:
+                # Fine fill with fixed spaces
+                queue.append(space['code'] + ' fine filling line')
+                points_left -= space['points']
+            if points_left >= var_sp.get_min_points():
+                # Put an adjustable space if possible to keep lines equal
+                if wedges:
+                    comment = 'Adjusting line length'
+                    queue.extend(single_justification(wedges, comment))
+                var_sp.points = points_left
+                queue.append(str(var_sp))
+                wedges = var_sp.wedge_positions()
+            # Always cast as many quads as needed, then put the line out
+            queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
+            queue.extend(double_justification(wedges, 'Ending line'))
+            points_left = 0
+
+        # Store the code and wedge positions to speed up the process
+        space = decode_mat(self.diecase.decode_matrix('G1'))
+        quad = decode_mat(self.diecase.decode_matrix('O15'))
+        working_mat = None
+        current_wedges = None
+        queue, points_left = end_casting(), 0
+        # Build the whole galley, line by line
+        while working_mat != {}:
+            start_line()
+            while points_left > 0:
+                build_line()
+        return queue + self.preheat_mould()
 
 
-def enter_measure(name='line length'):
+def single_justification(wedge_positions=(3, 8), comment=''):
+    """Add 0075 + pos_0075, then 0005 + pos_0005"""
+    (pos_0075, pos_0005) = wedge_positions
+    return pump_start(pos_0075, comment) + pump_stop(pos_0005)
+
+
+def double_justification(wedge_positions=(3, 8), comment=''):
+    """Add 0075 + pos_0075, then 0005-0075 + pos_0005"""
+    (pos_0075, pos_0005) = wedge_positions
+    return pump_start(pos_0075, comment) + galley_trip(pos_0005)
+
+
+def galley_trip(pos_0005=8, comment=''):
+    """Put the line to the galley"""
+    attach = comment and (' // ' + comment) or ''
+    return ['NKJS 0075 0005 %s%s' % (pos_0005, attach)]
+
+
+def pump_start(pos_0075=3, comment=''):
+    """Start the pump and set 0075 wedge"""
+    attach = comment and (' // ' + comment) or ''
+    return ['NKS 0075 %s%s' % (pos_0075, attach)]
+
+
+def pump_stop(pos_0005=8, comment=''):
+    """Stop the pump"""
+    attach = comment and (' // ' + comment) or ''
+    return ['NKJ 0005 %s%s' % (pos_0005, attach)]
+
+
+def end_casting():
+    """Alias for ending the casting job"""
+    return (pump_stop(comment='End casting') +
+            galley_trip(comment='Last line out'))
+
+
+def enter_measure(name='line length', default='cc'):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).
     Return length in DTP points."""
     prompt = ('Enter the desired value for %s and measurement unit:\n'
-              'cc - cicero (.1776"), dd - Didot point, '
-              'Pp - printer\'s pica (.1660"), pp - American pica point,\n'
-              'Pt - DTP pica (.1667"), pt - DTP point,\n", in - inch, '
-              'mm - millimeter, cm - centimeter?\n (default: cc) : ' % name)
+              'cc - cicero (.1776"), dd - Didot point,\n'
+              'Pp - US printer\'s pica (.1660"), pp - US pica point,\n'
+              'Pt - DTP pica (.1667"), pt - DTP pica point,\n'
+              '", in - inch, mm - millimeter, cm - centimeter?\n '
+              '(default: %s) : ' % (name, default))
     factor = 1.0
     # We need an ordered sequence here
     symbols = ['Pt', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cm' 'mm', 'in', '"', '']
     units = {'Pt': 12.0, 'pt': 1.0,
              'Pp': 12*0.166/0.1667, 'pp': 0.166/0.1667,
-             'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667, '': 12*0.1776/0.1667,
+             'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667,
              'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
     while True:
         raw_string = input(prompt).lower()
@@ -462,7 +609,9 @@ def enter_measure(name='line length'):
             for symbol in symbols:
                 # Get the units
                 if raw_string.endswith(symbol):
-                    factor = units[symbol]
+                    if not symbol:
+                        symbol = default
+                    factor = units.get(symbol, 1)
                     input_string = raw_string.replace(symbol, '')
                     input_string = input_string.strip()
                     break

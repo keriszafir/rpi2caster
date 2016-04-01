@@ -5,7 +5,9 @@ Data obtained from https://en.wikipedia.org/wiki/Letter_frequency
 All data is letter occurences relative to all letters in a sample of text.
 """
 from math import ceil
+from itertools import chain, zip_longest
 from .global_settings import UI
+from .exceptions import ReturnToMenu
 
 FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'f': 2.027, 'v': 2.415, 'n': 8.542, 'å': 1.338, 'g': 2.862,
@@ -120,9 +122,9 @@ LANGS = {'en': 'English', 'nl': 'Dutch', 'pl': 'Polish', 'de': 'German',
 class CharFreqs(object):
     """Read and calculate char frequencies, translate that to casting order"""
     def __init__(self, lang=None):
-        self.lang = lang in LANGS and lang or self.choose_language()
-        self.scale = self.define_scale()
-        self.upper_to_lower = self.define_ratio()
+        self.lang = lang in LANGS and lang or choose_language()
+        self.scale = 1.0
+        self.case_ratio = 1
 
     def __getitem__(self, item):
         return self.freqs.get(item, 0)
@@ -130,47 +132,54 @@ class CharFreqs(object):
     def __repr__(self):
         return self.lang
 
+    def __str__(self):
+        return LANGS.get(self.lang, '')
+
+    def __iter__(self):
+        return (char for char in self.freqs)
+
     @property
     def freqs(self):
-        return FREQS.get(self.lang, FREQS['en'])
+        """Get a dictionary of character frequencies"""
+        return FREQS.get(self.lang) or FREQS.get('en')
 
     @property
     def type_bill(self):
-        """Returns an arranged list of tuples:
-        (char, points_correction, qty)
+        """Returns an iterator object of tuples: (char, qty)
         for each character."""
-        # Start with lowercase
-        bill = [(char, 0, ceil(self.chars_for_100_a(char) * self.scale))
-                for char in sorted(self.freqs)]
-        # Add uppercase
-        bill.extend([(char.upper(), ceil(self.chars_for_100_a(char) *
-                      self.scale * self.upper_to_lower))
-                     for char in sorted(self.freqs) if char.isalpha()])
-        return bill
+        def quantity(char, upper=False):
+            """Calculate character quantity based on frequency"""
+            ratio = upper and self.case_ratio or 1
+            normalized_qty = self.freqs.get(char, 0) / self.freqs.get('a', 1)
+            return ceil(normalized_qty * self.scale * ratio)
 
-    def chars_for_100_a(self, char):
-        """Get a number of characters normalized to 100 "a"."""
-        a_freq = self.freqs.get('a', 10.0)
-        char_freq = self.freqs.get(char, 0)
-        return 100.0 * char_freq / a_freq
+        # Start with lowercase
+        lower_bill = ((char, quantity(char)) for char in sorted(self.freqs))
+        upper_bill = ((char.upper(), quantity(char, upper=True))
+                      for char in sorted(self.freqs) if char.isalpha())
+        return chain(lower_bill, upper_bill)
 
     def define_scale(self):
         """Define scale of production"""
-        prompt = ('How much "a" characters do you want to cast?\n'
-                  'The quantities of other characters will be calculated '
+        prompt = ('How much lowercase "a" characters do you want to cast?\n'
+                  'The quantities of other characters will be calculated\n'
                   'based on the letter frequency of the language.')
-        return UI.enter_data_or_default(prompt, 100, int) / 100
+        self.scale = UI.enter_data_or_default(prompt, 100, int)
 
-    def define_ratio(self):
+    def define_case_ratio(self):
         """Define uppercase to lowercase ratio"""
         prompt = ('Uppercase to lowercase ratio in %?')
-        return UI.enter_data_or_default(prompt, 100, float) / 100.0
+        self.case_ratio = UI.enter_data_or_default(prompt, 100, float) / 100.0
 
-    def choose_language(self):
-        """Display available languages and let user choose one/
-        Returns a string with language code (e.g. en, nl, de)."""
-        # No zeroth option
-        options = [('', '', '')]
-        options.extend([(lang, '%s - %s' % (lang, LANGS[lang]), '')
-                        for lang in sorted(LANGS)])
-        return UI.menu(options, header='Choose language')
+
+def choose_language():
+    """Display available languages and let user choose one/
+    Returns a string with language code (e.g. en, nl, de)."""
+    lang_it = ('%s - %s' % (lang, LANGS[lang]) for lang in sorted(LANGS))
+    # Group by three
+    grouper = zip_longest(lang_it, lang_it, lang_it, fillvalue='')
+    descriptions = '\n'.join('\t'.join(z) for z in grouper)
+    UI.display('Choose language:\n\n%s\n' % descriptions)
+    prompt = 'Language code (e.g. "en") or leave blank to go back to menu'
+    lang_code = UI.enter_data_or_exception(prompt, ReturnToMenu)
+    return lang_code

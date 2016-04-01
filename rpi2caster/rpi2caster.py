@@ -4,14 +4,16 @@ from os import system
 from sys import argv
 import argparse
 from . import exceptions as e
-from .text_ui import confirm, menu, exit_program
+from .text_ui import confirm, menu
 
 
 def cast(args):
     """Casting on an actual caster or simulation"""
     from . import casting_session
     session = casting_session.Casting(ribbon_file=args.ribbon_file,
-                                      diecase=args.diecase, wedge=args.wedge)
+                                      ribbon_id=args.ribbon_id,
+                                      diecase_id=args.diecase,
+                                      wedge=args.wedge)
     session.caster.mode.simulation = args.simulation
     session.caster.mode.punching = args.punching
     casting_session.UI.DEBUG_MODE = args.debug
@@ -52,10 +54,16 @@ def toggle_simulation(args):
 
 def main_menu(args):
     """Main menu - choose the module"""
+    def exit_program(*_):
+        """Breaks out of menu"""
+        nonlocal finished
+        finished = True
+
     header = ('rpi2caster - computer aided type casting for Monotype '
               'composition / type & rule casters.'
               '\n\nMain menu:\n')
-    while True:
+    finished = False
+    while not finished:
         options = [(exit_program, 'Exit',
                     'Exits the rpi2caster suite'),
                    (cast, {True: 'Punch ribbon...',
@@ -79,10 +87,10 @@ def main_menu(args):
                      False: 'Use a mockup for testing'}[args.simulation])]
         try:
             menu(options, header=header, footer='')(args)
-        except (e.ReturnToMenu, e.MenuLevelUp, e.ExitProgram):
+        except (e.ReturnToMenu, e.MenuLevelUp):
             pass
         except (KeyboardInterrupt, EOFError):
-            exit_program()
+            finished = True
 
 
 def main():
@@ -98,10 +106,10 @@ def main():
     # Initialize the main arguments parser
     main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
     # Set default values for all options globally
-    main_parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
-                             source=None, simulation=False, punching=False,
-                             unstable=False, manual=False, diecase=False,
-                             wedge=None, direct=False, testing=False)
+    main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
+                             ribbon_id='', source=None, simulation=False,
+                             punching=False, unstable=False, manual=False,
+                             diecase='', wedge='', direct=False, testing=False)
     #
     # Define commands
     #
@@ -139,6 +147,9 @@ def main():
     # Choose specific wedge
     cast_parser.add_argument('-w', '--wedge', metavar='W',
                              help='wedge to use: [s]series-set_width[e]')
+    # Ribbon ID for choosing from database
+    cast_parser.add_argument('-R', '--ribbon_id', metavar='R',
+                             help='ribbon ID to choose from database')
     # Ribbon - input file specification
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='ribbon file name')
@@ -181,7 +192,7 @@ def main():
     # Parsers defined
     try:
         args.job(args)
-    except (e.ExitProgram, e.ReturnToMenu, e.MenuLevelUp):
+    except (e.ReturnToMenu, e.MenuLevelUp):
         print('Goodbye!')
     except (KeyboardInterrupt, EOFError):
         print('\nInterrupted by user.')
@@ -190,6 +201,8 @@ def main():
             raise
         else:
             main_parser.print_help()
+    finally:
+        print('Goodbye!')
 
 
 if __name__ == '__main__':

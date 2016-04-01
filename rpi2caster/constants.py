@@ -12,10 +12,6 @@ ALNUM_ARR = ('1,2,3,4,5,6,7,8,9,10,11,12,13,14,0005,'
 COLUMNS_15 = [x for x in 'ABCDEFGHIJKLMNO']
 COLUMNS_17 = ['NI', 'NL'] + COLUMNS_15
 
-# Styles
-STYLES = {'r': 'roman', 'b': 'bold', 'i': 'italic',
-          's': 'smallcaps', 'l': 'subscript', 'u': 'superscript'}
-
 # For parsing lines in ribbon files
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
@@ -30,9 +26,3 @@ DEFAULT_CONFIG_PATHS = ['/etc/rpi2caster.conf', 'data/rpi2caster.conf']
 DEFAULT_DATABASE_PATHS = ['/var/local/rpi2caster/monotype.db',
                           '/var/local/rpi2caster/rpi2caster.db',
                           'data/rpi2caster.db']
-
-# Constants for control sequences
-GALLEY_TRIP = 'NKJS 0005 0075'
-PUMP_OFF = 'NJS 0005'
-PUMP_ON = 'NKS 0075'
-END_CASTING = [GALLEY_TRIP, PUMP_OFF, PUMP_OFF]

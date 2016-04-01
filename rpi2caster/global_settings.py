@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 """Global settings for rpi2caster"""
 
-from . import text_ui
+from . import text_ui as UI
 
-# User interface we use (text, web etc.)
-UI = text_ui
 # Conffile path
 CONFIG_PATH = '/etc/rpi2caster.conf'
 # SQLite3 database path

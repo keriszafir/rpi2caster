@@ -5,6 +5,7 @@ Database:
 Database-related classes for rpi2caster suite.
 """
 # IMPORTS:
+import os
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 import json
@@ -129,7 +130,10 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 sql = 'SELECT * FROM matrix_cases WHERE diecase_id = ?'
                 cursor.execute(sql, [diecase_id])
-                diecase = list(cursor.fetchone())
+                row = cursor.fetchone()
+                if not row:
+                    raise exceptions.NoMatchingData
+                diecase = list(row)
                 # De-serialize the diecase layout, convert it back to a list
                 raw_layout = json.loads(diecase.pop())
                 # Make sure the layout has specified units
@@ -146,7 +150,7 @@ class Database(object):
                 return diecase
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
-                raise exceptions.NoMatchingData
+                exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
@@ -180,8 +184,8 @@ class Database(object):
 
     def add_ribbon(self, ribbon):
         """Registers a ribbon in our database."""
-        data = [ribbon.description, ribbon.customer, ribbon.diecase.diecase_id,
-                ribbon.wedge.name, json.dumps(ribbon.contents)]
+        data = [ribbon.description, ribbon.customer, ribbon.diecase_id,
+                ribbon.wedge_name, json.dumps(ribbon.contents)]
         with self.db_connection:
             try:
                 cursor = self.db_connection.cursor()
@@ -238,38 +242,111 @@ class Database(object):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
-    def correct_diecase_layout(self):
+    def fix_v04(self):
         """Applies diecase layout correction for rpi2caster 0.4"""
         st_dict = {'roman': 'r', 'bold': 'b', 'italic': 'i', 'smallcaps': 's',
                    'small caps': 's', 'small_caps': 's', 'subscript': 'l',
                    'superscript': 'u', 'lower': 'l', 'upper': 'u',
                    'superior': 'u', 'inferior': 'l'}
+        print('Performing database backup...')
+        os.system('cp %s %s' % (self.path, self.path + '.bak'))
+        print('Applying fixes if needed...')
         with self.db_connection:
-            sql_query = 'SELECT * FROM matrix_cases ORDER BY diecase_id'
             cursor = self.db_connection.cursor()
-            cursor.execute(sql_query)
+            cursor.execute('SELECT * FROM matrix_cases ORDER BY diecase_id')
             results = cursor.fetchall()
             # Check if we got any:
             if not results:
                 print('No results found in database')
                 return
-            for row in results:
-                (diecase_id, _, _, layout) = row
+            for (diecase_id, _, _, layout) in results:
                 try:
-                    layout = json.loads(layout)
                     mangled_layout = []
-                    for matrix in layout:
+                    for matrix in json.loads(layout):
                         (char, styles, column, row, units) = matrix
-                        coordinates = '%s%s' % (column, row)
-                        mangled_styles = ''.join([st_dict.get(style, '')
-                                                  for style in styles])
-                        mangled_matrix = (char, mangled_styles,
-                                          coordinates, units)
-                        mangled_layout.append(mangled_matrix)
-                    jsoned_layout = json.dumps(mangled_layout)
+                        mangled_layout.append((char,
+                                               ''.join([st_dict.get(style, '')
+                                                        for style in styles]),
+                                               '%s%s' % (column, row),
+                                               '%s' % units))
                     cursor.execute(('UPDATE matrix_cases SET layout=?'
                                     'WHERE diecase_id=?'),
-                                   (jsoned_layout, diecase_id))
+                                   (json.dumps(mangled_layout), diecase_id))
                 except (ValueError, TypeError, IndexError):
                     print('Diecase %s: nothing to do' % diecase_id)
                     continue
+
+    def fix_v03(self):
+        """Applies database schema fix for 0.3"""
+        st_dict = {'roman': 'r', 'bold': 'b', 'italic': 'i', 'smallcaps': 's',
+                   'small caps': 's', 'small_caps': 's', 'subscript': 'l',
+                   'superscript': 'u', 'lower': 'l', 'upper': 'u',
+                   'superior': 'u', 'inferior': 'l'}
+
+        def correct_diecases():
+            """Changes wedge_series, set_width -> wedge_name;
+            changes layout: row, column -> coordinates, styles as a string"""
+            with self.db_connection:
+                cursor = self.db_connection.cursor()
+                cursor.execute('ALTER TABLE matrix_cases '
+                               'RENAME TO old_matrix_cases')
+                cursor.execute('CREATE TABLE matrix_cases ('
+                               'diecase_id TEXT UNIQUE PRIMARY KEY, '
+                               'typeface TEXT, '
+                               'wedge TEXT, '
+                               'layout TEXT NOT NULL)')
+                cursor.execute('SELECT * FROM old_matrix_cases')
+                diecases = cursor.fetchall()
+                for diecase_definition in diecases:
+                    [diecase_id, type_series, type_size, wedge_series,
+                     set_width, face_name, layout] = diecase_definition
+                    # Float .0 -> int
+                    if not set_width % 1:
+                        set_width = int(set_width)
+                    old_layout = json.loads(layout)
+                    mangled_layout = []
+                    for (char, styles, column, row, units) in old_layout:
+                        mangled_layout.append([char,
+                                               ''.join([st_dict.get(style, '')
+                                                        for style in styles]),
+                                               '%s%s' % (column, row),
+                                               '%s' % units])
+                    data = [diecase_id,
+                            '%s-%s %s' % (type_series, type_size, face_name),
+                            'S%s-%sE' % (wedge_series, set_width),
+                            json.dumps(mangled_layout)]
+                    cursor.execute('INSERT OR REPLACE INTO matrix_cases ('
+                                   'diecase_id, typeface, wedge, layout'
+                                   ') VALUES (?, ?, ?, ?)''', data)
+                cursor.execute('DROP TABLE wedges')
+                cursor.execute('DROP TABLE old_matrix_cases')
+                self.db_connection.commit()
+
+        def fix_needed():
+            """Checks if the diecase has been adjusted already"""
+            with self.db_connection:
+                cursor = self.db_connection.cursor()
+                cursor.execute('PRAGMA table_info(matrix_cases)')
+                column_items = [col_item[1] for col_item in cursor.fetchall()]
+            if column_items == ['diecase_id', 'type_series', 'type_size',
+                                'wedge_series', 'set_width', 'typeface_name',
+                                'layout']:
+                print('You have an old style diecases table. '
+                      'We need to change the database schema')
+                return True
+            else:
+                print('Your database is already corrected. '
+                      'No need to do anything.')
+                return False
+
+        print('Performing database backup...')
+        os.system('cp %s %s' % (self.path, self.path + '.bak'))
+        print('Applying layout corrections if needed...')
+        try:
+            if fix_needed():
+                print('This will correct the database, so that there is'
+                      ' a single column "wedges" and "typeface".')
+                correct_diecases()
+        except AttributeError:
+            print('You are using older version of the program. '
+                  'No need to change the database.')
