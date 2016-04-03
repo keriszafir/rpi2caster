@@ -10,6 +10,9 @@ from . import constants as c
 from .global_settings import UI
 # Configuration parsing
 from . import cfg_parser
+# Constants for readability
+AIR_ON = True
+AIR_OFF = False
 try:
     SIGNALS = (str(cfg_parser.get_config('SignalsArrangements',
                                          'signals_arrangement')).upper())
@@ -138,22 +141,24 @@ class MonotypeCaster(object):
         of duty cycle (bright/dark area ratio) and phase shift (disc's position
         relative to 0 degrees caster position).
         """
-        while True:
+        busy = True
+        while busy:
             # Escape this only by returning True on success,
             # or raising exceptions.CastingAborted, exceptions.ExitProgram
             # (which will be handled by the methods of the Casting class)
             try:
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
-                self.sensor.wait_for(True)
+                self.sensor.wait_for(AIR_ON)
                 self.output.valves_on(signals)
-                self.sensor.wait_for(False)
+                self.sensor.wait_for(AIR_OFF)
                 self.output.valves_off()
+                busy = False
                 # Successful ending - the combination has been cast
-                return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up
                 self.pump_stop()
+                # Exception will be handled in session
                 raise e.MachineStopped
 
     def pump_stop(self):
@@ -164,9 +169,9 @@ class MonotypeCaster(object):
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run a full machine cycle to turn the pump off
-                self.sensor.wait_for(True, 30)
+                self.sensor.wait_for(AIR_ON, 30)
                 self.output.valves_on(['N', 'J', 'S', '0005'])
-                self.sensor.wait_for(False, 30)
+                self.sensor.wait_for(AIR_OFF, 30)
                 self.output.valves_off()
                 UI.display('Pump is now off.')
                 return True

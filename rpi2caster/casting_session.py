@@ -285,7 +285,7 @@ class Casting(object):
             if not UI.confirm(prompt, default=True):
                 break
         # Now let's calculate and cast it...
-        self.cast_batch(order)
+        self.cast_galley(order)
 
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
