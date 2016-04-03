@@ -418,6 +418,28 @@ class Translator(object):
         return self.output_buffer
 
 
+class Line(deque):
+    """A line of type, justified to the left, center,right or both."""
+    def __init__(self, length):
+        self.length = length
+
+    def __add__(self, new):
+        if isinstance(new, matrix_data.Matrix):
+            self.append(new)
+        elif isinstance(new, (int, float)):
+            self.length += new
+        elif isinstance(new, (tuple, list, iter)):
+            self.extend([x for x in new])
+
+    def __radd__(self, new):
+        if isinstance(new, matrix_data.Matrix):
+            self.appendleft(new)
+        elif isinstance(new, (int, float)):
+            self.length += new
+        elif isinstance(new, (tuple, list, iter)):
+            self.extendleft([x for x in new])
+
+
 class GalleyBuilder(object):
     """Builds a galley from input sequence"""
     def __init__(self, source, diecase=None, measure=0):
