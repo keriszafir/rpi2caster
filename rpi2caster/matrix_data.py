@@ -217,10 +217,13 @@ class Diecase(object):
 
     def decode_matrix(self, code):
         """Finds the matrix based on the column and row in layout"""
-        mat = [mat for mat in self.matrices if mat.code == code.upper()][0]
-        if not mat:
-            mat = Matrix(char=' ', code=code, diecase=self)
-        elif not mat.char:
+        matrices = (mat for mat in self.matrices if mat.code == code.upper())
+        try:
+            mat = next(matrices)
+        except StopIteration:
+            mat = Matrix(code=code, diecase=self)
+        if not mat.char:
+            # Assume it's a space
             mat.char = ' '
         return mat
 
