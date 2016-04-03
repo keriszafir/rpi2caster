@@ -45,15 +45,15 @@ def choose_sensor_and_driver(casting_routine):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
+        mode = self.caster.mode
         UI.debug_pause('About to %s...' %
-                       (self.caster.mode.casting and 'cast composition' or
-                        self.caster.mode.testing and 'test the outputs' or
-                        self.caster.mode.calibration and
-                        'calibrate the machine' or
-                        self.caster.mode.punching and 'punch the ribbon'))
+                       (mode.casting and 'cast composition' or
+                        mode.testing and 'test the outputs' or
+                        mode.calibration and 'calibrate the machine' or
+                        mode.punching and 'punch the ribbon'))
         # Instantiate and enter context
-        with self.caster.mode.sensor() as self.caster.sensor:
-            with self.caster.mode.output() as self.caster.output:
+        with mode.sensor() as self.caster.sensor:
+            with mode.output() as self.caster.output:
                 with self.caster:
                     return casting_routine(self, *args, **kwargs)
     return wrapper
@@ -64,85 +64,14 @@ def cast_or_punch_result(ribbon_source):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         try:
-            self.cast_queue(ribbon_source(self, *args, **kwargs))
+            ribbon = ribbon_source(self, *args, **kwargs)
+            if ribbon:
+                self.cast_codes(ribbon)
         except e.CastingAborted:
             pass
         finally:
             self.caster.mode.diagnostics = False
             self.caster.mode.hmn, self.caster.mode.unitshift = False, False
-    return wrapper
-
-
-def prepare_job(ribbon_casting_workflow):
-    """Prepares the job for casting"""
-
-    def wrapper(self, ribbon):
-        """Wrapper function"""
-        # Stop here if no ribbon
-        if not ribbon:
-            return
-        # Mode aliases
-        punching = self.caster.mode.punching
-        casting = self.caster.mode.casting
-        diagnostics = self.caster.mode.diagnostics
-        # Rewind the ribbon if 0005 is found before 0005+0075
-        if not diagnostics and not punching and p.stop_comes_first(ribbon):
-            ribbon = [x for x in reversed(ribbon)]
-        # New stats for the resulting ribbon
-        self.stats.ribbon = ribbon
-        UI.display_parameters({'Ribbon info': self.stats.ribbon_parameters})
-        # Always 1 run for calibrating and punching
-        if diagnostics or punching:
-            self.stats.runs = 1
-            l_skipped = 0
-        else:
-            prompt = 'How many times do you want to cast it?'
-            self.stats.runs = abs(UI.enter_data_or_default(prompt, 1, int))
-            # Line skipping - ask user if they want to skip any initial line(s)
-            prompt = 'How many initial lines do you want to skip?'
-            l_skipped = (self.stats.get_ribbon_lines() > 1 and
-                         abs(UI.enter_data_or_default(prompt, 0, int)) or 0)
-        UI.display_parameters({'Session info': self.stats.session_parameters})
-        # For each casting run repeat
-        while self.stats.get_runs_left():
-            queue = deque(ribbon)
-            # Apply constraints: 0 <= lines_skipped < lines in ribbon
-            l_skipped = max(0, l_skipped)
-            l_skipped = min(l_skipped, self.stats.get_ribbon_lines() - 1)
-            UI.display('Skipping %s lines' % l_skipped)
-            # Take away combinations until we skip the desired number of lines
-            # BEWARE: ribbon starts with galley trip!
-            # We must give it back after lines are taken away
-            code = ''
-            while l_skipped + 1 > 0 and not diagnostics:
-                code = queue.popleft()
-                l_skipped -= 1 * p.check_newline(code)
-            queue.appendleft(code)
-            # The ribbon is ready for casting / punching
-            self.stats.queue = queue
-            exit_prompt = '[Y] to start next run or [N] to exit?'
-            if ribbon_casting_workflow(self, queue):
-                # Casting successful - ready to cast next run - ask to repeat
-                # after the last run is completed (because user may want to
-                # cast / punch once more?)
-                if (self.stats.all_done() and
-                        UI.confirm('One more run?', default=diagnostics)):
-                    self.stats.add_one_more_run()
-            elif casting and UI.confirm('Retry this run?', default=True):
-                # Casting aborted - ask if user wants to repeat
-                self.stats.undo_last_run()
-                self.stats.add_one_more_run()
-                lines_ok = self.stats.get_lines_done()
-                prompt = 'Skip %s lines successfully cast?' % lines_ok
-                if lines_ok > 0 and UI.confirm(prompt, default=True):
-                    l_skipped = lines_ok
-                # Start this run again
-            elif (not self.stats.all_done() and
-                  UI.confirm(exit_prompt, default=True)):
-                # There are some more runs to do - go on?
-                self.stats.undo_last_run()
-            else:
-                return
     return wrapper
 
 
@@ -170,13 +99,83 @@ class Casting(object):
         if wedge_name:
             self.wedge = Wedge(wedge_name)
 
-    @prepare_job
     @choose_sensor_and_driver
-    def cast_queue(self, casting_queue):
-        """Casts the sequence of codes in ribbon or self.ribbon.contents,
-        displaying the statistics (depending on context:
-        casting, punching or testing)
+    def cast_codes(self, ribbon):
         """
+        Main casting routine.
+        Cast or punch a sequence of codes, displaying the statistics.
+        First choose a number of repetitions and lines skipped (for casting),
+        diagnostics and punching will be processed from start to end.
+        For each run, display statistics and send signals to the caster
+        one by one, until a whole sequence is cast.
+        If casting multiple runs, repeat until all are done.
+        A run may not be successful (casting is aborted by machine stop
+        or ctrl-C interrupt) - in this case, lines cast successfully
+        may be skipped, and the rest will be cast.
+        """
+        mode = self.caster.mode
+        # Rewind the ribbon if 0005 is found before 0005+0075
+        if not (mode.testing or mode.punching) and p.stop_comes_first(ribbon):
+            ribbon = [x for x in reversed(ribbon)]
+        # New stats for the resulting ribbon
+        self.stats.ribbon = ribbon
+        UI.display_parameters({'Ribbon info': self.stats.ribbon_parameters})
+        # Always 1 run for calibrating and punching
+        if mode.diagnostics or mode.punching:
+            self.stats.runs = 1
+            l_skipped = 0
+        else:
+            prompt = 'How many times do you want to cast it?'
+            self.stats.runs = abs(UI.enter_data_or_default(prompt, 1, int))
+            # Line skipping - ask user if they want to skip any initial line(s)
+            prompt = 'How many initial lines do you want to skip?'
+            l_skipped = (self.stats.get_ribbon_lines() > 1 and
+                         abs(UI.enter_data_or_default(prompt, 0, int)) or 0)
+        UI.display_parameters({'Session info': self.stats.session_parameters})
+        # For each casting run repeat
+        while self.stats.get_runs_left():
+            queue = deque(ribbon)
+            # Apply constraints: 0 <= lines_skipped < lines in ribbon
+            l_skipped = min(l_skipped, self.stats.get_ribbon_lines() - 1)
+            l_skipped = max(0, l_skipped)
+            if l_skipped:
+                UI.display('Skipping %s lines' % l_skipped)
+            # Take away combinations until we skip the desired number of lines
+            # BEWARE: ribbon starts with galley trip!
+            # We must give it back after lines are taken away
+            code = ''
+            while l_skipped + 1 > 0 and not mode.diagnostics:
+                code = queue.popleft()
+                l_skipped -= 1 * p.check_newline(code)
+            queue.appendleft(code)
+            # The ribbon is ready for casting / punching
+            self.stats.queue = queue
+            exit_prompt = '[Y] to start next run or [N] to exit?'
+            if self.process_casting_run(queue):
+                # Casting successful - ready to cast next run - ask to repeat
+                # after the last run is completed (because user may want to
+                # cast / punch once more?)
+                if (self.stats.all_done() and
+                        UI.confirm('One more run?', default=mode.diagnostics)):
+                    self.stats.add_one_more_run()
+            elif mode.casting and UI.confirm('Retry this run?', default=True):
+                # Casting aborted - ask if user wants to repeat
+                self.stats.undo_last_run()
+                self.stats.add_one_more_run()
+                lines_ok = self.stats.get_lines_done()
+                prompt = 'Skip %s lines successfully cast?' % lines_ok
+                if lines_ok > 0 and UI.confirm(prompt, default=True):
+                    l_skipped = lines_ok
+                # Start this run again
+            elif (not self.stats.all_done() and
+                  UI.confirm(exit_prompt, default=True)):
+                # There are some more runs to do - go on?
+                self.stats.undo_last_run()
+            else:
+                return
+
+    def process_casting_run(self, casting_queue):
+        """Casts the sequence of codes in given sequence"""
         mode = self.caster.mode
         generator = (p.parse_record(record) for record in casting_queue)
         if not mode.testing:
@@ -307,7 +306,7 @@ class Casting(object):
                 UI.display('%s: %s' % (char, chars_qty))
                 matrix = self.diecase.lookup_matrix(char, style)
                 order.append((matrix, qty))
-        self.cast_batch(order)
+        self.cast_galley(order)
 
     def cast_spaces(self):
         """Spaces casting routine, based on the position in diecase.
@@ -327,11 +326,11 @@ class Casting(object):
             prompt = 'More spaces? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
                 break
-        self.cast_batch(order)
+        self.cast_galley(order)
 
     @cast_or_punch_result
-    def cast_batch(self, order=()):
-        """Cast a batch of characters, to a given galley width.
+    def cast_galley(self, order=()):
+        """Cast a series of type, filling lines of given width to the brim.
 
         Each character is specified by a tuple: (matrix, qty)
             where matrix is a matrix_data.Matrix object,
@@ -416,7 +415,7 @@ class Casting(object):
                    'until the lengths are the same.')
         if not UI.confirm('\nProceed?', default=True):
             return None
-        mat = matrix_data.Matrix(code='G5', diecase=self.diecase)
+        mat = self.diecase.decode_matrix('G5')
         self.caster.mode.calibration = True
         sequence = tsf.end_casting()
         sequence.extend(['S %s with S-needle' % mat] * 7)
@@ -439,9 +438,9 @@ class Casting(object):
                    % round(self.wedge.em_width, 4))
         if not UI.confirm('\nProceed?', default=True):
             return None
-        mat = matrix_data.Matrix(code='G5', diecase=self.diecase)
+        mat = self.diecase.decode_matrix('G5')
         self.caster.mode.calibration = True
-        sequence = tsf.end_casting() + [mat.code] * 7
+        sequence = tsf.end_casting() + ['%s' % mat] * 7
         sequence.extend(tsf.double_justification())
         return sequence
 
@@ -469,7 +468,7 @@ class Casting(object):
             if prev_wedge_positions != (3, 8) and wedges_change:
                 queue.extend(tsf.single_justification(prev_wedge_positions))
             # Add the characters to the queue
-            queue.extend([str(mat)] * 3)
+            queue.extend(['%s' % mat] * 3)
         # Set the initial wedge positions
         queue.extend(tsf.double_justification(wedge_positions))
         return queue
