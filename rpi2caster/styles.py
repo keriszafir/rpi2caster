@@ -3,14 +3,12 @@
 from .global_settings import UI
 
 
-# Styles definitions
-STYLES_ORDER = [x for x in 'rbislu']
-STYLES_NAMES = ['roman', 'bold', 'italic', 'smallcaps', 'inferior', 'superior']
-STYLES = dict(zip(STYLES_ORDER, STYLES_NAMES))
-
-
 class Styles(object):
     """Manage styles"""
+    order = [x for x in 'rbislu']
+    names = ['roman', 'bold', 'italic', 'smallcaps', 'inferior', 'superior']
+    style_dict = dict(zip(order, names))
+
     def __init__(self, styles_string=None, allow_multiple=True):
         self.styles_list = []
         self.allow_multiple = allow_multiple
@@ -21,13 +19,13 @@ class Styles(object):
             self.styles_string = styles_string
         else:
             # Setting an empty style will set all'
-            self.styles_list = STYLES_ORDER
+            self.styles_list = Styles.order
 
     def __iter__(self):
         return (x for x in self.styles_list)
 
     def __str__(self):
-        if self.styles_list == STYLES_ORDER:
+        if self.styles_list == Styles.order:
             return 'all'
         else:
             return ', '.join(self.values())
@@ -46,7 +44,7 @@ class Styles(object):
     @styles_string.setter
     def styles_string(self, styles_string):
         """Set styles based on string"""
-        styles_list = [x for x in STYLES_ORDER if x in styles_string]
+        styles_list = [x for x in Styles.order if x in styles_string]
         if self.allow_multiple:
             self.styles_list = styles_list
         else:
@@ -58,7 +56,7 @@ class Styles(object):
 
     def values(self):
         """Return a list of style names for each style"""
-        names = (STYLES.get(item, '') for item in self.styles_list)
+        names = (Styles.style_dict.get(item, '') for item in self.styles_list)
         return [name for name in names if name]
 
     def items(self):
@@ -68,7 +66,8 @@ class Styles(object):
     def choose(self):
         """Chooses one or more styles and returns a list of them"""
         desc = ('\nAvailable options:\n' +
-                '\n'.join(['%s - %s' % (x, STYLES[x]) for x in STYLES_ORDER]))
+                '\n'.join('%s - %s' % (x, Styles.style_dict[x])
+                          for x in Styles.order))
         header = 'Choose a text style.\n'
         if self.allow_multiple:
             header = ('Choose one or more text styles, '

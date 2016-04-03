@@ -26,9 +26,9 @@ from . import constants as c
 # Typesetting functions module
 from . import typesetting_funcs as tsf
 # Style manager
-from . import styles as st
+from .styles import Styles
 # Caster backend
-from . import monotype
+from .monotype import MonotypeCaster
 # Casting stats
 from .casting_stats import Stats
 # Globally selected UI
@@ -36,9 +36,9 @@ from .global_settings import UI
 # Typecase casting needs this
 from . import letter_frequencies
 # Matrix, wedge and typesetting data models
-from . import typesetting_data
+from .typesetting_data import Ribbon
 from . import matrix_data
-from . import wedge_data
+from .wedge_data import Wedge
 
 
 def choose_sensor_and_driver(casting_routine):
@@ -159,16 +159,16 @@ class Casting(object):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
 
-    def __init__(self, ribbon_file='', ribbon_id='', diecase_id='', wedge=''):
+    def __init__(self, ribbon_file='', ribbon_id='', diecase_id='',
+                 wedge_name=''):
         # Caster for this job
-        self.caster = monotype.MonotypeCaster()
+        self.caster = MonotypeCaster()
         self.stats = Stats(self)
-        self.ribbon = typesetting_data.Ribbon(filename=ribbon_file,
-                                              ribbon_id=ribbon_id)
+        self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
         if diecase_id:
             self.diecase = matrix_data.Diecase(diecase_id)
         if wedge:
-            self.wedge = wedge_data.Wedge(wedge)
+            self.wedge = Wedge(wedge_name)
 
     @prepare_job
     @choose_sensor_and_driver
@@ -293,7 +293,7 @@ class Casting(object):
         freqs.define_scale()
         UI.display('Styles to cast?')
         order = []
-        style_manager = st.Styles()
+        style_manager = Styles()
         styles = style_manager.keys()
         for style, name in style_manager.items():
             # Display style name
@@ -380,7 +380,7 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        style = st.Styles(allow_multiple=False)()
+        style = Styles(allow_multiple=False)()
         text = UI.enter_data('Text to compose?')
         if not self.diecase.test_characters(text, style):
             UI.display('WARNING: Some characters are missing!')
@@ -614,17 +614,17 @@ class Casting(object):
     @property
     def ribbon(self):
         """Ribbon for the casting session"""
-        return self.__dict__.get('_ribbon') or typesetting_data.Ribbon()
+        return self.__dict__.get('_ribbon') or Ribbon()
 
     @ribbon.setter
     def ribbon(self, ribbon):
         """Ribbon setter"""
-        self.__dict__['_ribbon'] = ribbon or typesetting_data.Ribbon()
+        self.__dict__['_ribbon'] = ribbon or Ribbon()
         if ribbon.diecase_id:
             self.diecase = matrix_data.Diecase(ribbon.diecase_id)
             self.wedge = self.diecase.wedge
         if ribbon.wedge_name:
-            self.wedge = wedge_data.Wedge(ribbon.wedge_name)
+            self.wedge = Wedge(ribbon.wedge_name)
 
     @property
     def diecase(self):
@@ -639,7 +639,7 @@ class Casting(object):
     @property
     def wedge(self):
         """Wedge for the casting session"""
-        return self.__dict__.get('_wedge') or wedge_data.Wedge()
+        return self.__dict__.get('_wedge') or Wedge()
 
     @wedge.setter
     def wedge(self, wedge):
@@ -649,7 +649,7 @@ class Casting(object):
 
     def _choose_ribbon(self):
         """Chooses a ribbon from database or file"""
-        self.ribbon = typesetting_data.Ribbon(manual_choice=True)
+        self.ribbon = Ribbon(manual_choice=True)
 
     def _choose_diecase(self):
         """Chooses a diecase from database"""
@@ -658,7 +658,7 @@ class Casting(object):
 
     def _choose_wedge(self):
         """Chooses a wedge from registered ones"""
-        self.wedge = wedge_data.Wedge(manual_choice=True)
+        self.wedge = Wedge(manual_choice=True)
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""

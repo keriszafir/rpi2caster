@@ -113,16 +113,18 @@ FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
          '#': {'1': 10, '2': 10, '3': 10, '4': 10, '5': 10, '6': 10,
                '7': 10, '8': 10, '9': 10, '0': 10}}
 
-LANGS = {'en': 'English', 'nl': 'Dutch', 'pl': 'Polish', 'de': 'German',
-         'eo': 'Esperanto', 'tr': 'Turkish', 'it': 'Italian', 'cz': 'Czech',
-         'fr': 'French', 'es': 'Spanish', 'pt': 'Portugese', 'da': 'Danish',
-         'fi': 'Finnish', 'sv': 'Swedish', '#': 'numbers'}
-
 
 class CharFreqs(object):
     """Read and calculate char frequencies, translate that to casting order"""
+    frequencies = FREQS
+    langs = {'en': 'English', 'nl': 'Dutch', 'pl': 'Polish', 'de': 'German',
+             'eo': 'Esperanto', 'tr': 'Turkish', 'it': 'Italian',
+             'cz': 'Czech', 'fr': 'French', 'es': 'Spanish',
+             'pt': 'Portugese', 'da': 'Danish', 'fi': 'Finnish',
+             'sv': 'Swedish', '#': 'numbers'}
+
     def __init__(self, lang=None):
-        self.lang = lang in LANGS and lang or choose_language()
+        self.lang = lang in CharFreqs.langs and lang or choose_language()
         self.scale = 1.0
         self.case_ratio = 1
 
@@ -133,7 +135,7 @@ class CharFreqs(object):
         return self.lang
 
     def __str__(self):
-        return LANGS.get(self.lang, '')
+        return CharFreqs.langs.get(self.lang, '')
 
     def __iter__(self):
         return (char for char in self.freqs)
@@ -141,7 +143,8 @@ class CharFreqs(object):
     @property
     def freqs(self):
         """Get a dictionary of character frequencies"""
-        return FREQS.get(self.lang) or FREQS.get('en')
+        return (CharFreqs.frequencies.get(self.lang) or
+                CharFreqs.frequencies.get('en'))
 
     @property
     def type_bill(self):
@@ -173,9 +176,10 @@ class CharFreqs(object):
 
 
 def choose_language():
-    """Display available languages and let user choose one/
+    """Display available languages and let user choose one.
     Returns a string with language code (e.g. en, nl, de)."""
-    lang_it = ('%s - %s' % (lang, LANGS[lang]) for lang in sorted(LANGS))
+    lang_it = ('%s - %s' % (lang, CharFreqs.langs[lang])
+               for lang in sorted(CharFreqs.langs))
     # Group by three
     grouper = zip_longest(lang_it, lang_it, lang_it, fillvalue='')
     descriptions = '\n'.join('\t'.join(z) for z in grouper)

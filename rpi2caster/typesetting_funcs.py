@@ -6,11 +6,12 @@ Contains functions used for calculating line length, justification,
 setting wedge positions, breaking the line etc.
 """
 import io
+from collections import deque
 from . import exceptions as e
 from .global_settings import UI
-from . import matrix_data
-from . import wedge_data
-from . import typesetting_data
+from .matrix_data import Diecase, Matrix
+from .wedge_data import Wedge
+from .typesetting_data import Ribbon
 
 COMMANDS = {'^00': 'roman', '^01': 'bold', '^02': 'italic',
             '^03': 'smallcaps', '^04': 'subscript', '^05': 'superscript',
@@ -40,7 +41,7 @@ class TypesettingSession(object):
 class Settings(object):
     """Typesetting job settings"""
     def __init__(self, diecase_id=''):
-        self.wedge = wedge_data.Wedge()
+        self.wedge = Wedge()
         self.diecase = matrix_data.Diecase(diecase_id,
                                            manual_choice=not diecase_id)
 
@@ -80,20 +81,6 @@ class Settings(object):
             self.compose = self.manual_compose
             # Set custom spaces
             self._configure_spaces()
-
-    def _choose_style(self):
-        """Parses the diecase for available styles and lets user choose one."""
-        available_styles = matrix_data.get_styles(self.diecase_layout)
-        options = {str(i): style for i, style in
-                   enumerate(available_styles, start=1)}
-        # Nothing to choose from? Don't display the menu
-        if len(options) == 1:
-            self.main_style = options['1']
-        # Otherwise, let user choose
-        styles_list = ['%s : %s' % (x, options[x]) for x in sorted(options)]
-        styles_list = ', '.join(styles_list)
-        prompt = 'Choose a dominant style: %s ' % styles_list
-        self.main_style = UI.simple_menu(prompt, options)
 
     @property
     def diecase(self):
@@ -167,7 +154,7 @@ class OutputData(object):
     def __init__(self):
         self.comments = False
         self.buffer = []
-        self.ribbon = typesetting_data.Ribbon()
+        self.ribbon = Ribbon()
 
     def _justify_line(self, mode=1):
         """justify_line(mode=1)

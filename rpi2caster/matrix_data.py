@@ -10,22 +10,22 @@ from copy import copy
 
 # Some functions raise custom exceptions
 from . import exceptions as e
-# Wedge operations for several matrix-case management functions
-from . import wedge_data
 # Constants module
 from . import constants as c
 # Parsing module
 from . import parsing as p
 # Styles manager
-from . import styles as st
-# Database backend
-from . import database
+from .styles import Styles
+# Wedge operations for several matrix-case management functions
+from .wedge_data import Wedge
 # User interface
 from .global_settings import UI
 # Letter frequency for completeness testing
-from . import letter_frequencies as lf
+from .letter_frequencies import CharFreqs
+# Database backend
+from .database import Database
 # Make or use existing database instance
-DB = database.Database()
+DB = Database()
 
 
 class Diecase(object):
@@ -46,7 +46,7 @@ class Diecase(object):
             data = ['', '', 'S5-12E', []]
         UI.display('Processing diecase data...')
         (self.diecase_id, self.typeface, wedge_name, layout) = data
-        self.wedge = wedge_data.Wedge(wedge_name, manual_choice=not wedge_name)
+        self.wedge = Wedge(wedge_name, manual_choice=not wedge_name)
         self.layout = layout or generate_empty_layout(15, 17)
 
     def __iter__(self):
@@ -110,7 +110,7 @@ class Diecase(object):
         """Parses the diecase layout and gets available typeface styles.
         Returns a list of them."""
         all_styles = set(''.join([mat.styles for mat in self]))
-        return st.Styles(all_styles)()
+        return Styles(all_styles)()
 
     def show_layout(self):
         """Shows the diecase layout"""
@@ -127,19 +127,17 @@ class Diecase(object):
         """Gets points for alternative wedge,
         assigned wedge or default wedge"""
         return (self.__dict__.get('_alt_row_points') or
-                self.__dict__.get('_row_points') or
-                wedge_data.Wedge().points)
+                self.__dict__.get('_row_points') or Wedge().points)
 
     @property
     def wedge_points(self):
         """Returns a list of assigned wedge's points"""
-        return (self.__dict__.get('_row_points') or
-                wedge_data.Wedge().points)
+        return (self.__dict__.get('_row_points') or Wedge().points)
 
     @property
     def wedge(self):
         """Gets assigned wedge."""
-        return self.__dict__.get('_wedge') or wedge_data.Wedge()
+        return self.__dict__.get('_wedge') or Wedge()
 
     @wedge.setter
     def wedge(self, wedge):
@@ -151,7 +149,7 @@ class Diecase(object):
     def alt_wedge(self):
         """Gets the diecase's temporary wedge"""
         return (self.__dict__.get('_alt_wedge') or
-                self.__dict__.get('_wedge') or wedge_data.Wedge())
+                self.__dict__.get('_wedge') or Wedge())
 
     @alt_wedge.setter
     def alt_wedge(self, wedge):
@@ -165,13 +163,12 @@ class Diecase(object):
         def enter_manually(char='', style=''):
             """Specify matrix by entering code"""
             if char:
-                what = spaces.get(char) or '%s %s' % (st.Styles(style), char)
+                what = spaces.get(char) or '%s %s' % (Styles(style), char)
                 UI.display('Choose matrix for %s' % what)
             else:
                 char = ''
             code = UI.enter_data_or_default('Combination?', 'G5').upper()
             matrix = Matrix(char=char, style=style, code=code, diecase=self)
-            matrix.units = self.wedge[matrix.row]
             return matrix
 
         spaces = {' ': 'low space', '_': 'high space'}
@@ -202,14 +199,14 @@ class Diecase(object):
             return candidates[0]
         else:
             # Multiple matches found = let user choose
-            what = spaces.get(char) or '%s %s' % (st.Styles(style), char)
+            what = spaces.get(char) or '%s %s' % (Styles(style), char)
             UI.display_header('Multiple matrices for %s' % what)
             # Show a menu with multiple candidates
             mats = {i: mat for i, mat in enumerate(candidates, start=1)}
             UI.display(''.join(['Index'.ljust(10), 'Char'.ljust(10),
                                 'Styles'.ljust(30), 'Coordinates']))
             for i, mat in mats.items():
-                matrix_styles = str(st.Styles(mat.styles))
+                matrix_styles = str(Styles(mat.styles))
                 record = [str(i).ljust(10), mat.char.ljust(10),
                           matrix_styles.ljust(30), mat.code]
                 UI.display(''.join(record))
@@ -267,7 +264,7 @@ class Diecase(object):
         charset = {char for char in input_string}
         # Return True unless any characters are missing
         retval = True
-        for style, description in st.Styles(styles).items():
+        for style, description in Styles(styles).items():
             chars_found = {mat.char for mat in self for char in charset
                            if char == mat.char and
                            (mat.isspace() or style in mat.styles)}
@@ -283,13 +280,13 @@ class Diecase(object):
     def _test_lang_completeness(self):
         """Choose a language and test whether the diecase contains all
         characters, and if not, list them"""
-        char_backend = lf.CharFreqs()
+        char_backend = CharFreqs()
         UI.display('Building character set...')
         uppercase = [char.upper() for char in char_backend]
         lowercase = [char.lower() for char in char_backend]
         all_chars = ''.join(list(sorted(set(uppercase + lowercase))))
         UI.display('\nCharacters: %s\n' % all_chars)
-        styles = st.Styles()()
+        styles = Styles()()
         self.test_characters(all_chars, styles)
         UI.pause()
 
@@ -314,7 +311,7 @@ class Diecase(object):
 
     def _assign_wedge(self, wedge=''):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
-        self.wedge = wedge_data.Wedge(wedge, manual_choice=not wedge)
+        self.wedge = Wedge(wedge, manual_choice=not wedge)
 
     def _save_to_db(self):
         """Stores the matrix case definition/layout in database"""
@@ -411,7 +408,7 @@ class Matrix(object):
                    self.ishighspace() and
                    ' // high space %.2f points wide' % self.points or
                    self.char and
-                   ' // %s %s' % (st.Styles(self.styles), self.char) or '')
+                   ' // %s %s' % (Styles(self.styles), self.char) or '')
         return '%s%s%s%s' % (self.column, s_signal, self.row, comment)
 
     def __call__(self, points):
@@ -570,7 +567,7 @@ class Matrix(object):
     def edit_matrix(self):
         """Edits the matrix data"""
         parameters = [(self.char, 'Character'),
-                      (str(st.Styles(self.styles)), 'Styles'),
+                      (str(Styles(self.styles)), 'Styles'),
                       (self.code, 'Coordinates'), (self.units, 'Unit width')]
         UI.display_parameters({'Matrix details': parameters})
         char = self.char
@@ -602,7 +599,7 @@ class Matrix(object):
 
     def choose_styles(self):
         """Choose styles for the matrix"""
-        style_manager = st.Styles(self.styles)
+        style_manager = Styles(self.styles)
         style_manager.choose()
         self.styles = style_manager()
 
@@ -709,7 +706,7 @@ def import_layout_file():
             else:
                 char = char.strip()
             # Parse styles and order them
-            styles = st.Styles(styles)()
+            styles = Styles(styles)()
             # Determine the diecase size, override previous size if larger
             if '16' in coordinates:
                 columns = c.COLUMNS_17

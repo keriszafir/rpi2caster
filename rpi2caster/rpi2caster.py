@@ -12,8 +12,8 @@ def cast(args):
     from . import casting_session
     session = casting_session.Casting(ribbon_file=args.ribbon_file,
                                       ribbon_id=args.ribbon_id,
-                                      diecase_id=args.diecase,
-                                      wedge=args.wedge)
+                                      diecase_id=args.diecase_id,
+                                      wedge_name=args.wedge_name)
     session.caster.mode.simulation = args.simulation
     session.caster.mode.punching = args.punching
     casting_session.UI.DEBUG_MODE = args.debug
@@ -109,7 +109,8 @@ def main():
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
                              ribbon_id='', source=None, simulation=False,
                              punching=False, unstable=False, manual=False,
-                             diecase='', wedge='', direct=False, testing=False)
+                             diecase_id='', wedge_name='',
+                             direct=False, testing=False)
     #
     # Define commands
     #
@@ -128,7 +129,7 @@ def main():
                              action="store_true")
     # Choose specific diecase
     cast_parser.add_argument('-m', '--diecase', metavar='ID',
-                             help='diecase ID to use')
+                             dest='diecase_id', help='diecase ID for casting')
     # Punch ribbon: uses different sensor, always adds O+15 to combinations
     cast_parser.add_argument('-p', '--punch', action='store_true',
                              dest='punching',
@@ -145,7 +146,7 @@ def main():
     test_or_cast.add_argument('-D', '--direct', action="store_true",
                               help='direct casting - no menu',)
     # Choose specific wedge
-    cast_parser.add_argument('-w', '--wedge', metavar='W',
+    cast_parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name'
                              help='wedge to use: [s]series-set_width[e]')
     # Ribbon ID for choosing from database
     cast_parser.add_argument('-R', '--ribbon_id', metavar='R',
