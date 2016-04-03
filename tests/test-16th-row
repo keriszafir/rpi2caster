@@ -1,0 +1,24 @@
+diecase 327-12-KS01
+description Row 16 test
+0005        // Pump off
+0075 0005   // Line to the galley
+O 16
+N 16
+M 16
+L 16
+K 16
+J 16
+I 16
+H 16
+G 16
+F 16
+E 16
+D 16
+C 16
+B 16
+A 16
+NL 16
+NI 16
+0075 6        // Pump on
+0075 0005 10  // Line to the galley
+

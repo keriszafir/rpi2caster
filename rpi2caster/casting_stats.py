@@ -156,7 +156,10 @@ class Stats(object):
         for code in code_generator:
             # Guards against empty combination i.e. line with comment only
             ribbon['codes'] += 1
-            if not mode.hmn and not mode.unitshift and '16' in code:
+            # When row 16 is encountered, ask user for addressing mode
+            # (depends on the machine - most common is 15x17 and unit-shift)
+            row_16_supported = mode.unitshift or mode.hmn or mode.kmn
+            if '16' in code and not row_16_supported:
                 # Do it now - before casting starts!
                 mode.choose_row16_addressing()
             if p.check_newline(code):

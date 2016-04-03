@@ -28,50 +28,85 @@ def adjust_signals(worker_function):
         or is not addressed for plain machines (O15 will be cast instead)
     """
     def wrapper(self, signals, *args, **kw):
-        """Wrapper function"""
+        """Changes the signals to match the selected method of addressing
+        16th row on the matrix case"""
 
-        def convert(signals):
-            """Changes the signals to match the selected method of addressing
-            16th row on the matrix case"""
-            # HMN:
-            # convert as commented below
-            # HMN used special and rare wedges that had 16 steps.
-            #
-            # Unit-shift:
-            # replace D column with EF; add D for shifting the diecase
-            # Normal wedge stays where it was; only the diecase moves.
-            if self.mode.hmn and '16' in signals:
-                if 'H' in signals:
-                    # H -> HN
-                    signals.append('N')
-                elif 'N' in signals and not ('I' in signals or 'L' in signals):
-                    # N -> MN
-                    signals.append('M')
-                elif 'N' in signals or 'M' in signals:
-                    # NI, NL, M -> HNI, HNL, HM
-                    signals.append('H')
-                elif [x for x in 'ABCDEFGIJKL' if x in signals]:
-                    # A...G, I...L -> HMA...G, HMI...L
-                    signals.extend(['H', 'M'])
-                else:
-                    # O15 (no other signals) -> HMN
-                    signals.extend(['H', 'M', 'N'])
-            elif self.mode.unitshift:
-                if 'D' in signals:
-                    signals.remove('D')
-                    signals.extend(['E', 'F'])
-                if '16' in signals:
-                    signals.append('D')
-            # Return a list of "normal" signals i.e. no 16
-            # arranged in Monotype order (NMLK...13, 14, 0005, O15)
-            return ([sig for sig in c.SIGNALS if sig in signals and
-                     (sig is not 'O15' or self.mode.testing)] +
-                    ['O15'] * (self.mode.punching and not self.mode.testing))
+        def convert_unitshift(signals):
+            """Adjust signals for unit-shift:
+            replace D column with EF;
+            add D for shifting the diecase to row 16.
+            Normal wedge stays where it was; only the diecase moves.
+            The width of characters in row 16 is the same as for row 15,
+            unless 0005 & 0075 wedge corrections are applied.
+            """
+            if 'D' in signals:
+                signals.remove('D')
+                signals.extend(['E', 'F'])
+            if '16' in signals:
+                signals.append('D')
+
+        def convert_hmn(signals):
+            """Adjust signals for HMN as commented below.
+            The HMN attachment was rare and required special normal wedges
+            with additional step for 16th row."""
+            if 'H' in signals:
+                # H -> HN
+                signals.append('N')
+            elif 'N' in signals and not ('I' in signals or 'L' in signals):
+                # N -> MN
+                signals.append('M')
+            elif 'N' in signals or 'M' in signals:
+                # NI, NL, M -> HNI, HNL, HM
+                signals.append('H')
+            elif [x for x in 'ABCDEFGIJKL' if x in signals]:
+                # A...G, I...L -> HMA...G, HMI...L
+                signals.extend(['H', 'M'])
+            else:
+                # O15 (no other signals) -> HMN
+                signals.extend(['H', 'M', 'N'])
+
+        def convert_kmn(signals):
+            """Adjust signals for the rare KMN attachment.
+            This attachment was made by one of Monotype's customers,
+            and HMN was based off it - so it's even less common..."""
+            if 'K' in signals:
+                # K16: add N
+                signals.append('N')
+            elif 'M' in signals:
+                # M16: add K
+                signals.append('K')
+            elif 'N' in signals and ('I' in signals or 'L' in signals):
+                # NI16, NL16: add K
+                signals.append('K')
+            elif 'N' in signals:
+                # N16: add M
+                signals.append('M')
+            elif [x for x in 'ABCDEFGHIJL' if x in signals]:
+                # All signals apart from above and O16: add KM
+                signals.extend(['K', 'M'])
+            else:
+                # O16: add KMN
+                signals.extend(['K', 'M', 'N'])
 
         # No signals = no casting!
         if not signals:
             return False
-        signals = convert(signals)
+        if self.mode.hmn and '16' in signals:
+            convert_hmn(signals)
+        elif self.mode.kmn and '16' in signals:
+            convert_kmn(signals)
+        elif self.mode.unitshift:
+            # Unit-shift is active for all rows, not just 16
+            convert_unitshift(signals)
+        # Return a list of "normal" signals i.e. with no signal 16,
+        # arranged in Monotype order (NMLK...13, 14, 0005, O15)
+        # Scrap O15 signal unless we're in testing mode, where it can
+        # be explicitly turned on.
+        signals = [sig for sig in c.SIGNALS if sig in signals and
+                   (sig is not 'O15' or self.mode.testing)]
+        # Always add O15 for punching ribbons
+        if self.mode.punching and 'O15' not in signals:
+            signals.append('O15')
         # Adjust the signals just before casting; show the new combination
         UI.display(signals and ('Sending: ' + ' '.join(signals)) or '')
         return worker_function(self, signals, *args, **kw)
@@ -403,6 +438,17 @@ class CasterMode(object):
         self.__dict__['_hmn'] = value
 
     @property
+    def kmn(self):
+        """Check if KMN mode is currently on"""
+        return self.__dict__.get('_kmn', False)
+
+    @kmn.setter
+    def kmn(self, value):
+        """Set the KMN mode"""
+        value = value and True or False
+        self.__dict__['_kmn'] = value
+
+    @property
     def unitshift(self):
         """Check if the unit shift mode is currently on"""
         return self.__dict__.get('_unit-shift', False)
@@ -433,6 +479,11 @@ class CasterMode(object):
             UI.display('Turn the HMN attachment ON')
             self.hmn = True
 
+        def kmn_on():
+            """Turn on the rare KMN 16x17 attachment"""
+            UI.display('Turn the KMN attachment ON')
+            self.kmn = True
+
         def unitshift_on():
             """Turn on the unit-shift attachment (introduced in 1960s)"""
             UI.display('Turn the attachment ON - switch under the paper tower')
@@ -442,11 +493,16 @@ class CasterMode(object):
             """User can choose not to use any attachment"""
             return None
 
-        prompt = ('You want to cast from a matrix in the 16th row.\n'
-                  'Which attachment do you use: HMN, Unit-Shift or none?\n'
-                  '(if none - the matrix will be replaced with O15)\n\n'
-                  'Your choice: [U]nit-Shift, [H]MN, leave blank for none?: ')
-        options = {'U': unitshift_on, 'H': hmn_on, '': do_nothing}
+        prompt = ('Your ribbon contains codes from the 16th row.\n'
+                  'It is supported by special attachments for the machine.\n'
+                  'Which mode does your caster use: HMN, KMN, Unit-Shift?\n\n'
+                  'If none - characters from row 15 will be cast instead.\n\n'
+                  'Your choice: [U]nit-Shift, [H]MN, [K]MN '
+                  '(leave blank for none)?: ')
+        options = {'U': unitshift_on,
+                   'H': hmn_on,
+                   'K': kmn_on,
+                   '': do_nothing}
         UI.simple_menu(prompt, options)()
 
 
