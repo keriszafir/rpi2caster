@@ -167,7 +167,7 @@ class Casting(object):
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
         if diecase_id:
             self.diecase = matrix_data.Diecase(diecase_id)
-        if wedge:
+        if wedge_name:
             self.wedge = Wedge(wedge_name)
 
     @prepare_job

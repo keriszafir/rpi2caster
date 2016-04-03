@@ -146,7 +146,7 @@ def main():
     test_or_cast.add_argument('-D', '--direct', action="store_true",
                               help='direct casting - no menu',)
     # Choose specific wedge
-    cast_parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name'
+    cast_parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
                              help='wedge to use: [s]series-set_width[e]')
     # Ribbon ID for choosing from database
     cast_parser.add_argument('-R', '--ribbon_id', metavar='R',
