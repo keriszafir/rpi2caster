@@ -26,11 +26,16 @@ def cast(args):
         session.main_menu()
 
 
-def translate(args):
+def composition(args):
     """Text to ribbon translation and justification"""
-    from rpi2caster import typesetting
-    typesetting.UI.DEBUG_MODE = args.debug
-    typesetting.main_menu()
+    from . import typesetting_session
+    session = typesetting_session.Typesetting(manual_mode=manual_mode,
+                                              text_file=text_file,
+                                              ribbon_file=ribbon_file,
+                                              diecase_id=diecase_id,
+                                              wedge_name=wedge_name)
+    typesetting_session.UI.DEBUG_MODE = args.debug
+    session.main_menu()
 
 
 def update(args):
@@ -71,7 +76,7 @@ def main_menu(args):
                     {True: 'Punch a ribbon with a keyboard\'s paper tower',
                      False: ('Cast composition, sorts or spaces; '
                              'test the machine')}[args.punching]),
-                   (translate, 'Typesetting...',
+                   (composition, 'Typesetting...',
                     'Compose text for casting'),
                    (update, 'Update the program',
                     'Check whether new version is available and update'),
@@ -108,7 +113,8 @@ def main():
     # Set default values for all options globally
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
                              ribbon_id='', source=None, simulation=False,
-                             punching=False, unstable=False, manual=False,
+                             punching=False, unstable=False,
+                             manual_mode=False,
                              diecase_id='', wedge_name='',
                              direct=False, testing=False)
     #
@@ -171,24 +177,29 @@ def main():
                                   help='Typesetting program')
     # Manual mode option - more control for user
     comp_parser.add_argument('-m', '--manual', help='use manual mode',
-                             action='store_true')
+                             dest='manual_mode', action='store_true')
     # Choose diecase layout
     comp_parser.add_argument('-D', '--diecase', dest='diecase_id',
                              help='diecase ID for typesetting',
                              metavar='ID')
+    # Specify alternative wedge
+    comp_parser.add_argument('-w', '--wedge', dest='wedge_name',
+                             help='wedge to use: [s]series-set_width[e]',
+                             metavar='W')
     # Debug mode
-    comp_parser.add_argument('-d', '--debug', help='Debug mode',
+    comp_parser.add_argument('-d', '--debug', help='debug mode',
                              action="store_true")
     # Input filename option
-    comp_parser.add_argument('source', help='source (text) file to translate',
+    comp_parser.add_argument('text_file',
+                             help='source (text) file to translate',
                              metavar='text_file', nargs='?',
                              type=argparse.FileType('r', encoding='UTF-8'))
     # Output filename option
-    comp_parser.add_argument('ribbon', help='ribbon file to generate',
+    comp_parser.add_argument('ribbon_file', help='ribbon file to generate',
                              metavar='ribbon_file', nargs='?',
                              type=argparse.FileType('w', encoding='UTF-8'))
     # Default action
-    comp_parser.set_defaults(job=translate)
+    comp_parser.set_defaults(job=composition)
     args = main_parser.parse_args()
     # Parsers defined
     try:
