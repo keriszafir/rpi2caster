@@ -189,7 +189,6 @@ class Casting(object):
                 if comment and not signals:
                     UI.display('\n\n' + comment + '\n' + '-' * len(comment))
                     continue
-                # Check if HMN or unit-shift must be applied
                 self.stats.signals = signals
                 UI.display_parameters({comment: self.stats.code_parameters})
                 # Let the caster do the job
@@ -491,6 +490,20 @@ class Casting(object):
         self.caster.output.valves_on(['G', '8'])
         UI.pause('Sending G8, waiting for you to stop...')
 
+    @cast_or_punch_result
+    def _test_row_16(self):
+        """Tests the 16th row with selected addressing mode
+        (HMN, KMN, unit-shift). Casts from all matrices in 16th row."""
+        UI.display('This will test the 16th row addressing.\n'
+                   'If your caster has HMN, KMN or unit-shift attachment, '
+                   'turn it on.\n')
+        if not UI.confirm('\nProceed?', default=True):
+            return None
+        self.caster.mode.calibration = True
+        queue = tsf.end_casting() + ['%s16' % x for x in c.COLUMNS_17]
+        queue.extend(tsf.double_justification(comment='Starting...'))
+        return queue
+
     def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
         def finish():
@@ -522,7 +535,10 @@ class Casting(object):
                      'Keep the matrix case at G8 and adjust the draw rods',
                      caster),
                     (self._calibrate_diecase, 'Calibrate matrix X-Y',
-                     'Calibrate the character-to-body positioning', caster)]
+                     'Calibrate the character-to-body positioning', caster),
+                    (self._test_row_16, 'Test HMN, KMN or unit-shift',
+                     'Cast type from row 16 with chosen addressing mode',
+                     caster)]
             return [(function, description, long_description) for
                     (function, description, long_description, condition)
                     in opts if condition]
