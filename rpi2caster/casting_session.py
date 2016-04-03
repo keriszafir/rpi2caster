@@ -63,6 +63,7 @@ def cast_or_punch_result(ribbon_source):
     """Get the ribbon from decorated routine and cast it"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
+        mode = self.caster.mode
         try:
             ribbon = ribbon_source(self, *args, **kwargs)
             if ribbon:
@@ -70,8 +71,10 @@ def cast_or_punch_result(ribbon_source):
         except e.CastingAborted:
             pass
         finally:
-            self.caster.mode.diagnostics = False
-            self.caster.mode.hmn, self.caster.mode.unitshift = False, False
+            # Reset diagnostics and row 16 addressing modes
+            for mode in (mode.kmn, mode.hmn, mode.unitshift,
+                         mode.testing, mode.calibration):
+                mode = False
     return wrapper
 
 
