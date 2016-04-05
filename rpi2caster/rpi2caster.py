@@ -29,11 +29,11 @@ def cast(args):
 def composition(args):
     """Text to ribbon translation and justification"""
     from . import typesetting_session
-    session = typesetting_session.Typesetting(manual_mode=manual_mode,
-                                              text_file=text_file,
-                                              ribbon_file=ribbon_file,
-                                              diecase_id=diecase_id,
-                                              wedge_name=wedge_name)
+    session = typesetting_session.Typesetting(manual_mode=args.manual_mode,
+                                              text_file=args.text_file,
+                                              ribbon_file=args.ribbon_file,
+                                              diecase_id=args.diecase_id,
+                                              wedge_name=args.wedge_name)
     typesetting_session.UI.DEBUG_MODE = args.debug
     session.main_menu()
 
