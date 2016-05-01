@@ -253,7 +253,7 @@ class Diecase(object):
     def import_layout(self):
         """Imports a layout from file"""
         # Load the layout from file
-        submitted_layout = import_layout_file()
+        submitted_layout = [x for x in import_layout_file()]
         if not submitted_layout:
             UI.pause('File does not contain a proper layout!')
             return False
@@ -262,8 +262,9 @@ class Diecase(object):
         try:
             self.layout = generate_empty_layout()
             for matrix in self.matrices:
-                for (char, styles, coordinates, units) in submitted_layout:
-                    if matrix.code == coordinates:
+                for record in submitted_layout:
+                    (char, styles, coordinates, units) = record
+                    if matrix.code.upper() == coordinates.upper():
                         matrix.char = char
                         matrix.styles = styles
                         matrix.units = units

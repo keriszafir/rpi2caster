@@ -12,7 +12,7 @@ clas = ['Development Status :: 2 - Pre-Alpha',
         'Topic :: Artistic Software']
 
 setup(name='rpi2caster',
-      version='0.4.dev2',
+      version='0.4.dev3',
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
