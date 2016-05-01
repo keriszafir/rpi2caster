@@ -386,11 +386,17 @@ class Diecase(object):
                            'I': self.import_layout,
                            'X': self.export_layout,
                            'C': e.menu_level_up}
-                messages = ['\nMatrix case manipulation:\n\n'
-                            '[V]iew, [N]ew, [E]dit, [I]mport '
-                            'or e[X]port layout\nAssign [W]edge, '
-                            'change [T]ypeface or diecase [ID]\n'
-                            '[A] - check if all characters are in diecase\n\n']
+                messages = ['Matrix case manipulation:\n\n'
+                            '[V]iew layout,\n'
+                            '[E]dit layout,\n'
+                            '[I]mport layout from file\n'
+                            'e[X]port layout to file,\n'
+                            'assign [W]edge,\n'
+                            'change [T]ypeface\n'
+                            'set diecase [ID]\n'
+                            'check if [A]ll characters for chosen language '
+                            'are in diecase,\n'
+                            '[N]ew layout from scratch\n']
                 # Save to database needs a complete set of metadata
                 required = {'Typeface': self.typeface,
                             'Diecase ID': self.diecase_id}
@@ -398,15 +404,15 @@ class Diecase(object):
                 messages.extend([item + ' is not set\n' for item in missing])
                 if not missing:
                     options['S'] = self._save_to_db
-                    messages.append('[S]ave diecase to database')
+                    messages.append('[S]ave diecase to database,\n')
                 # Check if it's in the database
                 if self._check_db():
                     options['D'] = self._delete_from_db
-                    messages.append(', [D]elete diecase from database')
+                    messages.append('[D]elete diecase from database,\n')
                 # Options constructed
-                messages.append('\n[C] to choose/create another diecase, '
-                                '[M] to exit to menu.')
-                messages.append('\nYour choice: ')
+                messages.append('[C] to choose/create another diecase,\n'
+                                '[M] to exit to menu.\n')
+                messages.append('Your choice: ')
                 message = ''.join(messages)
                 UI.simple_menu(message, options)()
         except e.MenuLevelUp:

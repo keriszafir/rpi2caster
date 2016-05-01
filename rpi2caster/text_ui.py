@@ -129,11 +129,13 @@ def debug_pause(msg1='', msg2=MSG_CONTINUE):
     """For debug confirmations"""
     if DEBUG_MODE:
         input('DEBUG: ' + msg1 + ' - ' + msg2)
+        print('\n')
 
 
 def pause(msg1='', msg2=MSG_CONTINUE):
     """Waits until user presses return"""
     input(msg1 + '\n' + msg2)
+    print('\n')
 
 
 def enter_data(prompt, datatype=str):
@@ -141,6 +143,7 @@ def enter_data(prompt, datatype=str):
     value = ''
     while not value:
         value = input(prompt + ' : ')
+        print('\n')
         try:
             value = datatype(value)
         except ValueError:
@@ -154,6 +157,7 @@ def enter_data_or_blank(prompt, datatype=str):
     """
     while True:
         value = input(prompt + ' : ')
+        print('\n')
         if not value and datatype in (int, float, bool):
             return datatype(0)
         elif not value:
@@ -169,6 +173,7 @@ def enter_data_or_default(prompt, default=1, datatype=str):
     or try to convert to the specified datatype."""
     while True:
         value = input(prompt + ' (default: %s) : ' % default)
+        print('\n')
         if not value:
             return default
         try:
@@ -182,6 +187,7 @@ def enter_data_or_exception(prompt, exception=ValueError, datatype=str):
     or try to convert to the specified datatype."""
     while True:
         value = input(prompt + ' : ')
+        print('\n')
         if not value:
             raise exception
         try:
@@ -238,6 +244,7 @@ def simple_menu(message, options):
     ans = ''
     while True:
         ans = input(message)
+        print('\n')
         if ans in options:
             return options[ans]
         elif ans.lower() in options:
@@ -267,7 +274,7 @@ def display_diecase_layout(diecase):
         # Style modifiers for displaying roman, bold, italic,
         # smallcaps, inferior, superior
         style_modifiers = {'r': '', 'b': '*', 'i': '/',
-                           's': '#', 'u': '_', 'l': '^'}
+                           's': '•', 'u': '_', 'l': '^'}
         spaces_symbols = {'_': '▣', ' ': '□', '': ' '}
         formatted_char = matrix.char
         for style in matrix.styles:
@@ -313,7 +320,7 @@ def display_diecase_layout(diecase):
         print(row)
     # Explanation of symbols
     print('\nExplanation:', '□ = low space, ▣ = high space',
-          '*a = bold, /a = italic, #a = small caps',
+          '*a = bold, /a = italic, •a = small caps',
           '_a = subscript (inferior), ^a = superscript (superior)',
           sep='\n', end='\n\n')
 

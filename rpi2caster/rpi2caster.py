@@ -5,6 +5,7 @@ from sys import argv
 import argparse
 from . import exceptions as e
 from .text_ui import confirm, menu
+from .matrix_data import diecase_operations, list_diecases
 
 
 def cast(args):
@@ -40,10 +41,20 @@ def composition(args):
 def update(args):
     """Updates the software"""
     # Upgrade routine
+    dev_prompt = 'Testing version (newest features, but unstable)? '
     if confirm('Update the software?', default=False):
-        pre = args.unstable and '--pre' or ''
+        use_dev_version = args.unstable or confirm(dev_prompt, default=False)
+        pre = use_dev_version and '--pre' or ''
         print('You may be asked for the admin password...')
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)
+
+
+def inventory(args):
+    """Inventory management - diecase manipulation etc."""
+    if args.list_diecases:
+        list_diecases()
+    else:
+        diecase_operations()
 
 
 def toggle_punching(args):
@@ -77,6 +88,8 @@ def main_menu(args):
                              'test the machine')}[args.punching]),
                    (composition, 'Typesetting...',
                     'Compose text for casting'),
+                   (inventory, 'Diecase manipulation...',
+                    'Add, display, edit or remove matrix case definitions'),
                    (update, 'Update the program',
                     'Check whether new version is available and update'),
                    (toggle_punching, 'Switch to %s mode'
@@ -113,7 +126,7 @@ def main():
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
                              ribbon_id='', source=None, simulation=False,
                              punching=False, unstable=False,
-                             manual_mode=False,
+                             manual_mode=False, list_diecases=False,
                              diecase_id='', wedge_name='',
                              direct=False, testing=False)
     #
@@ -166,8 +179,8 @@ def main():
     upd_parser = jobs.add_parser('update', aliases=['u', 'upd'],
                                  help='Update the software')
     # Update to unstable version
-    upd_parser.add_argument('-u', '--unstable', action='store_true',
-                            help='update to unstable (development) version')
+    upd_parser.add_argument('-t', '--testing', action='store_true',
+                            help='use testing rather than stable version')
     upd_parser.set_defaults(job=update)
     #
     # Composition (typesetting) program subparser
@@ -195,8 +208,17 @@ def main():
                              type=argparse.FileType('w', encoding='UTF-8'))
     # Default action
     comp_parser.set_defaults(job=composition)
+    #
+    # Inventory subparser
+    #
+    inv_parser = jobs.add_parser('inventory', aliases=['i', 'inv'],
+                                 help='Matrix case management')
+    # List the diecases and exit
+    inv_parser.add_argument('-l', '--list_diecases', action='store_true',
+                            help='list all diecases and finish')
+    inv_parser.set_defaults(job=inventory)
+    # Parsers are defined - get the args...
     args = main_parser.parse_args()
-    # Parsers defined
     try:
         args.job(args)
     except (e.ReturnToMenu, e.MenuLevelUp):

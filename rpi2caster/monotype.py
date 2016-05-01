@@ -13,11 +13,19 @@ from . import cfg_parser
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
+# Get the signals arrangement
 try:
     SIGNALS = (str(cfg_parser.get_config('SignalsArrangements',
                                          'signals_arrangement')).upper())
 except e.NotConfigured:
     SIGNALS = c.ALNUM_ARR
+# Get the interface to use
+try:
+    SENSOR = cfg_parser.get_config('Control', 'sensor').lower()
+    OUTPUT = cfg_parser.get_config('Control', 'output').lower()
+except e.NotConfigured:
+    SENSOR = 'simulation'
+    OUTPUT = 'simulation'
 
 
 def adjust_signals(worker_function):
@@ -465,12 +473,13 @@ class CasterMode(object):
         return (self.testing and TestSensor or
                 self.punching and PunchingSensor or
                 self.simulation and SimulationSensor or
-                hardware_sensor)
+                SENSORS.get(SENSOR, SimulationSensor))
 
     @property
     def output(self):
         """Chooses a simulation or hardware output driver"""
-        return self.simulation and SimulationOutput or hardware_output
+        return (self.simulation and SimulationOutput or
+                OUTPUTS.get(OUTPUT, SimulationOutput))
 
     def choose_row16_addressing(self):
         """Let user decide which way to address row 16"""
@@ -506,13 +515,29 @@ class CasterMode(object):
         UI.simple_menu(prompt, options)()
 
 
-def hardware_sensor():
+def sysfs_sensor():
     """Gets hardware sensor - prevents import loop"""
     from .input_driver_sysfs import SysfsSensor
     return SysfsSensor()
 
 
-def hardware_output():
+def wiringpi_output():
     """Gets hardware output - prevents import loop"""
     from .output_driver_wiringpi import WiringPiOutputDriver
     return WiringPiOutputDriver()
+
+
+def parallel_sensor():
+    """A parallel port sensor for John Cornelisse's old interface"""
+    pass
+
+
+def parallel_output():
+    """A parallel port valve control for John Cornelisse's old interface"""
+    pass
+
+
+SENSORS = {'simulation': SimulationSensor, 'sysfs': sysfs_sensor,
+           'parallel': parallel_sensor}
+OUTPUTS = {'simulation': SimulationOutput, 'wiringpi': wiringpi_output,
+           'parallel': parallel_output}

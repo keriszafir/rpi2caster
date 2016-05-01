@@ -66,15 +66,15 @@ def enter(value=0, unit=Measure.default_unit):
                 '    pt - DTP point = 1/72",\n'
                 '    Pt - DTP pica (=12pt, .1667"),\n'
                 '    ", in - inch;   '
-                'mm - millimeter;   cm - centimeter?\n\n')
+                'mm - millimeter;   cm - centimeter\n\n')
         UI.display(text)
 
     prompt = 'Enter the length/width value and unit (or "?" for help)'
+    value = value or Measure.default_value
+    default_value = '%s%s' % (value, unit)
     while True:
         # If 0, use default
-        value = value or Measure.default_value
-        value = '%s%s' % (value, unit)
-        raw_string = UI.enter_data_or_default(prompt, value)
+        raw_string = UI.enter_data_or_default(prompt, default_value)
         if '?' in raw_string:
             # Display help message and start again
             unit_help()

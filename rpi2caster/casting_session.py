@@ -295,9 +295,12 @@ class Casting(object):
         freqs = letter_frequencies.CharFreqs()
         freqs.define_case_ratio()
         freqs.define_scale()
+        supported_styles = self.diecase.styles
         UI.display('Styles to cast?')
+        # Order specified numbers of sorts from desired matrices
         order = []
-        style_manager = Styles()
+        style_manager = Styles(supported_styles)
+        style_manager.choose()
         styles = style_manager.keys()
         for style, name in style_manager.items():
             # Display style name
@@ -619,7 +622,7 @@ class Casting(object):
                     (self.cast_spaces, 'Cast spaces or quads',
                      'Cast spaces or quads of a specified width', caster),
                     (self.cast_typecases, 'Cast typecases',
-                     'Cast a typecase based on a selected font scheme',
+                     'Cast a typecase based on a selected language',
                      caster and diecase),
                     (self._display_details, 'Show details...',
                      'Display ribbon, diecase, wedge and interface info',

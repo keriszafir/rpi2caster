@@ -172,7 +172,7 @@ class CharFreqs(object):
     def define_case_ratio(self):
         """Define uppercase to lowercase ratio"""
         prompt = ('Uppercase to lowercase ratio in %?')
-        self.case_ratio = UI.enter_data_or_default(prompt, 100, float) / 100.0
+        self.case_ratio = UI.enter_data_or_default(prompt, 20, float) / 100.0
 
 
 def choose_language():
