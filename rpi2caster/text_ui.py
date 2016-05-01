@@ -47,7 +47,7 @@ def menu(options, header='', footer='', no_debug=False):
         (zero_function, zero_desc, zero_long_desc) = options[0]
         functions = [zero_function]
     except IndexError:
-        raise e.ExitProgram
+        raise e.MenuLevelUp
     # Display all the options
     # Tab indent, option number, option name (not processing option 0 yet!)
     for i, (function, desc, long_desc) in enumerate(options):

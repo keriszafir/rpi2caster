@@ -9,11 +9,12 @@ class Styles(object):
     names = ['roman', 'bold', 'italic', 'smallcaps', 'inferior', 'superior']
     style_dict = dict(zip(order, names))
 
-    def __init__(self, styles_string=None, allow_multiple=True):
+    def __init__(self, styles_string=None, allow_multiple=True,
+                 manual_choice=False):
         self.styles_list = []
         self.allow_multiple = allow_multiple
-        if styles_string is None:
-            self.styles_string = 'r'
+        if manual_choice or styles_string is None:
+            self.styles_string = styles_string or 'r'
             self.choose()
         elif styles_string:
             self.styles_string = styles_string

@@ -387,10 +387,14 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        style = Styles(allow_multiple=False)()
+        supported_styles = self.diecase.styles
+        style = Styles(supported_styles, allow_multiple=False,
+                       manual_choice=True)()
         text = UI.enter_data('Text to compose?')
         if not self.diecase.test_characters(text, style):
             UI.display('WARNING: Some characters are missing!')
+            if not UI.confirm('Continue?', default=False):
+                return
         space = self.diecase.decode_matrix('G2')
         matrix_stream = (self.diecase.lookup_matrix(char, style) if char != ' '
                          else space for char in text)

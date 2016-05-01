@@ -37,18 +37,8 @@ class CastingAborted(CastingOops):
     pass
 
 
-class CastingFinished(CastingOops):
-    """Raised when casting is finished normally because ribbon runs out."""
-    pass
-
-
 class MachineStopped(CastingOops):
     """Raised by the caster control routines, when the machine stops."""
-    pass
-
-
-class EmergencyStop(CastingOops):
-    """Raised when user pushes the emergency stop button to abort."""
     pass
 
 
@@ -59,16 +49,6 @@ class ReturnToMenu(UIOops):
 
 class MenuLevelUp(UIOops):
     """Raised in submenus, to go up to a higher level"""
-    pass
-
-
-class ChangeParameters(UIOops):
-    """Raised when user decides to change parameters in a current routine. """
-    pass
-
-
-class Row16(ChangeParameters):
-    """Raised when row 16 found in parsing - turn on HMN/KMN/unit-shift"""
     pass
 
 
@@ -128,8 +108,3 @@ def abort_casting(*_):
 def menu_level_up(*_):
     """Wrapper for raising MenuLevelUp where a function is needed"""
     raise MenuLevelUp
-
-
-def change_parameters(*_):
-    """Wrapper for raising ChangeParameters where a function is needed"""
-    raise ChangeParameters

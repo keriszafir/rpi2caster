@@ -21,8 +21,8 @@ except e.NotConfigured:
     SIGNALS = c.ALNUM_ARR
 # Get the interface to use
 try:
-    SENSOR = cfg_parser.get_config('Control', 'sensor').lower()
-    OUTPUT = cfg_parser.get_config('Control', 'output').lower()
+    SENSOR = str(cfg_parser.get_config('Control', 'sensor')).lower()
+    OUTPUT = str(cfg_parser.get_config('Control', 'output')).lower()
 except e.NotConfigured:
     SENSOR = 'simulation'
     OUTPUT = 'simulation'
