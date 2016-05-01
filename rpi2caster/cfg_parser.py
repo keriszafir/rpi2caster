@@ -25,9 +25,10 @@ def initialize_config():
                 cfg.read(path)
                 return cfg
         except (IOError, FileNotFoundError):
+            print('Configuration file at %s failed' % path)
             continue
     # No config file specified can be accessed
-    raise ConfigFileUnavailable('Cannot access config file!')
+    raise ConfigFileUnavailable('Cannot access any config file')
 
 
 def get_config(section_name, option_name):

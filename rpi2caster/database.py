@@ -150,7 +150,7 @@ class Database(object):
                 return diecase
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
-                exceptions.NoMatchingData
+                raise exceptions.NoMatchingData
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError

@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """Global settings for rpi2caster"""
-
 from . import text_ui as UI
+from click import get_app_dir
 
 # Conffile path
-CONFIG_PATH = '/etc/rpi2caster.conf'
+APPDIR = get_app_dir('rpi2caster', force_posix=True, roaming=True)
+CONFIG_PATH = APPDIR + '/rpi2caster.conf'
 # SQLite3 database path
-DATABASE_PATH = '/var/local/rpi2caster/rpi2caster.db'
+DATABASE_PATH = APPDIR + '/rpi2caster.db'
 # Comment symbols for parsing
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 # GPIO settings

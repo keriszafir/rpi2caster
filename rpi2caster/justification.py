@@ -59,8 +59,6 @@ THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 import sys
 
-__version__ = "1.01"
-
 INFINITY = 1000
 
 # Three classes defining the three different types of object that
@@ -92,7 +90,7 @@ class Glue:
     glue immediately follows a box.
     """
 
-    def __init__(self, width, stretch, shrink):
+    def __init__(self, width, shrink, stretch):
         self.width, self.stretch, self.shrink = width, stretch, shrink
         self.is_glue = True
         self.is_box = False
@@ -160,7 +158,7 @@ class ObjectList(list):
     def add_closing_penalty(self):
         "Add the standard glue and penalty for the end of a paragraph"
         self.append(Penalty(0, INFINITY, 0))
-        self.append(Glue(0, INFINITY, 0))
+        self.append(Glue(0, 0, INFINITY))
         self.append(Penalty(0, -INFINITY, 1))
 
     def is_feasible_breakpoint(self, i):
@@ -444,13 +442,13 @@ def main():
     text = ' '.join(text.split())
 
     line_width = 100   # Line width to use for formatting
-    full_justify = 0   # Boolean; if true, do full justification
+    full_justify = True   # Boolean; if true, do full justification
     # Turn chunk of text into an ObjectList.
     obj_list = ObjectList()
     for character in text:
         if character in ' \n':
             # Append interword space -- 2 units +/- 1
-            obj_list.append(Glue(2, 1, 1))
+            obj_list.append(Glue(3, 2, 10))
         elif character == '@':
             # Append forced break
             obj_list.append(Penalty(0, -INFINITY))
@@ -466,7 +464,6 @@ def main():
     line_lengths = [line_width]
     # line_lengths = range(120, 20, -10)
     breaks = obj_list.compute_breakpoints(line_lengths, tolerance=2)
-    print(breaks, len(obj_list))
 
     assert breaks[0] == 0
     line_start = 0
@@ -477,7 +474,7 @@ def main():
         line_no += 1
         for i in range(line_start, breakpoint):
             box = obj_list[i]
-            if box.is_glue():
+            if box.is_glue:
                 if full_justify:
                     box_width = int(box.compute_width(adj_ratio))
                 else:

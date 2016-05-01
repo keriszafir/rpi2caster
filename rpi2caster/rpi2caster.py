@@ -32,8 +32,7 @@ def composition(args):
     session = typesetting_session.Typesetting(manual_mode=args.manual_mode,
                                               text_file=args.text_file,
                                               ribbon_file=args.ribbon_file,
-                                              diecase_id=args.diecase_id,
-                                              wedge_name=args.wedge_name)
+                                              diecase_id=args.diecase_id)
     typesetting_session.UI.DEBUG_MODE = args.debug
     session.main_menu()
 
@@ -182,10 +181,6 @@ def main():
     comp_parser.add_argument('-D', '--diecase', dest='diecase_id',
                              help='diecase ID for typesetting',
                              metavar='ID')
-    # Specify alternative wedge
-    comp_parser.add_argument('-w', '--wedge', dest='wedge_name',
-                             help='wedge to use: [s]series-set_width[e]',
-                             metavar='W')
     # Debug mode
     comp_parser.add_argument('-d', '--debug', help='debug mode',
                              action="store_true")

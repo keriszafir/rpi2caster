@@ -4,10 +4,8 @@ diecase storing, parameter searches.
 """
 # File operations
 import io
-import os
 import csv
 from copy import copy
-
 # Some functions raise custom exceptions
 from . import exceptions as e
 # Constants module
@@ -19,7 +17,7 @@ from .styles import Styles
 # Wedge operations for several matrix-case management functions
 from .wedge_data import Wedge
 # User interface
-from .global_settings import UI
+from .global_settings import UI, APPDIR
 # Letter frequency for completeness testing
 from .letter_frequencies import CharFreqs
 # Database backend
@@ -42,18 +40,15 @@ class Diecase(object):
             data = None
         if not data:
             # Use default diecase
-            UI.display('Using empty 15x17 diecase with S5-12E wedge...')
+            UI.debug_info('Using empty 15x17 diecase with S5-12E wedge...')
             data = ['', '', 'S5-12E', []]
-        UI.display('Processing diecase data...')
+        UI.debug_info('Processing diecase data...')
         (self.diecase_id, self.typeface, wedge_name, layout) = data
         self.wedge = Wedge(wedge_name, manual_choice=not wedge_name)
         self.layout = layout or generate_empty_layout(15, 17)
 
     def __iter__(self):
         return iter(self.matrices)
-
-    def __next__(self):
-        yield from self.matrices
 
     def __repr__(self):
         return self.diecase_id
@@ -88,6 +83,34 @@ class Diecase(object):
         self.__dict__['_matrices'] = [mat for mat in matrices]
 
     @property
+    def ligatures(self):
+        """Matrix character may be any string, not just a single character.
+        This is used for ligatures, like ct, fb, fh, fi, fl, ffi, ffl, ij etc.
+        Return an iterator of matrices where char attribute is not a single
+        character. En-dashes and em-dashes will end up here also."""
+        return (x for x in self.matrices if len(x.char) > 1)
+
+    @property
+    def ligature_length(self):
+        """Get the maximum ligature length in chars"""
+        return max(len(matrix) for matrix in self.matrices)
+
+    @property
+    def low_spaces(self):
+        """Return an iterator of low spaces"""
+        return (x for x in self.matrices if x.islowspace())
+
+    @property
+    def high_spaces(self):
+        """Return an iterator of high spaces"""
+        return (x for x in self.matrices if x.ishighspace())
+
+    @property
+    def spaces(self):
+        """Return an iterator of all spaces, low and high"""
+        return (x for x in self.matrices if x.isspace())
+
+    @property
     def layout(self):
         """Gets a diecase layout as a list of lists"""
         return [matrix.get_record() for matrix in self.matrices]
@@ -112,16 +135,6 @@ class Diecase(object):
         all_styles = set(''.join([mat.styles for mat in self]))
         return Styles(all_styles)()
 
-    def show_layout(self):
-        """Shows the diecase layout"""
-        UI.display_diecase_layout(self)
-        UI.pause()
-
-    def edit_layout(self):
-        """Edits a layout and asks if user wants to save changes"""
-        # Edit the layout
-        UI.edit_diecase_layout(self)
-
     @property
     def alt_wedge_points(self):
         """Gets points for alternative wedge,
@@ -132,7 +145,7 @@ class Diecase(object):
     @property
     def wedge_points(self):
         """Returns a list of assigned wedge's points"""
-        return (self.__dict__.get('_row_points') or Wedge().points)
+        return self.__dict__.get('_row_points') or Wedge().points
 
     @property
     def wedge(self):
@@ -156,6 +169,16 @@ class Diecase(object):
         """Sets a temporary wedge used for calculating justification"""
         self.__dict__['_alt_wedge'] = wedge
         self.__dict__['_alt_row_points'] = wedge.points
+
+    def show_layout(self):
+        """Shows the diecase layout"""
+        UI.display_diecase_layout(self)
+        UI.pause()
+
+    def edit_layout(self):
+        """Edits a layout and asks if user wants to save changes"""
+        # Edit the layout
+        UI.edit_diecase_layout(self)
 
     def lookup_matrix(self, char='', style=''):
         """Chooses a matrix automatically or manually (if multiple matches),
@@ -250,7 +273,9 @@ class Diecase(object):
 
     def export_layout(self):
         """Exports the matrix case layout to file."""
-        filename = os.path.expanduser('~') + '/%s.csv' % self
+        name = self.diecase_id or 'NewDiecase'
+        # Save the exported diecase layout in the default directory
+        filename = APPDIR + '/%s.csv' % name
         with io.open(filename, 'a') as output_file:
             csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
                                     quoting=csv.QUOTE_ALL)
@@ -419,6 +444,9 @@ class Matrix(object):
         new_mat = copy(self)
         new_mat.points += points
         return new_mat
+
+    def __len__(self):
+        return len(self.char)
 
     @property
     def styles(self):
@@ -742,13 +770,6 @@ def generate_empty_layout(rows=None, columns=None):
     rows_list = [num + 1 for num in range(rows)]
     return (('', '', '%s%s' % (column, row), 0)
             for row in rows_list for column in columns_list)
-
-
-def high_or_low_space():
-    """Chooses high or low space"""
-    spaces = {True: '_', False: ' '}
-    high_or_low = UI.confirm('High space?', default=False)
-    return spaces[high_or_low]
 
 
 # Make a single instance of empty diecase for getting fallback values

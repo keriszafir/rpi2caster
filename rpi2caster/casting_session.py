@@ -27,6 +27,8 @@ from . import constants as c
 from . import typesetting_funcs as tsf
 # Style manager
 from .styles import Styles
+# Measure manager
+from .measure import Measure
 # Caster backend
 from .monotype import MonotypeCaster
 # Casting stats
@@ -37,7 +39,7 @@ from .global_settings import UI
 from . import letter_frequencies
 # Matrix, wedge and typesetting data models
 from .typesetting_data import Ribbon
-from . import matrix_data
+from .matrix_data import Diecase, diecase_operations
 from .wedge_data import Wedge
 
 
@@ -96,11 +98,12 @@ class Casting(object):
         # Caster for this job
         self.caster = MonotypeCaster()
         self.stats = Stats(self)
+        self.measure = Measure(manual=False)
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
         if diecase_id:
-            self.diecase = matrix_data.Diecase(diecase_id)
+            self.diecase = Diecase(diecase_id)
         if wedge_name:
-            self.wedge = Wedge(wedge_name)
+            self.diecase.alt_wedge = Wedge(wedge_name)
 
     @choose_sensor_and_driver
     def cast_codes(self, ribbon):
@@ -315,12 +318,13 @@ class Casting(object):
         Ask user about the space width and measurement unit.
         """
         order = []
-        master = self.diecase.lookup_matrix(matrix_data.high_or_low_space())
+        master = self.diecase.lookup_matrix(tsf.high_or_low_space())
         while True:
             matrix = copy(master)
-            UI.display('\nWidth for this matrix: %spt min - %spt max\n'
+            UI.display('Enter the space width...')
+            UI.display('\nWidth limits for this matrix: %spt min - %spt max\n'
                        % (matrix.get_min_points(), matrix.get_max_points()))
-            width = tsf.enter_measure('space width', 'pt')
+            width = Measure(6, 'pt').points
             matrix.points = width
             prompt = 'How many lines?'
             lines = UI.enter_data_or_default(prompt, 1, int)
@@ -335,7 +339,7 @@ class Casting(object):
         """Cast a series of type, filling lines of given width to the brim.
 
         Each character is specified by a tuple: (matrix, qty)
-            where matrix is a matrix_data.Matrix object,
+            where matrix is a Matrix object,
             qty is quantity (0 for a filled line,
                              >0 for a given number of chars).
 
@@ -346,19 +350,18 @@ class Casting(object):
         """
         if not order:
             e.return_to_menu()
-        measure = tsf.enter_measure()
         # 1 quad before and after the line
         quad_padding = 1
         quad = self.diecase.decode_matrix('O15')
         # Leave some slack to adjust the line
-        length = measure - 2 * quad_padding * quad.points
+        length = self.measure.points - 2 * quad_padding * quad.points
         # Build a sequence of matrices for casting
         # If n is 0, we fill the line to the brim
         queues = ([mat] * n if n else [mat] * int((length // mat.points) - 1)
                   for (mat, n) in order)
         matrix_stream = (mat for batch in queues for mat in batch)
         # Initialize the galley-constructor
-        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, measure)
+        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, self.measure)
         builder.quad_padding = quad_padding
         builder.cooldown = True
         builder.mould_heatup = UI.confirm('Pre-heat the mould?', True)
@@ -388,8 +391,7 @@ class Casting(object):
         space = self.diecase.decode_matrix('G2')
         matrix_stream = (self.diecase.lookup_matrix(char, style) if char != ' '
                          else space for char in text)
-        measure = tsf.enter_measure()
-        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, measure)
+        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, self.measure)
         builder.mould_heatup = False
         queue = builder.build_galley()
         UI.display('Each line will have two em-quads at the start '
@@ -430,14 +432,14 @@ class Casting(object):
         """Calculates the width, displays it and casts some 9-unit characters.
         Then, the user measures the width and adjusts the mould opening width.
         """
+        wedge = self.diecase.alt_wedge
         UI.display('Mould blade opening calibration:\n'
                    'Cast G5 (9-units wide on S5 wedge), then measure '
                    'the width. Adjust if needed.')
-        UI.display_parameters({'Wedge data': self.wedge.parameters})
-        UI.display('\n9 units (1en) is %s" wide'
-                   % round(self.wedge.em_width / 2, 4))
-        UI.display('18 units (1em) is %s" wide\n'
-                   % round(self.wedge.em_width, 4))
+        UI.display_parameters({'Wedge data': wedge.parameters})
+        UI.display('\n')
+        UI.display('9 units (1en) is %s" wide' % round(wedge.em_width / 2, 4))
+        UI.display('18 units (1em) is %s" wide\n' % round(wedge.em_width, 4))
         if not UI.confirm('\nProceed?', default=True):
             return None
         mat = self.diecase.decode_matrix('G5')
@@ -561,6 +563,22 @@ class Casting(object):
             nonlocal finished
             finished = True
 
+        def choose_ribbon():
+            """Chooses a ribbon from database or file"""
+            self.ribbon = Ribbon(manual_choice=True)
+
+        def choose_diecase():
+            """Chooses a diecase from database"""
+            self.diecase = Diecase(manual_choice=True)
+
+        def choose_wedge():
+            """Chooses a wedge from registered ones"""
+            self.diecase.alt_wedge = Wedge(manual_choice=True)
+
+        def choose_measure():
+            """Chooses a galley width"""
+            self.measure = Measure()
+
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
             # Options are described with tuples:
@@ -575,14 +593,17 @@ class Casting(object):
                     (self.cast_composition, 'Punch ribbon',
                      'Punch a paper ribbon for casting without the interface',
                      ribbon and not caster),
-                    (self._choose_ribbon, 'Select ribbon',
+                    (choose_ribbon, 'Select ribbon',
                      'Select a ribbon from database or file', True),
-                    (self._choose_diecase, 'Select diecase',
+                    (choose_diecase, 'Select diecase',
                      'Select a matrix case from database' + diecase_info,
                      caster),
-                    (self._choose_wedge, 'Select wedge',
-                     'Enter a wedge designation (current: %s)' % self.wedge,
-                     caster),
+                    (choose_wedge, 'Select wedge',
+                     'Enter a wedge designation (current: %s)'
+                     % self.diecase.alt_wedge, caster),
+                    (choose_measure, 'Change galley width',
+                     'Set a new galley width for casting type (current: %s)'
+                     % self.measure, caster),
                     (self.ribbon.display_contents, 'View codes',
                      'Display all codes in the selected ribbon', ribbon),
                     (self.diecase.show_layout, 'Show diecase layout',
@@ -605,7 +626,7 @@ class Casting(object):
                      caster),
                     (self._display_details, 'Show details...',
                      'Display ribbon and interface details', not caster),
-                    (matrix_data.diecase_operations, 'Matrix manipulation...',
+                    (diecase_operations, 'Matrix manipulation...',
                      'Work on matrix cases', True),
                     (self.diagnostics_submenu, 'Service...',
                      'Interface and machine diagnostic functions', True)]
@@ -639,44 +660,19 @@ class Casting(object):
         """Ribbon setter"""
         self.__dict__['_ribbon'] = ribbon or Ribbon()
         if ribbon.diecase_id:
-            self.diecase = matrix_data.Diecase(ribbon.diecase_id)
-            self.wedge = self.diecase.wedge
+            self.diecase = Diecase(ribbon.diecase_id)
         if ribbon.wedge_name:
-            self.wedge = Wedge(ribbon.wedge_name)
+            self.diecase.alt_wedge = Wedge(ribbon.wedge_name)
 
     @property
     def diecase(self):
         """Diecase for the casting session"""
-        return self.__dict__.get('_diecase') or matrix_data.Diecase()
+        return self.__dict__.get('_diecase') or Diecase()
 
     @diecase.setter
     def diecase(self, diecase):
         """Diecase setter"""
         self.__dict__['_diecase'] = diecase
-
-    @property
-    def wedge(self):
-        """Wedge for the casting session"""
-        return self.__dict__.get('_wedge') or Wedge()
-
-    @wedge.setter
-    def wedge(self, wedge):
-        """Wedge setter"""
-        self.__dict__['_wedge'] = wedge
-        self.diecase.alt_wedge = wedge
-
-    def _choose_ribbon(self):
-        """Chooses a ribbon from database or file"""
-        self.ribbon = Ribbon(manual_choice=True)
-
-    def _choose_diecase(self):
-        """Chooses a diecase from database"""
-        self.diecase = matrix_data.Diecase(manual_choice=True)
-        self.wedge = self.diecase.wedge
-
-    def _choose_wedge(self):
-        """Chooses a wedge from registered ones"""
-        self.wedge = Wedge(manual_choice=True)
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
@@ -686,7 +682,7 @@ class Casting(object):
             display({'Ribbon data': self.ribbon.parameters})
         if self.diecase and not punching:
             display({'Matrix case data': self.diecase.parameters})
-        if self.wedge and not punching:
-            display({'Wedge data': self.wedge.parameters})
+        if self.diecase.alt_wedge and not punching:
+            display({'Wedge data': self.diecase.alt_wedge.parameters})
         display({'Caster data': self.caster.parameters})
         UI.pause()

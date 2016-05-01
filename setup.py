@@ -3,8 +3,16 @@ from setuptools import setup, find_packages
 with open('README.rst', 'r') as readme_file:
     long_description = readme_file.read()
 
+clas = ['Development Status :: 2 - Pre-Alpha',
+        'Intended Audience :: Manufacturing',
+        'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
+        'Natural Language :: English',
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python :: 3 :: Only',
+        'Topic :: Artistic Software']
+
 setup(name='rpi2caster',
-      version='0.3.dev6',
+      version='0.4.dev1',
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
@@ -13,23 +21,16 @@ setup(name='rpi2caster',
       license='GPLv3',
       zip_safe=True,
       include_package_data=True,
-      #data_files=[('/usr/share/rpi2caster/database', ['data/rpi2caster.db']),
-      #            ('/usr/share/rpi2caster/config', ['data/rpi2caster.conf'])],
-      #tests.suite='nose.collector',
-      #tests.require=['nose'],
-      classifiers=['Development Status :: 2 - Pre-Alpha',
-                   'Intended Audience :: Manufacturing',
-                   'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
-                   'Natural Language :: English',
-                   'Operating System :: POSIX :: Linux',
-                   'Programming Language :: Python :: 3 :: Only',
-                   'Topic :: Artistic Software'],
+      classifiers=clas,
       extras_require={'output-driver-wiringpi': ['wiringpi >= 2.3'],
                       'output-driver-gpiozero': ['gpiozero >= 1.0'],
                       'input-driver-sysfs': ['gpiodaemon >= 0.5'],
                       'input-driver-gpiozero': ['gpiozero >= 1.0'],
                       'database-postgresql': ['psycopg2 >= 2.6']},
-      install_requires=['wiringpi >= 2.3', 'pip > 1.5', 'click > 6.0', 'pyphen > 0.9'],
-      keywords=['Monotype', 'typography', 'printing', 'letterpress', 'typesetting', 'typecasting', 'Raspberry Pi'],
+      install_requires=['wiringpi >= 2.3', 'pip > 1.5', 'click > 6.0',
+                        'pyphen > 0.9'],
+      keywords=['Monotype', 'typography', 'printing', 'letterpress',
+                'typesetting', 'typecasting', 'Raspberry Pi'],
       packages=find_packages(exclude=['data', 'docs', 'tests']),
-      entry_points={'console_scripts':['rpi2caster = rpi2caster.__main__:main']})
+      entry_points={'console_scripts':
+                    ['rpi2caster = rpi2caster.__main__:main']})
