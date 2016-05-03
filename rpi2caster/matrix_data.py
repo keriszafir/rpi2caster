@@ -315,7 +315,7 @@ class Diecase(object):
         lowercase = [char.lower() for char in char_backend]
         all_chars = ''.join(list(sorted(set(uppercase + lowercase))))
         UI.display('\nCharacters: %s\n' % all_chars)
-        styles = Styles()()
+        styles = Styles(self.styles, manual_choice=True)()
         self.test_characters(all_chars, styles)
         UI.pause()
 
@@ -454,6 +454,9 @@ class Matrix(object):
 
     def __len__(self):
         return len(self.char)
+
+    def __bool__(self):
+        return True
 
     @property
     def styles(self):

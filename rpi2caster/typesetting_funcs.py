@@ -211,7 +211,8 @@ class GalleyBuilder(object):
             # Take a mat from stash if there is any
             working_mat = working_mat or decode_mat(next(self.source, None))
             # Try to add another character to the line
-            if points_left > working_mat['points']:
+            # Empty mat = end of line, start filling
+            if points_left > working_mat.get('points', 1000):
                 # Store wedge positions
                 new_wedges = working_mat.get('wedges', (3, 8))
                 # Wedges change? Drop in some single justification
@@ -256,7 +257,7 @@ class GalleyBuilder(object):
                 wedges = var_sp.wedge_positions()
             # Always cast as many quads as needed, then put the line out
             queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
-            queue.extend(double_justification(wedges))
+            queue.extend(double_justification(wedges or (3, 8)))
             points_left = 0
 
         # Store the code and wedge positions to speed up the process
