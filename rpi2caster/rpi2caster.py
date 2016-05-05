@@ -43,7 +43,7 @@ def update(args):
     # Upgrade routine
     dev_prompt = 'Testing version (newest features, but unstable)? '
     if confirm('Update the software?', default=False):
-        use_dev_version = args.unstable or confirm(dev_prompt, default=False)
+        use_dev_version = args.testing or confirm(dev_prompt, default=False)
         pre = use_dev_version and '--pre' or ''
         print('You may be asked for the admin password...')
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)
@@ -134,7 +134,7 @@ def main():
     # Set default values for all options globally
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
                              ribbon_id='', source=None, simulation=False,
-                             punching=False, unstable=False,
+                             punching=False,
                              manual_mode=False, list_diecases=False,
                              diecase_id='', wedge_name='',
                              direct=False, testing=False)
