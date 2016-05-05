@@ -1,3 +1,4 @@
+v0.4 - point-based calculations; user configuration; length/width objects and something extra ;)
 v0.3dev6 - mould preheat quad number bugfix (less by one, to make sure no overlength is cast)
 v0.3dev5 - matrix selection regression fix
 v0.3dev4 - mould preheat before batch casting

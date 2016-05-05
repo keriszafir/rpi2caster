@@ -99,9 +99,8 @@ class Casting(object):
         self.caster = MonotypeCaster()
         self.stats = Stats(self)
         self.measure = Measure(manual=False)
+        self.diecase = Diecase(diecase_id)
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
-        if diecase_id:
-            self.diecase = Diecase(diecase_id)
         if wedge_name:
             self.diecase.alt_wedge = Wedge(wedge_name)
 
@@ -435,41 +434,34 @@ class Casting(object):
         return sequence
 
     @cast_or_punch_result
-    def _calibrate_mould(self):
-        """Calculates the width, displays it and casts some 9-unit characters.
-        Then, the user measures the width and adjusts the mould opening width.
-        """
-        wedge = self.diecase.alt_wedge
-        UI.display('Mould blade opening calibration:\n'
-                   'Cast G5 (9-units wide on S5 wedge), then measure '
-                   'the width. Adjust if needed.')
+    def _calibrate_mould_and_diecase(self):
+        """Casts the "en dash" characters for calibrating the character X-Y
+        relative to type body."""
+        UI.display('Mould blade opening and X-Y character calibration:\n'
+                   'First cast G5, adjust the sort width to the value shown.\n'
+                   '\nThen cast some lowercase "n" letters and n-dashes, '
+                   'check the position of the character relative to the '
+                   'type body and adjust the bridge X-Y. Repeat if needed.')
+        wedge = Wedge(manual_choice=True)
         UI.display_parameters({'Wedge data': wedge.parameters})
         UI.display('\n')
         UI.display('9 units (1en) is %s" wide' % round(wedge.em_width / 2, 4))
         UI.display('18 units (1em) is %s" wide\n' % round(wedge.em_width, 4))
         if not UI.confirm('\nProceed?', default=True):
             return None
-        mat = self.diecase.decode_matrix('G5')
-        self.caster.mode.calibration = True
-        sequence = tsf.end_casting() + ['%s' % mat] * 7
-        sequence.extend(tsf.double_justification())
-        return sequence
-
-    @cast_or_punch_result
-    def _calibrate_diecase(self):
-        """Casts the "en dash" characters for calibrating the character X-Y
-        relative to type body."""
-        UI.display('X-Y character calibration:\n'
-                   'Cast some en-dashes and/or lowercase "n" letters, '
-                   'then check the position of the character relative to the '
-                   'type body.\nAdjust if needed.')
+        # Set temporary alternative wedge for the procedure
+        old_wedge, self.diecase.alt_wedge = self.diecase.alt_wedge, wedge
         self.caster.mode.calibration = True
         # Build character list
         queue = tsf.end_casting()
         wedge_positions = (3, 8)
-        for char in ('--', 'n', 'h'):
-            mat = self.diecase.lookup_matrix(char)
+        for char in ('', 'n', '--'):
+            if not char:
+                mat = self.diecase.decode_matrix('G5')
+            else:
+                mat = self.diecase.lookup_matrix(char)
             if not self.diecase:
+                # Use custom value if no diecase given
                 mat.specify_units()
             # Change justification wedge positions if they are different
             # (only if the type was cast with corrections)
@@ -482,6 +474,8 @@ class Casting(object):
             queue.extend(['%s' % mat] * 3)
         # Set the initial wedge positions
         queue.extend(tsf.double_justification(wedge_positions))
+        # Reset the wedge
+        self.diecase.alt_wedge = old_wedge
         return queue
 
     @choose_sensor_and_driver
@@ -537,14 +531,13 @@ class Casting(object):
                     (self._calibrate_wedges, 'Calibrate the 52D wedge',
                      'Calibrate the space transfer wedge for correct width',
                      caster),
-                    (self._calibrate_mould, 'Calibrate mould opening',
-                     'Cast 9-unit characters to adjust the type width',
+                    (self._calibrate_mould_and_diecase,
+                     'Calibrate mould blade and diecase',
+                     'Set the type body width and character-to-body position',
                      caster),
                     (self._calibrate_draw_rods, 'Calibrate diecase draw rods',
                      'Keep the matrix case at G8 and adjust the draw rods',
                      caster),
-                    (self._calibrate_diecase, 'Calibrate matrix X-Y',
-                     'Calibrate the character-to-body positioning', caster),
                     (self._test_row_16, 'Test HMN, KMN or unit-shift',
                      'Cast type from row 16 with chosen addressing mode',
                      caster)]
@@ -670,16 +663,6 @@ class Casting(object):
             self.diecase = Diecase(ribbon.diecase_id)
         if ribbon.wedge_name:
             self.diecase.alt_wedge = Wedge(ribbon.wedge_name)
-
-    @property
-    def diecase(self):
-        """Diecase for the casting session"""
-        return self.__dict__.get('_diecase') or Diecase()
-
-    @diecase.setter
-    def diecase(self, diecase):
-        """Diecase setter"""
-        self.__dict__['_diecase'] = diecase
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""

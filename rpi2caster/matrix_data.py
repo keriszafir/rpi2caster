@@ -45,6 +45,7 @@ class Diecase(object):
         UI.debug_info('Processing diecase data...')
         (self.diecase_id, self.typeface, wedge_name, layout) = data
         self.wedge = Wedge(wedge_name, manual_choice=not wedge_name)
+        self.alt_wedge = self.wedge
         self.layout = layout or generate_empty_layout(15, 17)
 
     def __iter__(self):
@@ -135,41 +136,6 @@ class Diecase(object):
         all_styles = set(''.join([mat.styles for mat in self]))
         return Styles(all_styles)()
 
-    @property
-    def alt_wedge_points(self):
-        """Gets points for alternative wedge,
-        assigned wedge or default wedge"""
-        return (self.__dict__.get('_alt_row_points') or
-                self.__dict__.get('_row_points') or Wedge().points)
-
-    @property
-    def wedge_points(self):
-        """Returns a list of assigned wedge's points"""
-        return self.__dict__.get('_row_points') or Wedge().points
-
-    @property
-    def wedge(self):
-        """Gets assigned wedge."""
-        return self.__dict__.get('_wedge') or Wedge()
-
-    @wedge.setter
-    def wedge(self, wedge):
-        """Sets the wedge and memoizes row point values"""
-        self.__dict__['_wedge'] = wedge
-        self.__dict__['_row_points'] = wedge.points
-
-    @property
-    def alt_wedge(self):
-        """Gets the diecase's temporary wedge"""
-        return (self.__dict__.get('_alt_wedge') or
-                self.__dict__.get('_wedge') or Wedge())
-
-    @alt_wedge.setter
-    def alt_wedge(self, wedge):
-        """Sets a temporary wedge used for calculating justification"""
-        self.__dict__['_alt_wedge'] = wedge
-        self.__dict__['_alt_row_points'] = wedge.points
-
     def show_layout(self):
         """Shows the diecase layout"""
         UI.display_diecase_layout(self)
@@ -186,7 +152,12 @@ class Diecase(object):
         def enter_manually(char='', style=''):
             """Specify matrix by entering code"""
             if char:
-                what = spaces.get(char) or '%s %s' % (Styles(style), char)
+                st_string = str(Styles(style))
+                if 'all' in st_string:
+                    st_string = ''
+                else:
+                    st_string = ' ' + st_string
+                what = spaces.get(char) or '%s%s' % (st_string, char)
                 UI.display('Choose matrix for %s' % what)
             else:
                 char = ''
@@ -222,7 +193,12 @@ class Diecase(object):
             return candidates[0]
         else:
             # Multiple matches found = let user choose
-            what = spaces.get(char) or '%s %s' % (Styles(style), char)
+            st_string = str(Styles(style))
+            if 'all' in st_string:
+                st_string = ''
+            else:
+                st_string = ' ' + st_string
+            what = spaces.get(char) or '%s%s' % (st_string, char)
             UI.display_header('Multiple matrices for %s' % what)
             # Show a menu with multiple candidates
             mats = {i: mat for i, mat in enumerate(candidates, start=1)}
@@ -543,7 +519,7 @@ class Matrix(object):
         """Gets a number of points for characters in the diecase row"""
         # Try wedges in order:
         # diecase's temporary wedge, diecase's default wedge, standard S5-12E
-        return self.diecase.alt_wedge_points[self.row]
+        return self.diecase.alt_wedge.points[self.row]
 
     def get_min_points(self):
         """Gets the minimum unit value for a given wedge, based on the
@@ -633,8 +609,8 @@ class Matrix(object):
         mostly used for matrices placed in a different row than the
         unit arrangement indicates; this will make the program set the
         justification wedges and cast the character with the S-needle"""
-        UI.display('Enter unit value for this matrix; 0 for wedge default, '
-                   'leave blank for current')
+        UI.display('Enter unit value for %s; 0 for wedge default, '
+                   'leave blank for current' % self.code)
         prompt = 'Units?'
         self.units = UI.enter_data_or_default(prompt, self.units, int)
 

@@ -25,6 +25,9 @@ class Wedge(object):
     def __getitem__(self, row):
         return self.units[row]
 
+    def __bool__(self):
+        return True
+
     @property
     def pica(self):
         """Get the pica value for the wedge. Can be .1667" (old British)

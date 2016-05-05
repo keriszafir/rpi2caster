@@ -57,6 +57,15 @@ def inventory(args):
         diecase_operations()
 
 
+def meow(_):
+    "Easter egg"
+    try:
+        from . import easteregg
+        easteregg.show()
+    except (OSError, FileNotFoundError):
+        print('There are no Easter Eggs in this program.')
+
+
 def toggle_punching(args):
     """Switch between punching and casting modes"""
     args.punching = not args.punching
@@ -217,6 +226,14 @@ def main():
     inv_parser.add_argument('-l', '--list_diecases', action='store_true',
                             help='list all diecases and finish')
     inv_parser.set_defaults(job=inventory)
+    #
+    # Easter egg subparser
+    #
+    meow_parser = jobs.add_parser('meow',
+                                  aliases=['miauw', 'miau', 'miaou', 'miaow',
+                                           'mew', 'mjav', 'mio', 'miao'],
+                                  help='see for yourself...')
+    meow_parser.set_defaults(job=meow)
     # Parsers are defined - get the args...
     args = main_parser.parse_args()
     try:
