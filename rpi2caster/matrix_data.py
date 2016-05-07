@@ -589,15 +589,19 @@ class Matrix(object):
         UI.display('\n\n' + '*' * 80 + '\n')
         UI.display('%s %s %s, units: %s'
                    % (self.code, styles, char, self.units))
-        prompt = ('Character? (" ": low space, "_": high space,\n'
-                  'leave blank to keep current, ctrl-C to exit editing)?')
+        self.edit_char()
+        self.choose_styles()
+        self.specify_units()
+        return self
+
+    def edit_char(self):
+        """Edit the matrix character"""
+        prompt = ('Char? (" ": low / "_": high space, '
+                  'blank = keep, ctrl-C to exit)?')
         if self.char:
             self.char = UI.enter_data_or_default(prompt, self.char)
         else:
             self.char = UI.enter_data_or_blank(prompt)
-        self.choose_styles()
-        self.specify_units()
-        return self
 
     def specify_units(self):
         """Give a user-defined unit value for the matrix;
