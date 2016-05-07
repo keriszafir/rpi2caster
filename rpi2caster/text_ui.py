@@ -95,7 +95,7 @@ def display(*args, **kwargs):
 def display_header(text, symbol='-'):
     """Displays a header banner"""
     dash_line = symbol * len(text)
-    print('\n\n' + dash_line + '\n' + text + '\n' + dash_line + '\n')
+    print('\n' + dash_line + '\n' + text + '\n' + dash_line + '\n')
 
 
 def display_parameters(data):
@@ -143,7 +143,7 @@ def enter_data(prompt, datatype=str):
     value = ''
     while not value:
         value = input(prompt + ' : ')
-        print('\n')
+        print()
         try:
             value = datatype(value)
         except ValueError:
@@ -157,7 +157,7 @@ def enter_data_or_blank(prompt, datatype=str):
     """
     while True:
         value = input(prompt + ' : ')
-        print('\n')
+        print()
         if not value and datatype in (int, float, bool):
             return datatype(0)
         elif not value:
@@ -173,7 +173,7 @@ def enter_data_or_default(prompt, default=1, datatype=str):
     or try to convert to the specified datatype."""
     while True:
         value = input(prompt + ' (default: %s) : ' % default)
-        print('\n')
+        print()
         if not value:
             return default
         try:
@@ -187,7 +187,7 @@ def enter_data_or_exception(prompt, exception=ValueError, datatype=str):
     or try to convert to the specified datatype."""
     while True:
         value = input(prompt + ' : ')
-        print('\n')
+        print()
         if not value:
             raise exception
         try:
@@ -274,7 +274,7 @@ def display_diecase_layout(diecase):
         # Style modifiers for displaying roman, bold, italic,
         # smallcaps, inferior, superior
         style_modifiers = {'r': '', 'b': '*', 'i': '/',
-                           's': '•', 'u': '_', 'l': '^'}
+                           's': '·', 'u': '_', 'l': '^'}
         spaces_symbols = {'_': '▣', ' ': '□', '': ' '}
         formatted_char = matrix.char
         for style in matrix.styles:
@@ -314,24 +314,30 @@ def display_diecase_layout(diecase):
     # Add the header at the bottom
     table.extend([separator, header, separator])
     # We can display it now
-    print('\nDiecase ID: %s' % diecase)
-    print('Stopbar / wedge: %s\n' % diecase.wedge)
+    print('\nDiecase ID: %s  -   assigned stopbar/wedge: %s\n'
+          % (diecase, diecase.wedge))
     for row in table:
         print(row)
     # Explanation of symbols
     print('\nExplanation:', '□ = low space, ▣ = high space',
           '*a = bold, /a = italic, •a = small caps',
           '_a = subscript (inferior), ^a = superscript (superior)',
-          sep='\n', end='\n\n')
+          '# - matrix assigned to more than two styles', sep='\n')
 
 
 def edit_diecase_layout(diecase):
     """Edits a matrix case layout, row by row, matrix by matrix.
     Allows to enter a position to be edited. """
+    def edit(mat):
+        """Edit a matrix"""
+        clear()
+        display_diecase_layout(diecase)
+        mat.edit()
+
     def all_rows_mode():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
         for mat in diecase:
-            mat.edit_matrix()
+            edit(mat)
 
     def all_columns_mode():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
@@ -339,19 +345,19 @@ def edit_diecase_layout(diecase):
         iter_mats = (mat for col in c.COLUMNS_17
                      for mat in diecase if mat.column == col)
         for mat in iter_mats:
-            mat.edit_matrix()
+            edit(mat)
 
     def single_row_mode(row):
         """Edits matrices found in a single row"""
         iter_mats = (mat for mat in diecase if mat.row == row)
         for mat in iter_mats:
-            mat.edit_matrix()
+            edit(mat)
 
     def single_column_mode(column):
         """Edits matrices found in a single column"""
         iter_mats = (mat for mat in diecase if mat.column == column)
         for mat in iter_mats:
-            mat.edit_matrix()
+            edit(mat)
 
     # Map unit values to rows
     # If the layout is empty, we need to initialize it
@@ -376,7 +382,7 @@ def edit_diecase_layout(diecase):
                 single_row_mode(int(ans))
             elif ans:
                 mat = diecase.decode_matrix(ans)
-                mat.edit_matrix()
+                edit(mat)
             else:
                 return diecase.matrices
         except (IndexError, KeyboardInterrupt, TypeError, AttributeError):

@@ -582,7 +582,7 @@ class Matrix(object):
         """Check whether the mat is high space"""
         return self.char == '_'
 
-    def edit_matrix(self):
+    def edit(self):
         """Edits the matrix data"""
         char = self.char and 'char: "%s"' % self.char or 'character not set'
         styles = self.styles and 'styles: %s' % self.styles or ''
