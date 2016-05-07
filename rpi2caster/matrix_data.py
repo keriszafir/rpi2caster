@@ -352,7 +352,7 @@ class Diecase(object):
                 UI.clear()
                 UI.display_parameters({'Diecase data': self.parameters,
                                        'Wedge data': self.wedge.parameters})
-                options = {'M': e.return_to_menu,
+                options = {'Q': e.return_to_menu,
                            'T': self._set_typeface,
                            'A': self._test_lang_completeness,
                            'W': self._assign_wedge,
@@ -378,7 +378,8 @@ class Diecase(object):
                 required = {'Typeface': self.typeface,
                             'Diecase ID': self.diecase_id}
                 missing = [item for item in required if not required[item]]
-                messages.extend([item + ' is not set\n' for item in missing])
+                messages.extend(['Cannot save diecase with missing %s\n'
+                                 % item.lower() for item in missing])
                 if not missing:
                     options['S'] = self._save_to_db
                     messages.append('[S]ave diecase to database,\n')
@@ -388,7 +389,7 @@ class Diecase(object):
                     messages.append('[D]elete diecase from database,\n')
                 # Options constructed
                 messages.append('[C] to choose/create another diecase,\n'
-                                '[M] to exit to menu.\n')
+                                '[Q] to quit.\n')
                 messages.append('Your choice: ')
                 message = ''.join(messages)
                 UI.simple_menu(message, options)()
@@ -583,25 +584,19 @@ class Matrix(object):
 
     def edit_matrix(self):
         """Edits the matrix data"""
-        parameters = [(self.char, 'Character'),
-                      (str(Styles(self.styles)), 'Styles'),
-                      (self.code, 'Coordinates'), (self.units, 'Unit width')]
-        UI.display_parameters({'Matrix details': parameters})
-        char = self.char
-        prompt = (char and 'Character: "%s"' % char or
-                  'No character selected - enter to be able to use the matrix')
-        UI.display(prompt)
-        prompt = ('Character? (" " is low space, "_" is high space,\n'
-                  'leave blank to keep current, or ctrl-C to exit)?')
-        if char:
-            char = UI.enter_data_or_default(prompt, self.char)
+        char = self.char and 'char: "%s"' % self.char or 'character not set'
+        styles = self.styles and 'styles: %s' % self.styles or ''
+        UI.display('\n\n' + '*' * 80 + '\n')
+        UI.display('%s %s %s, units: %s'
+                   % (self.code, styles, char, self.units))
+        prompt = ('Character? (" ": low space, "_": high space,\n'
+                  'leave blank to keep current, ctrl-C to exit editing)?')
+        if self.char:
+            self.char = UI.enter_data_or_default(prompt, self.char)
         else:
-            char = UI.enter_data_or_blank(prompt)
-        if char:
-            # Otherwise change nothing
-            self.char = char
-            self.choose_styles()
-            self.specify_units()
+            self.char = UI.enter_data_or_blank(prompt)
+        self.choose_styles()
+        self.specify_units()
         return self
 
     def specify_units(self):
