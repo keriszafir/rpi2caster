@@ -529,12 +529,14 @@ def wiringpi_output():
 
 def parallel_sensor():
     """A parallel port sensor for John Cornelisse's old interface"""
-    pass
+    from .driver_parallel import ParallelSensor
+    return ParallelSensor()
 
 
 def parallel_output():
     """A parallel port valve control for John Cornelisse's old interface"""
-    pass
+    from .driver_parallel import ParallelOutputDriver
+    return ParallelOutputDriver()
 
 
 SENSORS = {'simulation': SimulationSensor, 'sysfs': sysfs_sensor,

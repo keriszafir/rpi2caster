@@ -66,14 +66,12 @@ class Styles(object):
 
     def choose(self):
         """Chooses one or more styles and returns a list of them"""
-        desc = ('\nAvailable options:\n' +
-                '\n'.join('%s - %s' % (x, Styles.style_dict[x])
-                          for x in Styles.order))
-        header = 'Choose a text style.\n'
+        header = 'Choose one text style.'
         if self.allow_multiple:
-            header = ('Choose one or more text styles, '
-                      'e.g. roman and small caps.\n')
-        current = '\nCurrent: %s\n' % self
-        UI.display(header + current + desc)
-        self.styles_string = UI.enter_data_or_default('Your choice?',
-                                                      self.styles_string)
+            header = 'Choose one or more text styles.'
+        string = self.styles_string
+        prompt = ('%s Available options:\n'
+                  'r - roman, b - bold, i - italic, s - small caps,\n'
+                  'l - lower index (inferior), u - upper index (superior)\n'
+                  'Your choice?' % header)
+        self.styles_string = UI.enter_data_or_default(prompt, string)

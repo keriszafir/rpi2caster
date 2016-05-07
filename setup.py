@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 with open('README.rst', 'r') as readme_file:
     long_description = readme_file.read()
 
-clas = ['Development Status :: 2 - Pre-Alpha',
+clas = ['Development Status :: 3 - Alpha',
         'Intended Audience :: Manufacturing',
         'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
         'Natural Language :: English',
@@ -12,7 +12,7 @@ clas = ['Development Status :: 2 - Pre-Alpha',
         'Topic :: Artistic Software']
 
 setup(name='rpi2caster',
-      version='0.5.a1',
+      version='0.5.a2',
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
@@ -26,6 +26,7 @@ setup(name='rpi2caster',
                       'output-driver-gpiozero': ['gpiozero >= 1.0'],
                       'input-driver-sysfs': ['gpiodaemon >= 0.5'],
                       'input-driver-gpiozero': ['gpiozero >= 1.0'],
+                      'driver-parallel': ['pyparallel >= 0.2'],
                       'database-postgresql': ['psycopg2 >= 2.6']},
       install_requires=['pip > 1.5', 'click > 6.0'],
       keywords=['Monotype', 'typography', 'printing', 'letterpress',

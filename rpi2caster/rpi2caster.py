@@ -5,7 +5,7 @@ from sys import argv
 import argparse
 from . import exceptions as e
 from .text_ui import confirm, menu
-from .matrix_data import diecase_operations, list_diecases
+from .matrix_data import diecase_operations, list_diecases, Diecase
 
 
 def cast(args):
@@ -52,8 +52,14 @@ def update(args):
 def inventory(args):
     """Inventory management - diecase manipulation etc."""
     if args.list_diecases:
+        # Just show what we have
         list_diecases()
+    elif args.diecase_id:
+        # Work on a specific diecase
+        diecase = Diecase(args.diecase_id)
+        diecase.manipulation_menu()
     else:
+        # Choose diecase and work on it
         diecase_operations()
 
 
@@ -225,6 +231,10 @@ def main():
     # List the diecases and exit
     inv_parser.add_argument('-l', '--list_diecases', action='store_true',
                             help='list all diecases and finish')
+    # Manipulate diecase with given ID
+    inv_parser.add_argument('-D', '--diecase', dest='diecase_id',
+                            help='work on diecase with given ID',
+                            metavar='ID')
     inv_parser.set_defaults(job=inventory)
     #
     # Easter egg subparser
@@ -239,7 +249,7 @@ def main():
     try:
         args.job(args)
     except (e.ReturnToMenu, e.MenuLevelUp):
-        print('Goodbye!')
+        pass
     except (KeyboardInterrupt, EOFError):
         print('\nInterrupted by user.')
     except AttributeError:
