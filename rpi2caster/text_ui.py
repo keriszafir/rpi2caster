@@ -295,22 +295,31 @@ def display_diecase_layout(diecase):
               '|' + 'Units'.center(7) + '|')
     # "-----" line in the table
     separator = '—' * len(header)
-    # A row with only spaces and vertical lines in it
-    empty_row = ('|' + ' ' * 3 + '|' + ' ' * 4 * len(col_numbers) + '|' +
-                 ' ' * 7 + '|')
     # Initialize the displayed layout
     table = [separator, header, separator]
     # Process each row
-    for row_num in row_numbers:
-        # Start with row number...
-        row = ['|' + str(row_num).center(3) + '|']
-        # Add only characters and styles, center chars to 4
-        row.extend([displayed_char(mat).center(4)
-                    for column_num in col_numbers for mat in diecase
-                    if mat.column == column_num and mat.row == row_num])
-        row.append('|%s|' % str(diecase.wedge[row_num]).center(7))
+    for row_number in row_numbers:
+        row = []
+        units_row = []
+        wedge_row_units = diecase.wedge[row_number]
+        for column_number in col_numbers:
+            for mat in diecase:
+                if mat.code == '%s%s' % (column_number, row_number):
+                    row.append(displayed_char(mat).center(4))
+                    # Show units under character if value is not row default
+                    show_units = (mat.units != wedge_row_units and
+                                  mat.char and not mat.isspace())
+                    if show_units:
+                        units_row.append(str(mat.units).center(4))
+                    else:
+                        units_row.append(''.center(4))
+                    break
+        row = ['|', str(row_number).center(3), '|', ''.join(row),
+               '|%s|' % str(wedge_row_units).center(7)]
+        units_row = ['|', ' ' * 3, '|', ''.join(units_row), '|', ' ' * 7, '|']
         table.append(''.join(row))
-        table.append(empty_row)
+        table.append(''.join(units_row))
+        # table.append(empty_row)
     # Add the header at the bottom
     table.extend([separator, header, separator])
     # We can display it now
