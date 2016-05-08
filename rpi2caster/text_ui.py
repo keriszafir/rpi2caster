@@ -313,6 +313,7 @@ def display_diecase_layout(diecase):
                         units_row.append(str(mat.units).center(4))
                     else:
                         units_row.append(''.center(4))
+                    # No need to iterate further
                     break
         row = ['|', str(row_number).center(3), '|', ''.join(row),
                '|%s|' % str(wedge_row_units).center(7)]
@@ -337,6 +338,19 @@ def display_diecase_layout(diecase):
 def edit_diecase_layout(diecase):
     """Edits a matrix case layout, row by row, matrix by matrix.
     Allows to enter a position to be edited. """
+    def swap(command):
+        """Swap two matrices based on command"""
+        # Process the command string (uppercase)
+        command = command.replace('SWAP', '').strip()
+        code1, code2 = command.split(',', 1)
+        code1, code2 = code1.strip(), code2.strip()
+        # Look for matrices
+        matches1 = [mat for mat in diecase.matrices if mat.code == code1]
+        matches2 = [mat for mat in diecase.matrices if mat.code == code2]
+        if matches1 and matches2:
+            mat1, mat2 = matches1[0], matches2[0]
+            mat1.code, mat2.code = mat2.code, mat1.code
+
     def edit(mat):
         """Edit a matrix"""
         clear()
@@ -375,6 +389,7 @@ def edit_diecase_layout(diecase):
               'matrix coordinates to edit a single matrix,\n'
               'or choose edit mode: AR - all matrices row by row, '
               'AC - all matrices column by column.'
+              '\nYou can swap two mats by entering: "swap coords1, coords2".'
               '\nYour choice (or leave blank to exit) : ')
     while True:
         print('\nCurrent diecase layout:\n')
@@ -389,9 +404,15 @@ def edit_diecase_layout(diecase):
                 single_column_mode(ans)
             elif ans in [str(x) for x in range(1, 17)]:
                 single_row_mode(int(ans))
+            elif ans.startswith('SWAP'):
+                swap(ans)
             elif ans:
-                mat = diecase.decode_matrix(ans)
-                edit(mat)
+                try:
+                    mats = [mat for mat in diecase if mat.code == ans.upper()]
+                    edit(mats[0])
+                except (IndexError, TypeError, AttributeError):
+                    # Loop over again
+                    pass
             else:
                 return diecase.matrices
         except (IndexError, KeyboardInterrupt, TypeError, AttributeError):

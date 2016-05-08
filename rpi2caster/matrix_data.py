@@ -663,7 +663,7 @@ def list_diecases():
 def choose_diecase():
     """Lists diecases and lets the user choose one;
     returns the Diecase class object with all parameters set up."""
-    prompt = 'Number of a diecase (0 for a new one, leave blank to exit): '
+    prompt = 'Number of a diecase (0 for a new one, leave blank to exit)'
     while True:
         try:
             UI.display('Choose a matrix case:', end='\n\n')

@@ -203,10 +203,10 @@ def main():
     comp_parser = jobs.add_parser('translate', aliases=['t', 'set'],
                                   help='Typesetting program')
     # Manual mode option - more control for user
-    comp_parser.add_argument('-m', '--manual', help='use manual mode',
+    comp_parser.add_argument('-M', '--manual', help='use manual mode',
                              dest='manual_mode', action='store_true')
     # Choose diecase layout
-    comp_parser.add_argument('-D', '--diecase', dest='diecase_id',
+    comp_parser.add_argument('-m', '--diecase', dest='diecase_id',
                              help='diecase ID for typesetting',
                              metavar='ID')
     # Debug mode
@@ -232,7 +232,7 @@ def main():
     inv_parser.add_argument('-l', '--list_diecases', action='store_true',
                             help='list all diecases and finish')
     # Manipulate diecase with given ID
-    inv_parser.add_argument('-D', '--diecase', dest='diecase_id',
+    inv_parser.add_argument('-m', '--diecase', dest='diecase_id',
                             help='work on diecase with given ID',
                             metavar='ID')
     inv_parser.set_defaults(job=inventory)
