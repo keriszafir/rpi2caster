@@ -299,7 +299,7 @@ def display_diecase_layout(diecase):
     empty_row = ('|' + ' ' * 3 + '|' + ' ' * 4 * len(col_numbers) + '|' +
                  ' ' * 7 + '|')
     # Initialize the displayed layout
-    table = [separator, header, separator, empty_row]
+    table = [separator, header, separator]
     # Process each row
     for row_num in row_numbers:
         # Start with row number...
@@ -320,7 +320,7 @@ def display_diecase_layout(diecase):
         print(row)
     # Explanation of symbols
     print('\nExplanation:', '□ = low space, ▣ = high space',
-          '*a = bold, /a = italic, •a = small caps',
+          '*a = bold, /a = italic, ·a = small caps',
           '_a = subscript (inferior), ^a = superscript (superior)',
           '# - matrix assigned to more than two styles', sep='\n')
 

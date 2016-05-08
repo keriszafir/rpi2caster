@@ -587,7 +587,7 @@ class Matrix(object):
         """Edits the matrix data"""
         char = self.char and 'char: "%s"' % self.char or 'character not set'
         styles = self.styles and 'styles: %s' % self.styles or ''
-        UI.display('\n\n' + '*' * 80 + '\n')
+        UI.display('\n' + '*' * 80 + '\n')
         UI.display('%s %s %s, units: %s'
                    % (self.code, styles, char, self.units))
         self.edit_char()
