@@ -291,12 +291,12 @@ def display_diecase_layout(diecase):
         elif 'NI' in mat.code or 'NL' in mat.code:
             col_numbers = c.COLUMNS_17
     # Generate a header with column numbers
-    header = ('|Row|' + ''.join([col.center(4) for col in col_numbers]) +
-              '|' + 'Units'.center(7) + '|')
+    header = (' Row ' + ''.join([col.center(4) for col in col_numbers]) +
+              'Units'.center(9))
     # "-----" line in the table
     separator = '—' * len(header)
     # Initialize the displayed layout
-    table = [separator, header, separator]
+    table = [header, separator]
     # Process each row
     for row_number in row_numbers:
         row = []
@@ -322,7 +322,7 @@ def display_diecase_layout(diecase):
         table.append(''.join(units_row))
         # table.append(empty_row)
     # Add the header at the bottom
-    table.extend([separator, header, separator])
+    table.extend([separator, header])
     # We can display it now
     print('\nDiecase ID: %s  -   assigned stopbar/wedge: %s\n'
           % (diecase, diecase.wedge))
