@@ -140,7 +140,7 @@ def main():
     # Set default values for all options globally
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
                              ribbon_id='', source=None, simulation=False,
-                             punching=False,
+                             punching=False, text_file='',
                              manual_mode=False, list_diecases=False,
                              diecase_id='', wedge_name='',
                              direct=False, testing=False)

@@ -8,10 +8,12 @@ from .wedge_data import Wedge
 
 class Measure(object):
     """Chooses and represents a line length"""
-    symbols = ['Pt', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cm', 'mm', 'in', '"']
-    units = {'Pt': 12.0, 'pt': 1.0,
+    symbols = ['pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cf', 'ff',
+               'cm', 'mm', 'in', '"']
+    units = {'pc': 12.0, 'pt': 1.0,
              'Pp': 12*0.166/0.1667, 'pp': 0.166/0.1667,
              'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667,
+             'cf': 12*0.1628/0.1667, 'ff': 0.1628/0.1667,
              'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
     # Get the default line length from config
     try:
@@ -61,10 +63,12 @@ def enter(value=0, unit=Measure.default_unit):
         text = ('\n\nAvailable units:\n'
                 '    dd - European Didot point,\n'
                 '    cc - cicero (=12dd, .1776"),\n'
-                '    pp - US printer\'s pica point,\n'
-                '    Pp - US pica (=12pp, .1660"),\n'
-                '    pt - DTP point = 1/72",\n'
-                '    Pt - DTP pica (=12pt, .1667"),\n'
+                '    ff - Fournier point,\n'
+                '    cf - Fournier cicero (=12ff, .1628"),\n'
+                '    pp - TeX / US printer\'s pica point,\n'
+                '    Pp - TeX / US printer\'s pica (=12pp, .1660"),\n'
+                '    pt - DTP / PostScript point = 1/72",\n'
+                '    pc - DTP / PostScript pica (=12pt, .1667"),\n'
                 '    ", in - inch;   '
                 'mm - millimeter;   cm - centimeter\n\n')
         UI.display(text)

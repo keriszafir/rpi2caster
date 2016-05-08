@@ -134,7 +134,7 @@ class Casting(object):
             self.stats.runs = abs(UI.enter_data_or_default(prompt, 1, int))
             # Line skipping - ask user if they want to skip any initial line(s)
             prompt = 'How many initial lines do you want to skip?'
-            l_skipped = (self.stats.get_ribbon_lines() > 1 and
+            l_skipped = (self.stats.get_ribbon_lines() > 2 and
                          abs(UI.enter_data_or_default(prompt, 0, int)) or 0)
         UI.display_parameters({'Session info': self.stats.session_parameters})
         # For each casting run repeat
@@ -320,7 +320,11 @@ class Casting(object):
         Ask user about the space width and measurement unit.
         """
         order = []
-        master = self.diecase.lookup_matrix(tsf.high_or_low_space())
+        if self.diecase:
+            master = self.diecase.lookup_matrix(tsf.high_or_low_space())
+            UI.display('Casting from %s' % master.code)
+        else:
+            master = self.diecase.lookup_matrix()
         while True:
             matrix = copy(master)
             UI.display('Enter the space width...')

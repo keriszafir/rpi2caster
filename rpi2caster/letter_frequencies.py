@@ -154,7 +154,7 @@ class CharFreqs(object):
             """Calculate character quantity based on frequency"""
             ratio = upper and self.case_ratio or 1
             normalized_qty = self.freqs.get(char, 0) / self.freqs.get('a', 1)
-            return ceil(normalized_qty * self.scale * ratio)
+            return max(ceil(normalized_qty * self.scale * ratio), 10)
 
         # Start with lowercase
         lower_bill = ((char, quantity(char)) for char in sorted(self.freqs))
@@ -166,7 +166,8 @@ class CharFreqs(object):
         """Define scale of production"""
         prompt = ('How much lowercase "a" characters do you want to cast?\n'
                   'The quantities of other characters will be calculated\n'
-                  'based on the letter frequency of the language.')
+                  'based on the letter frequency of the language.\n'
+                  'Minimum of 10 characters each will be cast.')
         self.scale = UI.enter_data_or_default(prompt, 100, int)
 
     def define_case_ratio(self):

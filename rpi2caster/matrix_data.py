@@ -46,7 +46,7 @@ class Diecase(object):
         (self.diecase_id, self.typeface, wedge_name, layout) = data
         self.wedge = Wedge(wedge_name, manual_choice=not wedge_name)
         self.alt_wedge = self.wedge
-        self.layout = layout or generate_empty_layout(15, 17)
+        self.layout = layout
 
     def __iter__(self):
         return iter(self.matrices)
@@ -119,8 +119,9 @@ class Diecase(object):
     @layout.setter
     def layout(self, layout):
         """Translates the layout to a list of matrix objects"""
-        self.matrices = []
-        self.__dict__['_layout'] = layout
+        if layout:
+            self.matrices = []
+            self.__dict__['_layout'] = layout
 
     @property
     def parameters(self):
@@ -156,12 +157,12 @@ class Diecase(object):
                 if 'all' in st_string:
                     st_string = ''
                 else:
-                    st_string = ' ' + st_string
+                    st_string = st_string + ' '
                 what = spaces.get(char) or '%s%s' % (st_string, char)
                 UI.display('Choose matrix for %s' % what)
             else:
                 char = ''
-            code = UI.enter_data_or_default('Combination?', 'G5').upper()
+            code = UI.enter_data_or_default('Mat position?', 'G5').upper()
             matrix = Matrix(char=char, style=style, code=code, diecase=self)
             return matrix
 
@@ -401,11 +402,11 @@ class Diecase(object):
 class Matrix(object):
     """A class for single matrices - all matrix data"""
     def __init__(self, **kwargs):
-        self.diecase = kwargs.get('diecase') or EMPTY_DIECASE
+        self.diecase = kwargs.get('diecase', EMPTY_DIECASE)
         self.char = kwargs.get('char', '')
         self.styles = kwargs.get('styles', 'r')
         self.code = kwargs.get('code', 'O15')
-        self.units = kwargs.get('units')
+        self.units = kwargs.get('units') or 0
 
     def __repr__(self):
         return self.code
@@ -451,23 +452,23 @@ class Matrix(object):
     @property
     def units(self):
         """Gets the specific or default number of units"""
-        wedge = self.diecase.wedge
-        units = self.points / wedge.units_to_points_factor
-        return int(round(units, 0))
+        # If units are assigned to the matrix, return the value
+        # Otherwise, wedge default
+        units = (self.__dict__.get('_units', 0) or
+                 self.diecase.wedge.units[self.row])
+        return units
 
     @units.setter
     def units(self, units):
         """Sets the unit width value"""
-        wedge = self.diecase.wedge
         if units:
-            self.points = wedge.units_to_points_factor * units
-        elif units == 0:
-            self.points = wedge.points[self.row]
+            self.__dict__['_units'] = units
 
     @property
     def points(self):
         """Gets a DTP point (=.1667"/12) width for the matrix"""
-        points = self.__dict__.get('_points') or self.get_row_points()
+        points = (self.__dict__.get('_points') or
+                  self.diecase.wedge.units_to_points_factor * self.units)
         return round(points, 2)
 
     @points.setter
@@ -608,8 +609,8 @@ class Matrix(object):
         mostly used for matrices placed in a different row than the
         unit arrangement indicates; this will make the program set the
         justification wedges and cast the character with the S-needle"""
-        UI.display('Enter unit value for %s; 0 for wedge default, '
-                   'leave blank for current' % self.code)
+        UI.display('Enter unit value for %s; 0 = row units, '
+                   'blank = current' % self.code)
         prompt = 'Units?'
         self.units = UI.enter_data_or_default(prompt, self.units, int)
 
