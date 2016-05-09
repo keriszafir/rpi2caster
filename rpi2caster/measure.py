@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """Line length and character width module"""
-from .global_settings import UI
-from .cfg_parser import get_config
-from .exceptions import NotConfigured, ConfigFileUnavailable
+from .global_config import UI, DEFAULT_MEASURE, DEFAULT_UNIT
 from .wedge_data import Wedge
 
 
 class Measure(object):
     """Chooses and represents a line length"""
+    default_unit = DEFAULT_UNIT
+    default_value = DEFAULT_MEASURE
     symbols = ['pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cf', 'ff',
                'cm', 'mm', 'in', '"']
     units = {'pc': 12.0, 'pt': 1.0,
@@ -15,16 +15,6 @@ class Measure(object):
              'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667,
              'cf': 12*0.1628/0.1667, 'ff': 0.1628/0.1667,
              'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
-    # Get the default line length from config
-    try:
-        default_value = get_config('Preferences', 'default_measure')
-    except (NotConfigured, ConfigFileUnavailable):
-        default_value = 25
-    # Get the measurement unit
-    try:
-        default_unit = get_config('Preferences', 'measurement_unit')
-    except (NotConfigured, ConfigFileUnavailable):
-        default_unit = 'cc'
 
     def __init__(self, value=default_value, unit=default_unit, manual=True):
         try:

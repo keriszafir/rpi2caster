@@ -8,7 +8,7 @@ from .measure import Measure
 from .typesetting_data import Ribbon
 from .matrix_data import Diecase, diecase_operations
 from .wedge_data import Wedge
-from .global_settings import UI
+from .global_config import UI
 
 
 class Typesetting(object):

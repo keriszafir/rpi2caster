@@ -7,7 +7,7 @@ from . import exceptions as e
 # Constants for rpi2caster
 from .constants import ASSIGNMENT_SYMBOLS
 # User interface
-from .global_settings import UI
+from .global_config import UI
 # Database
 from . import database
 DB = database.Database()

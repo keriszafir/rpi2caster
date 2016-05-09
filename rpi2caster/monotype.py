@@ -7,25 +7,10 @@ from . import exceptions as e
 # Constants module
 from . import constants as c
 # Default user interface
-from .global_settings import UI
-# Configuration parsing
-from . import cfg_parser
+from .global_config import UI, SIGNALS_ARRANGEMENT, SENSOR, OUTPUT
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
-# Get the signals arrangement
-try:
-    SIGNALS = (str(cfg_parser.get_config('SignalsArrangements',
-                                         'signals_arrangement')).upper())
-except e.NotConfigured:
-    SIGNALS = c.ALNUM_ARR
-# Get the interface to use
-try:
-    SENSOR = str(cfg_parser.get_config('Control', 'sensor')).lower()
-    OUTPUT = str(cfg_parser.get_config('Control', 'output')).lower()
-except e.NotConfigured:
-    SENSOR = 'simulation'
-    OUTPUT = 'simulation'
 
 
 def adjust_signals(worker_function):
@@ -320,7 +305,7 @@ class TestSensor(SimulationSensor):
 
 class SimulationOutput(object):
     """Mockup for a driver for 32 pneumatic outputs"""
-    def __init__(self, sig_arr=SIGNALS):
+    def __init__(self, sig_arr=SIGNALS_ARRANGEMENT):
         self.lock = False
         self.name = 'mockup output driver for simulation'
         self.signals_arrangement = [str(x).upper() for x in sig_arr.split(',')]

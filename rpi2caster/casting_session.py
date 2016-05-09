@@ -34,7 +34,7 @@ from .monotype import MonotypeCaster
 # Casting stats
 from .casting_stats import Stats
 # Globally selected UI
-from .global_settings import UI
+from .global_config import UI
 # Typecase casting needs this
 from . import letter_frequencies
 # Matrix, wedge and typesetting data models

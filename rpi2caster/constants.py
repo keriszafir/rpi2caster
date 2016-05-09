@@ -17,8 +17,8 @@ COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
 
 # Useful for config files (all aliases must be lowercase)
-TRUE_ALIASES = ['true', 'on', 'yes']
-FALSE_ALIASES = ['false', 'off', 'no']
+TRUE_ALIASES = ['true', 'on', 'yes', '1']
+FALSE_ALIASES = ['false', 'off', 'no', '0']
 
 # Config file locations
 DEFAULT_CONFIG_PATHS = ['/etc/rpi2caster.conf', 'data/rpi2caster.conf']

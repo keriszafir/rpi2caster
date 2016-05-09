@@ -3,7 +3,7 @@
 import time
 from parallel import Parallel
 from .monotype import SimulationSensor, SimulationOutput
-from .global_settings import UI
+from .global_config import UI
 from .constants import SIGNALS
 from .helpers import singleton
 

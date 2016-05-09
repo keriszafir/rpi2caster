@@ -9,7 +9,7 @@ from collections import deque
 from . import exceptions as e
 from .justification import Box, Glue, Penalty, ObjectList
 from .measure import Measure
-from .global_settings import UI
+from .global_config import UI
 from .matrix_data import Diecase, Matrix
 
 STYLES = {'^00': 'r', '^01': 'b', '^02': 'i',

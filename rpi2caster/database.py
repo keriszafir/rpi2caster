@@ -13,10 +13,8 @@ import json
 import sqlite3
 # Custom exceptions
 from . import exceptions
-# Get global settings
-from . import global_settings
-# Package constants
-from .constants import DEFAULT_DATABASE_PATHS
+# Get database paths from configuration
+from .global_config import DATABASE_PATHS
 
 
 class Singleton(type):
@@ -55,10 +53,8 @@ class Database(object):
     __metaclass__ = Singleton
 
     def __init__(self):
-        database_paths = ([global_settings.DATABASE_PATH] +
-                          DEFAULT_DATABASE_PATHS)
         # Connect to the database
-        for path in database_paths:
+        for path in DATABASE_PATHS:
             try:
                 self.path = path
                 self.db_connection = sqlite3.connect(path)

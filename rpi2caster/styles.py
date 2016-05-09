@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Style manager"""
-from .global_settings import UI
+from .global_config import UI
 
 
 class Styles(object):

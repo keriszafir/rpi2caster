@@ -2,7 +2,7 @@
 """Wedge data model for rpi2caster"""
 from itertools import zip_longest
 # Default user interface
-from .global_settings import UI
+from .global_config import UI
 # Constants for known normal wedge unit values
 from . import wedge_unit_values as wu
 

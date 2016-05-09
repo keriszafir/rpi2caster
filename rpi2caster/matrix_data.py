@@ -17,7 +17,7 @@ from .styles import Styles
 # Wedge operations for several matrix-case management functions
 from .wedge_data import Wedge
 # User interface
-from .global_settings import UI, APPDIR
+from .global_config import UI, APPDIR
 # Letter frequency for completeness testing
 from .letter_frequencies import CharFreqs
 # Database backend

@@ -31,6 +31,7 @@ setup(name='rpi2caster',
       install_requires=['pip > 1.5', 'click > 6.0'],
       keywords=['Monotype', 'typography', 'printing', 'letterpress',
                 'typesetting', 'typecasting', 'Raspberry Pi'],
+      data_files=[('/etc/rpi2caster.conf', ['data/rpi2caster.conf'])],
       packages=find_packages(exclude=['data', 'docs', 'tests']),
       entry_points={'console_scripts':
                     ['rpi2caster = rpi2caster.__main__:main']})

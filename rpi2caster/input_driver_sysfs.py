@@ -8,7 +8,7 @@ import select
 # Debounce timers need this
 from time import time
 # Constants shared between modules
-from .global_settings import UI, SENSOR_GPIO
+from .global_config import UI, SENSOR_GPIO
 # Custom exceptions
 from .exceptions import MachineStopped
 # Caster prototype

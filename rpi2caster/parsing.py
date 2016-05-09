@@ -6,10 +6,7 @@ This module contains file- and line-parsing functions for the casting program.
 import io
 from . import constants
 # Check if alternate comment symbols are configured
-try:
-    from .global_settings import COMMENT_SYMBOLS
-except ImportError:
-    COMMENT_SYMBOLS = constants.COMMENT_SYMBOLS
+from .constants import COMMENT_SYMBOLS
 
 
 def read_file(filename):

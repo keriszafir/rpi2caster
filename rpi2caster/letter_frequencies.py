@@ -6,7 +6,7 @@ All data is letter occurences relative to all letters in a sample of text.
 """
 from math import ceil
 from itertools import chain, zip_longest
-from .global_settings import UI
+from .global_config import UI
 from .exceptions import ReturnToMenu
 
 FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
