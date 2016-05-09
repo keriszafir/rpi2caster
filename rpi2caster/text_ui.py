@@ -276,10 +276,10 @@ def display_diecase_layout(diecase):
         style_modifiers = {'r': '', 'b': '*', 'i': '/',
                            's': '·', 'u': '_', 'l': '^'}
         spaces_symbols = {'_': '▣', ' ': '□', '': ' '}
-        formatted_char = matrix.char
-        for style in matrix.styles:
-            formatted_char = style_modifiers.get(style, '') + formatted_char
-        return spaces_symbols.get(matrix.char, formatted_char)
+        fmt = ''.join([style_modifiers.get(s, '') for s in matrix.styles])
+        if len(fmt) > 2:
+            fmt = '#'
+        return spaces_symbols.get(matrix.char, fmt + matrix.char)
 
     col_numbers = c.COLUMNS_15
     row_numbers = [x for x in range(1, 16)]
