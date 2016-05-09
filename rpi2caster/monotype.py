@@ -457,10 +457,16 @@ class CasterMode(object):
     @property
     def sensor(self):
         """Chooses a proper sensor"""
-        return (self.testing and TestSensor or
-                self.punching and PunchingSensor or
-                self.simulation and SimulationSensor or
-                SENSORS.get(SENSOR, SimulationSensor))
+        if self.simulation:
+            return SimulationSensor
+        elif SENSOR == 'parallel':
+            # Don't override the sensor for parallel interface
+            # even for testing and punching mode
+            return SENSORS.get('parallel')
+        else:
+            return (self.testing and TestSensor or
+                    self.punching and PunchingSensor or
+                    SENSORS.get(SENSOR, SimulationSensor))
 
     @property
     def output(self):
