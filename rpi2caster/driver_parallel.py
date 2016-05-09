@@ -3,13 +3,8 @@
 import time
 from parallel import Parallel
 from .monotype import SimulationSensor, SimulationOutput
-from .exceptions import return_to_menu
-from .global_config import UI
-from .constants import SIGNALS
+from .global_config import UI, SIGNALS_ARRANGEMENT
 from .helpers import singleton
-
-NEW_SIGNALS = ['O15'] + SIGNALS[:-1]
-MAP = dict(zip(NEW_SIGNALS, (2 ** x for x in range(31, -1, -1))))
 
 
 @singleton
@@ -20,6 +15,9 @@ class ParallelOutputDriver(SimulationOutput):
     byte2: A 1 2 3 4 5 6 7
     byte3: 8 9 10 11 12 13 14 0005
     """
+    numbers = (2 ** x for x in range(31, -1, -1))
+    mapping = dict(zip(SIGNALS_ARRANGEMENT, numbers))
+
     def __init__(self):
         super().__init__()
         self.name = 'Symbiosys parallel port interface'
