@@ -19,9 +19,8 @@ class WiringPiOutputDriver(SimulationOutput):
     """A 32-channel control interface based on two MCP23017 chips"""
 
     def __init__(self, mcp0_address=MCP0, mcp1_address=MCP1,
-                 sig_arr=SIGNALS_ARRANGEMENT,
                  pin_base=PIN_BASE):
-        super().__init__(sig_arr=sig_arr)
+        super().__init__()
         self.name = 'MCP23017 driver using wiringPi2-Python library'
         # Set up an output interface on two MCP23017 chips
         wiringpi.mcp23017Setup(pin_base, mcp0_address)
