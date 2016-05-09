@@ -74,9 +74,10 @@ def cast_or_punch_result(ribbon_source):
             pass
         finally:
             # Reset diagnostics and row 16 addressing modes
-            for mode in (mode.kmn, mode.hmn, mode.unitshift,
-                         mode.testing, mode.calibration):
-                mode = False
+            mode.kmn = False
+            mode.hmn = False
+            mode.unitshift = False
+            mode.diagnostics = False
     return wrapper
 
 

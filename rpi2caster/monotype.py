@@ -407,7 +407,8 @@ class CasterMode(object):
     def diagnostics(self, value=False):
         """Turns the testing or calibration mode off"""
         if not value:
-            self.testing = self.calibration = False
+            self.testing = False
+            self.calibration = False
 
     @property
     def punching(self):
