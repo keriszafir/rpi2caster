@@ -56,6 +56,21 @@ def get_config(section_name, option_name, default_value, datatype=str):
     return retval
 
 
+def get_casting_backend():
+    """Get the casting sensor and output pair"""
+    sensor = get_config('Interface', 'sensor', 'simulation')
+    output = get_config('Interface', 'output', 'simulation')
+    hardware = sensor != 'simulation' and output != 'simulation'
+    select = get_config('Preferences', 'choose_backend', False, bool)
+    prompt = 'Use caster? (no = simulation mode)'
+    if hardware and select and not UI.confirm(prompt, True):
+        return ('simulation', 'simulation')
+    elif hardware:
+        return (sensor, output)
+    else:
+        return ('simulation', 'simulation')
+
+
 # Conffile path
 APPDIR = get_app_dir('rpi2caster', force_posix=True, roaming=True)
 CONFIG_PATHS = [APPDIR + '/rpi2caster.conf',
@@ -76,11 +91,3 @@ SENSOR_GPIO = get_config('Interface', 'sensor_gpio', 17, int)
 MCP0 = get_config('Interface', 'MCP0', 0x20, int)
 MCP1 = get_config('Interface', 'MCP1', 0x21, int)
 PIN_BASE = get_config('Interface', 'pin_base', 65, int)
-SENSOR = get_config('Interface', 'sensor', 'simulation')
-OUTPUT = get_config('Interface', 'output', 'simulation')
-# Now choose the simulation or real sensor/interface...
-SELECT = get_config('Preferences', 'choose_backend', False, bool)
-if SELECT and SENSOR != 'simulation' and OUTPUT != 'simulation':
-    if not UI.confirm('Use caster? (no = simulation mode)', True):
-        SENSOR = 'simulation'
-        OUTPUT = 'simulation'

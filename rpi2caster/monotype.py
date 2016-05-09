@@ -7,10 +7,12 @@ from . import exceptions as e
 # Constants module
 from . import constants as c
 # Default user interface
-from .global_config import UI, SIGNALS_ARRANGEMENT, SENSOR, OUTPUT
+from .global_config import UI, SIGNALS_ARRANGEMENT, get_casting_backend
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
+# Get hardware parameters
+SENSOR, OUTPUT = get_casting_backend()
 
 
 def adjust_signals(worker_function):

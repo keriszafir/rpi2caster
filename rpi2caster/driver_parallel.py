@@ -30,9 +30,20 @@ class ParallelOutputDriver(SimulationOutput):
         if not self.lock:
             try:
                 self.lock = True
+                self.port = self.port or Parallel()
+                if not self.working:
+                    # Check for working to avoid re-initialization
+                    self._init_on()
+                    self._init_off()
+                    UI.display('\nPress the button on the interface...')
+                    self._wait_until_not_busy()
+                    self.working = True
                 return self
-            except OSError:
-                UI.pause('Cannot set up the parallel port. Exiting...')
+            except (FileNotFoundError, IOError, OSError):
+                UI.pause('ERROR: Cannot access the parallel port!\n'
+                         'Check your hardware and OS configuration...\n'
+                         'Simulating casting instead.')
+                return SimulationOutput()
 
     def __exit__(self, *_, **__):
         self.lock = False
@@ -63,22 +74,6 @@ class ParallelOutputDriver(SimulationOutput):
         """Deactivate the valves - actually, do nothing"""
         pass
 
-    def initialize(self):
-        """Startup sequence for the parallel port"""
-        if not self.port:
-            try:
-                self.port = Parallel()
-            except (FileNotFoundError, IOError, OSError):
-                UI.pause('ERROR: Cannot access the parallel port! '
-                         'Check your hardware and OS configuration...')
-                return_to_menu()
-        if not self.working:
-            self._init_on()
-            self._init_off()
-            UI.display('\nPress the button on the interface...')
-            self._wait_until_not_busy()
-            self.working = True
-
     def _send(self, data):
         """Send the codes through the data port"""
         # Wait until we can send the codes
@@ -92,39 +87,46 @@ class ParallelOutputDriver(SimulationOutput):
 
     def _set_data(self, data):
         "Set the lines on the data port"""
-        self.port.setData(data)
+        if self.port:
+            self.port.setData(data)
 
     def _wait_until_busy(self):
         """Wait until busy goes ON"""
-        while self.port.getInBusy():
-            pass
+        if self.port:
+            while self.port.getInBusy():
+                pass
 
     def _wait_until_not_busy(self):
         """Wait until busy goes OFF"""
-        while not self.port.getInBusy():
-            pass
+        if self.port:
+            while not self.port.getInBusy():
+                pass
 
     def _strobe_on(self):
         """Send the strobe signal"""
         # Negative logic!
-        self.port.setDataStrobe(False)
-        # 5us sleep
-        time.sleep(0.000005)
+        if self.port:
+            self.port.setDataStrobe(False)
+            # 5us sleep
+            time.sleep(0.000005)
 
     def _strobe_off(self):
         """Send the strobe signal"""
         # Negative logic!
-        self.port.setDataStrobe(True)
+        if self.port:
+            self.port.setDataStrobe(True)
 
     def _init_on(self):
         """Sends the init signal"""
         # Negative logic!
-        self.port.setInitOut(False)
+        if self.port:
+            self.port.setInitOut(False)
 
     def _init_off(self):
         """Sends the init signal"""
         # Negative logic!
-        self.port.setInitOut(True)
+        if self.port:
+            self.port.setInitOut(True)
 
 
 @singleton
@@ -135,7 +137,6 @@ class ParallelSensor(SimulationSensor):
 
     def check_if_machine_is_working(self):
         """Reset the interface if needed and go on"""
-        ParallelOutputDriver().initialize()
         UI.pause('Turn on the machine... (or ctrl-C to abort)')
 
     def wait_for(self, *args, **kw):
