@@ -5,36 +5,7 @@ import io
 import configparser
 from click import get_app_dir
 from . import text_ui as UI
-from .exceptions import ConfigFileUnavailable
 from .constants import TRUE_ALIASES, FALSE_ALIASES, SIGNALS
-
-# Conffile path
-APPDIR = get_app_dir('rpi2caster', force_posix=True, roaming=True)
-CONFIG_PATHS = [APPDIR + '/rpi2caster.conf',
-                '/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
-# SQLite3 database path
-DATABASE_PATHS = [APPDIR + '/rpi2caster.db',
-                  '/var/local/rpi2caster/rpi2caster.db',
-                  '/var/rpi2caster/rpi2caster.db']
-
-
-def initialize_config():
-    """Initializes config.
-
-    Looks for the configuration file, tests if it's readable.
-    Throws an exception if errors occur.
-    """
-    for path in CONFIG_PATHS:
-        try:
-            with io.open(path, 'r'):
-                cfg = configparser.SafeConfigParser()
-                cfg.read(path)
-                return cfg
-        except (IOError, FileNotFoundError):
-            print('Configuration file at %s failed' % path)
-            continue
-    # No config file specified can be accessed
-    raise ConfigFileUnavailable('Cannot access any config file')
 
 
 def get_config(section_name, option_name, default_value, datatype=str):
@@ -54,10 +25,11 @@ def get_config(section_name, option_name, default_value, datatype=str):
                 cfg = configparser.ConfigParser()
                 cfg.read(path)
                 option_value = str(cfg.get(section_name, option_name))
+                # Go further to processing
                 break
         except (IOError, FileNotFoundError,
                 configparser.NoSectionError, configparser.NoOptionError):
-            # This means we have no option like this... look further
+            # No option found in this config file - tr
             continue
     else:
         # Ran through all config files and found no option
@@ -65,24 +37,33 @@ def get_config(section_name, option_name, default_value, datatype=str):
         return default_value
     # We now have the value - let's convert it to desired datatype
     if datatype == list:
-        value = option_value.split(',')
+        retval = option_value.split(',')
     elif datatype == int and str(option_value).lower().startswith('0x'):
         # Value is a hexstring: 0x or 0X
         try:
-            value = int(option_value, 16)
+            retval = int(option_value, 16)
         except (ValueError, TypeError):
-            value = default_value
+            # Conversion failed
+            retval = default_value
     elif option_value.lower() in ('none', 'null'):
-        value = None
+        retval = None
     elif datatype == bool and str(option_value).lower() in TRUE_ALIASES:
-        value = True
+        retval = True
     elif datatype == bool and str(option_value).lower() in FALSE_ALIASES:
-        value = False
+        retval = False
     else:
-        value = datatype(option_value)
-    return value
+        retval = datatype(option_value)
+    return retval
 
 
+# Conffile path
+APPDIR = get_app_dir('rpi2caster', force_posix=True, roaming=True)
+CONFIG_PATHS = [APPDIR + '/rpi2caster.conf',
+                '/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
+# SQLite3 database path
+DATABASE_PATHS = [APPDIR + '/rpi2caster.db',
+                  '/var/local/rpi2caster/rpi2caster.db',
+                  '/var/rpi2caster/rpi2caster.db']
 # Line length / galley width default value
 DEFAULT_MEASURE = get_config('Preferences', 'default_measure', 25, int)
 DEFAULT_UNIT = get_config('Preferences', 'measurement_unit', 'cc')

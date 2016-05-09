@@ -3,6 +3,7 @@
 import time
 from parallel import Parallel
 from .monotype import SimulationSensor, SimulationOutput
+from .exceptions import return_to_menu
 from .global_config import UI
 from .constants import SIGNALS
 from .helpers import singleton
@@ -65,7 +66,12 @@ class ParallelOutputDriver(SimulationOutput):
     def initialize(self):
         """Startup sequence for the parallel port"""
         if not self.port:
-            self.port = Parallel()
+            try:
+                self.port = Parallel()
+            except (FileNotFoundError, IOError, OSError):
+                UI.pause('ERROR: Cannot access the parallel port! '
+                         'Check your hardware and OS configuration...')
+                return_to_menu()
         if not self.working:
             self._init_on()
             self._init_off()

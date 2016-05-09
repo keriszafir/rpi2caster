@@ -8,9 +8,9 @@ except ImportError:
     print('You must install wiringpi!')
 
 # Import mockup output driver from monotype
-from .monotype import SimulationOutput, SIGNALS
+from .monotype import SimulationOutput
 from .exceptions import WrongConfiguration
-from .global_config import PIN_BASE, MCP0, MCP1
+from .global_config import PIN_BASE, MCP0, MCP1, SIGNALS_ARRANGEMENT
 from .helpers import singleton
 
 
@@ -18,7 +18,8 @@ from .helpers import singleton
 class WiringPiOutputDriver(SimulationOutput):
     """A 32-channel control interface based on two MCP23017 chips"""
 
-    def __init__(self, mcp0_address=MCP0, mcp1_address=MCP1, sig_arr=SIGNALS,
+    def __init__(self, mcp0_address=MCP0, mcp1_address=MCP1,
+                 sig_arr=SIGNALS_ARRANGEMENT,
                  pin_base=PIN_BASE):
         super().__init__(sig_arr=sig_arr)
         self.name = 'MCP23017 driver using wiringPi2-Python library'

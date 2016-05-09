@@ -305,10 +305,11 @@ class TestSensor(SimulationSensor):
 
 class SimulationOutput(object):
     """Mockup for a driver for 32 pneumatic outputs"""
-    def __init__(self, sig_arr=SIGNALS_ARRANGEMENT):
+    def __init__(self, signals_arrangement=SIGNALS_ARRANGEMENT):
         self.lock = False
         self.name = 'mockup output driver for simulation'
-        self.signals_arrangement = [str(x).upper() for x in sig_arr.split(',')]
+        self.signals_arrangement = signals_arrangement
+        self.working = True
 
     def __del__(self):
         UI.debug_pause('Deleting the %s' % self.name)
