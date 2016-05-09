@@ -54,8 +54,9 @@ def choose_sensor_and_driver(casting_routine):
                         mode.calibration and 'calibrate the machine' or
                         mode.punching and 'punch the ribbon'))
         # Instantiate and enter context
-        with mode.sensor() as self.caster.sensor:
-            with mode.output() as self.caster.output:
+        sensor, output = mode.casting_backend
+        with sensor() as self.caster.sensor:
+            with output() as self.caster.output:
                 with self.caster:
                     return casting_routine(self, *args, **kwargs)
     return wrapper

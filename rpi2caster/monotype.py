@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Caster object for either real or virtual Monotype composition caster"""
+"""Caster object for either,  real or virtual Monotype composition caster"""
 # Built-in time module
 from time import time, sleep
 # Custom exceptions module
@@ -7,12 +7,11 @@ from . import exceptions as e
 # Constants module
 from . import constants as c
 # Default user interface
-from .global_config import UI, SIGNALS_ARRANGEMENT, get_casting_backend
+from .global_config import UI
+from .global_config import SIGNALS_ARRANGEMENT, SENSOR, OUTPUT, BACKEND_SELECT
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
-# Get hardware parameters
-SENSOR, OUTPUT = get_casting_backend()
 
 
 def adjust_signals(worker_function):
@@ -476,6 +475,42 @@ class CasterMode(object):
         return (self.simulation and SimulationOutput or
                 OUTPUTS.get(OUTPUT, SimulationOutput))
 
+    @property
+    def casting_backend(self):
+        """Chooses the sensor and output for controlling the machine
+        or simulating machine control"""
+        # First set the simulation backend
+        backend = [SENSOR, OUTPUT]
+        use_hw = not self.simulation and 'simulation' not in backend
+        if use_hw:
+            # Get the previous choice if it was stored
+            # only if real hardware is set as backend
+            use_real_caster = self.__dict__.get('_use_real_caster')
+            if use_real_caster is None:
+                if BACKEND_SELECT:
+                    # Ask only once
+                    prompt = 'Use caster? (no = simulation mode)'
+                    use_real_caster = UI.confirm(prompt, True)
+                else:
+                    use_real_caster = True
+                self.__dict__['_use_real_caster'] = use_real_caster
+            # Got it stored for the whole life of this object...
+        else:
+            use_real_caster = False
+        if use_real_caster:
+            if 'parallel' in backend:
+                # Parallel MUST work together!
+                backend = ['parallel', 'parallel']
+            elif self.testing:
+                backend[0] = TestSensor
+            elif self.punching:
+                backend[0] = PunchingSensor
+        else:
+            backend = ['simulation', 'simulation']
+        sensor, output = backend
+        return (SENSORS.get(sensor, SimulationSensor),
+                OUTPUTS.get(output, SimulationOutput))
+
     def choose_row16_addressing(self):
         """Let user decide which way to address row 16"""
         def hmn_on():
@@ -535,6 +570,7 @@ def parallel_output():
 
 
 SENSORS = {'simulation': SimulationSensor, 'sysfs': sysfs_sensor,
-           'parallel': parallel_sensor}
+           'parallel': parallel_sensor, 'testing': TestSensor,
+           'punching': PunchingSensor}
 OUTPUTS = {'simulation': SimulationOutput, 'wiringpi': wiringpi_output,
            'parallel': parallel_output}

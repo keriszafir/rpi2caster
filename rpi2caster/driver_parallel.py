@@ -22,6 +22,7 @@ class ParallelOutputDriver(SimulationOutput):
     """
     def __init__(self):
         super().__init__()
+        self.name = 'Symbiosys parallel port interface'
         self.working = False
         self.port = None
         self.lock = False
@@ -134,6 +135,7 @@ class ParallelSensor(SimulationSensor):
     """Parallel port sensor driver"""
     def __init__(self):
         super().__init__()
+        self.name = 'Symbiosys parallel port interface'
 
     def check_if_machine_is_working(self):
         """Reset the interface if needed and go on"""
