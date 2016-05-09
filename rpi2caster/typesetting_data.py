@@ -33,7 +33,7 @@ class Ribbon(object):
     store_in_db - store the metadata and contents in db
     set_[description, customer, diecase_id] - set parameters manually"""
     def __init__(self, ribbon_id='', filename='', manual_choice=False):
-        data = ['', 'New ribbon', 'No customer', '', 'S5-12E', []]
+        data = None
         self.filename = ''
         if ribbon_id:
             try:
@@ -46,6 +46,8 @@ class Ribbon(object):
         elif manual_choice:
             data = choose_ribbon_from_db() or import_ribbon_from_file()
         # Got data - unpack them, set the attributes
+        if not data:
+            data = ['', 'New ribbon', 'No customer', '', 'S5-12E', []]
         (self.ribbon_id, self.description, self.customer, self.diecase_id,
          self.wedge_name, self.contents) = data
 
