@@ -52,7 +52,8 @@ class ParallelOutputDriver(SimulationOutput):
     def valves_on(self, signals_list=None):
         """Activate the valves"""
         if signals_list:
-            number = sum(MAP.get(signal, 0) for signal in signals_list)
+            mapping = ParallelOutputDriver.mapping
+            number = sum(mapping.get(signal, 0) for signal in signals_list)
             # Split it to four bytes sent in sequence
             byte0 = (number >> 24) & 0xff
             byte1 = (number >> 16) & 0xff
