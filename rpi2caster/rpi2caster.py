@@ -15,7 +15,8 @@ def cast(args):
                                       ribbon_id=args.ribbon_id,
                                       diecase_id=args.diecase_id,
                                       wedge_name=args.wedge_name)
-    session.caster.mode.simulation = args.simulation
+    simulation = args.simulation or None
+    session.caster.mode.simulation = simulation
     session.caster.mode.punching = args.punching
     casting_session.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly or testing
@@ -139,7 +140,7 @@ def main():
     main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
     # Set default values for all options globally
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
-                             ribbon_id='', source=None, simulation=False,
+                             ribbon_id='', source=None, simulation=None,
                              punching=False, text_file='',
                              manual_mode=False, list_diecases=False,
                              diecase_id='', wedge_name='',

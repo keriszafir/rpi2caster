@@ -360,7 +360,6 @@ class SimulationOutput(object):
 class CasterMode(object):
     """Session mode: casting / simulation / perforation"""
     def __init__(self):
-        self.simulation = False
         self.punching = False
         self.testing = False
         self.calibration = False
@@ -368,12 +367,12 @@ class CasterMode(object):
     @property
     def simulation(self):
         """Simulation mode"""
-        return self.__dict__.get('simulation', False)
+        return self.__dict__.get('simulation')
 
     @simulation.setter
     def simulation(self, value):
         """Set the simulation mode"""
-        self.__dict__['simulation'] = value and True or False
+        self.__dict__['simulation'] = value
 
     @property
     def calibration(self):
@@ -383,7 +382,7 @@ class CasterMode(object):
     @calibration.setter
     def calibration(self, value):
         """Set the machine calibration mode"""
-        self.__dict__['calibration'] = value and True or False
+        self.__dict__['calibration'] = value
 
     @property
     def diagnostics(self):
@@ -405,7 +404,7 @@ class CasterMode(object):
     @punching.setter
     def punching(self, value):
         """Set the punching mode"""
-        self.__dict__['punching'] = value and True or False
+        self.__dict__['punching'] = value
 
     @property
     def testing(self):
@@ -415,7 +414,7 @@ class CasterMode(object):
     @testing.setter
     def testing(self, value):
         """Set the testing mode"""
-        self.__dict__['testing'] = value and True or False
+        self.__dict__['testing'] = value
 
     @property
     def casting(self):
@@ -441,7 +440,6 @@ class CasterMode(object):
     @kmn.setter
     def kmn(self, value):
         """Set the KMN mode"""
-        value = value and True or False
         self.__dict__['_kmn'] = value
 
     @property
@@ -452,28 +450,7 @@ class CasterMode(object):
     @unitshift.setter
     def unitshift(self, value):
         """Set the unit-shift mode"""
-        value = value and True or False
         self.__dict__['_unit-shift'] = value
-
-    @property
-    def sensor(self):
-        """Chooses a proper sensor"""
-        if self.simulation:
-            return SimulationSensor
-        elif SENSOR == 'parallel':
-            # Don't override the sensor for parallel interface
-            # even for testing and punching mode
-            return SENSORS.get('parallel')
-        else:
-            return (self.testing and TestSensor or
-                    self.punching and PunchingSensor or
-                    SENSORS.get(SENSOR, SimulationSensor))
-
-    @property
-    def output(self):
-        """Chooses a simulation or hardware output driver"""
-        return (self.simulation and SimulationOutput or
-                OUTPUTS.get(OUTPUT, SimulationOutput))
 
     @property
     def casting_backend(self):
@@ -481,32 +458,24 @@ class CasterMode(object):
         or simulating machine control"""
         # First set the simulation backend
         backend = [SENSOR, OUTPUT]
-        use_hw = not self.simulation and 'simulation' not in backend
-        if use_hw:
-            # Get the previous choice if it was stored
-            # only if real hardware is set as backend
-            use_real_caster = self.__dict__.get('_use_real_caster')
-            if use_real_caster is None:
-                if BACKEND_SELECT:
-                    # Ask only once
-                    prompt = 'Use caster? (no = simulation mode)'
-                    use_real_caster = UI.confirm(prompt, True)
-                else:
-                    use_real_caster = True
-                self.__dict__['_use_real_caster'] = use_real_caster
-            # Got it stored for the whole life of this object...
-        else:
-            use_real_caster = False
-        if use_real_caster:
-            if 'parallel' in backend:
-                # Parallel MUST work together!
-                backend = ['parallel', 'parallel']
-            elif self.testing:
-                backend[0] = TestSensor
-            elif self.punching:
-                backend[0] = PunchingSensor
-        else:
+        # Set simulation mode if specified in config
+        if 'simulation' in backend:
+            self.simulation = True
+        if self.simulation is None and BACKEND_SELECT:
+            # Select the casting or simulation mode
+            prompt = 'Use caster? (no = simulation mode)'
+            self.simulation = not UI.confirm(prompt, True)
+        if self.simulation:
+            # Simulation sensor and output driver must work together
+            # (unless for punching or testing)
             backend = ['simulation', 'simulation']
+        # Override depending on mode
+        backend[0] = (self.testing and 'testing' or
+                      self.punching and 'punching' or backend[0])
+        if 'parallel' in backend:
+            # Parallel sensor and output driver must work together
+            # even for punching or testing
+            backend = ['parallel', 'parallel']
         sensor, output = backend
         return (SENSORS.get(sensor, SimulationSensor),
                 OUTPUTS.get(output, SimulationOutput))
