@@ -12,24 +12,27 @@ from .measure import Measure
 from .global_config import UI
 from .matrix_data import Diecase, Matrix
 
-STYLES = {'^00': 'r', '^01': 'b', '^02': 'i',
-          '^03': 's', '^04': 'l', '^05': 'u',
-          '^RR': 'r', '^BB': 'b', '^II': 'i',
-          '^SS': 's', '^LL': 'l', '^UU': 'u'}
-ALIGNMENT = {'^CR': 'left', '^CC': 'center', '^CL': 'right', '^CF': 'both'}
 
-
-class InputData(object):
+class InputText(object):
     """Gets the input text, parses it, generates a sequence of characters
     or commands"""
+
     def __init__(self, text, context):
         self.context = context
         self.text = text
 
-    def parse_input(self, input_text):
+    def parse_input(self):
         """Generates a sequence of characters from the input text.
         For each character, this function predicts what two next characters
         and one next character are."""
+        diecase = self.context.diecase
+        # Cache the character set and spaces instead of generating
+        # them ad hoc
+        charset = diecase.charset
+        spaces = diecase.spaces
+        style_commands = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
+                          '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
+                          '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
         # This variable will prevent yielding a number of subsequent chars
         # after a ligature or command has been found and yielded.
         skip_steps = 0
@@ -38,14 +41,11 @@ class InputData(object):
         # Characters which will be skipped
         ignored = ('\n',)
         # Determine the length of character combinations parsed
-        max_len = max((len(mat.char) for mat in self.context.diecase) +
-                      (len(x) for x in ignored) +
-                      (len(x) for x in STYLES) +
-                      (len(x) for x in ALIGNMENT))
-        # Build a dict of matrices
-        mats = {(mat.char, mat.styles): mat for mat in self.context.diecase}
+        # Min = command length i.e. 3
+        # Max = ligature length - dictated by diecase
+        max_len = max(3, diecase.ligature_length)
         # What if char in text not present in diecase? Hmmm...
-        for index, _ in enumerate(input_text):
+        for index, _ in enumerate(self.text):
             if skip_steps:
                 # Skip the characters to be skipped
                 skip_steps -= 1
@@ -53,20 +53,18 @@ class InputData(object):
             for i in range(max_len, 0, -1):
                 # Start from longest, end with shortest
                 try:
-                    char = input_text[index:index+i]
+                    char = self.text[index:index+i]
                     skip_steps = i - 1
                     if char in ignored:
-                        continue
-                    elif char in ALIGNMENT:
-                        alignment = ALIGNMENT.get(char, 'both')
-                        yield Justify(alignment)
-                    elif char in STYLES:
-                        # Change the current style
-                        style = STYLES.get(char, 'r')
-                    else:
-                        # Try to look it up in spaces
-                        yield mats.get((char, style))
-                        # End on first (largest) combination found
+                        break
+                    elif char in style_commands:
+                        style = style_commands.get(char, 'r')
+                        break
+                    elif char in spaces:
+                        yield spaces.get(char)
+                        break
+                    elif (char, style) in charset:
+                        yield charset.get((char, style))
                         break
                 except (TypeError, AttributeError, ValueError):
                     pass

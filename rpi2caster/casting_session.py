@@ -39,6 +39,7 @@ from .global_config import UI
 from . import letter_frequencies
 # Matrix, wedge and typesetting data models
 from .typesetting_data import Ribbon
+from .typesetting_funcs import InputText
 from .matrix_data import Diecase, diecase_operations
 from .wedge_data import Wedge
 
@@ -383,7 +384,7 @@ class Casting(object):
         return queue
 
     @cast_or_punch_result
-    def quick_typesetting(self):
+    def quick_typesetting(self, text=None):
         """Allows us to use caster for casting single lines.
         This means that the user enters a text to be cast,
         gives the line length, chooses alignment and diecase.
@@ -392,17 +393,15 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        supported_styles = self.diecase.styles
-        style = Styles(supported_styles, allow_multiple=False,
-                       manual_choice=True)()
-        text = UI.enter_data('Text to compose?')
-        if not self.diecase.test_characters(text, style):
-            UI.display('WARNING: Some characters are missing!')
-            if not UI.confirm('Continue?', default=False):
-                return
-        space = self.diecase.decode_matrix('G2')
-        matrix_stream = (self.diecase.lookup_matrix(char, style) if char != ' '
-                         else space for char in text)
+        # supported_styles = self.diecase.styles
+        # style = Styles(supported_styles, allow_multiple=False,
+        #                manual_choice=True)()
+        # Safeguard against trying to use this feature from commandline
+        # without selecting a diecase
+        if not self.diecase:
+            e.return_to_menu()
+        text = text or UI.enter_data('Text to compose?')
+        matrix_stream = InputText(text, self).parse_input()
         builder = tsf.GalleyBuilder(matrix_stream, self.diecase, self.measure)
         builder.mould_heatup = False
         queue = builder.build_galley()

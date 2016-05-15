@@ -24,6 +24,8 @@ def cast(args):
         session.cast_composition()
     elif args.testing:
         session.diagnostics_submenu()
+    elif args.input_text is not None:
+        session.quick_typesetting(args.input_text)
     else:
         session.main_menu()
 
@@ -140,10 +142,10 @@ def main():
     main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
     # Set default values for all options globally
     main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
-                             ribbon_id='', source=None, simulation=None,
+                             ribbon_id='', source=None, simulation=False,
                              punching=False, text_file='',
                              manual_mode=False, list_diecases=False,
-                             diecase_id='', wedge_name='',
+                             diecase_id='', wedge_name='', input_text=None,
                              direct=False, testing=False)
     #
     # Define commands
@@ -171,14 +173,19 @@ def main():
     # Simulation mode: casting/punching without the actual caster/interface
     cast_parser.add_argument('-s', '--simulation', action='store_true',
                              help='simulate casting instead of real casting')
-    test_or_cast = cast_parser.add_mutually_exclusive_group()
+    casting_mode = cast_parser.add_mutually_exclusive_group()
     # Starts in the diagnostics submenu of the casting program
-    test_or_cast.add_argument('-T', '--test', action='store_true',
+    casting_mode.add_argument('-T', '--test', action='store_true',
                               dest='testing',
                               help='caster / interface diagnostics')
     # Allows to start casting right away without entering menu
-    test_or_cast.add_argument('-D', '--direct', action="store_true",
+    casting_mode.add_argument('-D', '--direct', action="store_true",
                               help='direct casting - no menu',)
+    # Quick typesetting feature
+    casting_mode.add_argument('-t', '--text', dest='input_text',
+                              metavar='"input text"',
+                              help=('compose and cast the '
+                                    'single- or double-quoted input text'))
     # Choose specific wedge
     cast_parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
                              help='wedge to use: [s]series-set_width[e]')

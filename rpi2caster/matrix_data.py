@@ -84,12 +84,10 @@ class Diecase(object):
         self.__dict__['_matrices'] = [mat for mat in matrices]
 
     @property
-    def ligatures(self):
-        """Matrix character may be any string, not just a single character.
-        This is used for ligatures, like ct, fb, fh, fi, fl, ffi, ffl, ij etc.
-        Return an iterator of matrices where char attribute is not a single
-        character. En-dashes and em-dashes will end up here also."""
-        return (x for x in self.matrices if len(x.char) > 1)
+    def charset(self):
+        """Diecase character set"""
+        return {(mat.char, style): mat for mat in self.matrices
+                for style in mat.styles}
 
     @property
     def ligature_length(self):
@@ -97,19 +95,13 @@ class Diecase(object):
         return max(len(matrix) for matrix in self.matrices)
 
     @property
-    def low_spaces(self):
-        """Return an iterator of low spaces"""
-        return (x for x in self.matrices if x.islowspace())
-
-    @property
-    def high_spaces(self):
-        """Return an iterator of high spaces"""
-        return (x for x in self.matrices if x.ishighspace())
-
-    @property
     def spaces(self):
         """Return an iterator of all spaces, low and high"""
-        return (x for x in self.matrices if x.isspace())
+        symbols = {' ': 5, '  ': 9, '   ': 18, '_': 5, '__': 9, '___': 18}
+        return {symbol: mat for mat in self.matrices for symbol in symbols
+                if (' ' in symbol and mat.islowspace() or
+                    '_' in symbol and mat.ishighspace()) and
+                mat.units == symbols.get(symbol, 0)}
 
     @property
     def layout(self):
@@ -577,11 +569,13 @@ class Matrix(object):
 
     def islowspace(self):
         """Check whether the mat is low space"""
-        return self.char == ' '
+        # Must work with multiple spaces as well (en- and em-quad)
+        return bool(self.char) and not self.char.strip(' ')
 
     def ishighspace(self):
         """Check whether the mat is high space"""
-        return self.char == '_'
+        # Must work with multiple underscores as well (high en- and em-quad)
+        return bool(self.char) and not self.char.strip('_')
 
     def edit(self):
         """Edits the matrix data"""
