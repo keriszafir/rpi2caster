@@ -150,7 +150,7 @@ class Diecase(object):
                     st_string = ''
                 else:
                     st_string = st_string + ' '
-                what = spaces.get(char) or '%s%s' % (st_string, char)
+                what = spaces.get(char) or '%s"%s"' % (st_string, char)
                 UI.display('Choose matrix for %s' % what)
             else:
                 char = ''
@@ -191,7 +191,7 @@ class Diecase(object):
                 st_string = ''
             else:
                 st_string = ' ' + st_string
-            what = spaces.get(char) or '%s%s' % (st_string, char)
+            what = spaces.get(char) or '%s"%s"' % (st_string, char)
             UI.display_header('Multiple matrices for %s' % what)
             # Show a menu with multiple candidates
             mats = {i: mat for i, mat in enumerate(candidates, start=1)}
@@ -515,6 +515,12 @@ class Matrix(object):
         # diecase's temporary wedge, diecase's default wedge, standard S5-12E
         return self.diecase.alt_wedge.points[self.row]
 
+    def get_row_units(self):
+        """Gets a number of units for characters in the diecase row"""
+        # Try wedges in order:
+        # diecase's temporary wedge, diecase's default wedge, standard S5-12E
+        return self.diecase.alt_wedge.units[self.row]
+
     def get_min_points(self):
         """Gets the minimum unit value for a given wedge, based on the
         matrix row and wedge unit value, for wedges at 1/1"""
@@ -603,8 +609,9 @@ class Matrix(object):
         mostly used for matrices placed in a different row than the
         unit arrangement indicates; this will make the program set the
         justification wedges and cast the character with the S-needle"""
-        UI.display('Enter unit value for %s; 0 = row units, '
-                   'blank = current' % self.code)
+        desc = self.char and '"%s" at ' % self.char or ''
+        UI.display('Enter unit value for %s%s; 0 = row units, '
+                   'blank = current' % (desc, self.code))
         prompt = 'Units?'
         self.units = UI.enter_data_or_default(prompt, self.units, int)
 

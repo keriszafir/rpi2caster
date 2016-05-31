@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-casting_session:
+casting:
 
 A module for everything related to working on a Monotype composition caster:
 -casting composed type,
@@ -23,8 +23,6 @@ from . import parsing as p
 from . import exceptions as e
 # Constants shared between modules
 from . import constants as c
-# Typesetting functions module
-from . import typesetting_funcs as tsf
 # Style manager
 from .styles import Styles
 # Measure manager
@@ -37,9 +35,11 @@ from .casting_stats import Stats
 from .global_config import UI
 # Typecase casting needs this
 from . import letter_frequencies
+# Typesetting functions
+from . import typesetting_funcs as tsf
 # Matrix, wedge and typesetting data models
 from .typesetting_data import Ribbon
-from .typesetting_funcs import InputText
+from .typesetting import InputText, GalleyBuilder
 from .matrix_data import Diecase, diecase_operations
 from .wedge_data import Wedge
 
@@ -272,17 +272,9 @@ class Casting(object):
         """
         order = []
         while True:
-            if self.diecase:
-                char = UI.enter_data_or_blank('Character?')
-                matrix = self.diecase.lookup_matrix(char)
-                prompt = ('Width correction? (%.2f...%.2f points)'
-                          % (matrix.get_min_points() - matrix.points,
-                             matrix.get_max_points() - matrix.points))
-                delta = UI.enter_data_or_default(prompt, 0, float)
-                matrix.points += delta
-            else:
-                matrix = self.diecase.lookup_matrix()
-                matrix.specify_units()
+            char = self.diecase and UI.enter_data_or_blank('Character?') or ''
+            matrix = self.diecase.lookup_matrix(char)
+            matrix.specify_units()
             qty = UI.enter_data_or_default('How many sorts?', 10, int)
             order.append((matrix, qty))
             prompt = 'More sorts? Otherwise, start casting'
@@ -314,7 +306,7 @@ class Casting(object):
             for char, chars_qty in freqs.type_bill:
                 qty = int(scale * chars_qty)
                 UI.display('%s: %s' % (char, chars_qty))
-                matrix = self.diecase.lookup_matrix(char, style)
+                matrix = self.diecase[(char, style)]
                 order.append((matrix, qty))
         self.cast_galley(order)
 
@@ -322,11 +314,36 @@ class Casting(object):
         """Spaces casting routine, based on the position in diecase.
         Ask user about the space width and measurement unit.
         """
+        # Specify a wedge to cast the spaces
+        wedge = Wedge(manual_choice=True)
+        UI.display_parameters({'Wedge data': wedge.parameters})
+        old_wedge, self.diecase.alt_wedge = self.diecase.alt_wedge, wedge
         order = []
-        if self.diecase:
-            master = self.diecase.lookup_matrix(tsf.high_or_low_space())
+        spaces = self.diecase.spaces
+        if len(spaces) == 1:
+            # Nothing to choose from
+            for _, value in spaces.items():
+                master = value
+                break
+        elif spaces:
+            # Multiple choice
+            descriptions = {' ': 'low space (6 units)',
+                            '  ': 'low en-quad (9 units)',
+                            '   ': 'low em-quad (18 units)',
+                            '_': 'high space (6 units)',
+                            '__': 'high en-quad (9 units)',
+                            '___': 'high em-quad (18 units)'}
+            available = ['"%s" : %s' % (x, descriptions[x])
+                         for x in sorted(descriptions) if x in spaces]
+            UI.display('Choose the matrix for casting spaces:')
+            UI.display('\n'.join(available))
+            choice = ''
+            while choice not in descriptions:
+                choice = UI.enter_data_or_blank('Choose space') or ' '
+            master = spaces.get(choice)
             UI.display('Casting from %s' % master.code)
         else:
+            # No data about spaces = enter manually
             master = self.diecase.lookup_matrix()
         while True:
             matrix = copy(master)
@@ -341,6 +358,8 @@ class Casting(object):
             prompt = 'More spaces? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
                 break
+        # "Return" the old wedge
+        self.diecase.alt_wedge = old_wedge
         self.cast_galley(order)
 
     @cast_or_punch_result
@@ -370,7 +389,7 @@ class Casting(object):
                   for (mat, n) in order)
         matrix_stream = (mat for batch in queues for mat in batch)
         # Initialize the galley-constructor
-        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, self.measure)
+        builder = GalleyBuilder(matrix_stream, self)
         builder.quad_padding = quad_padding
         builder.cooldown = True
         builder.mould_heatup = UI.confirm('Pre-heat the mould?', True)
@@ -393,16 +412,13 @@ class Casting(object):
 
         This allows for quick typesetting of short texts, like names etc.
         """
-        # supported_styles = self.diecase.styles
-        # style = Styles(supported_styles, allow_multiple=False,
-        #                manual_choice=True)()
         # Safeguard against trying to use this feature from commandline
         # without selecting a diecase
         if not self.diecase:
             e.return_to_menu()
         text = text or UI.enter_data('Text to compose?')
         matrix_stream = InputText(text, self).parse_input()
-        builder = tsf.GalleyBuilder(matrix_stream, self.diecase, self.measure)
+        builder = GalleyBuilder(matrix_stream, self)
         builder.mould_heatup = False
         queue = builder.build_galley()
         UI.display('Each line will have two em-quads at the start '
@@ -458,28 +474,17 @@ class Casting(object):
         old_wedge, self.diecase.alt_wedge = self.diecase.alt_wedge, wedge
         self.caster.mode.calibration = True
         # Build character list
-        queue = tsf.end_casting()
-        wedge_positions = (3, 8)
-        for char in ('', 'n', '--'):
-            if not char:
-                mat = self.diecase.decode_matrix('G5')
-            else:
-                mat = self.diecase.lookup_matrix(char)
-            if not self.diecase:
-                # Use custom value if no diecase given
-                mat.specify_units()
-            # Change justification wedge positions if they are different
-            # (only if the type was cast with corrections)
-            prev_wedge_positions = wedge_positions
-            wedge_positions = mat.wedge_positions()
-            wedges_change = wedge_positions != prev_wedge_positions
-            if prev_wedge_positions != (3, 8) and wedges_change:
-                queue.extend(tsf.single_justification(prev_wedge_positions))
-            # Add the characters to the queue
-            queue.extend(['%s' % mat] * 3)
-        # Set the initial wedge positions
-        queue.extend(tsf.double_justification(wedge_positions))
-        # Reset the wedge
+        mats = []
+        for char in ('  ', 'n', '--'):
+            mat = self.diecase[char, '']
+            mat.specify_units()
+            mats.append(mat)
+            mats.append(mat)
+        builder = GalleyBuilder(mats, self)
+        builder.fill_line = False
+        builder.mould_heatup = False
+        queue = builder.build_galley()
+        # "Return" the old wedge
         self.diecase.alt_wedge = old_wedge
         return queue
 

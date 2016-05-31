@@ -8,17 +8,17 @@ from .text_ui import confirm, menu
 from .matrix_data import diecase_operations, list_diecases, Diecase
 
 
-def cast(args):
+def casting_job(args):
     """Casting on an actual caster or simulation"""
-    from . import casting_session
-    session = casting_session.Casting(ribbon_file=args.ribbon_file,
-                                      ribbon_id=args.ribbon_id,
-                                      diecase_id=args.diecase_id,
-                                      wedge_name=args.wedge_name)
+    from . import casting
+    session = casting.Casting(ribbon_file=args.ribbon_file,
+                              ribbon_id=args.ribbon_id,
+                              diecase_id=args.diecase_id,
+                              wedge_name=args.wedge_name)
     simulation = args.simulation or None
     session.caster.mode.simulation = simulation
     session.caster.mode.punching = args.punching
-    casting_session.UI.DEBUG_MODE = args.debug
+    casting.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly or testing
     if args.direct:
         session.cast_composition()
@@ -30,14 +30,14 @@ def cast(args):
         session.main_menu()
 
 
-def composition(args):
+def typesetting_job(args):
     """Text to ribbon translation and justification"""
-    from . import typesetting_session
-    session = typesetting_session.Typesetting(manual_mode=args.manual_mode,
-                                              text_file=args.text_file,
-                                              ribbon_file=args.ribbon_file,
-                                              diecase_id=args.diecase_id)
-    typesetting_session.UI.DEBUG_MODE = args.debug
+    from . import typesetting
+    session = typesetting.Typesetting(manual_mode=args.manual_mode,
+                                      text_file=args.text_file,
+                                      ribbon_file=args.ribbon_file,
+                                      diecase_id=args.diecase_id)
+    typesetting.UI.DEBUG_MODE = args.debug
     session.main_menu()
 
 
@@ -99,12 +99,12 @@ def main_menu(args):
     while not finished:
         options = [(exit_program, 'Exit',
                     'Exits the rpi2caster suite'),
-                   (cast, {True: 'Punch ribbon...',
-                           False: 'Cast type...'}[args.punching],
+                   (casting_job, {True: 'Punch ribbon...',
+                                  False: 'Cast type...'}[args.punching],
                     {True: 'Punch a ribbon with a keyboard\'s paper tower',
                      False: ('Cast composition, sorts or spaces; '
                              'test the machine')}[args.punching]),
-                   (composition, 'Typesetting...',
+                   (typesetting_job, 'Typesetting...',
                     'Compose text for casting'),
                    (inventory, 'Diecase manipulation...',
                     'Add, display, edit or remove matrix case definitions'),
@@ -195,7 +195,7 @@ def main():
     # Ribbon - input file specification
     cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
                              help='ribbon file name')
-    cast_parser.set_defaults(job=cast)
+    cast_parser.set_defaults(job=casting_job)
     #
     # Software update subparser
     #
@@ -230,7 +230,7 @@ def main():
                              metavar='ribbon_file', nargs='?',
                              type=argparse.FileType('w', encoding='UTF-8'))
     # Default action
-    comp_parser.set_defaults(job=composition)
+    comp_parser.set_defaults(job=typesetting_job)
     #
     # Inventory subparser
     #
