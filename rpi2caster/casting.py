@@ -83,6 +83,22 @@ def cast_or_punch_result(ribbon_source):
     return wrapper
 
 
+def temporary_wedge(routine):
+    """Assign a temporary alternative wedge for casting/calibration"""
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        # Assign a temporary wedge
+        old_wedge = self.wedge
+        self.wedge = Wedge(wedge_name=self.wedge.name, manual_choice=True)
+        UI.display_parameters({'Wedge parameters': self.wedge.parameters})
+        UI.display('\n\n')
+        retval = routine(self, *args, **kwargs)
+        # Restore the former wedge and exit
+        self.wedge = old_wedge
+        return retval
+    return wrapper
+
+
 class Casting(object):
     """Casting:
 
@@ -310,14 +326,11 @@ class Casting(object):
                 order.append((matrix, qty))
         self.cast_galley(order)
 
+    @temporary_wedge
     def cast_spaces(self):
         """Spaces casting routine, based on the position in diecase.
         Ask user about the space width and measurement unit.
         """
-        # Specify a wedge to cast the spaces
-        wedge = Wedge(self.wedge.name, manual_choice=True)
-        UI.display_parameters({'Wedge data': wedge.parameters})
-        old_wedge, self.diecase.alt_wedge = self.diecase.alt_wedge, wedge
         order = []
         spaces = self.diecase.spaces
         if len(spaces) == 1:
@@ -327,12 +340,12 @@ class Casting(object):
                 break
         elif spaces:
             # Multiple choice
-            descriptions = {' ': 'low space (6 units)',
-                            '  ': 'low en-quad (9 units)',
-                            '   ': 'low em-quad (18 units)',
-                            '_': 'high space (6 units)',
-                            '__': 'high en-quad (9 units)',
-                            '___': 'high em-quad (18 units)'}
+            descriptions = {' ': 'low space (1/3em)',
+                            '  ': 'low half-square (1/2em)',
+                            '   ': 'low square (1em))',
+                            '_': 'high space (1/3em)',
+                            '__': 'high half-square (1/2em))',
+                            '___': 'high square (1em)'}
             available = ['"%s" : %s' % (x, descriptions[x])
                          for x in sorted(descriptions) if x in spaces]
             UI.display('Choose the matrix for casting spaces:')
@@ -358,8 +371,6 @@ class Casting(object):
             prompt = 'More spaces? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
                 break
-        # "Return" the old wedge
-        self.diecase.alt_wedge = old_wedge
         self.cast_galley(order)
 
     @cast_or_punch_result
