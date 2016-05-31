@@ -37,66 +37,13 @@ from .global_config import UI
 from . import letter_frequencies
 # Typesetting functions
 from . import typesetting_funcs as tsf
+# Decorator functions
+from . import decorators as dec
 # Matrix, wedge and typesetting data models
 from .typesetting_data import Ribbon
 from .typesetting import InputText, GalleyBuilder
 from .matrix_data import Diecase, diecase_operations
 from .wedge_data import Wedge
-
-
-def choose_sensor_and_driver(casting_routine):
-    """Checks current modes (simulation, perforation, testing)"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        mode = self.caster.mode
-        UI.debug_pause('About to %s...' %
-                       (mode.casting and 'cast composition' or
-                        mode.testing and 'test the outputs' or
-                        mode.calibration and 'calibrate the machine' or
-                        mode.punching and 'punch the ribbon'))
-        # Instantiate and enter context
-        sensor, output = mode.casting_backend
-        with sensor() as self.caster.sensor:
-            with output() as self.caster.output:
-                with self.caster:
-                    return casting_routine(self, *args, **kwargs)
-    return wrapper
-
-
-def cast_or_punch_result(ribbon_source):
-    """Get the ribbon from decorated routine and cast it"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        mode = self.caster.mode
-        try:
-            ribbon = ribbon_source(self, *args, **kwargs)
-            if ribbon:
-                self.cast_codes(ribbon)
-        except e.CastingAborted:
-            pass
-        finally:
-            # Reset diagnostics and row 16 addressing modes
-            mode.kmn = False
-            mode.hmn = False
-            mode.unitshift = False
-            mode.diagnostics = False
-    return wrapper
-
-
-def temporary_wedge(routine):
-    """Assign a temporary alternative wedge for casting/calibration"""
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        # Assign a temporary wedge
-        old_wedge = self.wedge
-        self.wedge = Wedge(wedge_name=self.wedge.name, manual_choice=True)
-        UI.display_parameters({'Wedge parameters': self.wedge.parameters})
-        UI.display('\n\n')
-        retval = routine(self, *args, **kwargs)
-        # Restore the former wedge and exit
-        self.wedge = old_wedge
-        return retval
-    return wrapper
 
 
 class Casting(object):
@@ -123,7 +70,7 @@ class Casting(object):
         if wedge_name:
             self.diecase.alt_wedge = Wedge(wedge_name)
 
-    @choose_sensor_and_driver
+    @dec.choose_sensor_and_driver
     def cast_codes(self, ribbon):
         """
         Main casting routine.
@@ -220,27 +167,27 @@ class Casting(object):
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Allow resume in punching mode
                 if (mode.punching and not mode.diagnostics and
-                        UI.confirm('Continue?', default=True)):
+                        UI.confirm('Resume punching?', default=True)):
                     self.caster.process(signals)
                 else:
                     self.stats.end_run()
                     return False
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def _test_front_pinblock(self):
         """Sends signals 1...14, one by one"""
         UI.pause('Testing the front pinblock - signals 1 towards 14.')
         self.caster.mode.testing = True
         return [str(n) for n in range(1, 15)]
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def _test_rear_pinblock(self):
         """Sends NI, NL, A...N"""
         UI.pause('This will test the front pinblock - signals NI, NL, A...N. ')
         self.caster.mode.testing = True
         return [x for x in c.COLUMNS_17]
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def _test_all(self):
         """Tests all valves and composition caster's inputs in original
         Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
@@ -251,14 +198,14 @@ class Casting(object):
         self.caster.mode.testing = True
         return [x for x in c.SIGNALS]
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def _test_justification(self):
         """Tests the 0075-S-0005"""
         UI.pause('This will test the justification pin block (0075, S, 0005).')
         self.caster.mode.testing = True
         return ['0075', 'S', '0005']
 
-    @choose_sensor_and_driver
+    @dec.choose_sensor_and_driver
     def _test_any_code(self):
         """Tests a user-specified combination of signals"""
         self.caster.mode.testing = True
@@ -275,13 +222,14 @@ class Casting(object):
                 break
         self.caster.mode.testing = False
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def cast_composition(self):
         """Casts or punches the ribbon contents if there are any"""
         if not self.ribbon.contents:
             e.return_to_menu()
         return self.ribbon.contents
 
+    @dec.temp_wedge
     def cast_sorts(self):
         """Sorts casting routine, based on the position in diecase.
         Ask user about the diecase row & column, as well as number of sorts.
@@ -299,6 +247,7 @@ class Casting(object):
         # Now let's calculate and cast it...
         self.cast_galley(order)
 
+    @dec.temp_wedge
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
         enter = UI.enter_data_or_default
@@ -326,7 +275,7 @@ class Casting(object):
                 order.append((matrix, qty))
         self.cast_galley(order)
 
-    @temporary_wedge
+    @dec.temp_wedge
     def cast_spaces(self):
         """Spaces casting routine, based on the position in diecase.
         Ask user about the space width and measurement unit.
@@ -373,7 +322,7 @@ class Casting(object):
                 break
         self.cast_galley(order)
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def cast_galley(self, order=()):
         """Cast a series of type, filling lines of given width to the brim.
 
@@ -413,7 +362,8 @@ class Casting(object):
                    'Starting with two lines of quads to heat up the mould.\n')
         return queue
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
+    @dec.temp_wedge
     def quick_typesetting(self, text=None):
         """Allows us to use caster for casting single lines.
         This means that the user enters a text to be cast,
@@ -437,7 +387,7 @@ class Casting(object):
                    'Starting with two lines of quads to heat up the mould.\n')
         return queue
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def _calibrate_wedges(self):
         """Allows to calibrate the justification wedges so that when you're
         casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -465,7 +415,8 @@ class Casting(object):
         sequence.extend(tsf.double_justification())
         return sequence
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
+    @dec.temp_wedge
     def _calibrate_mould_and_diecase(self):
         """Casts the "en dash" characters for calibrating the character X-Y
         relative to type body."""
@@ -473,16 +424,12 @@ class Casting(object):
                    'First cast G5, adjust the sort width to the value shown.\n'
                    '\nThen cast some lowercase "n" letters and n-dashes, '
                    'check the position of the character relative to the '
-                   'type body and adjust the bridge X-Y. Repeat if needed.')
-        wedge = Wedge(self.wedge.name, manual_choice=True)
-        UI.display_parameters({'Wedge data': wedge.parameters})
-        UI.display('\n')
-        UI.display('9 units (1en) is %s" wide' % round(wedge.em_width / 2, 4))
-        UI.display('18 units (1em) is %s" wide\n' % round(wedge.em_width, 4))
+                   'type body and adjust the bridge X-Y. Repeat if needed.\n')
+        em_width = self.wedge.em_width
+        UI.display('9 units (1en) is %s" wide' % round(em_width / 2, 4))
+        UI.display('18 units (1em) is %s" wide\n' % round(em_width, 4))
         if not UI.confirm('\nProceed?', default=True):
             return None
-        # Set temporary alternative wedge for the procedure
-        old_wedge, self.diecase.alt_wedge = self.diecase.alt_wedge, wedge
         self.caster.mode.calibration = True
         # Build character list
         mats = []
@@ -495,11 +442,9 @@ class Casting(object):
         builder.fill_line = False
         builder.mould_heatup = False
         queue = builder.build_galley()
-        # "Return" the old wedge
-        self.diecase.alt_wedge = old_wedge
         return queue
 
-    @choose_sensor_and_driver
+    @dec.choose_sensor_and_driver
     def _calibrate_draw_rods(self):
         """Keeps the diecase at G8 so that the operator can adjust
         the diecase draw rods until the diecase stops moving sideways
@@ -514,7 +459,7 @@ class Casting(object):
         self.caster.output.valves_on(['G', '8'])
         UI.pause('Sending G8, waiting for you to stop...')
 
-    @cast_or_punch_result
+    @dec.cast_or_punch_result
     def _test_row_16(self):
         """Tests the 16th row with selected addressing mode
         (HMN, KMN, unit-shift). Casts from all matrices in 16th row."""
@@ -594,7 +539,7 @@ class Casting(object):
 
         def choose_wedge():
             """Chooses a wedge from registered ones"""
-            self.diecase.alt_wedge = Wedge(manual_choice=True)
+            self.wedge = Wedge(manual_choice=True)
 
         def choose_measure():
             """Chooses a galley width"""
@@ -703,7 +648,7 @@ class Casting(object):
             display({'Ribbon data': self.ribbon.parameters})
         if self.diecase and not punching:
             display({'Matrix case data': self.diecase.parameters})
-        if self.diecase.alt_wedge and not punching:
-            display({'Wedge data': self.diecase.alt_wedge.parameters})
+        if self.wedge and not punching:
+            display({'Wedge data': self.wedge.parameters})
         display({'Caster data': self.caster.parameters})
         UI.pause()

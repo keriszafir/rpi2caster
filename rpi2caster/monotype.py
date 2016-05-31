@@ -172,9 +172,8 @@ class MonotypeCaster(object):
         """
         busy = True
         while busy:
-            # Escape this only by returning True on success,
-            # or raising exceptions.CastingAborted, exceptions.ExitProgram
-            # (which will be handled by the methods of the Casting class)
+            # Escape this only by returning True on success, or raising
+            # exceptions handled by the methods of the Casting class
             try:
                 # Casting cycle
                 # (sensor on - valves on - sensor off - valves off)
@@ -186,9 +185,11 @@ class MonotypeCaster(object):
                 # Successful ending - the combination has been cast
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up
-                self.pump_stop()
+                # Punching doesn't need this at all
+                if not self.mode.punching:
+                    self.pump_stop()
                 # Exception will be handled in session
-                raise e.MachineStopped
+                raise
 
     def pump_stop(self):
         """Forces pump stop - won't end until it is turned off"""

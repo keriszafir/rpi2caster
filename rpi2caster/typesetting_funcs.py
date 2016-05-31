@@ -43,10 +43,3 @@ def end_casting():
     """Alias for ending the casting job"""
     return (pump_stop(comment='End casting') +
             galley_trip(comment='Last line out'))
-
-
-def high_or_low_space():
-    """Chooses high or low space"""
-    spaces = {True: '_', False: ' '}
-    high_or_low = UI.confirm('High space?', default=False)
-    return spaces[high_or_low]
