@@ -10,14 +10,19 @@ from . import wedge_unit_values as wu
 class Wedge(object):
     """Default S5-12E wedge"""
     def __init__(self, wedge_name='', manual_choice=False):
-        if wedge_name or manual_choice:
-            self.name = wedge_name
+        if manual_choice:
+            # Manual override = always ask (use wedge name as default)
+            name = enter_name(wedge_name or 'S5-12E')
+            data = parse_name(name)
+        elif wedge_name:
+            # Name was specified = parse the wedge automatically
+            # In case of incorrect values, ask the user
+            data = parse_name(wedge_name)
         else:
             # Default S5-12E
-            self.series = '5'
-            self.set_width = 12
-            self.is_brit_pica = True
-            self.units = wu.S5
+            data = ['5', 12, True, wu.S5]
+        # Now set the values
+        self.series, self.set_width, self.is_brit_pica, self.units = data
 
     def __repr__(self):
         return self.name
@@ -54,73 +59,6 @@ class Wedge(object):
             set_width = self.set_width
         name = 'S%s-%s%s' % (self.series, set_width, self.is_brit_pica * 'E')
         return name
-
-    @name.setter
-    def name(self, wedge_name=None):
-        """Defines a wedge based on designation.
-        Recognizes many new-style (numeric) names, like S5-12 or 5-12,
-        and some old-style (alphabetic) names, like AK, BO etc.
-        For unknown wedges, the user has to enter the values manually."""
-        # Ask for wedge name and set width as it is written on the wedge
-        al_it = iter(wu.ALIASES)
-        # Group by three
-        grouper = zip_longest(al_it, al_it, al_it, fillvalue='')
-        old_wedges = '\n'.join('\t'.join(z) for z in grouper)
-        prompt = ('\nSome old-style wedge designations:\n\n%s'
-                  '\n\nIf you have one of those, enter number (like S5-xx.yE).'
-                  '\n\nWedge designation?' % old_wedges)
-        wedge_name = wedge_name or UI.enter_data_or_default(prompt, 'S5-12')
-        # For countries that use comma as decimal delimiter, convert to point:
-        wedge_name = wedge_name.replace(',', '.').upper().strip()
-        # Check if this is an European wedge
-        # (these were based on pica = .1667" )
-        is_brit_pica = wedge_name.endswith('E')
-        # Away with the initial S, final E and any spaces before and after
-        # Make it work with space or dash as delimiter
-        wedge = wedge_name.strip('SE ').replace('-', ' ').split(' ')
-        try:
-            (series, set_width) = wedge
-        except ValueError:
-            series = wedge[0]
-            set_width = None
-        # Now get the set width - ensure that it is float divisible by 0.25
-        # no smaller than 5 (narrowest type), no wider than 20 (large comp)
-        while True:
-            try:
-                set_width = float(set_width)
-                if not set_width % 0.25 and 5 <= set_width <= 20:
-                    break
-                else:
-                    raise ValueError
-            except (TypeError, ValueError):
-                prompt = ('Enter the set width as a decimal fraction '
-                          'divisible by 0.25 - e.g. 12.25: ')
-                set_width = UI.enter_data(prompt, float)
-        # We have the wedge name, so we can look the wedge up in known wedges
-        # (no need to enter the unit values manually)
-        units = wu.UNITS.get(series, None)
-        while not units:
-            # Enter manually if not found:
-            prompt = ('Enter the wedge unit values for rows 1...15 '
-                      'or 1...16, separated by commas.\n')
-            # Now we need to be sure that all whitespace is stripped,
-            # and the value written to database is a list of integers
-            try:
-                units = [int(i.strip())
-                         for i in UI.enter_data(prompt).split(',')]
-                # Display warning if the number of steps is not
-                # 15 or 16 (15 is most common, 16 was used for HMN and KMN).
-                if not 15 <= len(units) <= 16:
-                    UI.display('Wedge must have 15 or 16 steps - enter again.')
-                    units = None
-            except ValueError:
-                UI.display('Incorrect value - enter the values again.')
-                units = None
-        # Finally set the collected data
-        self.series = series
-        self.set_width = set_width
-        self.is_brit_pica = is_brit_pica
-        self.units = units
 
     @property
     def parameters(self):
@@ -159,3 +97,69 @@ class Wedge(object):
     def units_to_points_factor(self):
         """Gets the factor for converting points to units and vice versa"""
         return self.set_width * self.pica / 18 / 0.1667
+
+
+def enter_name(default='S5-12E'):
+    """Enter the wedge's name"""
+    # Ask for wedge name and set width as it is written on the wedge
+    al_it = iter(wu.ALIASES)
+    # Group by three
+    grouper = zip_longest(al_it, al_it, al_it, fillvalue='')
+    old_wedges = '\n'.join('\t'.join(z) for z in grouper)
+    prompt = ('\nSome old-style wedge designations:\n\n%s'
+              '\n\nIf you have one of those, enter number (like S5-xx.yE).'
+              '\n\nWedge designation?' % old_wedges)
+    return UI.enter_data_or_default(prompt, default)
+
+
+def parse_name(wedge_name):
+    """Parse the wedge's name and return a list:
+    [series, set_width, is_brit_pica, units]"""
+    # For countries that use comma as decimal delimiter, convert to point:
+    wedge_name = wedge_name.replace(',', '.').upper().strip()
+    # Check if this is an European wedge
+    # (these were based on pica = .1667" )
+    is_brit_pica = wedge_name.endswith('E')
+    # Away with the initial S, final E and any spaces before and after
+    # Make it work with space or dash as delimiter
+    wedge = wedge_name.strip('SE ').replace('-', ' ').split(' ')
+    try:
+        (series, set_width) = wedge
+    except ValueError:
+        series = wedge[0]
+        set_width = None
+    # Now get the set width - ensure that it is float divisible by 0.25
+    # no smaller than 5 (narrowest type), no wider than 20 (large comp)
+    while True:
+        try:
+            set_width = float(set_width)
+            if not set_width % 0.25 and 5 <= set_width <= 20:
+                break
+            else:
+                raise ValueError
+        except (TypeError, ValueError):
+            prompt = ('Enter the set width as a decimal fraction '
+                      'divisible by 0.25 - e.g. 12.25: ')
+            set_width = UI.enter_data(prompt, float)
+    # We have the wedge name, so we can look the wedge up in known wedges
+    # (no need to enter the unit values manually)
+    units = wu.UNITS.get(series, None)
+    while not units:
+        # Enter manually if not found:
+        prompt = ('Enter the wedge unit values for rows 1...15 '
+                  'or 1...16, separated by commas.\n')
+        # Now we need to be sure that all whitespace is stripped,
+        # and the value written to database is a list of integers
+        try:
+            units = [int(i.strip())
+                     for i in UI.enter_data(prompt).split(',')]
+            # Display warning if the number of steps is not
+            # 15 or 16 (15 is most common, 16 was used for HMN and KMN).
+            if not 15 <= len(units) <= 16:
+                UI.display('Wedge must have 15 or 16 steps - enter again.')
+                units = None
+        except ValueError:
+            UI.display('Incorrect value - enter the values again.')
+            units = None
+    # Now we have the data...
+    return [series, set_width, is_brit_pica, units]

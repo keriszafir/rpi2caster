@@ -315,7 +315,7 @@ class Casting(object):
         Ask user about the space width and measurement unit.
         """
         # Specify a wedge to cast the spaces
-        wedge = Wedge(manual_choice=True)
+        wedge = Wedge(self.wedge.name, manual_choice=True)
         UI.display_parameters({'Wedge data': wedge.parameters})
         old_wedge, self.diecase.alt_wedge = self.diecase.alt_wedge, wedge
         order = []
@@ -463,7 +463,7 @@ class Casting(object):
                    '\nThen cast some lowercase "n" letters and n-dashes, '
                    'check the position of the character relative to the '
                    'type body and adjust the bridge X-Y. Repeat if needed.')
-        wedge = Wedge(manual_choice=True)
+        wedge = Wedge(self.wedge.name, manual_choice=True)
         UI.display_parameters({'Wedge data': wedge.parameters})
         UI.display('\n')
         UI.display('9 units (1en) is %s" wide' % round(wedge.em_width / 2, 4))
@@ -626,7 +626,7 @@ class Casting(object):
                     (self.cast_sorts, 'Cast sorts from matrix coordinates',
                      'Cast from matrix at given position',
                      caster and not diecase),
-                    (self.cast_spaces, 'Cast spaces or quads',
+                    (self.cast_spaces, 'Cast spaces',
                      'Cast spaces or quads of a specified width', caster),
                     (self.cast_typecases, 'Cast typecases',
                      'Cast a typecase based on a selected language',
@@ -672,7 +672,17 @@ class Casting(object):
         if ribbon.diecase_id:
             self.diecase = Diecase(ribbon.diecase_id)
         if ribbon.wedge_name:
-            self.diecase.alt_wedge = Wedge(ribbon.wedge_name)
+            self.wedge = Wedge(ribbon.wedge_name)
+
+    @property
+    def wedge(self):
+        """Get the diecase's alternative wedge"""
+        return self.diecase.alt_wedge
+
+    @wedge.setter
+    def wedge(self, wedge):
+        """Set the diecase's alternative wedge"""
+        self.diecase.alt_wedge = wedge
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
