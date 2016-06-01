@@ -64,7 +64,7 @@ class Casting(object):
         # Caster for this job
         self.caster = MonotypeCaster()
         self.stats = Stats(self)
-        self.measure = Measure(manual=False)
+        self.measure = Measure(manual_choice=False)
         self.diecase = Diecase(diecase_id)
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
         if wedge_name:
@@ -323,6 +323,7 @@ class Casting(object):
         self.cast_galley(order)
 
     @dec.cast_or_punch_result
+    @dec.temp_measure
     def cast_galley(self, order=()):
         """Cast a series of type, filling lines of given width to the brim.
 
@@ -363,6 +364,7 @@ class Casting(object):
         return queue
 
     @dec.cast_or_punch_result
+    @dec.temp_measure
     @dec.temp_wedge
     def quick_typesetting(self, text=None):
         """Allows us to use caster for casting single lines.
@@ -537,14 +539,6 @@ class Casting(object):
             """Chooses a diecase from database"""
             self.diecase = Diecase(manual_choice=True)
 
-        def choose_wedge():
-            """Chooses a wedge from registered ones"""
-            self.wedge = Wedge(manual_choice=True)
-
-        def choose_measure():
-            """Chooses a galley width"""
-            self.measure = Measure()
-
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
             # Options are described with tuples:
@@ -564,12 +558,6 @@ class Casting(object):
                     (choose_diecase, 'Select diecase',
                      'Select a matrix case from database' + diecase_info,
                      caster),
-                    (choose_wedge, 'Select wedge',
-                     'Enter a wedge designation (current: %s)'
-                     % self.diecase.alt_wedge, caster),
-                    (choose_measure, 'Change galley width',
-                     'Set a new galley width for casting type (current: %s)'
-                     % self.measure, caster),
                     (self.ribbon.display_contents, 'View codes',
                      'Display all codes in the selected ribbon', ribbon),
                     (self.diecase.show_layout, 'Show diecase layout',

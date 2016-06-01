@@ -16,14 +16,15 @@ class Measure(object):
              'cf': 12*0.1628/0.1667, 'ff': 0.1628/0.1667,
              'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
 
-    def __init__(self, value=default_value, unit=default_unit, manual=True):
+    def __init__(self, value=default_value, unit=default_unit,
+                 what='galley width', manual_choice=True):
         try:
-            if manual or not value:
+            if manual_choice or not value:
                 raise ValueError
             string = '%s%s' % (value, unit)
             self.points = parse_value(string)
         except (TypeError, ValueError, AttributeError):
-            self.points = enter(value, unit)
+            self.points = enter(value, unit, what)
 
     def __str__(self):
         return '%s%s' % (self.type_units, Measure.default_unit)
@@ -35,16 +36,16 @@ class Measure(object):
         factor = 1 / Measure.units.get(Measure.default_unit, 1)
         return round(self.points * factor, 2)
 
-    def ems(self, type_size=12):
-        """Gets the number of ems of specified type size"""
-        return round(self.points / type_size, 2)
+    def ems(self, set_width=12):
+        """Gets the number of ems of specified set width"""
+        return round(self.points / set_width, 2)
 
     def monotype_units(self, wedge=Wedge()):
         """Calculates the line length in wedge's units"""
         return round(self.points / wedge.units_to_points_factor, 2)
 
 
-def enter(value=0, unit=Measure.default_unit):
+def enter(value=0, unit=Measure.default_unit, what='galley width'):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).
     Return length in DTP points."""
@@ -63,7 +64,7 @@ def enter(value=0, unit=Measure.default_unit):
                 'mm - millimeter;   cm - centimeter\n\n')
         UI.display(text)
 
-    prompt = 'Enter the length/width value and unit (or "?" for help)'
+    prompt = 'Enter the %s value and unit (or "?" for help)' % what
     value = value or Measure.default_value
     default_value = '%s%s' % (value, unit)
     while True:

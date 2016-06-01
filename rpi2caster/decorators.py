@@ -5,6 +5,7 @@
 from .global_config import UI
 from .exceptions import CastingAborted
 from .wedge_data import Wedge
+from .measure import Measure
 
 
 def choose_sensor_and_driver(casting_routine):
@@ -58,5 +59,17 @@ def temp_wedge(routine):
         retval = routine(self, *args, **kwargs)
         # Restore the former wedge and exit
         self.wedge = old_wedge
+        return retval
+    return wrapper
+
+
+def temp_measure(routine):
+    """Allow user to change measure i.e. line length"""
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        old_measure = self.measure
+        self.measure = Measure(manual_choice=True)
+        retval = routine(self, *args, **kwargs)
+        self.measure = old_measure
         return retval
     return wrapper

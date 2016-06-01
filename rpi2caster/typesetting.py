@@ -21,7 +21,7 @@ class Typesetting(object):
     def __init__(self, text_file='', ribbon_file='', diecase_id='',
                  manual_mode=False):
 
-        self.measure = Measure(manual=False)
+        self.measure = Measure(manual_choice=False)
         self.ribbon = Ribbon(ribbon_file)
         self.diecase = Diecase(diecase_id)
         self.source = text_file and open_file(text_file) or []
