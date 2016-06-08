@@ -30,19 +30,21 @@ class Measure(object):
         return '%s%s' % (self.type_units, Measure.default_unit)
 
     @property
-    def type_units(self):
+    def default_unit_width(self):
         """Get a value in default units specified in configuration"""
         # Get the coefficient for calculation
         factor = 1 / Measure.units.get(Measure.default_unit, 1)
         return round(self.points * factor, 2)
 
-    def ems(self, set_width=12):
+    def ems(self, wedge=''):
         """Gets the number of ems of specified set width"""
-        return round(self.points / set_width, 2)
+        wedge = wedge or Wedge()
+        return round(self.points / wedge.set_width, 2)
 
-    def monotype_units(self, wedge=Wedge()):
+    def monotype_units(self, wedge=''):
         """Calculates the line length in wedge's units"""
-        return round(self.points / wedge.units_to_points_factor, 2)
+        wedge = wedge or Wedge()
+        return round(self.points / wedge.unit_point_width, 2)
 
 
 def enter(value=0, unit=Measure.default_unit, what='galley width'):
@@ -77,7 +79,7 @@ def enter(value=0, unit=Measure.default_unit, what='galley width'):
         try:
             return parse_value(raw_string)
         except (TypeError, ValueError):
-            print('Incorrect value - enter again...')
+            UI.display('Incorrect value - enter again...')
 
 
 def parse_value(raw_string):
@@ -94,6 +96,7 @@ def parse_value(raw_string):
     else:
         factor = Measure.units.get(Measure.default_unit, 1)
     # Filter the string
+    string.replace(',', '.')
     num_string = ''.join(x for x in string if x.isdigit() or x is '.')
     # Convert the value with known unit to DTP points
     points = float(num_string) * factor

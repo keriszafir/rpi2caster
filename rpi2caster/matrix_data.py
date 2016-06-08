@@ -12,6 +12,8 @@ from . import exceptions as e
 from . import constants as c
 # Parsing module
 from . import parsing as p
+# Unit arrangement handling
+from . import unit_arrangements as ua
 # Styles manager
 from .styles import Styles
 # Wedge operations for several matrix-case management functions
@@ -47,6 +49,7 @@ class Diecase(object):
         self.wedge = Wedge(wedge_name, manual_choice=not wedge_name)
         self.alt_wedge = self.wedge
         self.layout = layout
+        self.ua_mapping = ()
 
     def __iter__(self):
         return iter(self.matrices)
@@ -99,9 +102,9 @@ class Diecase(object):
         """Return an iterator of all spaces, low and high"""
         symbols = {' ': 5, '  ': 9, '   ': 18, '_': 5, '__': 9, '___': 18}
         return {symbol: mat for mat in self.matrices for symbol in symbols
-                if (' ' in symbol and mat.islowspace() or
-                    '_' in symbol and mat.ishighspace()) and
-                mat.units == symbols.get(symbol, 0)}
+                if (' ' in symbol and mat.is_low_space or
+                    '_' in symbol and mat.is_high_space and
+                    mat.units == symbols.get(symbol, 0))}
 
     @property
     def layout(self):
@@ -307,6 +310,13 @@ class Diecase(object):
             self.typeface = typeface
             return True
 
+    def _set_unit_arrangement(self):
+        """Sets the unit arrangements for diecase's styles"""
+        self.ua_mapping = ua.ua_by_style(self.styles)
+        if UI.confirm('Display character unit values?', False):
+            ua.display_unit_values(self.ua_mapping)
+            UI.pause()
+
     def _assign_wedge(self, wedge=''):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
         self.wedge = Wedge(wedge, manual_choice=not wedge)
@@ -352,6 +362,7 @@ class Diecase(object):
                            'ID': self._set_diecase_id,
                            'E': self.edit_layout,
                            'N': clear_layout,
+                           'U': self._set_unit_arrangement,
                            'V': self.show_layout,
                            'I': self.import_layout,
                            'X': self.export_layout,
@@ -359,10 +370,11 @@ class Diecase(object):
                 messages = ['Matrix case manipulation:\n\n'
                             '[V]iew layout,\n'
                             '[E]dit layout,\n'
-                            '[I]mport layout from file\n'
+                            '[I]mport layout from file,\n'
                             'e[X]port layout to file,\n'
                             'assign [W]edge,\n'
-                            'change [T]ypeface\n'
+                            'change [T]ypeface,\n'
+                            'choose [U]nit arrangements,\n'
                             'set diecase [ID]\n'
                             'check if [A]ll characters for chosen language '
                             'are in diecase,\n'
@@ -391,15 +403,9 @@ class Diecase(object):
             return True
 
 
-class Matrix(object):
-    """A class for single matrices - all matrix data"""
-    def __init__(self, **kwargs):
-        self.diecase = kwargs.get('diecase', EMPTY_DIECASE)
-        self.char = kwargs.get('char', '')
-        self.styles = kwargs.get('styles', 'r')
-        self.code = kwargs.get('code', 'O15')
-        self.units = kwargs.get('units') or 0
-
+class MatrixMixin(object):
+    """This class contains methods used by all matrices -
+    characters and spaces"""
     def __repr__(self):
         return self.code
 
@@ -408,9 +414,9 @@ class Matrix(object):
             s_signal = 'S'
         else:
             s_signal = ''
-        comment = (self.islowspace() and
+        comment = (self.is_low_space and
                    ' // low space %.2f points wide' % self.points or
-                   self.ishighspace() and
+                   self.is_high_space and
                    ' // high space %.2f points wide' % self.points or
                    self.char and
                    ' // %s %s' % (Styles(self.styles), self.char) or '')
@@ -421,25 +427,6 @@ class Matrix(object):
         new_mat = copy(self)
         new_mat.points += points
         return new_mat
-
-    def __len__(self):
-        return len(self.char)
-
-    def __bool__(self):
-        return True
-
-    @property
-    def styles(self):
-        """Get the matrix's styles or an empty string if matrix has no char"""
-        if not self.char or self.isspace():
-            return ''
-        else:
-            return self.__dict__.get('_styles', 'r')
-
-    @styles.setter
-    def styles(self, styles):
-        """Sets the matrix's style string"""
-        self.__dict__['_styles'] = styles
 
     @property
     def units(self):
@@ -460,7 +447,7 @@ class Matrix(object):
     def points(self):
         """Gets a DTP point (=.1667"/12) width for the matrix"""
         points = (self.__dict__.get('_points') or
-                  self.diecase.wedge.units_to_points_factor * self.units)
+                  self.diecase.wedge.unit_point_width * self.units)
         return round(points, 2)
 
     @points.setter
@@ -537,10 +524,7 @@ class Matrix(object):
         # Safe limit is .19" = 13.680" and we don't let the mould open further
         full_width = round(self.get_row_points() + 0.0935 * 72, 2)
         width_cap = 13.680
-        if self.islowspace():
-            return full_width
-        else:
-            return min(full_width, width_cap)
+        return self.is_low_space and full_width or min(full_width, width_cap)
 
     def wedge_positions(self, point_correction=0):
         """Calculate the 0075 and 0005 wedge positions for this matrix
@@ -569,19 +553,62 @@ class Matrix(object):
         """Returns a record suitable for JSON-dumping and storing in DB"""
         return [self.char, self.styles, self.code, self.units]
 
-    def isspace(self):
-        """Check whether the mat is space or not"""
-        return self.islowspace() or self.ishighspace()
 
-    def islowspace(self):
-        """Check whether the mat is low space"""
-        # Must work with multiple spaces as well (en- and em-quad)
+class Matrix(MatrixMixin):
+    """A class for single matrices - all matrix data"""
+    def __init__(self, **kwargs):
+        self.diecase = kwargs.get('diecase', EMPTY_DIECASE)
+        self.char = kwargs.get('char', '')
+        self.styles = kwargs.get('styles', 'r')
+        self.code = kwargs.get('code', 'O15')
+        self.units = kwargs.get('units') or 0
+
+    def __len__(self):
+        return len(self.char)
+
+    def __bool__(self):
+        return True
+
+    @property
+    def styles(self):
+        """Get the matrix's styles or an empty string if matrix has no char"""
+        if not self.char or self.is_space:
+            return ''
+        else:
+            return self.__dict__.get('_styles', 'r')
+
+    @styles.setter
+    def styles(self, styles):
+        """Sets the matrix's style string"""
+        self.__dict__['_styles'] = styles
+
+    @property
+    def is_low_space(self):
+        """Checks whether this is a low space"""
         return bool(self.char) and not self.char.strip(' ')
 
-    def ishighspace(self):
-        """Check whether the mat is high space"""
-        # Must work with multiple underscores as well (high en- and em-quad)
-        return bool(self.char) and not self.char.strip('_')
+    @property
+    def is_high_space(self):
+        """A space which is not a low space is a high space"""
+        return self.is_space and not self.is_low_space
+
+    @property
+    def is_space(self):
+        """Is this a space?"""
+        # Low spaces/quads have a char multiple of " "; high - multiple of "_"
+        # Stripping all these characters will return nothing
+        return not self.char.replace(' ', '').replace('_', '')
+
+    def _get_units_from_arrangement(self):
+        """Try getting the unit width value from diecase's unit arrangement,
+        if that fails, return None"""
+        try:
+            for style, ua_id in self.diecase.ua_mapping:
+                if style in self.styles:
+                    return ua.get_unit_value(ua_id, self.char, self.styles)
+        except (AttributeError, e.UnitArrangementNotFound,
+                e.UnitValueNotFound):
+            return None
 
     def edit(self):
         """Edits the matrix data"""
@@ -610,9 +637,15 @@ class Matrix(object):
         unit arrangement indicates; this will make the program set the
         justification wedges and cast the character with the S-needle"""
         desc = self.char and '"%s" at ' % self.char or ''
-        UI.display('Enter unit value for %s%s; 0 = row units, '
-                   'blank = current' % (desc, self.code))
-        prompt = 'Units?'
+        try:
+            ua_units = self._get_units_from_arrangement()
+            UI.display('%s%s unit values: %s by UA, %s by row'
+                       % (desc, self.code, ua_units, self.get_row_units()))
+        except (AttributeError,
+                e.UnitArrangementNotFound, e.UnitValueNotFound):
+            UI.display('%s%s row unit value: %s'
+                       % (desc, self.code, self.get_row_units()))
+        prompt = 'New unit value? (0 = row units, blank = current)'
         self.units = UI.enter_data_or_default(prompt, self.units, int)
 
     def choose_styles(self):
@@ -620,6 +653,111 @@ class Matrix(object):
         style_manager = Styles(self.styles)
         style_manager.choose()
         self.styles = style_manager()
+
+
+class Space(MatrixMixin):
+    """Space - low or high, with a given position"""
+    def __init__(self, width='', is_low_space=True, diecase=None):
+        # Automatically choose a space from the
+        self.is_low_space = is_low_space
+        self.specify_width(width)
+        self.diecase = diecase or EMPTY_DIECASE
+        try:
+            self.closest_match()
+        except AttributeError:
+            self.code = 'G1'
+
+    @property
+    def is_space(self):
+        """By definition, True"""
+        return True
+
+    def closest_match(self):
+        """Automatically choose a matrix from diecase to get a most
+        suitable space for the desired width"""
+        def spaces_match(mat):
+            """The candidate matrix is a space"""
+            return mat.is_space and mat.is_low_space == self.is_low_space
+
+        def can_adjust(mat):
+            """The matrix units can be adjusted in -2...+10 range"""
+            # Rework this (narrower set = more units to add/take away)
+            return mat.units - 2 <= self.units <= mat.units + 10
+
+        def unit_difference(mat):
+            """Unit width difference between desired width and row width"""
+            return abs(self.units - mat.units)
+
+        try:
+            matrices = sorted([mat for mat in self.diecase
+                               if spaces_match(mat) and can_adjust(mat)],
+                              key=unit_difference)
+            # The best-matched candidate is the one with least unit difference
+            mat = matrices[0]
+            self.code = mat.code
+        except (AttributeError, TypeError, IndexError):
+            # No diecase or no matches
+            self.code = 'G5'
+
+    def specify_width(self, width='5u'):
+        """Specify the space's width"""
+        def parse_value(raw_string):
+            """Parse the entered value with units"""
+            # By default, use DTP points = 1/72"
+            factor = 1
+            string = raw_string.strip()
+            for symbol in symbols:
+                # End after first match
+                if string.endswith(symbol):
+                    string = string.replace(symbol, '')
+                    # Default unit - 1pt
+                    factor = units.get(symbol, 1)
+                    break
+            # Filter the string
+            string.replace(',', '.')
+            num_string = ''.join(x for x in string if x.isdigit() or x is '.')
+            # Convert the value with known unit to DTP points
+            points = float(num_string) * factor
+            return round(points, 2)
+        try:
+            # Point to unit conversion factor
+            ptu = 1 / self.diecase.alt_wedge.unit_point_width
+        except AttributeError:
+            # Assume set width = 12; 18 units is 12 points
+            ptu = 1.33
+        help_text = ('\n\nAvailable units:\n'
+                     '    dd - European Didot point,\n'
+                     '    cc - cicero (=12dd, .1776"),\n'
+                     '    ff - Fournier point,\n'
+                     '    cf - Fournier cicero (=12ff, .1628"),\n'
+                     '    pp - TeX / US printer\'s pica point,\n'
+                     '    Pp - TeX / US printer\'s pica (=12pp, .1660"),\n'
+                     '    pt - DTP / PostScript point = 1/72",\n'
+                     '    pc - DTP / PostScript pica (=12pt, .1667"),\n'
+                     '    u - unit of wedge\'s set\n'
+                     '    en - 9 units of wedge\'s set\n'
+                     '    em - 18 units of wedge\'s set\n\n')
+
+        units = {'pc': 12.0 * ptu, 'pt': 1.0,
+                 'Pp': 12 * 0.166 / 0.1667 * ptu, 'pp': 0.166 / 0.1667 * ptu,
+                 'cc': 12 * 0.1776 / 0.1667 * ptu, 'dd': 0.1776 / 0.1667 * ptu,
+                 'cf': 12 * 0.1628 / 0.1667 * ptu, 'ff': 0.1628 / 0.1667 * ptu,
+                 'u': 1, 'en': 9, 'em': 18}
+        symbols = ['pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cf', 'ff',
+                   'en', 'em', 'u']
+        prompt = 'Enter the space width value and unit (or "?" for help)'
+        while True:
+            # If 0, use default
+            raw_string = width or UI.enter_data_or_default(prompt, '1en')
+            if '?' in raw_string:
+                # Display help message and start again
+                UI.display(help_text)
+                continue
+            try:
+                self.units = parse_value(raw_string)
+                return
+            except (TypeError, ValueError):
+                UI.display('Incorrect value - enter again...')
 
 
 def diecase_operations():

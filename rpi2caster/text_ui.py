@@ -289,7 +289,7 @@ def display_diecase_layout(diecase):
         """Get the unit value string for a character, if the width
         overrides the wedge default"""
         show_units = (mat.units != wedge_row_units and
-                      mat.char and not mat.isspace())
+                      mat.char and not mat.is_space)
         if show_units:
             return str(mat.units)
         else:

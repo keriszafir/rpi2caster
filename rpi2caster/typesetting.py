@@ -285,7 +285,7 @@ class GalleyBuilder(object):
                 parameters['wedges'] = mat.wedge_positions()
                 parameters['points'] = mat.points
                 parameters['code'] = str(mat)
-                parameters['lowspace'] = mat.islowspace()
+                parameters['lowspace'] = mat.is_low_space
             return parameters
 
         def start_line():

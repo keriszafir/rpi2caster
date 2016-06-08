@@ -6,7 +6,7 @@ from .global_config import UI
 class Styles(object):
     """Manage styles"""
     order = [x for x in 'rbislu']
-    names = ['roman', 'bold', 'italic', 'smallcaps', 'inferior', 'superior']
+    names = ['roman', 'bold', 'italic', 'small caps', 'inferior', 'superior']
     style_dict = dict(zip(order, names))
 
     def __init__(self, styles_string=None, allow_multiple=True,

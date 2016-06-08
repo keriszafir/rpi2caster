@@ -84,6 +84,17 @@ class MatrixNotFound(TypesettingOops):
     pass
 
 
+class UnitArrangementNotFound(TypesettingOops):
+    """Raised when cannot find an unit arrangement for a given style"""
+    pass
+
+
+class UnitValueNotFound(TypesettingOops):
+    """Raised when cannot find an unit value in an arrangement
+    for a given character and style"""
+    pass
+
+
 class DuplicateError(TypesettingOops):
     """DuplicateError
 

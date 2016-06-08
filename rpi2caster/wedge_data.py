@@ -90,13 +90,18 @@ class Wedge(object):
     @property
     def points(self):
         """Gets the point values for the wedge's rows"""
-        return [round(self.units_to_points_factor * units, 2)
+        return [round(self.unit_point_width * units, 2)
                 for units in self.units]
 
     @property
-    def units_to_points_factor(self):
+    def unit_point_width(self):
         """Gets the factor for converting points to units and vice versa"""
-        return self.set_width * self.pica / 18 / 0.1667
+        return self.set_width * self.pica / 3
+
+    @property
+    def unit_inch_width(self):
+        """Get inch value of a wedge's set unit; 1 inch = 72 points"""
+        return self.unit_point_width / 72
 
 
 def enter_name(default='S5-12E'):
@@ -107,7 +112,8 @@ def enter_name(default='S5-12E'):
     grouper = zip_longest(al_it, al_it, al_it, fillvalue='')
     old_wedges = '\n'.join('\t'.join(z) for z in grouper)
     prompt = ('\nSome old-style wedge designations:\n\n%s'
-              '\n\nIf you have one of those, enter number (like S5-xx.yE).'
+              '\n\nIf you have one of those, '
+              'enter the corresponding new-style number (like S5-xx.yE).'
               '\n\nWedge designation?' % old_wedges)
     return UI.enter_data_or_default(prompt, default)
 

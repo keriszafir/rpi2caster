@@ -16,7 +16,6 @@ A module for everything related to working on a Monotype composition caster:
 
 # IMPORTS:
 from collections import deque
-from copy import copy
 # Signals parsing methods for rpi2caster
 from . import parsing as p
 # Custom exceptions
@@ -42,7 +41,7 @@ from . import decorators as dec
 # Matrix, wedge and typesetting data models
 from .typesetting_data import Ribbon
 from .typesetting import InputText, GalleyBuilder
-from .matrix_data import Diecase, diecase_operations
+from .matrix_data import Diecase, Space, diecase_operations
 from .wedge_data import Wedge
 
 
@@ -281,39 +280,8 @@ class Casting(object):
         Ask user about the space width and measurement unit.
         """
         order = []
-        spaces = self.diecase.spaces
-        if len(spaces) == 1:
-            # Nothing to choose from
-            for _, value in spaces.items():
-                master = value
-                break
-        elif spaces:
-            # Multiple choice
-            descriptions = {' ': 'low space (1/3em)',
-                            '  ': 'low half-square (1/2em)',
-                            '   ': 'low square (1em))',
-                            '_': 'high space (1/3em)',
-                            '__': 'high half-square (1/2em))',
-                            '___': 'high square (1em)'}
-            available = ['"%s" : %s' % (x, descriptions[x])
-                         for x in sorted(descriptions) if x in spaces]
-            UI.display('Choose the matrix for casting spaces:')
-            UI.display('\n'.join(available))
-            choice = ''
-            while choice not in descriptions:
-                choice = UI.enter_data_or_blank('Choose space') or ' '
-            master = spaces.get(choice)
-            UI.display('Casting from %s' % master.code)
-        else:
-            # No data about spaces = enter manually
-            master = self.diecase.lookup_matrix()
         while True:
-            matrix = copy(master)
-            UI.display('Enter the space width...')
-            UI.display('\nWidth limits for this matrix: %spt min - %spt max\n'
-                       % (matrix.get_min_points(), matrix.get_max_points()))
-            width = Measure(6, 'pt').points
-            matrix.points = width
+            matrix = Space(diecase=self.diecase)
             prompt = 'How many lines?'
             lines = UI.enter_data_or_default(prompt, 1, int)
             order.extend([(matrix, 0)] * lines)
@@ -475,6 +443,58 @@ class Casting(object):
         queue.extend(tsf.double_justification(comment='Starting...'))
         return queue
 
+    @dec.cast_or_punch_result
+    @dec.temp_wedge
+    def _diecase_proof(self):
+        """Tests the whole diecase, casting from each matrix.
+        Casts spaces between characters to be sure that the resulting
+        type will be of equal width."""
+        prompt = ('Matrix case size: 1 for 15x15, 2 for 15x17, 3 for 16x17? '
+                  '(leave blank to cancel) : ')
+        options = {'1': (15, 15), '2': (15, 17), '3': (16, 17), '': ()}
+        rows, columns = 0, 0
+        if (rows, columns) not in options.values():
+            choice = UI.simple_menu(prompt, options)
+            if not choice:
+                return
+            (rows, columns) = choice
+        # Generate column numbers
+        columns_list = columns == 17 and c.COLUMNS_17 or c.COLUMNS_15
+        # Generate row numbers: 1...15 or 1...16
+        rows_list = [num + 1 for num in range(rows)]
+        # Sequence to cast starts with pump stop and galley trip
+        # (will be cast in reversed order)
+        queue = tsf.end_casting() + tsf.galley_trip()
+        for row in rows_list:
+            # Calculate the width for the GS1 space
+            wedge_positions = (3, 8)
+            queue.append('O15')
+            if self.wedge[row] < 18:
+                # How many units do we add or take away?
+                delta = 18 - self.wedge[row] - self.wedge[1]
+                # We have difference in units of a set:
+                # translate to inches and make it 0.0005" steps, add 3/8
+                delta *= self.wedge.unit_inch_width
+                steps_0005 = int(delta * 2000) + 53
+                # Safety limits: upper = 15/15; lower = 1/1
+                steps_0005 = min(steps_0005, 240)
+                steps_0005 = max(steps_0005, 16)
+                steps_0075 = 0
+                while steps_0005 > 15:
+                    steps_0005 -= 15
+                    steps_0075 += 1
+                wedge_positions = (steps_0075, steps_0005)
+            for column in columns_list:
+                queue.append('%s%s' % (column, row))
+                if self.wedge[row] < 18:
+                    # Skip this for 18 unit rows
+                    queue.append('GS1')
+            # Quad out, put the row to the galley, set justification
+            queue.append('O15')
+            queue.extend(tsf.double_justification(wedge_positions))
+        if UI.confirm('Proceed?', True):
+            return queue
+
     def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
         def finish():
@@ -506,6 +526,8 @@ class Casting(object):
                     (self._calibrate_draw_rods, 'Calibrate diecase draw rods',
                      'Keep the matrix case at G8 and adjust the draw rods',
                      caster),
+                    (self._diecase_proof, 'Diecase proof',
+                     'Cast every character from the diecase', caster),
                     (self._test_row_16, 'Test HMN, KMN or unit-shift',
                      'Cast type from row 16 with chosen addressing mode',
                      caster)]
