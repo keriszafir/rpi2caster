@@ -41,7 +41,7 @@ from . import decorators as dec
 # Matrix, wedge and typesetting data models
 from .typesetting_data import Ribbon
 from .typesetting import InputText, GalleyBuilder
-from .matrix_data import Diecase, Space, diecase_operations
+from .matrix_data import Diecase, diecase_operations
 from .wedge_data import Wedge
 
 
@@ -281,7 +281,7 @@ class Casting(object):
         """
         order = []
         while True:
-            matrix = Space(diecase=self.diecase)
+            matrix = self.diecase.get_space(width=0, is_low_space=None)
             prompt = 'How many lines?'
             lines = UI.enter_data_or_default(prompt, 1, int)
             order.extend([(matrix, 0)] * lines)

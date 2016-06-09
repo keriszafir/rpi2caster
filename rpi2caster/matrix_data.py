@@ -132,6 +132,30 @@ class Diecase(object):
         all_styles = set(''.join([mat.styles for mat in self]))
         return Styles(all_styles)()
 
+    @property
+    def space(self):
+        """Get a space from diecase; most typically G1"""
+        return self.get_space()
+
+    @property
+    def half_quad(self):
+        """Get a 9-unit quad (half-square) from diecase"""
+        return self.get_space(width='1en', is_low_space=True)
+
+    @property
+    def quad(self):
+        """Get a full em quad"""
+        return self.space(width='1em', is_low_space=True)
+
+    def get_space(self, width='5u', is_low_space=True):
+        """Get a most suitable space for a given number of units"""
+        return Space(width, is_low_space, diecase=self)
+
+    def get_supporting_space(self, width):
+        """Support for overhanging characters with type body narrower than
+        the character; used for adding many units"""
+        return Space(width, is_low_space=False, diecase=self)
+
     def show_layout(self):
         """Shows the diecase layout"""
         UI.display_diecase_layout(self)
@@ -659,7 +683,11 @@ class Space(MatrixMixin):
     """Space - low or high, with a given position"""
     def __init__(self, width='', is_low_space=True, diecase=None):
         # Automatically choose a space from the
-        self.is_low_space = is_low_space
+        if is_low_space is None:
+            prompt = 'Y = low space, N = high space?'
+            self.is_low_space = UI.confirm(prompt, True)
+        else:
+            self.is_low_space = is_low_space
         self.specify_width(width)
         self.diecase = diecase or EMPTY_DIECASE
         try:
@@ -671,6 +699,26 @@ class Space(MatrixMixin):
     def is_space(self):
         """By definition, True"""
         return True
+
+    @property
+    def char(self):
+        """Get a character for the space, for compatibility with Matrix"""
+        char = self.is_low_space and ' ' or '_'
+        if self.units >= 18:
+            # "   " (low) or "___" (high) for em-quads and more
+            multiple = 3
+        elif self.units >= 9:
+            # "  " (low) or "__" (high) for 1/2em...1em
+            multiple = 2
+        else:
+            # " " (low) or "_" (high) for spaces less than 1/2em
+            multiple = 1
+        return multiple * char
+
+    @property
+    def styles(self):
+        """Spaces are viable for all styles"""
+        return Styles('rbislu')
 
     def closest_match(self):
         """Automatically choose a matrix from diecase to get a most

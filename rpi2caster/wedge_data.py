@@ -103,6 +103,24 @@ class Wedge(object):
         """Get inch value of a wedge's set unit; 1 inch = 72 points"""
         return self.unit_point_width / 72
 
+    @property
+    def adjustment_limits(self):
+        """Get the unit adjustment limits for this wedge"""
+        # The unit width adjustment range is limited by 0075 and 0005
+        # wedge positions (min. 1/1, max. 15/15 for low spaces,
+        # but less for characters - the mould has a limiter which allows
+        # the upper blade to open much less than the lower blade;
+        # the matrix size is .2" x .2", anything larger will lead to a splash)
+        # Normal (unadjusted) position is 3/8, so we can take away 2/7
+        # or add 12/7. One step of 0075 wedge is equal to 15 steps of 0005.
+        # So, we can take away 2*15+7=37, or add 12*15+7=187 steps,
+        # each is 0.0005" = 1/2000", so -0.0185...+0.0935
+        # The increment / decrement is absolute i.e. will mean different
+        # numbers of units depending on set width. Let's calculate this.
+        min_units = 0.0185 / self.unit_inch_width
+        max_units = 0.0935 / self.unit_inch_width
+        return (min_units, max_units)
+
 
 def enter_name(default='S5-12E'):
     """Enter the wedge's name"""
