@@ -193,16 +193,22 @@ class MonotypeCaster(object):
 
     def pump_stop(self):
         """Forces pump stop - won't end until it is turned off"""
+        def send_signals():
+            """Send a combination - full cycle"""
+            self.valves_off()
+            self.sensor.wait_for(AIR_ON, 30)
+            self.output.valves_on(['N', 'J', 'S', '0005'])
+            self.sensor.wait_for(AIR_OFF, 30)
+            self.output.valves_off()
+
         UI.display('Turning all valves off - just in case...')
         self.output.valves_off()
         while self.pump_working:
             UI.display('The pump is still working - turning it off...')
             try:
-                # Run a full machine cycle to turn the pump off
-                self.sensor.wait_for(AIR_ON, 30)
-                self.output.valves_on(['N', 'J', 'S', '0005'])
-                self.sensor.wait_for(AIR_OFF, 30)
-                self.output.valves_off()
+                # Run two full sequences to be sure
+                send_signals()
+                send_signals()
                 UI.display('Pump is now off.')
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
