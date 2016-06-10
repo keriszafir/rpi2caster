@@ -65,7 +65,7 @@ class SysfsSensor(SimulationSensor):
             while self.last_state != new_state:
                 if signals.poll(timeout):
                     state = get_state()
-                    if time() - debounce > 0.005:
+                    if time() - debounce > 0.01:
                         self.last_state = state
                     debounce = time()
                 else:
