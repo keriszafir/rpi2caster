@@ -395,7 +395,7 @@ class Casting(object):
                    '\nThen cast some lowercase "n" letters and n-dashes, '
                    'check the position of the character relative to the '
                    'type body and adjust the bridge X-Y. Repeat if needed.\n')
-        em_width = self.wedge.em_width
+        em_width = self.wedge.em_inch_width
         UI.display('9 units (1en) is %s" wide' % round(em_width / 2, 4))
         UI.display('18 units (1em) is %s" wide\n' % round(em_width, 4))
         if not UI.confirm('\nProceed?', default=True):

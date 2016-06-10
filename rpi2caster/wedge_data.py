@@ -42,11 +42,6 @@ class Wedge(object):
         return self.is_brit_pica and 0.1667 or 0.166
 
     @property
-    def em_width(self):
-        """Get the wedge em width (i.e. 18 units of wedge's set) in inches"""
-        return self.pica * self.set_width / 12
-
-    @property
     def name(self):
         """Gets a wedge name - for example S5-12.25E.
         S (for stopbar) is prepended by convention.
@@ -102,6 +97,11 @@ class Wedge(object):
     def unit_inch_width(self):
         """Get inch value of a wedge's set unit; 1 inch = 72 points"""
         return self.unit_point_width / 72
+
+    @property
+    def em_inch_width(self):
+        """Get inch width of an em, i.e. 18 units"""
+        return self.unit_inch_width * 18
 
     @property
     def adjustment_limits(self):
