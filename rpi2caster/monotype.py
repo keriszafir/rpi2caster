@@ -195,7 +195,7 @@ class MonotypeCaster(object):
         """Forces pump stop - won't end until it is turned off"""
         def send_signals():
             """Send a combination - full cycle"""
-            self.valves_off()
+            self.output.valves_off()
             self.sensor.wait_for(AIR_ON, 30)
             self.output.valves_on(['N', 'J', 'S', '0005'])
             self.sensor.wait_for(AIR_OFF, 30)
