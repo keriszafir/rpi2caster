@@ -446,7 +446,8 @@ class MatrixMixin(object):
         return self.code
 
     def __str__(self):
-        if self.points != self.get_row_points():
+        # TODO: check if S is added for different set width scenario
+        if self.units != self.get_row_units():
             s_signal = 'S'
         else:
             s_signal = ''
@@ -458,10 +459,10 @@ class MatrixMixin(object):
                    ' // %s %s' % (Styles(self.styles), self.char) or '')
         return '%s%s%s%s' % (self.column, s_signal, self.row, comment)
 
-    def __call__(self, points):
+    def __call__(self, units):
         """Returns a copy of self with a corrected width"""
         new_mat = copy(self)
-        new_mat.points += points
+        new_mat.units += units
         return new_mat
 
     @property
@@ -478,6 +479,11 @@ class MatrixMixin(object):
         """Sets the unit width value"""
         if units:
             self.__dict__['_units'] = units
+
+    @property
+    def ems(self):
+        """Get the ems for matrix; 1em = 18 units"""
+        return round(self.units / 18, 2)
 
     @property
     def points(self):
@@ -522,12 +528,6 @@ class MatrixMixin(object):
         self.row = p.get_row(signals)
         self.column = p.get_column(signals)
 
-    def get_row_points(self):
-        """Gets a number of points for characters in the diecase row"""
-        # Try wedges in order:
-        # diecase's temporary wedge, diecase's default wedge, standard S5-12E
-        return self.diecase.alt_wedge.points[self.row]
-
     def get_row_units(self):
         """Gets a number of units for characters in the diecase row"""
         # Try wedges in order:
@@ -569,7 +569,7 @@ class MatrixMixin(object):
         steps_0005 = int(diff * wedge_used.unit_inch_width * 2000) + 53
         # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
         # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
-        # Add or take away a number of inches; diff is in points i.e. 1/72"
+        # Add or take away a number of inches; diff is in units of wedge's set
         # Upper limit: 15/15 => 15*15=225 + 15 = 240
         # Unsafe for casting from mats - .2x.2 size - larger leads to splash!
         # Adding a high space for overhanging character is the way to do it

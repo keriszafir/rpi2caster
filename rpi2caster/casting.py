@@ -304,10 +304,10 @@ class Casting(TypesettingContext):
         quad_padding = 1
         quad = self.diecase.decode_matrix('O15')
         # Leave some slack to adjust the line
-        length = self.measure.points - 2 * quad_padding * quad.points
+        length = self.measure.ems - 2 * quad_padding * quad.ems
         # Build a sequence of matrices for casting
         # If n is 0, we fill the line to the brim
-        queues = ([mat] * n if n else [mat] * int((length // mat.points) - 1)
+        queues = ([mat] * n if n else [mat] * int((length // mat.ems) - 1)
                   for (mat, n) in order)
         matrix_stream = (mat for batch in queues for mat in batch)
         # Initialize the galley-constructor
