@@ -8,22 +8,84 @@ from . import exceptions as e
 from . import typesetting_funcs as tsf
 from .measure import Measure
 from .typesetting_data import Ribbon
-from .matrix_data import Diecase, Matrix, diecase_operations
+from .matrix_data import Diecase, Matrix, diecase_operations, EMPTY_DIECASE
 from .wedge_data import Wedge
 from .global_config import UI
 
 
-class Typesetting(object):
+class TypesettingContext(object):
+    """Mixin for setting diecase, wedge and measure"""
+    def __init__(self, ribbon_file='', ribbon_id='', diecase_id='',
+                 wedge_name='', measure=''):
+        self.diecase = Diecase(diecase_id)
+        self.measure = Measure(self, measure)
+        self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
+        if wedge_name:
+            self.wedge = Wedge(wedge_name)
+
+    @property
+    def ribbon(self):
+        """Ribbon for the casting session"""
+        return self.__dict__.get('_ribbon') or Ribbon()
+
+    @ribbon.setter
+    def ribbon(self, ribbon):
+        """Ribbon setter"""
+        self.__dict__['_ribbon'] = ribbon or Ribbon()
+        if ribbon.diecase_id:
+            self.diecase = Diecase(ribbon.diecase_id)
+        if ribbon.wedge_name:
+            self.wedge = Wedge(ribbon.wedge_name)
+
+    @property
+    def wedge(self):
+        """Get the diecase's alternative wedge"""
+        return self.diecase.alt_wedge
+
+    @wedge.setter
+    def wedge(self, wedge):
+        """Set the diecase's alternative wedge"""
+        self.diecase.alt_wedge = wedge
+
+    @property
+    def diecase(self):
+        """Get a diecase or empty diecase"""
+        return self.__dict__.get('_diecase') or EMPTY_DIECASE
+
+    @diecase.setter
+    def diecase(self, diecase):
+        """Set a diecase; keep wedge chosen earlier"""
+        old_wedge = self.diecase.alt_wedge
+        self.__dict__['_diecase'] = diecase
+        self.diecase.alt_wedge = old_wedge
+
+    def choose_diecase(self):
+        """Chooses a diecase from database"""
+        self.diecase = Diecase(manual_choice=True)
+
+    def choose_wedge(self):
+        """Chooses a wedge from registered ones"""
+        self.wedge = Wedge(manual_choice=True)
+
+    def change_measure(self):
+        """Change a line length"""
+        UI.display('Set the galley width...')
+        self.measure = Measure(self, manual_choice=True)
+
+    def choose_ribbon(self):
+        """Chooses a ribbon from database or file"""
+        self.ribbon = Ribbon(manual_choice=True)
+
+
+class Typesetting(TypesettingContext):
     """Typesetting session - choose and translate text with control codes
     into a sequence of Monotype control codes, which can be sent to
     the machine to cast composed and justified type.
     """
-    def __init__(self, text_file='', ribbon_file='', diecase_id='',
-                 manual_mode=False):
-
-        self.measure = Measure(manual_choice=False)
-        self.ribbon = Ribbon(ribbon_file)
-        self.diecase = Diecase(diecase_id)
+    def __init__(self, text_file='', ribbon_file='', ribbon_id='',
+                 diecase_id='', wedge_name='', measure='', manual_mode=False):
+        super().__init__(ribbon_file, ribbon_id, diecase_id, wedge_name,
+                         measure)
         self.source = text_file and open_file(text_file) or []
         # Use a manual compositor (user decides where to break the line)
         # or automatic compositor (hyphenation and justification is done
@@ -38,31 +100,18 @@ class Typesetting(object):
             nonlocal finished
             finished = True
 
-        def choose_diecase():
-            """Chooses a diecase from database"""
-            self.diecase = Diecase(manual_choice=True)
-
-        def choose_wedge():
-            """Chooses a wedge from registered ones"""
-            self.diecase.alt_wedge = Wedge(manual_choice=True)
-
-        def change_measure():
-            """Change a line length"""
-            UI.display('Set the galley width...')
-            self.measure = Measure()
-
         def menu_options():
             """Build a list of options, adding an option"""
             # Options are described with tuples:
             # (function, description, condition)
             opts = [(finish, 'Exit', 'Exits the program'),
-                    (choose_diecase, 'Select diecase',
+                    (self.choose_diecase, 'Select diecase',
                      'Select a matrix case from database (current: %s)'
                      % (self.diecase or 'not selected')),
-                    (choose_wedge, 'Select wedge',
+                    (self.choose_wedge, 'Select wedge',
                      'Enter a wedge designation (current: %s)'
                      % self.diecase.alt_wedge),
-                    (change_measure, 'Change measure',
+                    (self.change_measure, 'Change measure',
                      'Set new line length (current: %s)' % self.measure),
                     (self.diecase.show_layout, 'Show diecase layout',
                      'View the matrix case layout'),
@@ -108,7 +157,7 @@ class InputText(object):
     """Gets the input text, parses it, generates a sequence of characters
     or commands"""
 
-    def __init__(self, text, context):
+    def __init__(self, context, text):
         self.context = context
         self.text = text
 
@@ -116,11 +165,10 @@ class InputText(object):
         """Generates a sequence of characters from the input text.
         For each character, this function predicts what two next characters
         and one next character are."""
-        diecase = self.context.diecase
         # Cache the character set and spaces instead of generating
         # them ad hoc
-        charset = diecase.charset
-        spaces = diecase.spaces
+        charset = self.context.diecase.charset
+        spaceset = self.context.diecase.spaceset
         style_commands = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
                           '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
                           '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
@@ -134,7 +182,7 @@ class InputText(object):
         # Determine the length of character combinations parsed
         # Min = command length i.e. 3
         # Max = ligature length - dictated by diecase
-        max_len = max(3, diecase.ligature_length)
+        max_len = max(3, self.context.diecase.ligature_length)
         # What if char in text not present in diecase? Hmmm...
         for index, _ in enumerate(self.text):
             if skip_steps:
@@ -151,8 +199,8 @@ class InputText(object):
                     elif char in style_commands:
                         style = style_commands.get(char, 'r')
                         break
-                    elif char in spaces:
-                        yield spaces.get(char)
+                    elif char in spaceset:
+                        yield spaceset.get(char)
                         break
                     elif (char, style) in charset:
                         yield charset.get((char, style))
@@ -248,24 +296,24 @@ class Page(object):
 
 class GalleyBuilder(object):
     """Builds a galley from input sequence"""
-    def __init__(self, source, context):
+    def __init__(self, context, source):
         self.source = (x for x in source)
-        self.points = context.measure.points
         self.diecase = context.diecase
+        self.units = context.measure.wedge_set_units
         # Cooldown: whether to separate sorts with spaces
-        self.cooldown = False
+        self.cooldown_spaces = False
         # Mould heatup: two lines filled with quads to heat the mould
-        self.mould_heatup = True
+        self.mould_heatup_quads = True
         # Fill line: will add quads/spaces nutil length is met
         self.fill_line = True
         self.quad_padding = 1
 
-    def preheat_mould(self):
+    def mould_heatup(self):
         """Appends two lines of em-quads at the end"""
         chunk = []
-        if self.mould_heatup:
+        if self.mould_heatup_quads:
             quad = self.diecase.decode_matrix('O15')
-            quad_qty = int(self.points // quad.points)
+            quad_qty = int(self.units // quad.units)
             chunk = ['%s preheat' % quad] * quad_qty
             comment = 'Casting quads for mould heatup'
             chunk.extend(tsf.double_justification(comment=comment))
@@ -283,15 +331,15 @@ class GalleyBuilder(object):
             parameters = {}
             if mat:
                 parameters['wedges'] = mat.wedge_positions()
-                parameters['points'] = mat.points
+                parameters['units'] = mat.units
                 parameters['code'] = str(mat)
                 parameters['lowspace'] = mat.is_low_space
             return parameters
 
         def start_line():
             """Starts a new line"""
-            nonlocal points_left, queue
-            points_left = self.points - 2 * self.quad_padding * quad['points']
+            nonlocal units_left, queue
+            units_left = self.units - 2 * self.quad_padding * quad['units']
             quads = [quad['code'] + ' quad padding'] * self.quad_padding
             queue.extend(quads)
 
@@ -300,12 +348,12 @@ class GalleyBuilder(object):
             wedges if needed, and adding a space for cooldown, if needed."""
             # Declare variables in non-local scope to preserve them
             # after the function exits
-            nonlocal queue, points_left, working_mat, current_wedges
+            nonlocal queue, units_left, working_mat, current_wedges
             # Take a mat from stash if there is any
             working_mat = working_mat or decode_mat(next(self.source, None))
             # Try to add another character to the line
             # Empty mat = end of line, start filling
-            if points_left > working_mat.get('points', 1000):
+            if units_left > working_mat.get('units', 1000):
                 # Store wedge positions
                 new_wedges = working_mat.get('wedges', (3, 8))
                 # Wedges change? Drop in some single justification
@@ -316,17 +364,17 @@ class GalleyBuilder(object):
                     current_wedges = new_wedges
                 # Add the mat
                 queue.append(working_mat['code'])
-                points_left -= working_mat['points']
+                units_left -= working_mat['units']
                 # We need to know what comes next
                 working_mat = decode_mat(next(self.source, None))
                 if working_mat:
-                    next_points = space['points'] + working_mat['points']
-                    space_needed = (points_left > next_points and not
+                    next_units = space['units'] + working_mat['units']
+                    space_needed = (units_left > next_units and not
                                     working_mat.get('lowspace', True))
-                    if self.cooldown and space_needed:
+                    if self.cooldown_spaces and space_needed:
                         # Add a space for matrix cooldown
                         queue.append(space['code'] + ' for cooldown')
-                        points_left -= space['points']
+                        units_left -= space['units']
                     # Exit and loop further
                     return
             # Finish the line
@@ -334,38 +382,38 @@ class GalleyBuilder(object):
             wedges = current_wedges
             current_wedges = None
             if self.fill_line:
-                while points_left > quad['points']:
+                while units_left > quad['units']:
                     # Coarse fill with quads
                     queue.append(quad['code'] + ' coarse filling line')
-                    points_left -= quad['points']
-                while points_left > space['points'] * 2:
+                    units_left -= quad['units']
+                while units_left > space['units'] * 2:
                     # Fine fill with fixed spaces
                     queue.append(space['code'] + ' fine filling line')
-                    points_left -= space['points']
-                if points_left >= var_sp.get_min_points():
+                    units_left -= space['units']
+                if units_left >= var_sp.get_min_units():
                     # Put an adjustable space if possible to keep lines equal
                     if wedges:
                         queue.extend(tsf.single_justification(wedges))
-                    var_sp.points = points_left
+                    var_sp.units = units_left
                     queue.append(str(var_sp))
                     wedges = var_sp.wedge_positions()
             # Always cast as many quads as needed, then put the line out
             queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
             queue.extend(tsf.double_justification(wedges or (3, 8)))
-            points_left = 0
+            units_left = 0
 
         # Store the code and wedge positions to speed up the process
         space = decode_mat(self.diecase.decode_matrix('G1'))
         quad = decode_mat(self.diecase.decode_matrix('O15'))
         working_mat = None
         current_wedges = None
-        queue, points_left = tsf.end_casting(), 0
+        queue, units_left = tsf.end_casting(), 0
         # Build the whole galley, line by line
         while working_mat != {}:
             start_line()
-            while points_left > 0:
+            while units_left > 0:
                 build_line()
-        return queue + self.preheat_mould()
+        return queue + self.mould_heatup()
 
 
 def open_file(filename=''):

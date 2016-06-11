@@ -67,9 +67,15 @@ def temp_measure(routine):
     """Allow user to change measure i.e. line length"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        old_measure = self.measure
-        self.measure = Measure(manual_choice=True)
-        retval = routine(self, *args, **kwargs)
-        self.measure = old_measure
-        return retval
+        prompt = 'Current measure is %s, change it?' % self.measure
+        if UI.confirm(prompt, False):
+            # Change measure before, restore after
+            old_measure = self.measure
+            self.measure = Measure(self, value=None, manual_choice=True)
+            retval = routine(self, *args, **kwargs)
+            self.measure = old_measure
+            return retval
+        else:
+            # Just do it
+            return routine(self, *args, **kwargs)
     return wrapper

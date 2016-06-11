@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Line length and character width module"""
 from .global_config import UI, DEFAULT_MEASURE, DEFAULT_UNIT
-from .wedge_data import Wedge
 
 
 class Measure(object):
@@ -16,10 +15,13 @@ class Measure(object):
              'cf': 12*0.1628/0.1667, 'ff': 0.1628/0.1667,
              'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0}
 
-    def __init__(self, value=default_value, unit=default_unit,
-                 what='galley width', manual_choice=True):
+    def __init__(self, context, value='', unit='',
+                 what='galley width', manual_choice=False):
+        self.context = context
+        value = value or Measure.default_value
+        unit = unit or Measure.default_unit
         try:
-            if manual_choice or not value:
+            if manual_choice or value is None:
                 raise ValueError
             string = '%s%s' % (value, unit)
             self.points = parse_value(string)
@@ -27,7 +29,7 @@ class Measure(object):
             self.points = enter(value, unit, what)
 
     def __str__(self):
-        return '%s%s' % (self.type_units, Measure.default_unit)
+        return '%s%s' % (self.default_unit_width, Measure.default_unit)
 
     @property
     def default_unit_width(self):
@@ -36,15 +38,15 @@ class Measure(object):
         factor = 1 / Measure.units.get(Measure.default_unit, 1)
         return round(self.points * factor, 2)
 
-    def ems(self, wedge=''):
+    @property
+    def ems(self):
         """Gets the number of ems of specified set width"""
-        wedge = wedge or Wedge()
-        return round(self.points / wedge.set_width, 2)
+        return round(self.points / self.context.wedge.set_width, 2)
 
-    def monotype_units(self, wedge=''):
+    @property
+    def wedge_set_units(self):
         """Calculates the line length in wedge's units"""
-        wedge = wedge or Wedge()
-        return round(self.points / wedge.unit_point_width, 2)
+        return round(self.points / self.context.wedge.unit_point_width, 2)
 
 
 def enter(value=0, unit=Measure.default_unit, what='galley width'):

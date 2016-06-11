@@ -66,7 +66,7 @@ class Diecase(object):
         except ValueError:
             char = item
             styles = ''
-        return self.lookup_matrix(char, styles)
+        return self.find_matrix(char, styles)
 
     @property
     def matrices(self):
@@ -89,7 +89,7 @@ class Diecase(object):
     @property
     def charset(self):
         """Diecase character set"""
-        return {(mat.char, style): mat for mat in self.matrices
+        return {(mat.char, style): copy(mat) for mat in self.matrices
                 for style in mat.styles}
 
     @property
@@ -98,13 +98,12 @@ class Diecase(object):
         return max(len(matrix) for matrix in self.matrices)
 
     @property
-    def spaces(self):
+    def spaceset(self):
         """Return an iterator of all spaces, low and high"""
         symbols = {' ': 5, '  ': 9, '   ': 18, '_': 5, '__': 9, '___': 18}
-        return {symbol: mat for mat in self.matrices for symbol in symbols
-                if (' ' in symbol and mat.is_low_space or
-                    '_' in symbol and mat.is_high_space and
-                    mat.units == symbols.get(symbol, 0))}
+        return {symbol: Space(width=units, diecase=self,
+                              is_low_space=' ' in symbol)
+                for symbol, units in symbols.items()}
 
     @property
     def layout(self):
@@ -124,6 +123,19 @@ class Diecase(object):
         return [(self.diecase_id, 'Diecase ID'),
                 (self.typeface, 'Typeface'),
                 (self.wedge, 'Assigned wedge')]
+
+    @property
+    def alt_wedge(self):
+        """Get an alternative wedge"""
+        return self.__dict__.get('_alt_wedge') or self.wedge
+
+    @alt_wedge.setter
+    def alt_wedge(self, wedge):
+        """Set an alternative wedge for defined (non-empty) diecases"""
+        if self:
+            self.__dict__['_alt_wedge'] = wedge
+        else:
+            self.wedge = wedge
 
     @property
     def styles(self):
@@ -166,7 +178,7 @@ class Diecase(object):
         # Edit the layout
         UI.edit_diecase_layout(self)
 
-    def lookup_matrix(self, char='', style=''):
+    def find_matrix(self, char='', style=''):
         """Chooses a matrix automatically or manually (if multiple matches),
         allows to specify matrix data manually if no matches found"""
         def enter_manually(char='', style=''):
@@ -210,7 +222,7 @@ class Diecase(object):
         if not candidates:
             return enter_manually(char, style)
         elif len(candidates) == 1:
-            return candidates[0]
+            return copy(candidates[0])
         else:
             # Multiple matches found = let user choose
             st_string = str(Styles(style))
@@ -231,7 +243,7 @@ class Diecase(object):
                 UI.display(''.join(record))
             prompt = 'Choose matrix (leave blank to enter manually)'
             choice = UI.enter_data_or_blank(prompt, int)
-            matrix = mats.get(choice) or enter_manually(char, style)
+            matrix = copy(mats.get(choice)) or enter_manually(char, style)
             return matrix
 
     def decode_matrix(self, code):
@@ -470,17 +482,7 @@ class MatrixMixin(object):
     @property
     def points(self):
         """Gets a DTP point (=.1667"/12) width for the matrix"""
-        points = (self.__dict__.get('_points') or
-                  self.diecase.wedge.unit_point_width * self.units)
-        return round(points, 2)
-
-    @points.setter
-    def points(self, points):
-        """Sets a DTP point value for the mat and updates the unit value"""
-        # Set constraints on width
-        lim_points = min(points, self.get_max_points())
-        lim_points = max(lim_points, self.get_min_points())
-        self.__dict__['_points'] = lim_points
+        return round(self.diecase.wedge.unit_point_width * self.units, 2)
 
     @property
     def row(self):
@@ -532,33 +534,42 @@ class MatrixMixin(object):
         # diecase's temporary wedge, diecase's default wedge, standard S5-12E
         return self.diecase.alt_wedge.units[self.row]
 
-    def get_min_points(self):
+    def get_min_units(self):
         """Gets the minimum unit value for a given wedge, based on the
         matrix row and wedge unit value, for wedges at 1/1"""
-        # 3/8 - 1/1 = 2/7 so 2*15 + 7 = 37
-        # 37 * 0.0005 = 0.0185 i.e. max inches we can take away
-        return round(max(self.get_row_points() - 0.0185 * 72, 0), 2)
+        shrink = self.diecase.alt_wedge.adjustment_limits[0]
+        return round(max(self.get_row_units() - shrink, 0), 2)
 
-    def get_max_points(self):
+    def get_max_units(self):
         """Gets the minimum unit value for a given wedge, based on the
         matrix row and wedge unit value, for wedges at 1/1"""
-        # 15/15 - 3/8 = 12/7 so 12*15 + 7 = 187
-        # 187 * 0.0005 = 0.0935 i.e. max inches we can add
-        # Matrix is typically .2 x .2 - anything wider will lead to a splash!
-        # Safe limit is .19" = 13.680" and we don't let the mould open further
-        full_width = round(self.get_row_points() + 0.0935 * 72, 2)
-        width_cap = 13.680
+        stretch = self.diecase.alt_wedge.adjustment_limits[1]
+        full_width = self.get_row_units() + stretch
+        width_cap = 20
         return self.is_low_space and full_width or min(full_width, width_cap)
 
-    def wedge_positions(self, point_correction=0):
+    def wedge_positions(self, unit_correction=0):
         """Calculate the 0075 and 0005 wedge positions for this matrix
         based on the current wedge used"""
-        diff = self.points + point_correction - self.get_row_points()
+        wedge_assigned = self.diecase.wedge
+        wedge_used = self.diecase.alt_wedge
+        # Set width correction
+        # Casting type meant for e.g. 12 set wedge using 9 set wedge will mean
+        # that we need to add some units to compensate the width,
+        # otherwise the type body will be too narrow (and vice versa)
+        set_ratio = wedge_assigned.set_width / wedge_used.set_width
+        # The same goes for using European / old British wedges (pica = .1667")
+        # instead of US / new British (pica = .1660")
+        pica_ratio = wedge_assigned.pica / wedge_used.pica
+        factor = set_ratio * pica_ratio
+        # Units of alternative wedge's set to add or subtract
+        diff = factor * (self.units + unit_correction) - self.get_row_units()
         # The following calculations are done in 0005 wedge steps
+        # 1 step = 1/2000"
+        steps_0005 = int(diff * wedge_used.unit_inch_width * 2000) + 53
         # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
         # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
         # Add or take away a number of inches; diff is in points i.e. 1/72"
-        steps_0005 = int(diff * 2000 / 72) + 53
         # Upper limit: 15/15 => 15*15=225 + 15 = 240
         # Unsafe for casting from mats - .2x.2 size - larger leads to splash!
         # Adding a high space for overhanging character is the way to do it
@@ -729,13 +740,14 @@ class Space(MatrixMixin):
 
         def can_adjust(mat):
             """The matrix units can be adjusted in -2...+10 range"""
-            # Rework this (narrower set = more units to add/take away)
-            return mat.units - 2 <= self.units <= mat.units + 10
+            return mat.units - shrink <= self.units <= mat.units + stretch
 
         def unit_difference(mat):
             """Unit width difference between desired width and row width"""
             return abs(self.units - mat.units)
 
+        # How many units can we take away or add?
+        shrink, stretch = self.diecase.alt_wedge.adjustment_limits
         try:
             matrices = sorted([mat for mat in self.diecase
                                if spaces_match(mat) and can_adjust(mat)],
@@ -744,8 +756,13 @@ class Space(MatrixMixin):
             mat = matrices[0]
             self.code = mat.code
         except (AttributeError, TypeError, IndexError):
-            # No diecase or no matches
-            self.code = 'G5'
+            # No diecase or no matches; use default values
+            if self.units >= 18 - shrink:
+                self.code = 'O15'
+            elif self.units >= 9:
+                self.code = 'G5'
+            else:
+                self.code = 'G1'
 
     def specify_width(self, width='5u'):
         """Specify the space's width"""
@@ -759,14 +776,14 @@ class Space(MatrixMixin):
                 if string.endswith(symbol):
                     string = string.replace(symbol, '')
                     # Default unit - 1pt
-                    factor = units.get(symbol, 1)
+                    factor = meas.get(symbol, 1)
                     break
             # Filter the string
             string.replace(',', '.')
             num_string = ''.join(x for x in string if x.isdigit() or x is '.')
-            # Convert the value with known unit to DTP points
-            points = float(num_string) * factor
-            return round(points, 2)
+            # Convert the value with known unit to units
+            units = float(num_string) * factor
+            return round(units, 2)
         try:
             # Point to unit conversion factor
             ptu = 1 / self.diecase.alt_wedge.unit_point_width
@@ -786,11 +803,11 @@ class Space(MatrixMixin):
                      '    en - 9 units of wedge\'s set\n'
                      '    em - 18 units of wedge\'s set\n\n')
 
-        units = {'pc': 12.0 * ptu, 'pt': 1.0,
-                 'Pp': 12 * 0.166 / 0.1667 * ptu, 'pp': 0.166 / 0.1667 * ptu,
-                 'cc': 12 * 0.1776 / 0.1667 * ptu, 'dd': 0.1776 / 0.1667 * ptu,
-                 'cf': 12 * 0.1628 / 0.1667 * ptu, 'ff': 0.1628 / 0.1667 * ptu,
-                 'u': 1, 'en': 9, 'em': 18}
+        meas = {'pc': 12.0 * ptu, 'pt': 1.0 * ptu,
+                'Pp': 12 * 0.166 / 0.1667 * ptu, 'pp': 0.166 / 0.1667 * ptu,
+                'cc': 12 * 0.1776 / 0.1667 * ptu, 'dd': 0.1776 / 0.1667 * ptu,
+                'cf': 12 * 0.1628 / 0.1667 * ptu, 'ff': 0.1628 / 0.1667 * ptu,
+                'u': 1, 'en': 9, 'em': 18}
         symbols = ['pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cf', 'ff',
                    'en', 'em', 'u']
         prompt = 'Enter the space width value and unit (or "?" for help)'

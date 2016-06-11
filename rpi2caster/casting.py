@@ -24,8 +24,6 @@ from . import exceptions as e
 from . import constants as c
 # Style manager
 from .styles import Styles
-# Measure manager
-from .measure import Measure
 # Caster backend
 from .monotype import MonotypeCaster
 # Casting stats
@@ -39,13 +37,11 @@ from . import typesetting_funcs as tsf
 # Decorator functions
 from . import decorators as dec
 # Matrix, wedge and typesetting data models
-from .typesetting_data import Ribbon
-from .typesetting import InputText, GalleyBuilder
-from .matrix_data import Diecase, diecase_operations
-from .wedge_data import Wedge
+from .typesetting import TypesettingContext, InputText, GalleyBuilder
+from .matrix_data import diecase_operations
 
 
-class Casting(object):
+class Casting(TypesettingContext):
     """Casting:
 
     Methods related to operating the composition caster.
@@ -59,15 +55,12 @@ class Casting(object):
     -casting spaces to heat up the mould."""
 
     def __init__(self, ribbon_file='', ribbon_id='', diecase_id='',
-                 wedge_name=''):
+                 wedge_name='', measure=''):
+        super().__init__(ribbon_file, ribbon_id, diecase_id, wedge_name,
+                         measure)
         # Caster for this job
         self.caster = MonotypeCaster()
         self.stats = Stats(self)
-        self.measure = Measure(manual_choice=False)
-        self.diecase = Diecase(diecase_id)
-        self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
-        if wedge_name:
-            self.diecase.alt_wedge = Wedge(wedge_name)
 
     @dec.choose_sensor_and_driver
     def cast_codes(self, ribbon):
@@ -236,7 +229,7 @@ class Casting(object):
         order = []
         while True:
             char = self.diecase and UI.enter_data_or_blank('Character?') or ''
-            matrix = self.diecase.lookup_matrix(char)
+            matrix = self.diecase.find_matrix(char)
             matrix.specify_units()
             qty = UI.enter_data_or_default('How many sorts?', 10, int)
             order.append((matrix, qty))
@@ -318,10 +311,10 @@ class Casting(object):
                   for (mat, n) in order)
         matrix_stream = (mat for batch in queues for mat in batch)
         # Initialize the galley-constructor
-        builder = GalleyBuilder(matrix_stream, self)
+        builder = GalleyBuilder(self, matrix_stream)
         builder.quad_padding = quad_padding
-        builder.cooldown = True
-        builder.mould_heatup = UI.confirm('Pre-heat the mould?', True)
+        builder.cooldown_spaces = True
+        builder.mould_heatup_quads = UI.confirm('Pre-heat the mould?', True)
         job = self.caster.mode.punching and 'punching' or 'casting'
         UI.display('Generating a sequence for %s...' % job)
         queue = builder.build_galley()
@@ -348,9 +341,9 @@ class Casting(object):
         if not self.diecase:
             e.return_to_menu()
         text = text or UI.enter_data('Text to compose?')
-        matrix_stream = InputText(text, self).parse_input()
-        builder = GalleyBuilder(matrix_stream, self)
-        builder.mould_heatup = False
+        matrix_stream = InputText(self, text).parse_input()
+        builder = GalleyBuilder(self, matrix_stream)
+        builder.mould_heatup_quads = False
         queue = builder.build_galley()
         UI.display('Each line will have two em-quads at the start '
                    'and at the end, to support the type.\n'
@@ -402,15 +395,15 @@ class Casting(object):
             return None
         self.caster.mode.calibration = True
         # Build character list
-        mats = []
+        matrix_stream = []
         for char in ('  ', 'n', '--'):
             mat = self.diecase[char, '']
             mat.specify_units()
-            mats.append(mat)
-            mats.append(mat)
-        builder = GalleyBuilder(mats, self)
+            matrix_stream.append(mat)
+            matrix_stream.append(mat)
+        builder = GalleyBuilder(self, matrix_stream)
         builder.fill_line = False
-        builder.mould_heatup = False
+        builder.mould_heatup_quads = False
         queue = builder.build_galley()
         return queue
 
@@ -553,14 +546,6 @@ class Casting(object):
             nonlocal finished
             finished = True
 
-        def choose_ribbon():
-            """Chooses a ribbon from database or file"""
-            self.ribbon = Ribbon(manual_choice=True)
-
-        def choose_diecase():
-            """Chooses a diecase from database"""
-            self.diecase = Diecase(manual_choice=True)
-
         def menu_options():
             """Build a list of options, adding an option if condition is met"""
             # Options are described with tuples:
@@ -575,9 +560,9 @@ class Casting(object):
                     (self.cast_composition, 'Punch ribbon',
                      'Punch a paper ribbon for casting without the interface',
                      ribbon and not caster),
-                    (choose_ribbon, 'Select ribbon',
+                    (self.choose_ribbon, 'Select ribbon',
                      'Select a ribbon from database or file', True),
-                    (choose_diecase, 'Select diecase',
+                    (self.choose_diecase, 'Select diecase',
                      'Select a matrix case from database' + diecase_info,
                      caster),
                     (self.ribbon.display_contents, 'View codes',
@@ -625,30 +610,6 @@ class Casting(object):
             except (e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
                 # Will skip to the end of the loop, and start all over
                 pass
-
-    @property
-    def ribbon(self):
-        """Ribbon for the casting session"""
-        return self.__dict__.get('_ribbon') or Ribbon()
-
-    @ribbon.setter
-    def ribbon(self, ribbon):
-        """Ribbon setter"""
-        self.__dict__['_ribbon'] = ribbon or Ribbon()
-        if ribbon.diecase_id:
-            self.diecase = Diecase(ribbon.diecase_id)
-        if ribbon.wedge_name:
-            self.wedge = Wedge(ribbon.wedge_name)
-
-    @property
-    def wedge(self):
-        """Get the diecase's alternative wedge"""
-        return self.diecase.alt_wedge
-
-    @wedge.setter
-    def wedge(self, wedge):
-        """Set the diecase's alternative wedge"""
-        self.diecase.alt_wedge = wedge
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""

@@ -117,9 +117,9 @@ class Wedge(object):
         # each is 0.0005" = 1/2000", so -0.0185...+0.0935
         # The increment / decrement is absolute i.e. will mean different
         # numbers of units depending on set width. Let's calculate this.
-        min_units = 0.0185 / self.unit_inch_width
-        max_units = 0.0935 / self.unit_inch_width
-        return (min_units, max_units)
+        shrink_units = 0.0185 / self.unit_inch_width
+        stretch_units = 0.0935 / self.unit_inch_width
+        return (shrink_units, stretch_units)
 
 
 def enter_name(default='S5-12E'):
