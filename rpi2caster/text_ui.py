@@ -410,6 +410,7 @@ def edit_diecase_layout(diecase):
     while True:
         print('\nCurrent diecase layout:\n')
         display_diecase_layout(diecase)
+        print()
         try:
             ans = input(prompt).upper()
             if ans == 'AR':

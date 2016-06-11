@@ -142,21 +142,18 @@ def get_unit_value(ua_id, char, style):
     if not arrangement:
         raise UnitArrangementNotFound
     # Look up the character in accents
-    if char in ACCENTS:
-        lookup_character = char
-    else:
-        for letter in ACCENTS:
-            if char in ACCENTS[letter]:
-                lookup_character = letter
-                break
-    # Now look up the unit value for the character
-    for unit_value in arrangement:
-        if lookup_character in arrangement[unit_value]:
-            retval = unit_value
+    for letter, accent_list in ACCENTS.items():
+        if char in accent_list:
+            # Get a non-accented letter and use its unit value
+            char = letter
             break
+    # Otherwise, char is not a known accent
+    # Now look up the unit value for the character
+    for unit_value, character_list in arrangement.items():
+        if char in character_list:
+            return unit_value
     else:
         raise UnitValueNotFound
-    return retval
 
 
 def ua_by_style(styles_string=''):
