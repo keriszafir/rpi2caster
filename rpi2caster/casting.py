@@ -553,7 +553,7 @@ class Casting(TypesettingContext):
             caster = not self.caster.mode.punching
             diecase = bool(self.diecase)
             ribbon = bool(self.ribbon)
-            diecase_info = diecase and ' (current: %s)' % diecase or ''
+            diecase_info = diecase and ' (current: %s)' % self.diecase or ''
             opts = [(finish, 'Exit', 'Exits the program', True),
                     (self.cast_composition, 'Cast composition',
                      'Cast type from a selected ribbon', ribbon and caster),

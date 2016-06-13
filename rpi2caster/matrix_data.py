@@ -813,7 +813,7 @@ class Space(MatrixMixin):
         prompt = 'Enter the space width value and unit (or "?" for help)'
         while True:
             # If 0, use default
-            raw_string = width or UI.enter_data_or_default(prompt, '1en')
+            raw_string = str(width) or UI.enter_data_or_default(prompt, '1en')
             if '?' in raw_string:
                 # Display help message and start again
                 UI.display(help_text)

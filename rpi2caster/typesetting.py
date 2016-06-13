@@ -20,8 +20,7 @@ class TypesettingContext(object):
         self.diecase = Diecase(diecase_id)
         self.measure = Measure(self, measure)
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
-        if wedge_name:
-            self.wedge = Wedge(wedge_name)
+        self.wedge = wedge_name and Wedge(wedge_name) or self.diecase.wedge
 
     @property
     def ribbon(self):
