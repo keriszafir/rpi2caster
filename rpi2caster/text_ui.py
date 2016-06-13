@@ -400,20 +400,25 @@ def edit_diecase_layout(diecase):
 
     # Map unit values to rows
     # If the layout is empty, we need to initialize it
+    can_save = diecase.typeface and diecase.diecase_id
     prompt = ('Enter row number to edit all mats in a row,\n'
               'column number to edit all mats in a column,\n'
               'matrix coordinates to edit a single matrix,\n'
               'or choose edit mode: AR - all matrices row by row, '
               'AC - all matrices column by column.'
               '\nYou can swap two mats by entering: "swap coords1, coords2".'
-              '\nYour choice (or leave blank to exit) : ')
+              '%s'
+              '\nYour choice (or leave blank to exit) : '
+              % (can_save and '\nS to save diecase to database.' or ''))
     while True:
         print('\nCurrent diecase layout:\n')
         display_diecase_layout(diecase)
         print()
         try:
             ans = input(prompt).upper()
-            if ans == 'AR':
+            if ans == 'S' and can_save:
+                diecase.save_to_db()
+            elif ans == 'AR':
                 all_rows_mode()
             elif ans == 'AC':
                 all_columns_mode()

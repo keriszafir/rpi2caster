@@ -9,29 +9,34 @@ from .global_config import UI
 # Accented letters will use the same unit arrangement value as their
 # non-accented counterparts. We need a collection for determining
 # which letter's variation we have.
-ACCENTS = {'a': ['ą', 'ä', 'á', 'ã', 'â', 'ạ', 'à'],
-           'c': ['ć', 'ĉ', 'ç'],
-           'e': ['ę', 'ë', 'ȩ', 'ẽ', 'é', 'ê', 'è', 'ẹ'],
-           'g': ['ǵ', 'ĝ'],
-           'h': ['ḧ', 'ḩ', 'ĥ', 'ḥ'],
-           'i': ['ï', 'ĩ', 'í', 'î', 'ì', 'ị'],
-           'j': ['j́', 'ĵ'],
-           'k': ['ķ', 'ḱ', 'ḳ'],
-           'l': ['ł', 'ļ', 'ĺ', 'ḷ'],
-           'm': ['ḿ', 'ṃ'],
-           'n': ['ń', 'ņ', 'ñ', 'ǹ', 'ṇ'],
-           'o': ['ó', 'ö', 'õ', 'ô', 'ò', 'ọ'],
-           'p': ['þ', 'ṕ'],
-           'q': [],
-           'r': ['ŗ', 'ŕ', 'ṛ'],
-           's': ['ś', 'ş', 'ŝ', 'ṣ'],
-           't': ['ţ', 'ẗ', 'ṭ'],
-           'u': ['ü', 'ũ', 'ú', 'û', 'ù', 'ụ', 'ǘ', 'ǜ'],
-           'v': ['ṽ', 'ṿ'],
-           'w': ['ẅ', 'ẃ', 'ŵ', 'ẁ', 'ẉ'],
-           'x': ['ẍ'],
-           'y': ['ÿ', 'ỹ', 'ý', 'ŷ', 'ỳ', 'ỵ'],
-           'z': ['ż', 'ź', 'ẑ', 'ẓ']}
+ACCENTS = {'a': 'ąäáãâạà',
+           'c': 'ćĉç',
+           'e': 'ęëȩẽéêèẹ',
+           'g': 'ǵĝ',
+           'h': 'ḧḩĥḥ',
+           'i': 'ïĩíîìị',
+           'j': 'j́ĵ',
+           'k': 'ķḱḳ',
+           'l': 'łļĺḷ',
+           'm': 'ḿṃ',
+           'n': 'ńņñǹṇ',
+           'o': 'óöõôòọ',
+           'p': 'þṕ',
+           'q': '',
+           'r': 'ŗŕṛ',
+           's': 'śşŝṣ',
+           't': 'ţẗṭ',
+           'u': 'üũúûùụǘǜ',
+           'v': 'ṽṿ',
+           'w': 'ẅẃŵẁẉ',
+           'x': 'ẍ',
+           'y': 'ÿỹýŷỳỵ',
+           'z': 'żźẑẓ'}
+
+# Add accents for upper-case characters
+chars = [char for char in ACCENTS]
+for char in chars:
+    ACCENTS[char.upper()] = ACCENTS.get(char).upper()
 
 # Define unit arrangements for the fonts
 # This may in future be stored in data files (JSON-encoded?)
@@ -142,8 +147,8 @@ def get_unit_value(ua_id, char, style):
     if not arrangement:
         raise UnitArrangementNotFound
     # Look up the character in accents
-    for letter, accent_list in ACCENTS.items():
-        if char in accent_list:
+    for letter, accents_string in ACCENTS.items():
+        if char in accents_string:
             # Get a non-accented letter and use its unit value
             char = letter
             break

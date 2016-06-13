@@ -236,6 +236,9 @@ def main():
     #
     inv_parser = jobs.add_parser('inventory', aliases=['i', 'inv'],
                                  help='Matrix case management')
+    # Debug mode
+    inv_parser.add_argument('-d', '--debug', help='debug mode',
+                            action="store_true")
     # List the diecases and exit
     inv_parser.add_argument('-l', '--list_diecases', action='store_true',
                             help='list all diecases and finish')

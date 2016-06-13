@@ -304,7 +304,7 @@ class Diecase(object):
         for style, description in Styles(styles).items():
             chars_found = {mat.char for mat in self for char in charset
                            if char == mat.char and
-                           (mat.isspace() or style in mat.styles)}
+                           (mat.is_space or style in mat.styles)}
             missing = sorted(charset.difference(chars_found))
             if missing:
                 UI.display('Missing mats for %s: %s'
@@ -357,7 +357,7 @@ class Diecase(object):
         """Assigns a wedge (from database or newly-defined) to the diecase"""
         self.wedge = Wedge(wedge, manual_choice=not wedge)
 
-    def _save_to_db(self):
+    def save_to_db(self):
         """Stores the matrix case definition/layout in database"""
         try:
             DB.add_diecase(self)
@@ -422,7 +422,7 @@ class Diecase(object):
                 messages.extend(['Cannot save diecase with missing %s\n'
                                  % item.lower() for item in missing])
                 if not missing:
-                    options['S'] = self._save_to_db
+                    options['S'] = self.save_to_db
                     messages.append('[S]ave diecase to database,\n')
                 # Check if it's in the database
                 if self._check_db():
@@ -528,6 +528,13 @@ class MatrixMixin(object):
         self.row = p.get_row(signals)
         self.column = p.get_column(signals)
 
+    @property
+    def is_space(self):
+        """Is this a space?"""
+        # Low spaces/quads have a char multiple of " "; high - multiple of "_"
+        # Stripping all these characters will return nothing
+        return not self.char.replace(' ', '').replace('_', '')
+
     def get_row_units(self):
         """Gets a number of units for characters in the diecase row"""
         # Try wedges in order:
@@ -626,13 +633,6 @@ class Matrix(MatrixMixin):
     def is_high_space(self):
         """A space which is not a low space is a high space"""
         return self.is_space and not self.is_low_space
-
-    @property
-    def is_space(self):
-        """Is this a space?"""
-        # Low spaces/quads have a char multiple of " "; high - multiple of "_"
-        # Stripping all these characters will return nothing
-        return not self.char.replace(' ', '').replace('_', '')
 
     def _get_units_from_arrangement(self):
         """Try getting the unit width value from diecase's unit arrangement,
@@ -922,10 +922,7 @@ def import_layout_file():
                 (char, styles, coordinates) = record[:3]
                 units = 0
             # Strip unneeded whitespace from character
-            if char.isspace():
-                char = ' '
-            else:
-                char = char.strip()
+            char = char.isspace() and ' ' or char.strip()
             # Parse styles and order them
             styles = Styles(styles)()
             # Determine the diecase size, override previous size if larger
