@@ -528,7 +528,7 @@ class Casting(TypesettingContext):
                     (self._test_rear_pinblock, 'Test the rear pin block',
                      'Test the pins NI, NL, A...N, one by one', caster),
                     (self._blow_all, 'Blow all air pins',
-                     'Blow air into every pin for a short time', True)
+                     'Blow air into every pin for a short time', True),
                     (self._test_justification, 'Test the justification block',
                      'Test the pins for 0075, S and 0005, one by one', caster),
                     (self._test_any_code, 'Send specified signal combination',
