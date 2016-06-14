@@ -238,13 +238,13 @@ class Stats(object):
         # Check 0005
         if p.check_0005(combination):
             candidates = [x for x in range(15) if str(x) in combination]
-            self.__dict__['_current']['0005'] = (candidates and
-                                                 str(max(candidates)) or '15')
+            self.__dict__['_current']['0005'] = (str(max(candidates))
+                                                 if candidates else '15')
         # Check 0075
         if p.check_0075(combination):
             candidates = [x for x in range(15) if str(x) in combination]
-            self.__dict__['_current']['0075'] = (candidates and
-                                                 str(max(candidates)) or '15')
+            self.__dict__['_current']['0075'] = (str(max(candidates))
+                                                 if candidates else'15')
 
     def _check_double_justification(self):
         """Checks the current and previous signals for 0075+0005 -> 0075

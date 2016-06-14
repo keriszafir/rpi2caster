@@ -102,7 +102,8 @@ def adjust_signals(worker_function):
         if self.mode.punching and 'O15' not in signals:
             signals.append('O15')
         # Adjust the signals just before casting; show the new combination
-        UI.display(signals and ('Sending: ' + ' '.join(signals)) or '')
+        UI.display('Sending %s' % (' '.join(signals) if signals
+                                   else 'no signals'))
         return worker_function(self, signals, *args, **kw)
     return wrapper
 

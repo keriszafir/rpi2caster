@@ -34,9 +34,8 @@ ACCENTS = {'a': 'ąäáãâạà',
            'z': 'żźẑẓ'}
 
 # Add accents for upper-case characters
-chars = [char for char in ACCENTS]
-for char in chars:
-    ACCENTS[char.upper()] = ACCENTS.get(char).upper()
+for unaccented_char in [char for char in ACCENTS]:
+    ACCENTS[unaccented_char.upper()] = ACCENTS.get(unaccented_char).upper()
 
 # Define unit arrangements for the fonts
 # This may in future be stored in data files (JSON-encoded?)
@@ -157,8 +156,8 @@ def get_unit_value(ua_id, char, style):
     for unit_value, character_list in arrangement.items():
         if char in character_list:
             return unit_value
-    else:
-        raise UnitValueNotFound
+    # Falling off the loop means nothing is found - raise exception
+    raise UnitValueNotFound
 
 
 def ua_by_style(styles_string=''):
@@ -193,10 +192,8 @@ def char_unit_values(mapping):
         # End here.
         if not units_dict:
             continue
-        style_dict = {}
-        for unit_value in units_dict:
-            for character in units_dict[unit_value]:
-                style_dict[character] = unit_value
+        style_dict = {character: unit_value for unit_value in units_dict
+                      for character in units_dict.get(unit_value, {})}
         # Add the style character unit values to the collected data dict
         if style_dict:
             data[style] = style_dict

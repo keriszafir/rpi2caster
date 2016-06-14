@@ -47,7 +47,7 @@ def update(args):
     dev_prompt = 'Testing version (newest features, but unstable)? '
     if confirm('Update the software?', default=False):
         use_dev_version = args.testing or confirm(dev_prompt, default=False)
-        pre = use_dev_version and '--pre' or ''
+        pre = '--pre' if use_dev_version else ''
         print('You may be asked for the admin password...')
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)
 

@@ -14,10 +14,10 @@ def choose_sensor_and_driver(casting_routine):
         """Wrapper function"""
         mode = self.caster.mode
         UI.debug_pause('About to %s...' %
-                       (mode.casting and 'cast composition' or
-                        mode.testing and 'test the outputs' or
-                        mode.calibration and 'calibrate the machine' or
-                        mode.punching and 'punch the ribbon'))
+                       ('cast composition' if mode.casting
+                        else 'test the outputs' if mode.testing
+                        else 'calibrate the machine' if mode.calibration
+                        else 'punch the ribbon' if mode.punching else 'blow'))
         # Instantiate and enter context
         sensor, output = mode.casting_backend
         with sensor() as self.caster.sensor:
@@ -79,3 +79,14 @@ def temp_measure(routine):
             # Just do it
             return routine(self, *args, **kwargs)
     return wrapper
+
+
+def singleton(cls):
+    """Decorator function for singletons"""
+    instances = {}
+
+    def getinstance():
+        if cls not in instances:
+            instances[cls] = cls()
+        return instances[cls]
+    return getinstance

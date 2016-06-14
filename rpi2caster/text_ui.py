@@ -262,7 +262,7 @@ def confirm(question, default=None):
     def_string = ''
     if default is True or default is False:
         options[''] = default
-        def_string = ', default: %s' % (default and 'Y' or 'N')
+        def_string = ', default: %s' % ('Y' if default is True else 'N')
     return simple_menu('%s [Y / N%s]: ' % (question, def_string), options)
 
 

@@ -20,7 +20,7 @@ class TypesettingContext(object):
         self.diecase = Diecase(diecase_id)
         self.measure = Measure(self, measure)
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
-        self.wedge = wedge_name and Wedge(wedge_name) or self.diecase.wedge
+        self.wedge = Wedge(wedge_name) if wedge_name else self.diecase.wedge
 
     @property
     def ribbon(self):
@@ -85,12 +85,12 @@ class Typesetting(TypesettingContext):
                  diecase_id='', wedge_name='', measure='', manual_mode=False):
         super().__init__(ribbon_file, ribbon_id, diecase_id, wedge_name,
                          measure)
-        self.source = text_file and open_file(text_file) or []
+        self.source = open_file(text_file) if text_file else []
         # Use a manual compositor (user decides where to break the line)
         # or automatic compositor (hyphenation and justification is done
         # automatically with the Knuth-Plass algorithm)
-        self.compositor = (manual_mode and ManualCompositor(self) or
-                           AutoCompositor(self))
+        self.compositor = (ManualCompositor(self) if manual_mode
+                           else AutoCompositor(self))
 
     def main_menu(self):
         """Main menu for the typesetting utility."""

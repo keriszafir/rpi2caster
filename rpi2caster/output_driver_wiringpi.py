@@ -11,7 +11,7 @@ except ImportError:
 from .monotype import SimulationOutput
 from .exceptions import WrongConfiguration
 from .global_config import PIN_BASE, MCP0, MCP1
-from .helpers import singleton
+from .decorators import singleton
 
 
 @singleton

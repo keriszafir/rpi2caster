@@ -82,7 +82,7 @@ def parse_signals(input_signals):
     # From remaining numbers, determine row numbers.
     # The highest number will be removed from the raw_signals to avoid
     # erroneously adding its digits as signals.
-    rows = row_16_found and ['16'] or []
+    rows = ['16'] if row_16_found else []
     for row in range(14, 0, -1):
         if str(row) in signals:
             rows.append(str(row))
@@ -148,8 +148,8 @@ def stop_comes_first(contents):
 
 def get_column(signals):
     """Gets the lowest column number from the signals list."""
-    decoded_signals = ({'N', 'I'}.issubset(signals) and 'NI' or
-                       {'N', 'L'}.issubset(signals) and 'NL' or signals)
+    decoded_signals = ('NI' if {'N', 'I'}.issubset(signals)
+                       else 'NL' if {'N', 'L'}.issubset(signals) else signals)
     generator = (x for x in constants.COLUMNS_17 if x in decoded_signals)
     try:
         return next(generator)

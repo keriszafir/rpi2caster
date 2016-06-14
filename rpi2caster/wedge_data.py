@@ -39,7 +39,7 @@ class Wedge(object):
         or .166" (new British; American). The .1667" was commonly used with
         wedges made for European markets (wedge designation series-setE).
         Curiously, the old British pica is the same as modern DTP pica."""
-        return self.is_brit_pica and 0.1667 or 0.166
+        return 0.1667 if self.is_brit_pica else 0.166
 
     @property
     def name(self):

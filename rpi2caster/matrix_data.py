@@ -451,12 +451,12 @@ class MatrixMixin(object):
             s_signal = 'S'
         else:
             s_signal = ''
-        comment = (self.is_low_space and
-                   ' // low space %.2f points wide' % self.points or
-                   self.is_high_space and
-                   ' // high space %.2f points wide' % self.points or
-                   self.char and
-                   ' // %s %s' % (Styles(self.styles), self.char) or '')
+        comment = (' // low space %.2f points wide' % self.points
+                   if self.is_low_space
+                   else ' // high space %.2f points wide' % self.points
+                   if self.is_high_space
+                   else ' // %s %s' % (Styles(self.styles), self.char)
+                   if self.char else '')
         return '%s%s%s%s' % (self.column, s_signal, self.row, comment)
 
     def __call__(self, units):
@@ -553,7 +553,7 @@ class MatrixMixin(object):
         stretch = self.diecase.alt_wedge.adjustment_limits[1]
         full_width = self.get_row_units() + stretch
         width_cap = 20
-        return self.is_low_space and full_width or min(full_width, width_cap)
+        return full_width if self.is_low_space else min(full_width, width_cap)
 
     def wedge_positions(self, unit_correction=0):
         """Calculate the 0075 and 0005 wedge positions for this matrix
@@ -647,8 +647,8 @@ class Matrix(MatrixMixin):
 
     def edit(self):
         """Edits the matrix data"""
-        char = self.char and 'char: "%s"' % self.char or 'character not set'
-        styles = self.styles and 'styles: %s' % self.styles or ''
+        char = 'char: "%s"' % self.char if self.char else 'character not set'
+        styles = 'styles: %s' % self.styles if self.styles else ''
         UI.display('\n' + '*' * 80 + '\n')
         UI.display('%s %s %s, units: %s'
                    % (self.code, styles, char, self.units))
@@ -671,7 +671,7 @@ class Matrix(MatrixMixin):
         mostly used for matrices placed in a different row than the
         unit arrangement indicates; this will make the program set the
         justification wedges and cast the character with the S-needle"""
-        desc = self.char and '"%s" at ' % self.char or ''
+        desc = '"%s" at ' % self.char if self.char else ''
         try:
             ua_units = self._get_units_from_arrangement()
             UI.display('%s%s unit values: %s by UA, %s by row'
@@ -714,7 +714,7 @@ class Space(MatrixMixin):
     @property
     def char(self):
         """Get a character for the space, for compatibility with Matrix"""
-        char = self.is_low_space and ' ' or '_'
+        char = ' ' if self.is_low_space else '_'
         if self.units >= 18:
             # "   " (low) or "___" (high) for em-quads and more
             multiple = 3
@@ -922,7 +922,7 @@ def import_layout_file():
                 (char, styles, coordinates) = record[:3]
                 units = 0
             # Strip unneeded whitespace from character
-            char = char.isspace() and ' ' or char.strip()
+            char = ' ' if char.isspace() else char.strip()
             # Parse styles and order them
             styles = Styles(styles)()
             # Determine the diecase size, override previous size if larger
@@ -952,7 +952,7 @@ def generate_empty_layout(rows=None, columns=None):
             return
         (rows, columns) = choice
     # Generate column numbers
-    columns_list = columns == 17 and c.COLUMNS_17 or c.COLUMNS_15
+    columns_list = c.COLUMNS_17 if columns == 17 else c.COLUMNS_15
     # Generate row numbers: 1...15 or 1...16
     rows_list = [num + 1 for num in range(rows)]
     return (('', '', '%s%s' % (column, row), 0)

@@ -80,11 +80,11 @@ FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'q': 0.505},
          'pl': {'r': 5.243, 'u': 2.062, 'd': 3.725, 'ń': 0.362, 'l': 2.564,
                 'f': 0.143, 'v': 0.012, 'n': 6.237, 'ą': 0.699, 'g': 1.731,
-                'b': 1.74, 'o': 6.667, 'k': 2.753, 's': 5.224, 'w': 5.813,
+                'b': 1.740, 'o': 6.667, 'k': 2.753, 's': 5.224, 'w': 5.813,
                 'ś': 0.814, 'ć': 0.743, 'p': 2.445, 'y': 3.206, 'a': 10.503,
                 'm': 2.515, 'ó': 1.141, 'x': 0.004, 'j': 1.836, 'z': 4.852,
                 'ę': 1.035, 'h': 1.015, 't': 2.475, 'c': 3.895, 'i': 8.328,
-                'e': 7.352, 'ł': 2.109, 'ż': 0.706, 'ź': 0.078},
+                'e': 7.352, 'ł': 2.109, 'ż': 0.706, 'ź': 0.078, 'y': 4.200},
          'tr': {'r': 7.722, 'u': 3.235, 'd': 5.206, 'l': 5.922, 'f': 0.461,
                 'ğ': 1.125, 'v': 0.959, 'n': 7.987, 'g': 1.253, 'b': 2.844,
                 'o': 2.976, 'k': 5.683, 'ı': 5.114, 'p': 0.886, 'y': 3.336,
@@ -124,7 +124,7 @@ class CharFreqs(object):
              'sv': 'Swedish', '#': 'numbers'}
 
     def __init__(self, lang=None):
-        self.lang = lang in CharFreqs.langs and lang or choose_language()
+        self.lang = CharFreqs.langs.get(lang) or choose_language()
         self.scale = 1.0
         self.case_ratio = 1
 
@@ -152,7 +152,7 @@ class CharFreqs(object):
         for each character."""
         def quantity(char, upper=False):
             """Calculate character quantity based on frequency"""
-            ratio = upper and self.case_ratio or 1
+            ratio = self.case_ratio if upper else 1
             normalized_qty = self.freqs.get(char, 0) / self.freqs.get('a', 1)
             return max(ceil(normalized_qty * self.scale * ratio), 10)
 

@@ -92,8 +92,8 @@ class Casting(TypesettingContext):
             self.stats.runs = abs(UI.enter_data_or_default(prompt, 1, int))
             # Line skipping - ask user if they want to skip any initial line(s)
             prompt = 'How many initial lines do you want to skip?'
-            l_skipped = (self.stats.get_ribbon_lines() > 2 and
-                         abs(UI.enter_data_or_default(prompt, 0, int)) or 0)
+            l_skipped = (abs(UI.enter_data_or_default(prompt, 0, int))
+                         if self.stats.get_ribbon_lines() > 2 else 0)
         UI.display_parameters({'Session info': self.stats.session_parameters})
         # For each casting run repeat
         while self.stats.get_runs_left():
@@ -228,7 +228,7 @@ class Casting(TypesettingContext):
         """
         order = []
         while True:
-            char = self.diecase and UI.enter_data_or_blank('Character?') or ''
+            char = UI.enter_data_or_blank('Character?') if self.diecase else ''
             matrix = self.diecase.find_matrix(char)
             matrix.specify_units()
             qty = UI.enter_data_or_default('How many sorts?', 10, int)
@@ -315,7 +315,7 @@ class Casting(TypesettingContext):
         builder.quad_padding = quad_padding
         builder.cooldown_spaces = True
         builder.mould_heatup_quads = UI.confirm('Pre-heat the mould?', True)
-        job = self.caster.mode.punching and 'punching' or 'casting'
+        job = 'punching' if self.caster.mode.punching else 'casting'
         UI.display('Generating a sequence for %s...' % job)
         queue = builder.build_galley()
         UI.display('\nReady for %s...\n\n' % job)
@@ -452,7 +452,7 @@ class Casting(TypesettingContext):
                 return
             (rows, columns) = choice
         # Generate column numbers
-        columns_list = columns == 17 and c.COLUMNS_17 or c.COLUMNS_15
+        columns_list = c.COLUMNS_17 if columns == 17 else c.COLUMNS_15
         # Generate row numbers: 1...15 or 1...16
         rows_list = [num + 1 for num in range(rows)]
         # Sequence to cast starts with pump stop and galley trip
@@ -553,7 +553,7 @@ class Casting(TypesettingContext):
             caster = not self.caster.mode.punching
             diecase = bool(self.diecase)
             ribbon = bool(self.ribbon)
-            diecase_info = diecase and ' (current: %s)' % self.diecase or ''
+            diecase_info = ' (current: %s)' % self.diecase if diecase else ''
             opts = [(finish, 'Exit', 'Exits the program', True),
                     (self.cast_composition, 'Cast composition',
                      'Cast type from a selected ribbon', ribbon and caster),

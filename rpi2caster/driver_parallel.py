@@ -4,7 +4,7 @@ import time
 from parallel import Parallel
 from .monotype import SimulationSensor, SimulationOutput
 from .global_config import UI, SIGNALS_ARRANGEMENT
-from .helpers import singleton
+from .decorators import singleton
 
 
 @singleton
