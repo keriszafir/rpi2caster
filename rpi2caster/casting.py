@@ -16,6 +16,7 @@ A module for everything related to working on a Monotype composition caster:
 
 # IMPORTS:
 from collections import deque
+from time import sleep
 # Signals parsing methods for rpi2caster
 from . import parsing as p
 # Custom exceptions
@@ -213,6 +214,27 @@ class Casting(TypesettingContext):
             else:
                 break
         self.caster.mode.testing = False
+
+    @dec.choose_sensor_and_driver
+    def _blow_all(self):
+        """Blow all signals for a short time; add NI, NL also"""
+        self.caster.mode.testing = True
+        UI.display('Blowing air through all air pins on both pinblocks...')
+        queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7', 'H8'
+                 'I9', 'J10', 'K11', 'L12', 'M13', 'N14', '0075', '0005', 'S']
+        try:
+            while True:
+                for combination in queue:
+                    signals = p.parse_signals(combination)
+                    sleep(0.2)
+                    UI.display('Activating ' + ' '.join(signals))
+                    self.caster.output.valves_on(signals)
+                    sleep(0.2)
+                    self.caster.output.valves_off()
+                if not UI.confirm('Repeat?', False):
+                    break
+        except (KeyboardInterrupt, EOFError):
+            self.caster.output.valves_off()
 
     @dec.cast_or_punch_result
     def cast_composition(self):
@@ -505,6 +527,8 @@ class Casting(TypesettingContext):
                      'Test the pins 1...14', caster),
                     (self._test_rear_pinblock, 'Test the rear pin block',
                      'Test the pins NI, NL, A...N, one by one', caster),
+                    (self._blow_all, 'Blow all air pins',
+                     'Blow air into every pin for a short time', True)
                     (self._test_justification, 'Test the justification block',
                      'Test the pins for 0075, S and 0005, one by one', caster),
                     (self._test_any_code, 'Send specified signal combination',
@@ -519,8 +543,6 @@ class Casting(TypesettingContext):
                     (self._calibrate_draw_rods, 'Calibrate diecase draw rods',
                      'Keep the matrix case at G8 and adjust the draw rods',
                      caster),
-                    (self._diecase_proof, 'Diecase proof',
-                     'Cast every character from the diecase', caster),
                     (self._test_row_16, 'Test HMN, KMN or unit-shift',
                      'Cast type from row 16 with chosen addressing mode',
                      caster)]
@@ -589,6 +611,8 @@ class Casting(TypesettingContext):
                      'Display ribbon and interface details', not caster),
                     (diecase_operations, 'Matrix manipulation...',
                      'Work on matrix cases', True),
+                    (self._diecase_proof, 'Diecase proof',
+                     'Cast every character from the diecase', True),
                     (self.diagnostics_submenu, 'Service...',
                      'Interface and machine diagnostic functions', True)]
             # Built a list of menu options conditionally
