@@ -220,16 +220,16 @@ class Casting(TypesettingContext):
         """Blow all signals for a short time; add NI, NL also"""
         self.caster.mode.testing = True
         UI.pause('Blowing air through all air pins on both pinblocks...')
-        queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7', 'H8'
+        queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7', 'H8',
                  'I9', 'J10', 'K11', 'L12', 'M13', 'N14', '0075', '0005', 'S']
         try:
             while True:
                 for combination in queue:
                     signals = p.parse_signals(combination)
-                    sleep(0.5)
+                    sleep(0.3)
                     UI.display('Activating ' + ' '.join(signals))
                     self.caster.output.valves_on(signals)
-                    sleep(0.5)
+                    sleep(0.3)
                     self.caster.output.valves_off()
                 if not UI.confirm('Repeat?', True):
                     break
