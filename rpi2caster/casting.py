@@ -392,11 +392,11 @@ class Casting(TypesettingContext):
                    'until the lengths are the same.')
         if not UI.confirm('\nProceed?', default=True):
             return None
-        mat = self.diecase.decode_matrix('G5')
         self.caster.mode.calibration = True
         sequence = tsf.end_casting()
-        sequence.extend(['S %s with S-needle' % mat] * 7)
-        sequence.extend(['%s' % mat] * 7)
+        sequence.extend(['GS5'] * 7)
+        sequence.extend(tsf.double_justification())
+        sequence.extend(['G5'] * 7)
         sequence.extend(tsf.double_justification())
         return sequence
 
