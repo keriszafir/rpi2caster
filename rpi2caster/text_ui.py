@@ -285,7 +285,7 @@ def display_diecase_layout(diecase):
         """Get the column width"""
         return column_widths.get(column, 4)
 
-    def get_unit_value(mat):
+    def get_mat_unit_value(mat):
         """Get the unit value string for a character, if the width
         overrides the wedge default"""
         show_units = (mat.units != wedge_row_units and
@@ -328,7 +328,7 @@ def display_diecase_layout(diecase):
             for mat in diecase:
                 if mat.code == '%s%s' % (col, row):
                     items.append(get_char(mat).center(width))
-                    units_row.append(get_unit_value(mat).center(width))
+                    units_row.append(get_mat_unit_value(mat).center(width))
                     # No need to iterate further
                     break
         items = ['|', str(row).center(3), '|', ''.join(items),

@@ -140,10 +140,21 @@ UA = {'82': {'r': {5: ['f', 'i', 'I', 'j', 'J', 'l'],
                     15: ['W']}}}
 
 
-def get_unit_value(ua_id, char, style):
+def get_unit_value(ua_id, char, styles):
     """Get an unit value for a given character and style."""
-    arrangement = UA.get(str(ua_id)).get(style)
-    if not arrangement:
+    # Get the unit arrangement for a given style
+    # Caveat: some arrangements are used for bold etc. (non-regular) styles,
+    # but are defined only for roman. If no arrangement for a given style
+    # is found, try using roman instead.
+    arrangement = UA.get(str(ua_id)) or {}
+    style_arrangement = {}
+    for style in styles:
+        style_arrangement = arrangement.get(style)
+        if style_arrangement:
+            break
+    else:
+        style_arrangement = arrangement.get('r')
+    if not style_arrangement:
         raise UnitArrangementNotFound
     # Look up the character in accents
     for letter, accents_string in ACCENTS.items():
@@ -153,7 +164,7 @@ def get_unit_value(ua_id, char, style):
             break
     # Otherwise, char is not a known accent
     # Now look up the unit value for the character
-    for unit_value, character_list in arrangement.items():
+    for unit_value, character_list in style_arrangement.items():
         if char in character_list:
             return unit_value
     # Falling off the loop means nothing is found - raise exception

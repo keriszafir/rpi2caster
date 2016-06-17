@@ -471,6 +471,7 @@ class MatrixMixin(object):
         # If units are assigned to the matrix, return the value
         # Otherwise, wedge default
         units = (self.__dict__.get('_units', 0) or
+                 self.get_units_from_arrangement() or
                  self.diecase.wedge.units[self.row])
         return units
 
@@ -555,6 +556,20 @@ class MatrixMixin(object):
         width_cap = 20
         return full_width if self.is_low_space else min(full_width, width_cap)
 
+    def get_units_from_arrangement(self):
+        """Try getting the unit width value from diecase's unit arrangement,
+        if that fails, return 0"""
+        retval = 0
+        for style, ua_id in self.diecase.ua_mapping:
+            if style in self.styles:
+                try:
+                    retval = ua.get_unit_value(ua_id, self.char, self.styles)
+                    break
+                except (AttributeError, TypeError, KeyError, ValueError,
+                        e.UnitArrangementNotFound, e.UnitValueNotFound):
+                    pass
+        return retval
+
     def wedge_positions(self, unit_correction=0):
         """Calculate the 0075 and 0005 wedge positions for this matrix
         based on the current wedge used"""
@@ -634,17 +649,6 @@ class Matrix(MatrixMixin):
         """A space which is not a low space is a high space"""
         return self.is_space and not self.is_low_space
 
-    def _get_units_from_arrangement(self):
-        """Try getting the unit width value from diecase's unit arrangement,
-        if that fails, return None"""
-        try:
-            for style, ua_id in self.diecase.ua_mapping:
-                if style in self.styles:
-                    return ua.get_unit_value(ua_id, self.char, self.styles)
-        except (AttributeError, e.UnitArrangementNotFound,
-                e.UnitValueNotFound):
-            return None
-
     def edit(self):
         """Edits the matrix data"""
         char = 'char: "%s"' % self.char if self.char else 'character not set'
@@ -672,16 +676,17 @@ class Matrix(MatrixMixin):
         unit arrangement indicates; this will make the program set the
         justification wedges and cast the character with the S-needle"""
         desc = '"%s" at ' % self.char if self.char else ''
-        try:
-            ua_units = self._get_units_from_arrangement()
+        ua_units = self.get_units_from_arrangement()
+        row_units = self.get_row_units()
+        if ua_units:
             UI.display('%s%s unit values: %s by UA, %s by row'
-                       % (desc, self.code, ua_units, self.get_row_units()))
-        except (AttributeError,
-                e.UnitArrangementNotFound, e.UnitValueNotFound):
+                       % (desc, self.code, ua_units, row_units))
+            prompt = 'New unit value? (0 = UA units, blank = current)'
+        else:
             UI.display('%s%s row unit value: %s'
-                       % (desc, self.code, self.get_row_units()))
-        prompt = 'New unit value? (0 = row units, blank = current)'
-        self.units = UI.enter_data_or_default(prompt, self.units, int)
+                       % (desc, self.code, self.row_units))
+            prompt = 'New unit value? (0 = row units, blank = current)'
+        self.units = UI.enter_data_or_default(prompt, self.units, float)
 
     def choose_styles(self):
         """Choose styles for the matrix"""
@@ -710,6 +715,11 @@ class Space(MatrixMixin):
     def is_space(self):
         """By definition, True"""
         return True
+
+    @property
+    def is_high_space(self):
+        """True if not low space"""
+        return not self.is_low_space
 
     @property
     def char(self):
