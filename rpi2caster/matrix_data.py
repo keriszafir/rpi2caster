@@ -684,7 +684,7 @@ class Matrix(MatrixMixin):
             prompt = 'New unit value? (0 = UA units, blank = current)'
         else:
             UI.display('%s%s row unit value: %s'
-                       % (desc, self.code, self.row_units))
+                       % (desc, self.code, row_units))
             prompt = 'New unit value? (0 = row units, blank = current)'
         self.units = UI.enter_data_or_default(prompt, self.units, float)
 
