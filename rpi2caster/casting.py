@@ -122,7 +122,7 @@ class Casting(TypesettingContext):
                     default_runs = 1 if mode.diagnostics else 0
                     prompt = 'Repeat how many times?'
                     runs = UI.enter_data_or_default(prompt, default_runs, int)
-                    self.stats.runs += runs
+                    self.stats.runs += abs(runs)
             elif mode.casting and UI.confirm('Retry this run?', default=True):
                 # Casting aborted - ask if user wants to repeat
                 self.stats.undo_last_run()
