@@ -25,11 +25,6 @@ class Stats(object):
         session = self.__dict__['_session']
         return session.get('runs', 1) - session.get('runs_done', 0) <= 0
 
-    def add_one_more_run(self):
-        """Adds one to all_runs number - in case of repeating the job"""
-        # Updating the attribute to trigger the "magic" in self.runs setter
-        self.runs += 1
-
     def undo_last_run(self):
         """Subtracts the current run stats from all runs stats;
         this is called before repeating a failed casting run."""

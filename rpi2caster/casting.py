@@ -114,25 +114,26 @@ class Casting(TypesettingContext):
             queue.appendleft(code)
             # The ribbon is ready for casting / punching
             self.stats.queue = queue
-            exit_prompt = '[Y] to start next run or [N] to exit?'
             if self.process_casting_run(queue):
                 # Casting successful - ready to cast next run - ask to repeat
                 # after the last run is completed (because user may want to
                 # cast / punch once more?)
-                if (self.stats.all_done() and
-                        UI.confirm('One more run?', default=mode.diagnostics)):
-                    self.stats.add_one_more_run()
+                if self.stats.all_done():
+                    default_runs = 1 if mode.diagnostics else 0
+                    prompt = 'Repeat how many times?'
+                    runs = UI.enter_data_or_default(prompt, default_runs, int)
+                    self.stats.runs += runs
             elif mode.casting and UI.confirm('Retry this run?', default=True):
                 # Casting aborted - ask if user wants to repeat
                 self.stats.undo_last_run()
-                self.stats.add_one_more_run()
+                self.stats.runs += 1
                 lines_ok = self.stats.get_lines_done()
                 prompt = 'Skip %s lines successfully cast?' % lines_ok
                 if lines_ok > 0 and UI.confirm(prompt, default=True):
                     l_skipped = lines_ok
                 # Start this run again
             elif (not self.stats.all_done() and
-                  UI.confirm(exit_prompt, default=True)):
+                  UI.confirm('[Y] = next run or [N] = exit?', default=True)):
                 # There are some more runs to do - go on?
                 self.stats.undo_last_run()
             else:
