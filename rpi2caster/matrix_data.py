@@ -181,7 +181,7 @@ class Diecase(object):
     def find_matrix(self, char='', style=''):
         """Chooses a matrix automatically or manually (if multiple matches),
         allows to specify matrix data manually if no matches found"""
-        def enter_manually(char='', style=''):
+        def enter_parameters(char='', style=''):
             """Specify matrix by entering code"""
             if char:
                 st_string = str(Styles(style))
@@ -195,6 +195,29 @@ class Diecase(object):
                 char = ''
             code = UI.enter_data_or_default('Mat position?', 'G5').upper()
             matrix = Matrix(char=char, style=style, code=code, diecase=self)
+            return matrix
+
+        def choose_from_menu(candidates):
+            """If multiple mats match, let the user choose one from a menu"""
+            st_string = str(Styles(style))
+            if 'all' in st_string:
+                st_string = ''
+            else:
+                st_string = ' ' + st_string
+            what = spaces.get(char) or '%s"%s"' % (st_string, char)
+            UI.display_header('Multiple matrices for %s' % what)
+            # Show a menu with multiple candidates
+            mats = {i: mat for i, mat in enumerate(candidates, start=1)}
+            UI.display(''.join(['Index'.ljust(10), 'Char'.ljust(10),
+                                'Styles'.ljust(30), 'Coordinates']))
+            for i, mat in mats.items():
+                matrix_styles = str(Styles(mat.styles))
+                record = [str(i).ljust(10), mat.char.ljust(10),
+                          matrix_styles.ljust(30), mat.code]
+                UI.display(''.join(record))
+            prompt = 'Choose matrix (leave blank to enter manually)'
+            choice = UI.enter_data_or_blank(prompt, int)
+            matrix = copy(mats.get(choice)) or enter_parameters(char, style)
             return matrix
 
         spaces = {' ': 'low space', '_': 'high space'}
@@ -218,33 +241,10 @@ class Diecase(object):
                           if style in mat.styles or not self.styles]
         else:
             candidates = []
-        # Built the list of candidates...
-        if not candidates:
-            return enter_manually(char, style)
-        elif len(candidates) == 1:
-            return copy(candidates[0])
-        else:
-            # Multiple matches found = let user choose
-            st_string = str(Styles(style))
-            if 'all' in st_string:
-                st_string = ''
-            else:
-                st_string = ' ' + st_string
-            what = spaces.get(char) or '%s"%s"' % (st_string, char)
-            UI.display_header('Multiple matrices for %s' % what)
-            # Show a menu with multiple candidates
-            mats = {i: mat for i, mat in enumerate(candidates, start=1)}
-            UI.display(''.join(['Index'.ljust(10), 'Char'.ljust(10),
-                                'Styles'.ljust(30), 'Coordinates']))
-            for i, mat in mats.items():
-                matrix_styles = str(Styles(mat.styles))
-                record = [str(i).ljust(10), mat.char.ljust(10),
-                          matrix_styles.ljust(30), mat.code]
-                UI.display(''.join(record))
-            prompt = 'Choose matrix (leave blank to enter manually)'
-            choice = UI.enter_data_or_blank(prompt, int)
-            matrix = copy(mats.get(choice)) or enter_manually(char, style)
-            return matrix
+        # Decide what to do based on the length of candidate list
+        return (copy(candidates[0]) if len(candidates) == 1
+                else enter_parameters(char, style) if not candidates
+                else choose_from_menu(candidates))
 
     def decode_matrix(self, code):
         """Finds the matrix based on the column and row in layout"""
