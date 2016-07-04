@@ -35,7 +35,7 @@ def cast_or_punch_result(ribbon_source):
         try:
             ribbon = ribbon_source(self, *args, **kwargs)
             if ribbon:
-                self.cast_codes(ribbon)
+                self.cast_ribbon(ribbon)
         except CastingAborted:
             pass
         finally:

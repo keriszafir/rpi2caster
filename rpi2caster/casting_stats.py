@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Casting stats - implements stats getting and setting"""
 from . import parsing as p
+from .global_config import UI
 
 
 class Stats(object):
@@ -22,12 +23,14 @@ class Stats(object):
 
     def all_done(self):
         """Check if there are runs left"""
-        session = self.__dict__['_session']
-        return session.get('runs', 1) - session.get('runs_done', 0) <= 0
+        runs_done = self.__dict__['_session'].get('runs_done', 0)
+        all_runs = self.__dict__['_session'].get('runs', 1)
+        return False if runs_done < all_runs else True
 
     def undo_last_run(self):
         """Subtracts the current run stats from all runs stats;
         this is called before repeating a failed casting run."""
+        self.end_run()
         session = self.__dict__['_session']
         run = self.__dict__['_run']
         session['failed_runs'] = session.get('failed_runs', 0) + 1
@@ -50,6 +53,70 @@ class Stats(object):
     def get_current_run(self):
         """Gets the current run number"""
         return self.__dict__.get('_session', {}).get('current_run', 1)
+
+    def set_session_lines_skipped(self):
+        """Skip lines before casting or after aborting the job"""
+        # Offer to skip lines only if enough of them were cast
+        ask = UI.enter_data_or_default
+        lines_in_ribbon = self.get_ribbon_lines()
+        prompt = 'min: 0, max: %s' % (lines_in_ribbon - 1)
+        # Skip lines effective for ALL runs
+        if self.session.caster.mode.casting and lines_in_ribbon > 2:
+            UI.display('How many lines of composition to skip for ALL runs?')
+            session_lines_skipped = -1
+            while not 0 <= session_lines_skipped < lines_in_ribbon:
+                session_lines_skipped = ask(prompt, 0, int)
+        else:
+            session_lines_skipped = 0
+        self.__dict__['_session']['lines_skipped'] = session_lines_skipped
+
+    def set_run_lines_skipped(self):
+        """Set lines to skip for the upcoming run only"""
+        ask = UI.enter_data_or_default
+        lines_in_ribbon = self.get_ribbon_lines()
+        lines_ok = self.get_lines_done()
+        prompt = 'min: 0, max: %s' % (lines_in_ribbon - 1)
+        # Skip lines effective for UPCOMING run only
+        if self.session.caster.mode.casting and lines_in_ribbon > 1:
+            lines_skipped = lines_ok - 2 if lines_ok >= 2 else 0
+            if lines_skipped:
+                UI.display('%s lines were cast in the last run.' % lines_ok)
+                UI.display('We can skip two less - to heat up the mould.')
+            UI.display('How many lines to skip for THIS run?')
+            choice = -1
+            while not 0 <= choice < lines_in_ribbon:
+                choice = ask(prompt, lines_skipped, int)
+        else:
+            choice = 0
+        self.__dict__['_run']['lines_skipped'] = choice
+
+    def get_lines_skipped(self):
+        """Get a number of lines to skip - decide whether to use
+        the run or ribbon skipped lines"""
+        return (self.__dict__.get('_run').get('lines_skipped') or
+                self.__dict__.get('_session').get('lines_skipped') or 0)
+
+    def set_runs(self):
+        """Set a number of casting runs"""
+        prompt = 'How many times do you want to cast this?'
+        if self.all_done():
+            # Add some runs more if necessary after finished
+            prompt = 'Casting finished; add more runs - how many?'
+            more_runs = -1
+            while more_runs < 0:
+                more_runs = (UI.enter_data_or_default(prompt, 0, int)
+                             if self.session.caster.mode.casting
+                             else 1 if UI.confirm('Repeat?', True) else 0)
+            self.runs += more_runs
+        else:
+            # Set the number of runs before starting the job
+            if self.session.caster.mode.casting:
+                runs = -1
+                while runs < 0:
+                    runs = UI.enter_data_or_default(prompt, 1, int)
+            else:
+                runs = 1
+            self.runs = runs
 
     @property
     def runs(self):
@@ -141,8 +208,10 @@ class Stats(object):
         """Parses the ribbon, counts combinations, lines and characters"""
         mode = self.session.caster.mode
         # Reset counters
-        self.__dict__['_ribbon'] = {'lines': -1, 'codes': 0, 'chars': 0}
-        self.__dict__['_session'] = {'lines': 0, 'codes': 0, 'chars': 0}
+        self.__dict__['_ribbon'] = {'lines': -1, 'codes': 0, 'chars': 0,
+                                    'lines_skipped': 0}
+        self.__dict__['_session'] = {'lines': 0, 'codes': 0, 'chars': 0,
+                                     'lines_skipped': 0}
         self.__dict__['_current'] = {}
         self.__dict__['_previous'] = {}
         ribbon = self.__dict__['_ribbon']
@@ -166,7 +235,8 @@ class Stats(object):
     def queue(self, queue):
         """Parses the ribbon, counts combinations, lines and characters"""
         # Clear and start with -1 line for the initial galley trip
-        self.__dict__['_run'] = {'lines': -1, 'codes': 0, 'chars': 0}
+        self.__dict__['_run'] = {'lines': -1, 'codes': 0, 'chars': 0,
+                                 'lines_skipped': 0}
         run = self.__dict__['_run']
         # Before first casting, set the current run number to 1
         # (the session current run will be unset yet, so default)

@@ -53,10 +53,8 @@ class TypesettingContext(object):
 
     @diecase.setter
     def diecase(self, diecase):
-        """Set a diecase; keep wedge chosen earlier"""
-        old_wedge = self.diecase.alt_wedge
+        """Set a diecase; reset the wedge"""
         self.__dict__['_diecase'] = diecase
-        self.diecase.alt_wedge = old_wedge
 
     def choose_diecase(self):
         """Chooses a diecase from database"""
@@ -301,22 +299,9 @@ class GalleyBuilder(object):
         self.units = context.measure.wedge_set_units
         # Cooldown: whether to separate sorts with spaces
         self.cooldown_spaces = False
-        # Mould heatup: two lines filled with quads to heat the mould
-        self.mould_heatup_quads = True
         # Fill line: will add quads/spaces nutil length is met
         self.fill_line = True
         self.quad_padding = 1
-
-    def mould_heatup(self):
-        """Appends two lines of em-quads at the end"""
-        chunk = []
-        if self.mould_heatup_quads:
-            quad = self.diecase.decode_matrix('O15')
-            quad_qty = int(self.units // quad.units)
-            chunk = ['%s preheat' % quad] * quad_qty
-            comment = 'Casting quads for mould heatup'
-            chunk.extend(tsf.double_justification(comment=comment))
-        return chunk * 2
 
     def make_ribbon(self):
         """Instantiates a Ribbon() object from whatever we've generated"""
@@ -412,7 +397,7 @@ class GalleyBuilder(object):
             start_line()
             while units_left > 0:
                 build_line()
-        return queue + self.mould_heatup()
+        return queue
 
 
 def open_file(filename=''):

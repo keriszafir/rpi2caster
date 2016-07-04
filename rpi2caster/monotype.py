@@ -427,7 +427,7 @@ class CasterMode(object):
     @property
     def casting(self):
         """Check if the machine is casting"""
-        return not self.punching and not self.testing
+        return not self.punching and not self.testing and not self.calibration
 
     @property
     def hmn(self):
