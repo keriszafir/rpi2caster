@@ -157,7 +157,7 @@ class Diecase(object):
     @property
     def quad(self):
         """Get a full em quad"""
-        return self.space(width='1em', is_low_space=True)
+        return self.get_space(width='1em', is_low_space=True)
 
     def get_space(self, width='5u', is_low_space=True):
         """Get a most suitable space for a given number of units"""

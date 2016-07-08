@@ -1,4 +1,0 @@
-#!/bin/bash
-sudo aptitude update
-sudo aptitude -Z upgrade
-apt-get moo

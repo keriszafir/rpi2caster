@@ -12,10 +12,10 @@ from .global_config import UI, SENSOR_GPIO
 # Custom exceptions
 from .exceptions import MachineStopped
 # Caster prototype
-from .monotype import SimulationSensor
+from .monotype import SensorMixin
 
 
-class SysfsSensor(SimulationSensor):
+class SysfsSensor(SensorMixin):
     """Optical cycle sensor using kernel sysfs interface"""
     def __init__(self, gpio=SENSOR_GPIO):
         super().__init__()

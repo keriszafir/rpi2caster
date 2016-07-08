@@ -2,13 +2,13 @@
 """Parallel port input and output driver"""
 import time
 from parallel import Parallel
-from .monotype import SimulationSensor, SimulationOutput
+from .monotype import SensorMixin, OutputMixin, SimulationOutput
 from .global_config import UI, SIGNALS_ARRANGEMENT
 from .decorators import singleton
 
 
 @singleton
-class ParallelOutputDriver(SimulationOutput):
+class ParallelOutputDriver(OutputMixin):
     """Output driver for parallel port. Sends four bytes in sequence:
     byte0: O N M L K J I H
     byte1: G F S E D 0075 C B
@@ -130,7 +130,7 @@ class ParallelOutputDriver(SimulationOutput):
 
 
 @singleton
-class ParallelSensor(SimulationSensor):
+class ParallelSensor(SensorMixin):
     """Parallel port sensor driver"""
     def __init__(self):
         super().__init__()

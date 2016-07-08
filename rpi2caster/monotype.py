@@ -14,7 +14,7 @@ AIR_ON = True
 AIR_OFF = False
 
 
-def adjust_signals(worker_function):
+def adjust_signals(signal_processing_routine):
     """Adjusts the signals received by caster so that:
     1. O15 is stripped unless we are in testing mode (if explicitly stated)
         or in punching mode (always - it helps drive the punches)
@@ -104,7 +104,7 @@ def adjust_signals(worker_function):
         # Adjust the signals just before casting; show the new combination
         UI.display('Sending %s' % (' '.join(signals) if signals
                                    else 'no signals'))
-        return worker_function(self, signals, *args, **kw)
+        return signal_processing_routine(self, signals, *args, **kw)
     return wrapper
 
 
@@ -216,13 +216,13 @@ class MonotypeCaster(object):
                 pass
 
 
-class SimulationSensor(object):
+class SensorMixin(object):
     """Mockup for a machine cycle sensor"""
     def __init__(self):
         self.lock = False
         self.manual_mode = True
         self.last_state = False
-        self.name = 'mockup machine cycle sensor'
+        self.name = 'generic machine cycle sensor'
 
     def __enter__(self):
         if not self.lock:
@@ -244,7 +244,8 @@ class SimulationSensor(object):
 
     def check_if_machine_is_working(self):
         """Detect machine cycles and alert if it's not working"""
-        UI.display('Now checking if the machine is running...')
+        UI.display('Turn on the air, motor, pump (if put out) and machine.')
+        UI.display('Checking if the machine is running...')
         cycles = 3
         while True:
             try:
@@ -255,9 +256,11 @@ class SimulationSensor(object):
                     cycles -= 1
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                if not UI.confirm('Machine not running - do you want to '
-                                  'continue? ', default=False):
-                    e.return_to_menu()
+                if UI.confirm('Machine stopped - continue? ', default=False):
+                    # Continue checking
+                    pass
+                else:
+                    return False
 
     def wait_for(self, new_state, timeout=30, time_on=0.1, time_off=0.1):
         """Waits for a keypress to emulate machine cycle, unless user
@@ -283,40 +286,59 @@ class SimulationSensor(object):
             sleep(time_on)
 
 
-class PunchingSensor(SimulationSensor):
+class SimulationSensor(SensorMixin):
+    """Simulate casting with no actual machine"""
+    def __init__(self):
+        super().__init__()
+        self.name = 'simulation - mockup casting interface'
+
+    def check_if_machine_is_working(self):
+        """Warn that this is just a simulation"""
+        UI.display('Simulation mode - no machine is used.\n'
+                   'This will emulate the actual casting sequence '
+                   'as closely as possible.\n')
+        return super().check_if_machine_is_working()
+
+
+class PunchingSensor(SensorMixin):
     """A special sensor class for perforators"""
     def __init__(self):
         super().__init__()
-        self.name = 'Timer-driven or manual advance for perforator'
+        self.name = 'timer-driven or manual advance for perforator'
 
     def check_if_machine_is_working(self):
         """Ask for user confirmation before punching"""
         UI.pause('\nRibbon punching: \n'
                  'Put the ribbon on the perforator and turn on the air.')
+        return True
 
     def wait_for(self, new_state, timeout=30, time_on=0.25, time_off=0.4):
         """Calls simulation sensor's function, but with different timings"""
         super().wait_for(new_state, timeout, time_on, time_off)
 
 
-class TestSensor(SimulationSensor):
+class TestSensor(SensorMixin):
     """A keyboard-operated "sensor" for testing inputs.
     No automatic mode is supported."""
     def __init__(self):
         super().__init__()
-        self.name = 'Timer-driven or manual advance for perforator'
+        self.name = 'manual advance for testing'
 
     def wait_for(self, new_state, *_):
         """Waits for keypress before turning the line off"""
         if not new_state:
             UI.pause('Next combination?')
 
+    def check_if_machine_is_working(self):
+        """Do nothing here"""
+        return True
 
-class SimulationOutput(object):
+
+class OutputMixin(object):
     """Mockup for a driver for 32 pneumatic outputs"""
     def __init__(self, signals_arrangement=SIGNALS_ARRANGEMENT):
         self.lock = False
-        self.name = 'mockup output driver for simulation'
+        self.name = 'generic output driver'
         self.signals_arrangement = signals_arrangement
         self.working = True
 
@@ -363,6 +385,13 @@ class SimulationOutput(object):
         """Turns off all the valves"""
         for sig in self.signals_arrangement:
             self.one_off(sig)
+
+
+class SimulationOutput(OutputMixin):
+    """Simulation output driver - don't control any hardware"""
+    def __init__(self):
+        super().__init__()
+        self.name = 'simulation - mockup casting interface'
 
 
 class CasterMode(object):

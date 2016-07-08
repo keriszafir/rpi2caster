@@ -101,7 +101,7 @@ class Casting(TypesettingContext):
         def skip_lines(ribbon):
             """Skip a definite number of lines"""
             # Apply constraints: 0 <= lines_skipped < lines in ribbon
-            l_skipped = self.stats.get_lines_skipped()
+            l_skipped = self.stats.lines_skipped
             if l_skipped:
                 UI.display('Skipping %s lines' % l_skipped)
             # Take away combinations until we skip the desired number of lines
@@ -109,7 +109,7 @@ class Casting(TypesettingContext):
             # We must give it back after lines are taken away
             code = ''
             queue = deque(ribbon)
-            while l_skipped + 1 > 0 and not mode.diagnostics:
+            while l_skipped + 1 > 0:
                 code = queue.popleft()
                 l_skipped -= 1 * p.check_newline(code)
             queue.appendleft(code)
@@ -117,21 +117,70 @@ class Casting(TypesettingContext):
             self.stats.queue = queue
             return queue
 
+        def set_runs():
+            """Set a number of casting runs"""
+            prompt = 'How many times do you want to cast this?'
+            # Set the number of runs before starting the job
+            runs = -1 if mode.casting else 1
+            while runs < 0:
+                runs = enter_data(prompt, 1, int)
+            self.stats.runs = runs
+
+        def set_session_lines_skipped():
+            """Skip lines before casting or after aborting the job"""
+            # Offer to skip lines only if enough of them were cast
+            lines_in_ribbon = self.stats.get_ribbon_lines()
+            prompt = ('How many lines to skip for ALL runs?\n'
+                      'min: 0, max: %s' % (lines_in_ribbon - 1))
+            # Skip lines effective for ALL runs
+            lines_skipped = -1 if mode.casting and lines_in_ribbon > 2 else 0
+            while not 0 <= lines_skipped < lines_in_ribbon:
+                lines_skipped = enter_data(prompt, 0, int)
+            self.stats.session_lines_skipped = lines_skipped
+
+        def set_run_lines_skipped():
+            """Set lines to skip for the upcoming run only"""
+            lines_in_ribbon = self.stats.get_ribbon_lines()
+            lines_ok = self.stats.get_lines_done()
+            prompt = 'min: 0, max: %s' % (lines_in_ribbon - 1)
+            # Skip lines effective for UPCOMING run only
+            if mode.casting and lines_in_ribbon > 2:
+                lines_skipped = lines_ok - 2 if lines_ok >= 2 else 0
+                if lines_skipped:
+                    UI.display('%s lines were cast in the last run.'
+                               % lines_ok)
+                    UI.display('We can skip two less - to heat up the mould.')
+                UI.display('How many lines to skip for THIS run?')
+                choice = -1
+                while not 0 <= choice < lines_in_ribbon:
+                    choice = enter_data(prompt, lines_skipped, int)
+            else:
+                choice = 0
+            self.stats.run_lines_skipped = choice
+
         def start_casting():
             """Things to do only once during the whole casting session"""
-            preheat_quads = preheat()
-            if mode.casting or mode.calibration:
-                UI.display('Turn on the compressor, cooling and machine.\n')
-                self.caster.sensor.check_if_machine_is_working()
+            def check_running():
+                """Aborts casting and exits to menu"""
+                if not self.caster.sensor.check_if_machine_is_working():
+                    raise e.ReturnToMenu
+
+            if mode.casting:
+                preheat_quads = preheat()
+                check_running()
                 try:
                     # Use different stats for preheat quads
                     old_stats, self.stats = self.stats, Stats(self)
                     cast_run(preheat_quads)
                 finally:
                     self.stats = old_stats
+            else:
+                check_running()
 
         def cast_run(casting_queue):
-            """Casts the sequence of codes in given sequence"""
+            """Casts the sequence of codes in given sequence.
+            This function is executed until the sequence is exhausted
+            or casting is stopped by machine or user."""
             generator = (p.parse_record(record) for record in casting_queue)
             while True:
                 try:
@@ -150,112 +199,66 @@ class Casting(TypesettingContext):
                     return True
                 except (e.MachineStopped, KeyboardInterrupt, EOFError):
                     # Allow resume in punching mode
-                    if (mode.punching and not mode.diagnostics and
+                    if (mode.punching and not mode.testing and
                             UI.confirm('Resume punching?', default=True)):
                         self.caster.process(signals)
                     else:
                         return False
 
+        def after_casting():
+            """After the run is finished, decide whether to repeat or not
+            (for casting, set number of repetitions; for other modes, just
+            ask if user wants to do it again). If failed, offer to repeat
+            the run with skipped lines."""
+            runs_left = self.stats.runs_remaining
+            if casting_success:
+                more_runs = -1 if not runs_left else 0
+                # Add some runs more if necessary after finished
+                prompt = 'Casting finished; add more runs - how many?'
+                while more_runs < 0:
+                    more_runs = (enter_data(prompt, 0, int) if mode.casting
+                                 else 1 if UI.confirm('Repeat?', True) else 0)
+                self.stats.runs += more_runs
+            else:
+                # Retry in casting and calibration modes
+                # In case of retrying, set the run lines skipped
+                # If not retrying, but there are still some more runs to go,
+                # ask if user wishes to go on with casting or abort
+                self.stats.reset_last_run_stats()
+                caster = mode.casting or mode.calibration
+                prompt = '%s runs remaining. Continue casting?' % runs_left
+                if caster and UI.confirm('Retry the last run?', default=True):
+                    # Casting aborted - ask if user wants to repeat
+                    set_run_lines_skipped()
+                    self.stats.runs += 1
+                    # Start this run again
+                elif runs_left and not UI.confirm(prompt, default=True):
+                    raise e.ReturnToMenu
+
+        # Helpful aliases
         mode = self.caster.mode
-        prepare_ribbon()
-        UI.display_parameters({'Ribbon info': self.stats.ribbon_parameters})
-        self.stats.set_runs()
-        self.stats.set_session_lines_skipped()
-        self.stats.set_run_lines_skipped()
-        UI.display_parameters({'Session info': self.stats.session_parameters})
-        start_casting()
-        # For each casting run repeat
-        while self.stats.get_runs_left():
-            queue = skip_lines(ribbon)
-            if cast_run(queue):
-                # Casting successful - ready to cast next run - ask to repeat
-                # after the last run is completed (because user may want to
-                # cast / punch once more?)
-                self.stats.end_run()
-                self.stats.set_runs()
-            elif ((mode.casting or mode.calibration) and
-                  UI.confirm('Retry the last run?', default=True)):
-                # Casting aborted - ask if user wants to repeat
-                self.stats.set_run_lines_skipped()
-                self.stats.undo_last_run()
-                self.stats.runs += 1
-                # Start this run again
-            elif (not self.stats.all_done() and
-                  UI.confirm('[Y] = next run or [N] = exit?', default=True)):
-                # There are some more runs to do - go on?
-                self.stats.undo_last_run()
-            else:
-                return
-
-    @dec.cast_or_punch_result
-    def _test_front_pinblock(self):
-        """Sends signals 1...14, one by one"""
-        UI.pause('Testing the front pinblock - signals 1 towards 14.')
-        self.caster.mode.testing = True
-        return [str(n) for n in range(1, 15)]
-
-    @dec.cast_or_punch_result
-    def _test_rear_pinblock(self):
-        """Sends NI, NL, A...N"""
-        UI.pause('This will test the front pinblock - signals NI, NL, A...N. ')
-        self.caster.mode.testing = True
-        return [x for x in c.COLUMNS_17]
-
-    @dec.cast_or_punch_result
-    def _test_all(self):
-        """Tests all valves and composition caster's inputs in original
-        Monotype order: NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
-        """
-        UI.pause('This will test all the air lines in the same order '
-                 'as the holes on the paper tower: \n%s\n'
-                 'MAKE SURE THE PUMP IS DISENGAGED.' % ' '.join(c.SIGNALS))
-        self.caster.mode.testing = True
-        return [x for x in c.SIGNALS]
-
-    @dec.cast_or_punch_result
-    def _test_justification(self):
-        """Tests the 0075-S-0005"""
-        UI.pause('This will test the justification pin block (0075, S, 0005).')
-        self.caster.mode.testing = True
-        return ['0075', 'S', '0005']
-
-    @dec.choose_sensor_and_driver
-    def _test_any_code(self):
-        """Tests a user-specified combination of signals"""
-        self.caster.mode.testing = True
-        while True:
-            UI.display('Enter the signals to send to the caster, '
-                       'or leave empty to return to menu: ')
-            prompt = 'Signals? (leave blank to exit)'
-            signals = p.parse_signals(UI.enter_data_or_blank(prompt))
-            if signals:
-                self.caster.output.valves_off()
-                UI.display('Activating ' + ' '.join(signals))
-                self.caster.output.valves_on(signals)
-            else:
-                break
-        self.caster.mode.testing = False
-
-    @dec.choose_sensor_and_driver
-    def _blow_all(self):
-        """Blow all signals for a short time; add NI, NL also"""
-        self.caster.mode.testing = True
-        UI.pause('Blowing air through all air pins on both pinblocks...')
-        queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7', 'H8',
-                 'I9', 'J10', 'K11', 'L12', 'M13', 'N14', '0075', '0005', 'S']
+        enter_data = UI.enter_data_or_default
         try:
-            while True:
-                for combination in queue:
-                    signals = p.parse_signals(combination)
-                    sleep(0.3)
-                    UI.display('Activating ' + ' '.join(signals))
-                    self.caster.output.valves_on(signals)
-                    sleep(0.3)
-                    self.caster.output.valves_off()
-                if not UI.confirm('Repeat?', True):
-                    break
-        except (KeyboardInterrupt, EOFError):
-            self.caster.output.valves_off()
+            # Ribbon pre-processing and casting parameters setup
+            prepare_ribbon()
+            UI.display_parameters({'Ribbon info':
+                                   self.stats.ribbon_parameters})
+            set_runs()
+            set_session_lines_skipped()
+            set_run_lines_skipped()
+            UI.display_parameters({'Session info':
+                                   self.stats.session_parameters})
+            # Machine startup; mould heatup
+            start_casting()
+            # Cast until there are no more runs left
+            while self.stats.runs_remaining:
+                queue = skip_lines(ribbon)
+                casting_success = cast_run(queue)
+                self.stats.end_run()
+                after_casting()
+        except e.ReturnToMenu:
+            # Needed for proper cleanup and resetting the modes by decorators
+            return False
 
     @dec.cast_or_punch_result
     def cast_composition(self):
@@ -393,93 +396,8 @@ class Casting(TypesettingContext):
         return queue
 
     @dec.cast_or_punch_result
-    def _calibrate_wedges(self):
-        """Allows to calibrate the justification wedges so that when you're
-        casting a 9-unit character with the S-needle at 0075:3 and 0005:8
-        (neutral position), the    width is the same.
-
-        It works like this:
-        1. 0075 - turn the pump on,
-        2. cast 10 spaces from the specified matrix (default: G9),
-        3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
-        4. cast 10 spaces with the S-needle from the same matrix,
-        5. put the line to the galley, then 0005 to turn the pump off.
-        """
-        UI.display('Transfer wedge calibration:\n\n'
-                   'This function will cast two lines of 5 spaces: '
-                   'first: G5, second: GS5 with wedges at 3/8. \n'
-                   'Adjust the 52D space transfer wedge '
-                   'until the lengths are the same.')
-        if not UI.confirm('\nProceed?', default=True):
-            return None
-        self.caster.mode.calibration = True
-        sequence = tsf.end_casting()
-        sequence.extend(['GS5'] * 7)
-        sequence.extend(tsf.double_justification())
-        sequence.extend(['G5'] * 7)
-        sequence.extend(tsf.double_justification())
-        return sequence
-
-    @dec.cast_or_punch_result
     @dec.temp_wedge
-    def _calibrate_mould_and_diecase(self):
-        """Casts the "en dash" characters for calibrating the character X-Y
-        relative to type body."""
-        UI.display('Mould blade opening and X-Y character calibration:\n'
-                   'First cast G5, adjust the sort width to the value shown.\n'
-                   '\nThen cast some lowercase "n" letters and n-dashes, '
-                   'check the position of the character relative to the '
-                   'type body and adjust the bridge X-Y. Repeat if needed.\n')
-        em_width = self.wedge.em_inch_width
-        UI.display('9 units (1en) is %s" wide' % round(em_width / 2, 4))
-        UI.display('18 units (1em) is %s" wide\n' % round(em_width, 4))
-        if not UI.confirm('\nProceed?', default=True):
-            return None
-        self.caster.mode.calibration = True
-        # Build character list
-        matrix_stream = []
-        for char in ('  ', 'n', '--'):
-            mat = self.diecase[char, '']
-            mat.specify_units()
-            matrix_stream.append(mat)
-            matrix_stream.append(mat)
-        builder = GalleyBuilder(self, matrix_stream)
-        builder.fill_line = False
-        queue = builder.build_galley()
-        return queue
-
-    @dec.choose_sensor_and_driver
-    def _calibrate_draw_rods(self):
-        """Keeps the diecase at G8 so that the operator can adjust
-        the diecase draw rods until the diecase stops moving sideways
-        when the centering pin is descending."""
-        UI.display('Draw rods calibration:\n'
-                   'The diecase will be moved to the central position (G-8), '
-                   'turn on the machine\nand adjust the diecase draw rods '
-                   'until the diecase stops moving sideways as the\n'
-                   'centering pin is descending into the hole in the matrix.')
-        if not UI.confirm('\nProceed?', default=True):
-            return None
-        self.caster.output.valves_on(['G', '8'])
-        UI.pause('Sending G8, waiting for you to stop...')
-
-    @dec.cast_or_punch_result
-    def _test_row_16(self):
-        """Tests the 16th row with selected addressing mode
-        (HMN, KMN, unit-shift). Casts from all matrices in 16th row."""
-        UI.display('This will test the 16th row addressing.\n'
-                   'If your caster has HMN, KMN or unit-shift attachment, '
-                   'turn it on.\n')
-        if not UI.confirm('\nProceed?', default=True):
-            return None
-        self.caster.mode.calibration = True
-        queue = tsf.end_casting() + ['%s16' % x for x in c.COLUMNS_17]
-        queue.extend(tsf.double_justification(comment='Starting...'))
-        return queue
-
-    @dec.cast_or_punch_result
-    @dec.temp_wedge
-    def _diecase_proof(self):
+    def diecase_proof(self):
         """Tests the whole diecase, casting from each matrix.
         Casts spaces between characters to be sure that the resulting
         type will be of equal width."""
@@ -531,6 +449,164 @@ class Casting(TypesettingContext):
 
     def diagnostics_submenu(self):
         """Settings and alignment menu for servicing the caster"""
+        @dec.testing_mode
+        @dec.cast_or_punch_result
+        def test_front_pinblock():
+            """Sends signals 1...14, one by one"""
+            UI.pause('Testing the front pinblock - signals 1 towards 14.')
+            return [str(n) for n in range(1, 15)]
+
+        @dec.testing_mode
+        @dec.cast_or_punch_result
+        def test_rear_pinblock():
+            """Sends NI, NL, A...N"""
+            UI.pause('This will test the rear pinblock - NI, NL, A...N. ')
+            return [x for x in c.COLUMNS_17]
+
+        @dec.testing_mode
+        @dec.cast_or_punch_result
+        def test_all():
+            """Tests all valves and composition caster's inputs in original
+            Monotype order:
+            NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
+            """
+            UI.pause('This will test all the air lines in the same order '
+                     'as the holes on the paper tower: \n%s\n'
+                     'MAKE SURE THE PUMP IS DISENGAGED.' % ' '.join(c.SIGNALS))
+            return [x for x in c.SIGNALS]
+
+        @dec.testing_mode
+        @dec.cast_or_punch_result
+        def test_justification():
+            """Tests the 0075-S-0005"""
+            UI.pause('This will test the justification pinblock: '
+                     '0075, S, 0005.')
+            return ['0075', 'S', '0005']
+
+        @dec.testing_mode
+        @dec.choose_sensor_and_driver
+        def test_any_code():
+            """Tests a user-specified combination of signals"""
+            while True:
+                UI.display('Enter the signals to send to the caster, '
+                           'or leave empty to return to menu: ')
+                prompt = 'Signals? (leave blank to exit)'
+                signals = p.parse_signals(UI.enter_data_or_blank(prompt))
+                if signals:
+                    self.caster.output.valves_off()
+                    UI.display('Activating ' + ' '.join(signals))
+                    self.caster.output.valves_on(signals)
+                else:
+                    break
+
+        @dec.testing_mode
+        @dec.choose_sensor_and_driver
+        def blow_all():
+            """Blow all signals for a short time; add NI, NL also"""
+            UI.pause('Blowing air through all air pins on both pinblocks...')
+            queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
+                     'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14',
+                     '0075', '0005', 'S']
+            duration = 0.3
+            try:
+                while True:
+                    for combination in queue:
+                        signals = p.parse_signals(combination)
+                        sleep(duration)
+                        UI.display('Activating ' + ' '.join(signals))
+                        self.caster.output.valves_on(signals)
+                        sleep(duration)
+                        self.caster.output.valves_off()
+                    if not UI.confirm('Repeat?', True):
+                        break
+            except (KeyboardInterrupt, EOFError):
+                self.caster.output.valves_off()
+
+        @dec.choose_sensor_and_driver
+        def calibrate_draw_rods():
+            """Keeps the diecase at G8 so that the operator can adjust
+            the diecase draw rods until the diecase stops moving sideways
+            when the centering pin is descending."""
+            UI.display('Draw rods calibration:\n'
+                       'The diecase will be moved to the central position '
+                       '(G8).\n Turn on the machine and adjust the diecase '
+                       'draw rods until the diecase stops wobbling.')
+            if not UI.confirm('\nProceed?', default=True):
+                return None
+            self.caster.output.valves_on(['G', '8'])
+            UI.pause('Sending G8, waiting for you to stop...')
+
+        @dec.calibration_mode
+        @dec.cast_or_punch_result
+        def calibrate_wedges():
+            """Allows to calibrate the justification wedges so that when you're
+            casting a 9-unit character with the S-needle at 0075:3 and 0005:8
+            (neutral position), the    width is the same.
+
+            It works like this:
+            1. 0075 - turn the pump on,
+            2. cast 10 spaces from the specified matrix (default: G9),
+            3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
+            4. cast 10 spaces with the S-needle from the same matrix,
+            5. put the line to the galley, then 0005 to turn the pump off.
+            """
+            UI.display('Transfer wedge calibration:\n\n'
+                       'This function will cast two lines of 5 spaces: '
+                       'first: G5, second: GS5 with wedges at 3/8. \n'
+                       'Adjust the 52D space transfer wedge '
+                       'until the lengths are the same.')
+            if not UI.confirm('\nProceed?', default=True):
+                return None
+            sequence = tsf.end_casting()
+            sequence.extend(['GS5'] * 7)
+            sequence.extend(tsf.double_justification())
+            sequence.extend(['G5'] * 7)
+            sequence.extend(tsf.double_justification())
+            return sequence
+
+        @dec.calibration_mode
+        @dec.cast_or_punch_result
+        @dec.temp_wedge
+        def calibrate_mould_and_diecase():
+            """Casts the "en dash" characters for calibrating the character X-Y
+            relative to type body."""
+            UI.display('Mould blade opening and X-Y character calibration:\n'
+                       'Cast G5, adjust the sort width to the value shown.\n'
+                       '\nThen cast some lowercase "n" letters and n-dashes, '
+                       'check the position of the character relative to the '
+                       'type body and adjust the bridge X-Y. '
+                       'Repeat if needed.\n')
+            em_width = self.wedge.em_inch_width
+            UI.display('9 units (1en) is %s" wide' % round(em_width / 2, 4))
+            UI.display('18 units (1em) is %s" wide\n' % round(em_width, 4))
+            if not UI.confirm('\nProceed?', default=True):
+                return None
+            # Build character list
+            matrix_stream = []
+            for char in ('  ', 'n', '--'):
+                mat = self.diecase[char, '']
+                mat.specify_units()
+                matrix_stream.append(mat)
+                matrix_stream.append(mat)
+            builder = GalleyBuilder(self, matrix_stream)
+            builder.fill_line = False
+            queue = builder.build_galley()
+            return queue
+
+        @dec.calibration_mode
+        @dec.cast_or_punch_result
+        def test_row_16():
+            """Tests the 16th row with selected addressing mode
+            (HMN, KMN, unit-shift). Casts from all matrices in 16th row."""
+            UI.display('This will test the 16th row addressing.\n'
+                       'If your caster has HMN, KMN or unit-shift attachment, '
+                       'turn it on.\n')
+            if not UI.confirm('\nProceed?', default=True):
+                return None
+            queue = tsf.end_casting() + ['%s16' % x for x in c.COLUMNS_17]
+            queue.extend(tsf.double_justification(comment='Starting...'))
+            return queue
+
         def finish():
             """Sets the flag to True"""
             nonlocal finished
@@ -540,29 +616,29 @@ class Casting(TypesettingContext):
             """Build a list of options, adding an option if condition is met"""
             caster = not self.caster.mode.punching
             opts = [(finish, 'Back', 'Returns to main menu', True),
-                    (self._test_all, 'Test outputs',
+                    (test_all, 'Test outputs',
                      'Test all the air outputs N...O15, one by one', True),
-                    (self._test_front_pinblock, 'Test the front pin block',
+                    (test_front_pinblock, 'Test the front pin block',
                      'Test the pins 1...14', caster),
-                    (self._test_rear_pinblock, 'Test the rear pin block',
+                    (test_rear_pinblock, 'Test the rear pin block',
                      'Test the pins NI, NL, A...N, one by one', caster),
-                    (self._blow_all, 'Blow all air pins',
+                    (blow_all, 'Blow all air pins',
                      'Blow air into every pin for a short time', True),
-                    (self._test_justification, 'Test the justification block',
+                    (test_justification, 'Test the justification block',
                      'Test the pins for 0075, S and 0005, one by one', caster),
-                    (self._test_any_code, 'Send specified signal combination',
+                    (test_any_code, 'Send specified signal combination',
                      'Send the specified signals to the machine', True),
-                    (self._calibrate_wedges, 'Calibrate the 52D wedge',
+                    (calibrate_wedges, 'Calibrate the 52D wedge',
                      'Calibrate the space transfer wedge for correct width',
                      caster),
-                    (self._calibrate_mould_and_diecase,
+                    (calibrate_mould_and_diecase,
                      'Calibrate mould blade and diecase',
                      'Set the type body width and character-to-body position',
                      caster),
-                    (self._calibrate_draw_rods, 'Calibrate diecase draw rods',
+                    (calibrate_draw_rods, 'Calibrate diecase draw rods',
                      'Keep the matrix case at G8 and adjust the draw rods',
                      caster),
-                    (self._test_row_16, 'Test HMN, KMN or unit-shift',
+                    (test_row_16, 'Test HMN, KMN or unit-shift',
                      'Cast type from row 16 with chosen addressing mode',
                      caster)]
             return [(function, description, long_description) for
@@ -630,7 +706,7 @@ class Casting(TypesettingContext):
                      'Display ribbon and interface details', not caster),
                     (diecase_operations, 'Matrix manipulation...',
                      'Work on matrix cases', True),
-                    (self._diecase_proof, 'Diecase proof',
+                    (self.diecase_proof, 'Diecase proof',
                      'Cast every character from the diecase', True),
                     (self.diagnostics_submenu, 'Service...',
                      'Interface and machine diagnostic functions', True)]

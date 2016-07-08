@@ -39,11 +39,37 @@ def cast_or_punch_result(ribbon_source):
         except CastingAborted:
             pass
         finally:
-            # Reset diagnostics and row 16 addressing modes
+            # Reset row 16 addressing modes
             mode.kmn = False
             mode.hmn = False
             mode.unitshift = False
-            mode.diagnostics = False
+    return wrapper
+
+
+def calibration_mode(routine):
+    """Use a calibration mode for the routine.
+    This will affect casting statistics and some prompts."""
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        # Turn on the calibration mode
+        self.caster.mode.calibration = True
+        retval = routine(self, *args, **kwargs)
+        # Reset the mode
+        self.caster.mode.calibration = False
+        return retval
+    return wrapper
+
+
+def testing_mode(routine):
+    """Output testing mode - skip some steps in casting"""
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        # Turn on the calibration mode
+        self.caster.mode.testing = True
+        retval = routine(self, *args, **kwargs)
+        # Reset the mode
+        self.caster.mode.testing = False
+        return retval
     return wrapper
 
 
