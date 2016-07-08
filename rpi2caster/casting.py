@@ -84,8 +84,9 @@ class Casting(TypesettingContext):
                 quad = self.diecase.quad
                 quad_qty = int(self.measure.wedge_set_units // quad.units)
                 comment = 'Casting quads for mould heatup'
-                return (tsf.double_justification(comment=comment) +
-                        ['%s preheat' % quad] * quad_qty) * 2
+                sequence = (['%s preheat' % quad] * quad_qty +
+                            tsf.double_justification(comment=comment)) * 2
+                return reversed(sequence)
             else:
                 return []
 
@@ -96,26 +97,25 @@ class Casting(TypesettingContext):
                        p.stop_comes_first(ribbon))
             ribbon = ribbon if forward else [x for x in reversed(ribbon)]
             self.stats.ribbon = ribbon
-            return ribbon
 
-        def skip_lines(ribbon):
+        def skip_lines():
             """Skip a definite number of lines"""
+            nonlocal queue
             # Apply constraints: 0 <= lines_skipped < lines in ribbon
-            l_skipped = self.stats.lines_skipped
-            if l_skipped:
-                UI.display('Skipping %s lines' % l_skipped)
+            lines_skipped = self.stats.lines_skipped
+            if lines_skipped:
+                UI.display('Skipping %s lines' % lines_skipped)
             # Take away combinations until we skip the desired number of lines
             # BEWARE: ribbon starts with galley trip!
             # We must give it back after lines are taken away
             code = ''
             queue = deque(ribbon)
-            while l_skipped + 1 > 0:
+            while lines_skipped > 0:
                 code = queue.popleft()
-                l_skipped -= 1 * p.check_newline(code)
+                lines_skipped -= 1 * p.check_newline(code)
             queue.appendleft(code)
             # The ribbon is ready for casting / punching
             self.stats.queue = queue
-            return queue
 
         def set_runs():
             """Set a number of casting runs"""
@@ -128,35 +128,38 @@ class Casting(TypesettingContext):
 
         def set_session_lines_skipped():
             """Skip lines before casting or after aborting the job"""
-            # Offer to skip lines only if enough of them were cast
-            lines_in_ribbon = self.stats.get_ribbon_lines()
-            prompt = ('How many lines to skip for ALL runs?\n'
-                      'min: 0, max: %s' % (lines_in_ribbon - 1))
-            # Skip lines effective for ALL runs
-            lines_skipped = -1 if mode.casting and lines_in_ribbon > 2 else 0
-            while not 0 <= lines_skipped < lines_in_ribbon:
-                lines_skipped = enter_data(prompt, 0, int)
+            lines_in_ribbon = max(1, self.stats.get_ribbon_lines())
+            if mode.casting and lines_in_ribbon > 2:
+                prompt = ('How many lines to skip for ALL runs?\n'
+                          'min: 0, max: %s' % (lines_in_ribbon - 1))
+                # Skip lines effective for ALL runs
+                lines_skipped = -1
+                while not 0 <= lines_skipped < lines_in_ribbon:
+                    lines_skipped = enter_data(prompt, 0, int)
+            else:
+                lines_skipped = 0
             self.stats.session_lines_skipped = lines_skipped
 
         def set_run_lines_skipped():
             """Set lines to skip for the upcoming run only"""
-            lines_in_ribbon = self.stats.get_ribbon_lines()
+            lines_in_ribbon = max(1, self.stats.get_ribbon_lines())
             lines_ok = self.stats.get_lines_done()
-            prompt = 'min: 0, max: %s' % (lines_in_ribbon - 1)
+            # Offer to skip lines only if enough of them were cast
+            prompt = 'min: 0, max: %s' % (lines_in_ribbon - 2)
             # Skip lines effective for UPCOMING run only
             if mode.casting and lines_in_ribbon > 2:
-                lines_skipped = lines_ok - 2 if lines_ok >= 2 else 0
-                if lines_skipped:
-                    UI.display('%s lines were cast in the last run.'
-                               % lines_ok)
-                    UI.display('We can skip two less - to heat up the mould.')
+                max_lines_skipped = lines_ok - 2 if lines_ok >= 2 else 0
+                if max_lines_skipped:
+                    UI.display('%s lines were cast in the last run.\n'
+                               'We can skip up to %s to heat up the mould.'
+                               % (lines_ok, max_lines_skipped))
                 UI.display('How many lines to skip for THIS run?')
-                choice = -1
-                while not 0 <= choice < lines_in_ribbon:
-                    choice = enter_data(prompt, lines_skipped, int)
+                lines_skipped = -1
+                while not 0 <= lines_skipped <= max_lines_skipped:
+                    lines_skipped = enter_data(prompt, max_lines_skipped, int)
             else:
-                choice = 0
-            self.stats.run_lines_skipped = choice
+                lines_skipped = 0
+            self.stats.run_lines_skipped = lines_skipped
 
         def start_casting():
             """Things to do only once during the whole casting session"""
@@ -165,23 +168,24 @@ class Casting(TypesettingContext):
                 if not self.caster.sensor.check_if_machine_is_working():
                     raise e.ReturnToMenu
 
+            nonlocal queue
             if mode.casting:
-                preheat_quads = preheat()
+                queue = preheat()
                 check_running()
                 try:
                     # Use different stats for preheat quads
                     old_stats, self.stats = self.stats, Stats(self)
-                    cast_run(preheat_quads)
+                    cast_queue()
                 finally:
                     self.stats = old_stats
             else:
                 check_running()
 
-        def cast_run(casting_queue):
+        def cast_queue():
             """Casts the sequence of codes in given sequence.
             This function is executed until the sequence is exhausted
             or casting is stopped by machine or user."""
-            generator = (p.parse_record(record) for record in casting_queue)
+            generator = (p.parse_record(record) for record in queue)
             while True:
                 try:
                     signals, comment = next(generator)
@@ -238,6 +242,7 @@ class Casting(TypesettingContext):
         # Helpful aliases
         mode = self.caster.mode
         enter_data = UI.enter_data_or_default
+        queue = ribbon
         try:
             # Ribbon pre-processing and casting parameters setup
             prepare_ribbon()
@@ -252,8 +257,8 @@ class Casting(TypesettingContext):
             start_casting()
             # Cast until there are no more runs left
             while self.stats.runs_remaining:
-                queue = skip_lines(ribbon)
-                casting_success = cast_run(queue)
+                skip_lines()
+                casting_success = cast_queue()
                 self.stats.end_run()
                 after_casting()
         except e.ReturnToMenu:
@@ -451,21 +456,21 @@ class Casting(TypesettingContext):
         """Settings and alignment menu for servicing the caster"""
         @dec.testing_mode
         @dec.cast_or_punch_result
-        def test_front_pinblock():
+        def test_front_pinblock(*_):
             """Sends signals 1...14, one by one"""
             UI.pause('Testing the front pinblock - signals 1 towards 14.')
             return [str(n) for n in range(1, 15)]
 
         @dec.testing_mode
         @dec.cast_or_punch_result
-        def test_rear_pinblock():
+        def test_rear_pinblock(*_):
             """Sends NI, NL, A...N"""
             UI.pause('This will test the rear pinblock - NI, NL, A...N. ')
             return [x for x in c.COLUMNS_17]
 
         @dec.testing_mode
         @dec.cast_or_punch_result
-        def test_all():
+        def test_all(*_):
             """Tests all valves and composition caster's inputs in original
             Monotype order:
             NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
@@ -477,7 +482,7 @@ class Casting(TypesettingContext):
 
         @dec.testing_mode
         @dec.cast_or_punch_result
-        def test_justification():
+        def test_justification(*_):
             """Tests the 0075-S-0005"""
             UI.pause('This will test the justification pinblock: '
                      '0075, S, 0005.')
@@ -485,7 +490,7 @@ class Casting(TypesettingContext):
 
         @dec.testing_mode
         @dec.choose_sensor_and_driver
-        def test_any_code():
+        def test_any_code(*_):
             """Tests a user-specified combination of signals"""
             while True:
                 UI.display('Enter the signals to send to the caster, '
@@ -501,7 +506,7 @@ class Casting(TypesettingContext):
 
         @dec.testing_mode
         @dec.choose_sensor_and_driver
-        def blow_all():
+        def blow_all(*_):
             """Blow all signals for a short time; add NI, NL also"""
             UI.pause('Blowing air through all air pins on both pinblocks...')
             queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
@@ -523,7 +528,7 @@ class Casting(TypesettingContext):
                 self.caster.output.valves_off()
 
         @dec.choose_sensor_and_driver
-        def calibrate_draw_rods():
+        def calibrate_draw_rods(*_):
             """Keeps the diecase at G8 so that the operator can adjust
             the diecase draw rods until the diecase stops moving sideways
             when the centering pin is descending."""
@@ -538,7 +543,7 @@ class Casting(TypesettingContext):
 
         @dec.calibration_mode
         @dec.cast_or_punch_result
-        def calibrate_wedges():
+        def calibrate_wedges(*_):
             """Allows to calibrate the justification wedges so that when you're
             casting a 9-unit character with the S-needle at 0075:3 and 0005:8
             (neutral position), the    width is the same.
@@ -567,7 +572,7 @@ class Casting(TypesettingContext):
         @dec.calibration_mode
         @dec.cast_or_punch_result
         @dec.temp_wedge
-        def calibrate_mould_and_diecase():
+        def calibrate_mould_and_diecase(*_):
             """Casts the "en dash" characters for calibrating the character X-Y
             relative to type body."""
             UI.display('Mould blade opening and X-Y character calibration:\n'
@@ -595,7 +600,7 @@ class Casting(TypesettingContext):
 
         @dec.calibration_mode
         @dec.cast_or_punch_result
-        def test_row_16():
+        def test_row_16(*_):
             """Tests the 16th row with selected addressing mode
             (HMN, KMN, unit-shift). Casts from all matrices in 16th row."""
             UI.display('This will test the 16th row addressing.\n'
@@ -607,7 +612,7 @@ class Casting(TypesettingContext):
             queue.extend(tsf.double_justification(comment='Starting...'))
             return queue
 
-        def finish():
+        def finish(*_):
             """Sets the flag to True"""
             nonlocal finished
             finished = True
@@ -651,7 +656,7 @@ class Casting(TypesettingContext):
         while not finished:
             try:
                 # Catch "return to menu" and "exit program" exceptions here
-                UI.menu(menu_options(), header=header)()
+                UI.menu(menu_options(), header=header)(self)
             except e.ReturnToMenu:
                 # Stay in the menu
                 pass
