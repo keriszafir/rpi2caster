@@ -555,6 +555,7 @@ def sysfs_sensor():
     from .input_driver_sysfs import SysfsSensor
     return SysfsSensor()
 
+
 def rpigpio_sensor():
     """Gets hardware sensor with RPi.GPIO backend"""
     from .input_driver_rpi_gpio import RPiGPIOSensor
