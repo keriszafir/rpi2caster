@@ -18,7 +18,7 @@ class Stats(object):
         session = self.__dict__['_session']
         # Current run will always be runs done +1
         session['runs_done'] = session.get('current_run', 1)
-        session['current_run'] = session.get('current_run', 1) + 1
+        session['current_run'] += 1
 
     def reset_last_run_stats(self):
         """Subtracts the current run stats from all runs stats;
@@ -31,7 +31,8 @@ class Stats(object):
 
     def get_lines_done(self):
         """Gets the current run line number"""
-        return self.__dict__.get('_run', {}).get('current_line', 0) - 1
+        current_line = self.__dict__.get('_run', {}).get('current_line', 1)
+        return max(0, current_line - 1)
 
     def get_ribbon_lines(self):
         """Gets number of lines per ribbon"""
@@ -39,7 +40,7 @@ class Stats(object):
 
     def get_current_run(self):
         """Gets the current run number"""
-        return self.__dict__.get('_session', {}).get('current_run', 1)
+        return self.__dict__.get('_session').get('current_run', 1)
 
     @property
     def runs(self):
@@ -153,10 +154,10 @@ class Stats(object):
         """Parses the ribbon, counts combinations, lines and characters"""
         mode = self.session.caster.mode
         # Reset counters
-        self.__dict__['_ribbon'] = {'lines': -1, 'codes': 0, 'chars': 0,
-                                    'lines_skipped': 0}
+        self.__dict__['_ribbon'] = {'lines': -1, 'codes': 0, 'chars': 0}
         self.__dict__['_session'] = {'lines': 0, 'codes': 0, 'chars': 0,
-                                     'lines_skipped': 0}
+                                     'lines_skipped': 0, 'current_run': 1,
+                                     'runs_done': 0}
         self.__dict__['_current'] = {}
         self.__dict__['_previous'] = {}
         ribbon = self.__dict__['_ribbon']
@@ -183,10 +184,6 @@ class Stats(object):
         self.__dict__['_run'] = {'lines': -1, 'codes': 0, 'chars': 0,
                                  'lines_skipped': 0}
         run = self.__dict__['_run']
-        # Before first casting, set the current run number to 1
-        # (the session current run will be unset yet, so default)
-        session = self.__dict__['_session']
-        session['current_run'] = session.get('current_run', 1)
         code_generator = (code for (code, _) in
                           (p.parse_record(x) for x in queue) if code)
         for code in code_generator:
@@ -265,14 +262,32 @@ class Stats(object):
 
 def build_data(source, parameter, data_name=''):
     """Builds data to display based on the given parameter"""
-    try:
-        percentage = ((source.get('current_%s' % parameter, 1) - 1) /
-                      source.get('%ss' % parameter, 1) * 100)
-    except ZeroDivisionError:
-        percentage = 0
-    return (('%s / %s [%.1f%% done], %s left'
-             % (source.get('current_%s' % parameter, 0),
-                source.get('%ss' % parameter, 0), percentage,
-                source.get('%ss' % parameter, 1) -
-                source.get('current_%s' % parameter, 1) + 1),
-             data_name or parameter.capitalize()))
+    def progress_str():
+        """Get the current and all values progress"""
+        current = source.get('current_%s' % parameter, 1)
+        try:
+            total = source['%ss' % parameter]
+            return '%s / %s' % (current, total)
+        except KeyError:
+            return '%s' % current
+
+    def percentage_str():
+        """Get a % value of things done"""
+        try:
+            value = ((source.get('current_%s' % parameter, 'not set') - 1) /
+                     source.get('%ss' % parameter, 'not set') * 100)
+            return ' [%.1f%% done]' % value
+        except (TypeError, ValueError, ZeroDivisionError):
+            return ''
+
+    def remaining_str():
+        """Get a value of things left"""
+        try:
+            value = (source.get('%ss' % parameter, 'not set') -
+                     source.get('current_%s' % parameter, 'not set') + 1)
+            return ', %s left' % value
+        except (TypeError, ValueError):
+            return ''
+
+    return ('%s%s%s' % (progress_str(), percentage_str(), remaining_str()),
+            data_name or parameter.capitalize())

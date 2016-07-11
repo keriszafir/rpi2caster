@@ -11,14 +11,16 @@ def single_justification(wedge_positions=(3, 8),
                          comment='Single justification'):
     """Add 0075 + pos_0075, then 0005 + pos_0005"""
     (pos_0075, pos_0005) = wedge_positions
-    return pump_start(pos_0075, comment) + pump_stop(pos_0005)
+    return (pump_start(pos_0075, comment) if pos_0075 == pos_0005
+            else pump_start(pos_0075, comment) + pump_stop(pos_0005))
 
 
 def double_justification(wedge_positions=(3, 8),
                          comment='Double justification'):
     """Add 0075 + pos_0075, then 0005-0075 + pos_0005"""
     (pos_0075, pos_0005) = wedge_positions
-    return pump_start(pos_0075, comment) + galley_trip(pos_0005)
+    return (galley_trip(pos_0075, comment) if pos_0075 == pos_0005
+            else pump_start(pos_0075, comment) + galley_trip(pos_0005))
 
 
 def galley_trip(pos_0005=8, comment='Line to the galley'):

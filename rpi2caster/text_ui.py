@@ -6,6 +6,7 @@ import io
 import os
 import readline
 import glob
+import click
 
 from . import exceptions as e
 from . import constants as c
@@ -15,6 +16,42 @@ DEBUG_MODE = False
 # Some standard prompts
 MSG_MENU = '[Enter] to go back to main menu...'
 MSG_CONTINUE = '[Enter] to continue...'
+
+
+class FormattedText(object):
+    """Formatted text for displaying diecase layouts etc."""
+    def __init__(self, text, **kwargs):
+        self.text = text
+        self.formatted_text = click.style(text, **kwargs)
+
+    def __str__(self):
+        return self.formatted_text
+
+    def __repr__(self):
+        return self.formatted_text
+
+    def __len__(self):
+        return len(self.text)
+
+    def ljust(self, length):
+        """Left-justify"""
+        return self.formatted_text + ' ' * (length - len(self.text))
+
+    def rjust(self, length):
+        """Right-justify"""
+        return ' ' * (length - len(self.text)) + self.formatted_text
+
+    def center(self, length):
+        """Center"""
+        text_length = len(self.text)
+        chunk = self.formatted_text
+        while text_length < length:
+            chunk = ' %s ' % chunk
+            text_length += 2
+        if text_length > length:
+            return chunk[1:]
+        else:
+            return chunk
 
 
 def menu(options, header='', footer='', no_debug=False):
@@ -84,7 +121,7 @@ def menu(options, header='', footer='', no_debug=False):
 
 def clear():
     """Clears the screen"""
-    os.system('clear')
+    click.clear()
 
 
 def display(*args, **kwargs):
@@ -136,6 +173,11 @@ def pause(msg1='', msg2=MSG_CONTINUE):
     """Waits until user presses return"""
     input(msg1 + '\n' + msg2)
     print('\n')
+
+
+def edit(text=''):
+    """Use click to call a text editor for editing a text"""
+    return click.edit(text, require_save=False) or text
 
 
 def enter_data(prompt, datatype=str):
@@ -269,7 +311,7 @@ def confirm(question, default=None):
 def display_diecase_layout(diecase):
     """Shows a layout for a given diecase ID, unit values for its
     assigned wedge, or the typical S5 if not specified."""
-    def get_char(matrix):
+    def _get_char(matrix):
         """Modifies matrix char for displaying"""
         # Style modifiers for displaying roman, bold, italic,
         # smallcaps, inferior, superior
@@ -279,7 +321,24 @@ def display_diecase_layout(diecase):
         fmt = ''.join([style_modifiers.get(s, '') for s in matrix.styles])
         if len(fmt) > 2:
             fmt = '#'
-        return spaces_symbols.get(matrix.char, fmt + matrix.char)
+        return spaces_symbols.get(matrix.char) or fmt + matrix.char
+
+    def get_char(matrix):
+        """New style formatting for diecase layouts"""
+        style_modifiers = {'r': dict(fg=None),
+                           'b': dict(bold=True),
+                           'i': dict(fg='cyan'),
+                           's': dict(underline=True),
+                           'u': dict(fg='blue'),
+                           'l': dict(fg='magenta')}
+        spaces_symbols = {'_': FormattedText('▣', fg='red'),
+                          ' ': FormattedText('□', fg='red'),
+                          '': FormattedText(' ')}
+        style_options = {'fg': None}
+        for style in matrix.styles:
+            style_options.update(style_modifiers.get(style))
+        return (spaces_symbols.get(matrix.char) or
+                FormattedText(matrix.char, **style_options))
 
     def get_width(column):
         """Get the column width"""

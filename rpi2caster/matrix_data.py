@@ -822,17 +822,22 @@ class Space(MatrixMixin):
                    'en', 'em', 'u']
         prompt = 'Enter the space width value and unit (or "?" for help)'
         while True:
-            # If 0, use default
-            raw_string = str(width) or UI.enter_data_or_default(prompt, '1en')
+            if width is None:
+                raw_string = UI.enter_data_or_default(prompt, '1en')
+            elif not width:
+                # If 0, use default 5 units
+                raw_string = '9u'
+            else:
+                raw_string = str(width)
             if '?' in raw_string:
                 # Display help message and start again
                 UI.display(help_text)
-                continue
             try:
                 self.units = parse_value(raw_string)
                 return
             except (TypeError, ValueError):
                 UI.display('Incorrect value - enter again...')
+                raw_string = None
 
 
 def diecase_operations():

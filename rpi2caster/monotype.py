@@ -190,11 +190,11 @@ class MonotypeCaster(object):
                 if not self.mode.punching:
                     self.pump_stop()
                 # Exception will be handled in session
-                raise
+                raise e.MachineStopped
 
     def pump_stop(self):
         """Forces pump stop - won't end until it is turned off"""
-        def send_signals():
+        def send_stop_signals():
             """Send a combination - full cycle"""
             self.output.valves_off()
             self.sensor.wait_for(AIR_ON, 30)
@@ -208,10 +208,10 @@ class MonotypeCaster(object):
             UI.display('The pump is still working - turning it off...')
             try:
                 # Run two full sequences to be sure
-                send_signals()
-                send_signals()
+                send_stop_signals()
+                send_stop_signals()
                 UI.display('Pump is now off.')
-                return True
+                self.pump_working = False
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 pass
 
@@ -249,6 +249,7 @@ class SensorMixin(object):
         cycles = 3
         while True:
             try:
+                self.wait_for(new_state=True, timeout=30)
                 while cycles:
                     # Run a new cycle
                     UI.display(cycles)
@@ -256,10 +257,8 @@ class SensorMixin(object):
                     cycles -= 1
                 return True
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                if UI.confirm('Machine stopped - continue? ', default=False):
-                    # Continue checking
-                    pass
-                else:
+                prompt = 'Machine is not running. Y to try again or N to exit?'
+                if not UI.confirm(prompt, default=False):
                     return False
 
     def wait_for(self, new_state, timeout=30, time_on=0.1, time_off=0.1):
