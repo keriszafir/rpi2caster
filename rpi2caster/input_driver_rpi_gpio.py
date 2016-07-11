@@ -2,7 +2,7 @@
 """RPi.GPIO input driver for rpi2caster"""
 
 import RPi.GPIO as GPIO
-from .global_config import SENSOR_GPIO
+from .global_config import SENSOR_GPIO, INPUT_BOUNCE_TIME
 from .exceptions import MachineStopped
 from .monotype import SensorMixin
 
@@ -29,7 +29,7 @@ class RPiGPIOSensor(SensorMixin):
         """Use interrupt handlers in RPi.GPIO for triggering the change"""
         change = GPIO.RISING if new_state else GPIO.FALLING
         channel = GPIO.wait_for_edge(self.gpio, change, timeout=timeout*1000,
-                                     bouncetime=50)
+                                     bouncetime=INPUT_BOUNCE_TIME)
         if channel is None:
             raise MachineStopped
         else:

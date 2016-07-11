@@ -72,6 +72,7 @@ DEFAULT_UNIT = get_config('Preferences', 'measurement_unit', 'cc')
 SIGNALS_ARRANGEMENT = get_config('Interface', 'signals', SIGNALS, list)
 EMERGENCY_STOP_GPIO = get_config('Interface', 'emergency_stop_gpio', 22, int)
 SENSOR_GPIO = get_config('Interface', 'sensor_gpio', 17, int)
+INPUT_BOUNCE_TIME = get_config('Interface', 'input_bounce_time', 25, int)
 # Default hardware interface output data
 MCP0 = get_config('Interface', 'MCP0', 0x20, int)
 MCP1 = get_config('Interface', 'MCP1', 0x21, int)

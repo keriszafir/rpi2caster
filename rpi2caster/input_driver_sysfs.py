@@ -8,7 +8,7 @@ import select
 # Debounce timers need this
 from time import time
 # Constants shared between modules
-from .global_config import UI, SENSOR_GPIO
+from .global_config import UI, SENSOR_GPIO, INPUT_BOUNCE_TIME
 # Custom exceptions
 from .exceptions import MachineStopped
 # Caster prototype
@@ -65,7 +65,8 @@ class SysfsSensor(SensorMixin):
             while self.last_state != new_state:
                 if signals.poll(timeout):
                     state = get_state()
-                    if time() - debounce > 0.01:
+                    # Input bounce time is given in milliseconds
+                    if time() - debounce > INPUT_BOUNCE_TIME * 0.001:
                         self.last_state = state
                     debounce = time()
                 else:
