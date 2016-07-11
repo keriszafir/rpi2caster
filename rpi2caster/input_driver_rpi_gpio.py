@@ -28,7 +28,8 @@ class RPiGPIOSensor(SensorMixin):
     def wait_for(self, new_state, timeout=5, *_):
         """Use interrupt handlers in RPi.GPIO for triggering the change"""
         change = GPIO.RISING if new_state else GPIO.FALLING
-        channel = GPIO.wait_for_edge(self.gpio, change)
+        channel = GPIO.wait_for_edge(self.gpio, change, timeout=timeout*1000,
+                                     bouncetime=10)
         if channel is None:
             raise MachineStopped
         else:
