@@ -5,8 +5,10 @@ import RPi.GPIO as GPIO
 from .global_config import SENSOR_GPIO, INPUT_BOUNCE_TIME
 from .exceptions import MachineStopped
 from .monotype import SensorMixin
+from .decorators import singleton
 
 
+@singleton
 class RPiGPIOSensor(SensorMixin):
     """Simple RPi.GPIO input driver for photocell"""
     def __init__(self, gpio=SENSOR_GPIO):
