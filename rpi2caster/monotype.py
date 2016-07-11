@@ -555,6 +555,11 @@ def sysfs_sensor():
     from .input_driver_sysfs import SysfsSensor
     return SysfsSensor()
 
+def rpigpio_sensor():
+    """Gets hardware sensor with RPi.GPIO backend"""
+    from .input_driver_rpi_gpio import RPiGPIOSensor
+    return RPiGPIOSensor()
+
 
 def wiringpi_output():
     """Gets hardware output - prevents import loop"""
@@ -575,6 +580,7 @@ def parallel_output():
 
 
 SENSORS = {'simulation': SimulationSensor, 'sysfs': sysfs_sensor,
+           'rpi.gpio': rpigpio_sensor,
            'parallel': parallel_sensor, 'testing': TestSensor,
            'punching': PunchingSensor}
 OUTPUTS = {'simulation': SimulationOutput, 'wiringpi': wiringpi_output,
