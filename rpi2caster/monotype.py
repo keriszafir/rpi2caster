@@ -187,6 +187,7 @@ class MonotypeCaster(object):
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Machine stopped during casting - clean up
                 # Punching doesn't need this at all
+                UI.display('Emergency stop!')
                 if not self.mode.punching:
                     self.pump_stop()
                 # Exception will be handled in session
