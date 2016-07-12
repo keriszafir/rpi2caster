@@ -498,6 +498,9 @@ class CasterMode(object):
         # Set simulation mode if specified in config
         if 'simulation' in backend:
             self.simulation = True
+        # The same for punching mode
+        if 'punching' in backend:
+            self.punching = True
         if self.simulation is None and BACKEND_SELECT:
             # Select the casting or simulation mode
             prompt = 'Use caster? (no = simulation mode)'
