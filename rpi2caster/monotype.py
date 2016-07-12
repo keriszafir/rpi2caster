@@ -541,42 +541,58 @@ class CasterMode(object):
             return WiringPiOutputDriver()
 
         def parallel_sensor():
-            """A parallel port sensor for John Cornelisse's old interface"""
-            from .driver_parallel import ParallelSensor
-            return ParallelSensor()
+            """A parallel port valve control for John Cornelisse's
+            old interface built by Symbiosys"""
+            from .io_driver_parallel import ParallelInterface
+            try:
+                return ParallelInterface()
+            except (FileNotFoundError, IOError, OSError):
+                UI.pause('ERROR: Cannot access the parallel port!\n'
+                         'Check your hardware and OS configuration...\n'
+                         'Using simulation interface instead.')
+                return SimulationSensor()
 
         def parallel_output():
             """A parallel port valve control for John Cornelisse's
             old interface built by Symbiosys"""
-            from .driver_parallel import ParallelOutputDriver
-            return ParallelOutputDriver()
+            from .io_driver_parallel import ParallelInterface
+            try:
+                return ParallelInterface()
+            except (FileNotFoundError, IOError, OSError):
+                return SimulationOutput()
 
-        sensor_names = {'simulation': SimulationSensor, 'sysfs': sysfs_sensor,
+        sensor_names = {'simulation': SimulationSensor,
+                        'sysfs': sysfs_sensor,
                         'rpi.gpio': rpigpio_sensor,
-                        'parallel': parallel_sensor, 'testing': TestSensor,
+                        'parallel': parallel_sensor,
+                        'testing': TestSensor,
                         'punching': PunchingSensor}
         output_names = {'simulation': SimulationOutput,
                         'wiringpi': wiringpi_output,
                         'parallel': parallel_output}
-        # If we don't know whether simulation is on or off - ask
-        if self.simulation is None and BACKEND_SELECT:
-            prompt = 'Use caster? (no = simulation mode)'
-            self.simulation = not UI.confirm(prompt, True)
         # First get the backend from configuration
         backend = [SENSOR, OUTPUT]
         sensor, output = backend
         # Use simulation mode if set in configuration
         self.simulation = True if 'simulation' in backend else self.simulation
+        # If we don't know whether simulation is on or off - ask
+        if self.simulation is None and BACKEND_SELECT:
+            prompt = 'Use real caster? (no = simulation mode)'
+            self.simulation = not UI.confirm(prompt, True)
         # Use parallel interface
-        parallel = True if 'parallel' in backend else False
+        parallel = (True if 'parallel' in backend and not self.simulation
+                    else False)
         self.punching = True if 'punching' in backend else False
         # Override the backend for parallel and simulation
         # Use parallel sensor above all else
         # Testing and punching sensor overrides simulation sensor
-        sensor = ('parallel' if parallel else 'testing' if self.testing
+        sensor = ('parallel' if parallel
+                  else 'testing' if self.testing
                   else 'punching' if self.punching
-                  else 'simulation' if self.simulation else sensor)
-        output = ('parallel' if parallel else 'simulation' if self.simulation
+                  else 'simulation' if self.simulation
+                  else sensor)
+        output = ('parallel' if parallel
+                  else 'simulation' if self.simulation
                   else output)
         return (sensor_names.get(sensor, SimulationSensor),
                 output_names.get(output, SimulationOutput))

@@ -2,13 +2,13 @@
 """Parallel port input and output driver"""
 import time
 from parallel import Parallel
-from .monotype import SensorMixin, OutputMixin, SimulationOutput
+from .monotype import SensorMixin, OutputMixin
 from .global_config import UI, SIGNALS_ARRANGEMENT
 from .decorators import singleton
 
 
 @singleton
-class ParallelOutputDriver(OutputMixin):
+class ParallelInterface(SensorMixin, OutputMixin):
     """Output driver for parallel port. Sends four bytes in sequence:
     byte0: O N M L K J I H
     byte1: G F S E D 0075 C B
@@ -22,27 +22,20 @@ class ParallelOutputDriver(OutputMixin):
         super().__init__()
         self.name = 'Symbiosys parallel port interface'
         self.working = False
-        self.port = None
+        self.port = Parallel()
         self.lock = False
 
     def __enter__(self):
         if not self.lock:
-            try:
-                self.lock = True
-                self.port = self.port or Parallel()
-                if not self.working:
-                    # Check for working to avoid re-initialization
-                    self._init_on()
-                    self._init_off()
-                    UI.display('\nPress the button on the interface...')
-                    self._wait_until_not_busy()
-                    self.working = True
-                return self
-            except (FileNotFoundError, IOError, OSError):
-                UI.pause('ERROR: Cannot access the parallel port!\n'
-                         'Check your hardware and OS configuration...\n'
-                         'Simulating casting instead.')
-                return SimulationOutput()
+            self.lock = True
+            self.port = self.port or Parallel()
+            if not self.working:
+                # Check for working to avoid re-initialization
+                self._init_on()
+                self._init_off()
+                UI.display('\nPress the button on the interface...')
+                self._wait_until_not_busy()
+                self.working = True
 
     def __exit__(self, *_, **__):
         self.lock = False
@@ -52,7 +45,7 @@ class ParallelOutputDriver(OutputMixin):
     def valves_on(self, signals_list=None):
         """Activate the valves"""
         if signals_list:
-            mapping = ParallelOutputDriver.mapping
+            mapping = ParallelInterface.mapping
             number = sum(mapping.get(signal, 0) for signal in signals_list)
             # Split it to four bytes sent in sequence
             byte0 = (number >> 24) & 0xff
@@ -127,14 +120,6 @@ class ParallelOutputDriver(OutputMixin):
         # Negative logic!
         if self.port:
             self.port.setInitOut(True)
-
-
-@singleton
-class ParallelSensor(SensorMixin):
-    """Parallel port sensor driver"""
-    def __init__(self):
-        super().__init__()
-        self.name = 'Symbiosys parallel port interface'
 
     def check_if_machine_is_working(self):
         """Reset the interface if needed and go on"""
