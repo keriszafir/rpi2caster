@@ -55,21 +55,30 @@ class SysfsSensor(SensorMixin):
 
         # Set debounce time to now
         debounce = time()
-        # Prevent sudden exit in the midst of machine cycle
+        # Prevent sudden exit if the current state is the desired state
         with io.open(self.value_file, 'r') as gpiostate:
             if get_state() == new_state:
                 self.last_state = not new_state
         with io.open(self.value_file, 'r') as gpiostate:
-            signals = select.epoll()
-            signals.register(gpiostate, select.POLLPRI)
-            while self.last_state != new_state:
-                if signals.poll(timeout):
-                    state = get_state()
-                    # Input bounce time is given in milliseconds
-                    if time() - debounce > INPUT_BOUNCE_TIME * 0.001:
-                        self.last_state = state
-                    debounce = time()
-                else:
+            done = False
+            while not done:
+                try:
+                    signals = select.epoll()
+                    signals.register(gpiostate, select.POLLPRI)
+                    while self.last_state != new_state:
+                        # Keep polling or raise MachineStopped on timeout
+                        if signals.poll(timeout):
+                            state = get_state()
+                            # Input bounce time is given in milliseconds
+                            if time() - debounce > INPUT_BOUNCE_TIME * 0.001:
+                                self.last_state = state
+                            debounce = time()
+                        else:
+                            raise MachineStopped
+                    done = True
+                except RuntimeError:
+                    pass
+                except (KeyboardInterrupt, EOFError):
                     raise MachineStopped
 
 

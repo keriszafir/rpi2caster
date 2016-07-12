@@ -679,43 +679,42 @@ class Casting(TypesettingContext):
             """Build a list of options, adding an option if condition is met"""
             # Options are described with tuples:
             # (function, description, condition)
-            caster = not self.caster.mode.punching
             diecase = bool(self.diecase)
             ribbon = bool(self.ribbon)
             diecase_info = ' (current: %s)' % self.diecase if diecase else ''
             opts = [(finish, 'Exit', 'Exits the program', True),
                     (self.cast_composition, 'Cast composition',
-                     'Cast type from a selected ribbon', ribbon and caster),
+                     'Cast type from a selected ribbon', ribbon and casting),
                     (self.cast_composition, 'Punch ribbon',
                      'Punch a paper ribbon for casting without the interface',
-                     ribbon and not caster),
+                     ribbon and punching),
                     (self.choose_ribbon, 'Select ribbon',
                      'Select a ribbon from database or file', True),
                     (self.choose_diecase, 'Select diecase',
                      'Select a matrix case from database' + diecase_info,
-                     caster),
+                     casting),
                     (self.ribbon.display_contents, 'View codes',
                      'Display all codes in the selected ribbon', ribbon),
                     (self.diecase.show_layout, 'Show diecase layout',
-                     'View the matrix case layout', diecase and caster),
+                     'View the matrix case layout', diecase and casting),
                     (self.quick_typesetting, 'Quick typesetting',
-                     'Compose and cast a line of text', self.diecase),
+                     'Compose and cast a line of text', diecase and casting),
                     (self.cast_sorts, 'Cast sorts for given characters',
                      'Cast from matrix based on a character',
-                     caster and diecase),
+                     casting and diecase),
                     (self.cast_sorts, 'Cast sorts from matrix coordinates',
                      'Cast from matrix at given position',
-                     caster and not diecase),
+                     casting and not diecase),
                     (self.cast_spaces, 'Cast spaces',
-                     'Cast spaces or quads of a specified width', caster),
+                     'Cast spaces or quads of a specified width', casting),
                     (self.cast_typecases, 'Cast typecases',
                      'Cast a typecase based on a selected language',
-                     caster and diecase),
+                     casting and diecase),
                     (self._display_details, 'Show details...',
                      'Display ribbon, diecase, wedge and interface info',
-                     caster),
+                     casting),
                     (self._display_details, 'Show details...',
-                     'Display ribbon and interface details', not caster),
+                     'Display ribbon and interface details', punching),
                     (diecase_operations, 'Matrix manipulation...',
                      'Work on matrix cases', True),
                     (self.diecase_proof, 'Diecase proof',
@@ -727,11 +726,14 @@ class Casting(TypesettingContext):
                     for (function, description, long_description, condition)
                     in opts if condition]
 
+        punching = self.caster.mode.punching
+        casting = not punching
+        job = 'Casting' if casting else 'Punching'
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.\n\n'
                   'This program reads a ribbon (from file or database) '
                   'and casts the type on a composition caster.'
-                  '\n\nCasting / Punching Menu:')
+                  '\n\n%s Menu:' % job)
         # Keep displaying the menu and go back here after any method ends
         finished = False
         while not finished:
