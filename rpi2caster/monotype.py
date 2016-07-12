@@ -415,12 +415,12 @@ class CasterMode(object):
     @property
     def calibration(self):
         """Machine calibration mode"""
-        return self.__dict__.get('calibration', False)
+        return self.__dict__.get('_calibration', False)
 
     @calibration.setter
     def calibration(self, value):
         """Set the machine calibration mode"""
-        self.__dict__['calibration'] = value
+        self.__dict__['_calibration'] = value
 
     @property
     def diagnostics(self):
@@ -437,22 +437,22 @@ class CasterMode(object):
     @property
     def punching(self):
         """Punching mode"""
-        return self.__dict__.get('punching', False)
+        return self.__dict__.get('_punching', False)
 
     @punching.setter
     def punching(self, value):
         """Set the punching mode"""
-        self.__dict__['punching'] = value
+        self.__dict__['_punching'] = value
 
     @property
     def testing(self):
         """Testing mode"""
-        return self.__dict__.get('testing', False)
+        return self.__dict__.get('_testing', False)
 
     @testing.setter
     def testing(self, value):
         """Set the testing mode"""
-        self.__dict__['testing'] = value
+        self.__dict__['_testing'] = value
 
     @property
     def casting(self):
