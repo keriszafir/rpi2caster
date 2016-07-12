@@ -400,6 +400,7 @@ class CasterMode(object):
         self.punching = False
         self.testing = False
         self.calibration = False
+        self.casting_backend = self.get_casting_backend()
 
     @property
     def simulation(self):
@@ -489,8 +490,7 @@ class CasterMode(object):
         """Set the unit-shift mode"""
         self.__dict__['_unit-shift'] = value
 
-    @property
-    def casting_backend(self):
+    def get_casting_backend(self):
         """Chooses the sensor and output for controlling the machine
         or simulating machine control"""
         # First set the simulation backend
