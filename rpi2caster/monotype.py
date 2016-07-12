@@ -400,7 +400,6 @@ class CasterMode(object):
         self.punching = False
         self.testing = False
         self.calibration = False
-        self.casting_backend = self.get_casting_backend()
 
     @property
     def simulation(self):
@@ -490,36 +489,6 @@ class CasterMode(object):
         """Set the unit-shift mode"""
         self.__dict__['_unit-shift'] = value
 
-    def get_casting_backend(self):
-        """Chooses the sensor and output for controlling the machine
-        or simulating machine control"""
-        # First set the simulation backend
-        backend = [SENSOR, OUTPUT]
-        # Set simulation mode if specified in config
-        if 'simulation' in backend:
-            self.simulation = True
-        # The same for punching mode
-        if 'punching' in backend:
-            self.punching = True
-        if self.simulation is None and BACKEND_SELECT:
-            # Select the casting or simulation mode
-            prompt = 'Use caster? (no = simulation mode)'
-            self.simulation = not UI.confirm(prompt, True)
-        if self.simulation:
-            # Simulation sensor and output driver must work together
-            # (unless for punching or testing)
-            backend = ['simulation', 'simulation']
-        # Override depending on mode
-        backend[0] = (self.testing and 'testing' or
-                      self.punching and 'punching' or backend[0])
-        if 'parallel' in backend:
-            # Parallel sensor and output driver must work together
-            # even for punching or testing
-            backend = ['parallel', 'parallel']
-        sensor, output = backend
-        return (SENSORS.get(sensor, SimulationSensor),
-                OUTPUTS.get(output, SimulationOutput))
-
     def choose_row16_addressing(self):
         """Let user decide which way to address row 16"""
         def hmn_on():
@@ -553,40 +522,61 @@ class CasterMode(object):
                    '': do_nothing}
         UI.simple_menu(prompt, options)()
 
+    def get_casting_backend(self):
+        """Chooses the sensor and output for controlling the machine
+        or simulating machine control"""
+        def sysfs_sensor():
+            """Gets hardware sensor - prevents import loop"""
+            from .input_driver_sysfs import SysfsSensor
+            return SysfsSensor()
 
-def sysfs_sensor():
-    """Gets hardware sensor - prevents import loop"""
-    from .input_driver_sysfs import SysfsSensor
-    return SysfsSensor()
+        def rpigpio_sensor():
+            """Gets hardware sensor with RPi.GPIO backend"""
+            from .input_driver_rpi_gpio import RPiGPIOSensor
+            return RPiGPIOSensor()
 
+        def wiringpi_output():
+            """Gets hardware output - prevents import loop"""
+            from .output_driver_wiringpi import WiringPiOutputDriver
+            return WiringPiOutputDriver()
 
-def rpigpio_sensor():
-    """Gets hardware sensor with RPi.GPIO backend"""
-    from .input_driver_rpi_gpio import RPiGPIOSensor
-    return RPiGPIOSensor()
+        def parallel_sensor():
+            """A parallel port sensor for John Cornelisse's old interface"""
+            from .driver_parallel import ParallelSensor
+            return ParallelSensor()
 
+        def parallel_output():
+            """A parallel port valve control for John Cornelisse's
+            old interface built by Symbiosys"""
+            from .driver_parallel import ParallelOutputDriver
+            return ParallelOutputDriver()
 
-def wiringpi_output():
-    """Gets hardware output - prevents import loop"""
-    from .output_driver_wiringpi import WiringPiOutputDriver
-    return WiringPiOutputDriver()
-
-
-def parallel_sensor():
-    """A parallel port sensor for John Cornelisse's old interface"""
-    from .driver_parallel import ParallelSensor
-    return ParallelSensor()
-
-
-def parallel_output():
-    """A parallel port valve control for John Cornelisse's old interface"""
-    from .driver_parallel import ParallelOutputDriver
-    return ParallelOutputDriver()
-
-
-SENSORS = {'simulation': SimulationSensor, 'sysfs': sysfs_sensor,
-           'rpi.gpio': rpigpio_sensor,
-           'parallel': parallel_sensor, 'testing': TestSensor,
-           'punching': PunchingSensor}
-OUTPUTS = {'simulation': SimulationOutput, 'wiringpi': wiringpi_output,
-           'parallel': parallel_output}
+        sensor_names = {'simulation': SimulationSensor, 'sysfs': sysfs_sensor,
+                        'rpi.gpio': rpigpio_sensor,
+                        'parallel': parallel_sensor, 'testing': TestSensor,
+                        'punching': PunchingSensor}
+        output_names = {'simulation': SimulationOutput,
+                        'wiringpi': wiringpi_output,
+                        'parallel': parallel_output}
+        # If we don't know whether simulation is on or off - ask
+        if self.simulation is None and BACKEND_SELECT:
+            prompt = 'Use caster? (no = simulation mode)'
+            self.simulation = not UI.confirm(prompt, True)
+        # First get the backend from configuration
+        backend = [SENSOR, OUTPUT]
+        sensor, output = backend
+        # Use simulation mode if set in configuration
+        self.simulation = True if 'simulation' in backend else self.simulation
+        # Use parallel interface
+        parallel = True if 'parallel' in backend else False
+        self.punching = True if 'punching' in backend else False
+        # Override the backend for parallel and simulation
+        # Use parallel sensor above all else
+        # Testing and punching sensor overrides simulation sensor
+        sensor = ('parallel' if parallel else 'testing' if self.testing
+                  else 'punching' if self.punching
+                  else 'simulation' if self.simulation else sensor)
+        output = ('parallel' if parallel else 'simulation' if self.simulation
+                  else output)
+        return (sensor_names.get(sensor, SimulationSensor),
+                output_names.get(output, SimulationOutput))

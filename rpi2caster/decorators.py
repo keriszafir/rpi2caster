@@ -19,7 +19,7 @@ def choose_sensor_and_driver(casting_routine):
                         else 'calibrate the machine' if mode.calibration
                         else 'punch the ribbon' if mode.punching else 'blow'))
         # Instantiate and enter context
-        sensor, output = mode.casting_backend
+        sensor, output = mode.get_casting_backend()
         with sensor() as self.caster.sensor:
             with output() as self.caster.output:
                 with self.caster:
