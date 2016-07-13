@@ -12,18 +12,21 @@ def choose_sensor_and_driver(casting_routine):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
+        def debug():
+            """Show some info"""
+            UI.debug_pause('About to %s...' %
+                           ('cast composition' if mode.casting
+                            else 'test the outputs' if mode.testing
+                            else 'calibrate the machine' if mode.calibration
+                            else 'punch the ribbon' if mode.punching
+                            else 'blow'))
+
         mode = self.caster.mode
-        UI.debug_pause('About to %s...' %
-                       ('cast composition' if mode.casting
-                        else 'test the outputs' if mode.testing
-                        else 'calibrate the machine' if mode.calibration
-                        else 'punch the ribbon' if mode.punching else 'blow'))
         # Instantiate and enter context
-        sensor, output = mode.get_casting_backend()
-        with sensor() as self.caster.sensor:
-            with output() as self.caster.output:
-                with self.caster:
-                    return casting_routine(self, *args, **kwargs)
+        debug()
+        with self.caster:
+            debug()
+            return casting_routine(self, *args, **kwargs)
     return wrapper
 
 

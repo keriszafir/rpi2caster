@@ -126,7 +126,10 @@ class MonotypeCaster(object):
         else:
             self.lock = True
             UI.debug_pause('Entering the caster context...')
-            return self
+            sensor, output = self.mode.get_casting_backend()
+            with sensor() as self.sensor:
+                with output() as self.output:
+                    return self
 
     def __exit__(self, *_):
         UI.debug_pause('Caster no longer in use.')
@@ -219,11 +222,12 @@ class MonotypeCaster(object):
 
 class SensorMixin(object):
     """Mockup for a machine cycle sensor"""
+    name = 'generic machine cycle sensor'
+
     def __init__(self):
         self.lock = False
         self.manual_mode = True
         self.last_state = False
-        self.name = 'generic machine cycle sensor'
 
     def __enter__(self):
         if not self.lock:
@@ -288,9 +292,7 @@ class SensorMixin(object):
 
 class SimulationSensor(SensorMixin):
     """Simulate casting with no actual machine"""
-    def __init__(self):
-        super().__init__()
-        self.name = 'simulation - mockup casting interface'
+    name = 'simulation - mockup casting interface'
 
     def check_if_machine_is_working(self):
         """Warn that this is just a simulation"""
@@ -302,9 +304,7 @@ class SimulationSensor(SensorMixin):
 
 class PunchingSensor(SensorMixin):
     """A special sensor class for perforators"""
-    def __init__(self):
-        super().__init__()
-        self.name = 'timer-driven or manual advance for perforator'
+    name = 'timer-driven or manual advance for perforator'
 
     def check_if_machine_is_working(self):
         """Ask for user confirmation before punching"""
@@ -314,15 +314,16 @@ class PunchingSensor(SensorMixin):
 
     def wait_for(self, new_state, timeout=30, time_on=0.25, time_off=0.4):
         """Calls simulation sensor's function, but with different timings"""
-        super().wait_for(new_state, timeout, time_on, time_off)
+        if new_state:
+            super().wait_for(new_state, timeout, time_on, time_off)
+        else:
+            sleep(time_off)
 
 
 class TestSensor(SensorMixin):
     """A keyboard-operated "sensor" for testing inputs.
     No automatic mode is supported."""
-    def __init__(self):
-        super().__init__()
-        self.name = 'manual advance for testing'
+    name = 'manual advance for testing'
 
     def wait_for(self, new_state, *_):
         """Waits for keypress before turning the line off"""
@@ -336,9 +337,10 @@ class TestSensor(SensorMixin):
 
 class OutputMixin(object):
     """Mockup for a driver for 32 pneumatic outputs"""
+    name = 'generic output driver'
+
     def __init__(self, signals_arrangement=SIGNALS_ARRANGEMENT):
         self.lock = False
-        self.name = 'generic output driver'
         self.signals_arrangement = signals_arrangement
         self.working = True
 
@@ -389,9 +391,7 @@ class OutputMixin(object):
 
 class SimulationOutput(OutputMixin):
     """Simulation output driver - don't control any hardware"""
-    def __init__(self):
-        super().__init__()
-        self.name = 'simulation - mockup casting interface'
+    name = 'simulation - mockup casting interface'
 
 
 class CasterMode(object):
@@ -523,76 +523,109 @@ class CasterMode(object):
         UI.simple_menu(prompt, options)()
 
     def get_casting_backend(self):
-        """Chooses the sensor and output for controlling the machine
-        or simulating machine control"""
-        def sysfs_sensor():
-            """Gets hardware sensor - prevents import loop"""
-            from .input_driver_sysfs import SysfsSensor
-            return SysfsSensor()
+        """Use the interface factory method to determine sensor and output"""
+        return interface_factory(self)
 
-        def rpigpio_sensor():
-            """Gets hardware sensor with RPi.GPIO backend"""
-            from .input_driver_rpi_gpio import RPiGPIOSensor
-            return RPiGPIOSensor()
 
-        def wiringpi_output():
-            """Gets hardware output - prevents import loop"""
-            from .output_driver_wiringpi import WiringPiOutputDriver
-            return WiringPiOutputDriver()
+def interface_factory(mode, default_sensor=SENSOR, default_output=OUTPUT):
+    """Interface factory combines the sensor and output modules into
+    an Interface class. Returns an instance of this class."""
+    def sysfs_sensor():
+        """Gets hardware sensor - prevents import loop"""
+        from .input_driver_sysfs import SysfsSensor
+        return SysfsSensor()
 
-        def parallel_sensor():
-            """A parallel port valve control for John Cornelisse's
-            old interface built by Symbiosys"""
-            from .io_driver_parallel import ParallelInterface
-            try:
-                return ParallelInterface()
-            except (FileNotFoundError, IOError, OSError):
-                UI.pause('ERROR: Cannot access the parallel port!\n'
-                         'Check your hardware and OS configuration...\n'
-                         'Using simulation interface instead.')
-                return SimulationSensor()
+    def rpigpio_sensor():
+        """Gets hardware sensor with RPi.GPIO backend"""
+        from .input_driver_rpi_gpio import RPiGPIOSensor
+        return RPiGPIOSensor()
 
-        def parallel_output():
-            """A parallel port valve control for John Cornelisse's
-            old interface built by Symbiosys"""
-            from .io_driver_parallel import ParallelInterface
-            try:
-                return ParallelInterface()
-            except (FileNotFoundError, IOError, OSError):
-                return SimulationOutput()
+    def parallel_sensor():
+        """A parallel port valve control for John Cornelisse's
+        old interface built by Symbiosys"""
+        from .io_driver_parallel import ParallelInterface
+        try:
+            return ParallelInterface()
+        except (FileNotFoundError, IOError, OSError):
+            UI.pause('ERROR: Cannot access the parallel port!\n'
+                     'Check your hardware and OS configuration...\n'
+                     'Using simulation interface instead.')
+            return (punching_sensor() if mode.punching
+                    else test_sensor() if mode.testing
+                    else simulation_sensor())
 
-        sensor_names = {'simulation': SimulationSensor,
+    def parallel_output():
+        """A parallel port valve control for John Cornelisse's
+        old interface built by Symbiosys"""
+        from .io_driver_parallel import ParallelInterface
+        try:
+            return ParallelInterface()
+        except (FileNotFoundError, IOError, OSError):
+            return simulation_output()
+
+    def test_sensor():
+        """Sensor used for testing - manual advance ONLY"""
+        mode.testing = True
+        return TestSensor()
+
+    def simulation_sensor():
+        """Sensor used for simulation - manual or automatic advance,
+        can simulate machine stop"""
+        mode.simulation = True
+        return SimulationSensor()
+
+    def punching_sensor():
+        """Manual or time-driven advance, no machine stop detection"""
+        mode.punching = True
+        return PunchingSensor()
+
+    def wiringpi_output():
+        """Gets hardware output - prevents import loop"""
+        from .output_driver_wiringpi import WiringPiOutputDriver
+        return WiringPiOutputDriver()
+
+    def simulation_output():
+        """Simulate valves instead of using real hardware"""
+        mode.simulation = True
+        return SimulationOutput()
+
+    def get_classes():
+        """Get the sensor and output drivers"""
+        sensor_names = {'simulation': simulation_sensor,
                         'sysfs': sysfs_sensor,
                         'rpi.gpio': rpigpio_sensor,
                         'parallel': parallel_sensor,
-                        'testing': TestSensor,
-                        'punching': PunchingSensor}
-        output_names = {'simulation': SimulationOutput,
+                        'testing': test_sensor,
+                        'punching': punching_sensor}
+        output_names = {'simulation': simulation_output,
                         'wiringpi': wiringpi_output,
                         'parallel': parallel_output}
         # First get the backend from configuration
-        backend = [SENSOR, OUTPUT]
-        sensor, output = backend
+        backend = [default_sensor, default_output]
         # Use simulation mode if set in configuration
-        self.simulation = True if 'simulation' in backend else self.simulation
+        simulation = True if 'simulation' in backend else mode.simulation
         # If we don't know whether simulation is on or off - ask
-        if self.simulation is None and BACKEND_SELECT:
+        if simulation is None and BACKEND_SELECT:
             prompt = 'Use real caster? (no = simulation mode)'
-            self.simulation = not UI.confirm(prompt, True)
+            simulation = not UI.confirm(prompt, True)
         # Use parallel interface
-        parallel = (True if 'parallel' in backend and not self.simulation
-                    else False)
-        self.punching = True if 'punching' in backend else False
+        parallel = True if 'parallel' in backend and not simulation else False
+        punching = True if 'punching' in backend else mode.punching
         # Override the backend for parallel and simulation
         # Use parallel sensor above all else
         # Testing and punching sensor overrides simulation sensor
         sensor = ('parallel' if parallel
-                  else 'testing' if self.testing
-                  else 'punching' if self.punching
-                  else 'simulation' if self.simulation
-                  else sensor)
+                  else 'testing' if mode.testing
+                  else 'punching' if punching
+                  else 'simulation' if simulation
+                  else default_sensor)
         output = ('parallel' if parallel
-                  else 'simulation' if self.simulation
-                  else output)
-        return (sensor_names.get(sensor, SimulationSensor),
-                output_names.get(output, SimulationOutput))
+                  else 'simulation' if simulation
+                  else default_output)
+        # Get the function for building the interface based on name
+        # These functions will be executed when needed
+        sensor_function = sensor_names.get(sensor, SimulationSensor)
+        output_function = output_names.get(output, SimulationOutput)
+        return sensor_function, output_function
+
+    return get_classes()
