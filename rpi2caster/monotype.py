@@ -115,6 +115,8 @@ class MonotypeCaster(object):
         self.mode = CasterMode()
         self.lock = False
         self.pump_working = False
+        # Update the modes right at the beginning
+        interface_factory(self.mode)
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
