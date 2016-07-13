@@ -113,8 +113,6 @@ class MonotypeCaster(object):
     caster driver objects (whether real hardware or mockup for simulation)."""
     def __init__(self):
         self.mode = CasterMode()
-        self.sensor = SimulationSensor()
-        self.output = SimulationOutput()
         self.lock = False
         self.pump_working = False
 
@@ -133,7 +131,30 @@ class MonotypeCaster(object):
 
     def __exit__(self, *_):
         UI.debug_pause('Caster no longer in use.')
+        self.sensor = None
+        self.output = None
         self.lock = False
+
+    @property
+    def sensor(self):
+        """Sensor controls the advance between steps during casting, testing
+        or punching the ribbon"""
+        return self.__dict__.get('_sensor') or SimulationSensor()
+
+    @sensor.setter
+    def sensor(self, sensor):
+        """Set a current sensor"""
+        self.__dict__['_sensor'] = sensor
+
+    @property
+    def output(self):
+        """Output is the machine control mechanism, using solenoid valves"""
+        return self.__dict__.get('_output') or SimulationOutput()
+
+    @output.setter
+    def output(self, output):
+        """Set the current output"""
+        self.__dict__['_output'] = output
 
     @property
     def parameters(self):
