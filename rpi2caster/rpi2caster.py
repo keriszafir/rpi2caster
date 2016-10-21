@@ -15,19 +15,17 @@ def casting_job(args):
                               ribbon_id=args.ribbon_id,
                               diecase_id=args.diecase_id,
                               wedge_name=args.wedge_name)
-    simulation = args.simulation or None
-    session.caster.mode.simulation = simulation
+    session.caster.mode.simulation = args.simulation or None
     session.caster.mode.punching = args.punching
     casting.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly or testing
-    if args.direct:
-        session.cast_composition()
-    elif args.testing:
-        session.diagnostics_submenu()
-    elif args.input_text is not None:
+    if args.input_text is not None:
         session.quick_typesetting(args.input_text)
     else:
-        session.main_menu()
+        entry_point = (session.cast_composition if args.direct
+                       else session.diagnostics_submenu if args.testing
+                       else session.main_menu)
+        entry_point()
 
 
 def typesetting_job(args):
@@ -132,132 +130,134 @@ def main():
     """Main function
 
     Parse input options and decide which to run"""
-    # Help description and epilogue i.e. what you see at the bottom
-    desc = ('Starting rpi2caster without arguments will open the main menu, '
-            'where you can choose what to do (casting, inventory management, '
-            'typesetting), toggle simulation or perforation modes.')
-    epi = ('Enter "%s [command] -h" for detailed help about its options. '
-           'Typesetting is not ready yet.' % argv[0])
-    # Initialize the main arguments parser
-    main_parser = argparse.ArgumentParser(description=desc, epilog=epi)
-    # Set default values for all options globally
-    main_parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
-                             ribbon_id='', source=None, simulation=False,
-                             punching=False, text_file='',
-                             manual_mode=False, list_diecases=False,
-                             diecase_id='', wedge_name='', input_text=None,
-                             direct=False, testing=False)
-    #
-    # Define commands
-    #
-    # Subparsers for jobs: casting, inventory management, typesetting
-    jobs = main_parser.add_subparsers(title='Commands',
-                                      description='Choose what you want to do',
-                                      help='description:')
-    #
-    # Casting subparser
-    #
-    cast_parser = jobs.add_parser('cast', aliases=['c'],
-                                  help=('Casting with a Monotype caster '
-                                        'or mockup caster for testing'))
-    # Debug mode
-    cast_parser.add_argument('-d', '--debug', help='debug mode',
-                             action="store_true")
-    # Choose specific diecase
-    cast_parser.add_argument('-m', '--diecase', metavar='ID',
-                             dest='diecase_id', help='diecase ID for casting')
-    # Punch ribbon: uses different sensor, always adds O+15 to combinations
-    cast_parser.add_argument('-p', '--punch', action='store_true',
-                             dest='punching',
-                             help='ribbon punching (perforation) mode')
-    # Simulation mode: casting/punching without the actual caster/interface
-    cast_parser.add_argument('-s', '--simulation', action='store_true',
-                             help='simulate casting instead of real casting')
-    casting_mode = cast_parser.add_mutually_exclusive_group()
-    # Starts in the diagnostics submenu of the casting program
-    casting_mode.add_argument('-T', '--test', action='store_true',
-                              dest='testing',
-                              help='caster / interface diagnostics')
-    # Allows to start casting right away without entering menu
-    casting_mode.add_argument('-D', '--direct', action="store_true",
-                              help='direct casting - no menu',)
-    # Quick typesetting feature
-    casting_mode.add_argument('-t', '--text', dest='input_text',
-                              metavar='"input text"',
-                              help=('compose and cast the '
-                                    'single- or double-quoted input text'))
-    # Choose specific wedge
-    cast_parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
-                             help='wedge to use: [s]series-set_width[e]')
-    # Ribbon ID for choosing from database
-    cast_parser.add_argument('-R', '--ribbon_id', metavar='R',
-                             help='ribbon ID to choose from database')
-    # Ribbon - input file specification
-    cast_parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
-                             help='ribbon file name')
-    cast_parser.set_defaults(job=casting_job)
-    #
-    # Software update subparser
-    #
-    upd_parser = jobs.add_parser('update', aliases=['u', 'upd'],
-                                 help='Update the software')
-    # Update to unstable version
-    upd_parser.add_argument('-t', '--testing', action='store_true',
-                            help='use testing rather than stable version')
-    upd_parser.set_defaults(job=update)
-    #
-    # Composition (typesetting) program subparser
-    #
-    comp_parser = jobs.add_parser('translate', aliases=['t', 'set'],
-                                  help='Typesetting program')
-    # Manual mode option - more control for user
-    comp_parser.add_argument('-M', '--manual', help='use manual mode',
-                             dest='manual_mode', action='store_true')
-    # Choose diecase layout
-    comp_parser.add_argument('-m', '--diecase', dest='diecase_id',
-                             help='diecase ID for typesetting',
-                             metavar='ID')
-    # Debug mode
-    comp_parser.add_argument('-d', '--debug', help='debug mode',
-                             action="store_true")
-    # Input filename option
-    comp_parser.add_argument('text_file',
-                             help='source (text) file to translate',
-                             metavar='text_file', nargs='?',
-                             type=argparse.FileType('r', encoding='UTF-8'))
-    # Output filename option
-    comp_parser.add_argument('ribbon_file', help='ribbon file to generate',
-                             metavar='ribbon_file', nargs='?',
-                             type=argparse.FileType('w', encoding='UTF-8'))
-    # Default action
-    comp_parser.set_defaults(job=typesetting_job)
-    #
-    # Inventory subparser
-    #
-    inv_parser = jobs.add_parser('inventory', aliases=['i', 'inv'],
-                                 help='Matrix case management')
-    # Debug mode
-    inv_parser.add_argument('-d', '--debug', help='debug mode',
+    def build_casting_parser():
+        """Define options for the casting parser"""
+        # Casting subparser
+        parser = cmds.add_parser('cast', aliases=['c'],
+                                 help=('Casting with a Monotype caster '
+                                       'or mockup caster for testing'))
+        # Debug mode
+        parser.add_argument('-d', '--debug', help='debug mode',
                             action="store_true")
-    # List the diecases and exit
-    inv_parser.add_argument('-l', '--list_diecases', action='store_true',
+        # Choose specific diecase
+        parser.add_argument('-m', '--diecase', metavar='ID',
+                            dest='diecase_id',
+                            help='diecase ID for casting')
+        # Punch ribbon: uses different sensor, always adds O+15 to combinations
+        parser.add_argument('-p', '--punch', action='store_true',
+                            dest='punching',
+                            help='ribbon punching (perforation) mode')
+        # Simulation mode: casting/punching without the actual caster/interface
+        parser.add_argument('-s', '--simulation', action='store_true',
+                            help='simulation run instead of real casting')
+        # Entry point decides where the user starts the program
+        start = parser.add_mutually_exclusive_group()
+        # Starts in the diagnostics submenu of the casting program
+        start.add_argument('-T', '--test', action='store_true', dest='testing',
+                           help='caster / interface diagnostics')
+        # Allows to start casting right away without entering menu
+        start.add_argument('-D', '--direct', action="store_true",
+                           help='direct casting - no menu',)
+        # Quick typesetting feature
+        start.add_argument('-t', '--text', dest='input_text',
+                           metavar='"input text"',
+                           help=('compose and cast the '
+                                 'single- or double-quoted input text'))
+        # Choose specific wedge
+        parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
+                            help='wedge to use: [s]series-set_width[e]')
+        # Ribbon ID for choosing from database
+        parser.add_argument('-R', '--ribbon_id', metavar='R',
+                            help='ribbon ID to choose from database')
+        # Ribbon - input file specification
+        parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
+                            help='ribbon file name')
+        parser.set_defaults(job=casting_job)
+
+    def build_typesetting_parser():
+        """Typesetting a.k.a. text translation options"""
+        parser = cmds.add_parser('translate', aliases=['t', 'set'],
+                                 help='Typesetting program')
+        # Manual mode option - more control for user
+        parser.add_argument('-M', '--manual', help='use manual mode',
+                            dest='manual_mode', action='store_true')
+        # Choose diecase layout
+        parser.add_argument('-m', '--diecase', dest='diecase_id', metavar='ID',
+                            help='diecase ID for typesetting')
+        # Debug mode
+        parser.add_argument('-d', '--debug', help='debug mode',
+                            action="store_true")
+        # Input filename option
+        parser.add_argument('text_file', metavar='text_file', nargs='?',
+                            help='source (text) file to translate',
+                            type=argparse.FileType('r', encoding='UTF-8'))
+        # Output filename option
+        parser.add_argument('ribbon_file', metavar='ribbon_file', nargs='?',
+                            help='ribbon file to generate',
+                            type=argparse.FileType('w', encoding='UTF-8'))
+        # Default action
+        parser.set_defaults(job=typesetting_job)
+
+    def build_misc_parsers():
+        """Miscellaneous parsers"""
+        # Update subparser
+        upd_parser = cmds.add_parser('update', aliases=['u', 'upd'],
+                                     help='Update the software')
+        upd_parser.add_argument('-t', '--testing', action='store_true',
+                                help='use testing rather than stable version')
+        upd_parser.set_defaults(job=update)
+        # Easter egg subparser
+        meow_parser = cmds.add_parser('meow', help='here, kitty, kitty!',
+                                      aliases=['miauw', 'miau', 'miaou', 'mio',
+                                               'miaow', 'mew', 'mjav', 'miao'])
+        meow_parser.set_defaults(job=meow)
+
+    def build_inv_parser():
+        """Inventory management parser"""
+        parser = cmds.add_parser('inventory', aliases=['i', 'inv'],
+                                 help='Matrix case management')
+        # Debug mode
+        parser.add_argument('-d', '--debug', help='debug mode',
+                            action="store_true")
+        # List the diecases and exit
+        parser.add_argument('-l', '--list_diecases', action='store_true',
                             help='list all diecases and finish')
-    # Manipulate diecase with given ID
-    inv_parser.add_argument('-m', '--diecase', dest='diecase_id',
-                            help='work on diecase with given ID',
-                            metavar='ID')
-    inv_parser.set_defaults(job=inventory)
-    #
-    # Easter egg subparser
-    #
-    meow_parser = jobs.add_parser('meow',
-                                  aliases=['miauw', 'miau', 'miaou', 'miaow',
-                                           'mew', 'mjav', 'mio', 'miao'],
-                                  help='see for yourself...')
-    meow_parser.set_defaults(job=meow)
-    # Parsers are defined - get the args...
-    args = main_parser.parse_args()
+        # Manipulate diecase with given ID
+        parser.add_argument('-m', '--diecase', dest='diecase_id', metavar='ID',
+                            help='work on diecase with given ID')
+        parser.set_defaults(job=inventory)
+
+    def build_main_parser():
+        """Main parser"""
+        # Help description and epilogue i.e. what you see at the bottom
+        desc = ('Starting rpi2caster without arguments will open the main '
+                'menu, where you can choose what to do (casting, inventory '
+                'management, typesetting), toggle simulation or '
+                'perforation modes.')
+        epi = ('Enter "%s [command] -h" for detailed help about its options. '
+               'Typesetting is not ready yet.' % argv[0])
+        # Initialize the main arguments parser
+        parser = argparse.ArgumentParser(description=desc, epilog=epi)
+        # Set default values for all options globally
+        parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
+                            ribbon_id='', source=None, simulation=False,
+                            punching=False, text_file='',
+                            manual_mode=False, list_diecases=False,
+                            diecase_id='', wedge_name='', input_text=None,
+                            direct=False, testing=False)
+        return parser
+
+    # Build the parsers and get the arguments
+    main_parser = build_main_parser()
+    cmds = main_parser.add_subparsers(title='Commands', help='description:',
+                                      description='Choose what you want to do')
+    build_typesetting_parser()
+    build_casting_parser()
+    build_inv_parser()
+    build_misc_parsers()
+    main_parser.parse_args()
     try:
+        args = main_parser.parse_args()
         args.job(args)
     except (e.ReturnToMenu, e.MenuLevelUp):
         pass

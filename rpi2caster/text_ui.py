@@ -120,7 +120,7 @@ def menu(options, header='', footer='', no_debug=False):
 
 
 def clear():
-    """Clears the screen"""
+    """Clears the screen by click.clear() which is OS independent."""
     click.clear()
 
 

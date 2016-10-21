@@ -115,8 +115,6 @@ class MonotypeCaster(object):
         self.mode = CasterMode()
         self.lock = False
         self.pump_working = False
-        # Update the modes right at the beginning
-        interface_factory(self.mode)
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
@@ -127,9 +125,10 @@ class MonotypeCaster(object):
             self.lock = True
             UI.debug_pause('Entering the caster context...')
             sensor, output = self.mode.get_casting_backend()
-            with sensor() as self.sensor:
-                with output() as self.output:
-                    return self
+            self.sensor = sensor()
+            self.output = output()
+            with self.sensor, self.output:
+                return self
 
     def __exit__(self, *_):
         UI.debug_pause('Caster no longer in use.')

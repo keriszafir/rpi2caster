@@ -14,6 +14,7 @@ def choose_sensor_and_driver(casting_routine):
         """Wrapper function"""
         def debug():
             """Show some info"""
+            mode = self.caster.mode
             UI.debug_pause('About to %s...' %
                            ('cast composition' if mode.casting
                             else 'test the outputs' if mode.testing
@@ -21,12 +22,10 @@ def choose_sensor_and_driver(casting_routine):
                             else 'punch the ribbon' if mode.punching
                             else 'blow'))
 
-        mode = self.caster.mode
-        # Instantiate and enter context
         debug()
         with self.caster:
-            debug()
             return casting_routine(self, *args, **kwargs)
+
     return wrapper
 
 
@@ -115,7 +114,9 @@ def singleton(cls):
     instances = {}
 
     def getinstance():
+        """Check whether we already have an instance of the class"""
         if cls not in instances:
             instances[cls] = cls()
         return instances[cls]
+
     return getinstance

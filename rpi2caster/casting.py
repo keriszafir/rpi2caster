@@ -726,17 +726,17 @@ class Casting(TypesettingContext):
                     for (function, description, long_description, condition)
                     in opts if condition]
 
-        punching = self.caster.mode.punching
-        casting = not punching
-        job = 'Casting' if casting else 'Punching'
-        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-                  'for Monotype Composition or Type and Rule casters.\n\n'
-                  'This program reads a ribbon (from file or database) '
-                  'and casts the type on a composition caster.'
-                  '\n\n%s Menu:' % job)
         # Keep displaying the menu and go back here after any method ends
         finished = False
         while not finished:
+            punching = self.caster.mode.punching
+            casting = not punching
+            job = 'Casting' if casting else 'Punching'
+            header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+                      'for Monotype Composition or Type and Rule casters.\n\n'
+                      'This program reads a ribbon (from file or database) '
+                      'and casts the type on a composition caster.'
+                      '\n\n%s Menu:' % job)
             # Catch any known exceptions here
             try:
                 UI.menu(menu_options(), header=header, footer='')()
