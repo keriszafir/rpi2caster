@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """Line length and character width module"""
-from .global_config import UI, DEFAULT_MEASURE, DEFAULT_UNIT
+from .rpi2caster import UI, CFG
 
 
 class Measure(object):
     """Chooses and represents a line length"""
-    default_unit = DEFAULT_UNIT
-    default_value = DEFAULT_MEASURE
+    default_unit = CFG.get_option('default_unit')
+    default_value = CFG.get_option('default_measure')
     symbols = ['pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cf', 'ff',
                'cm', 'mm', 'in', '"']
     units = {'pc': 12.0, 'pt': 1.0,

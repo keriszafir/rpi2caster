@@ -3,8 +3,8 @@
 import time
 from parallel import Parallel
 from .monotype import SensorMixin, OutputMixin
-from .global_config import UI, SIGNALS_ARRANGEMENT
-from .decorators import singleton
+from .rpi2caster import UI, CFG
+from .misc import singleton
 
 
 @singleton
@@ -16,7 +16,7 @@ class ParallelInterface(SensorMixin, OutputMixin):
     byte3: 8 9 10 11 12 13 14 0005
     """
     numbers = (2 ** x for x in range(31, -1, -1))
-    mapping = dict(zip(SIGNALS_ARRANGEMENT, numbers))
+    mapping = dict(zip(CFG.get_option('signals_arrangement'), numbers))
 
     def __init__(self):
         super().__init__()

@@ -2,10 +2,12 @@
 """RPi.GPIO input driver for rpi2caster"""
 
 import RPi.GPIO as GPIO
-from .global_config import SENSOR_GPIO, INPUT_BOUNCE_TIME
+from .rpi2caster import CFG
 from .exceptions import MachineStopped
 from .monotype import SensorMixin
-from .decorators import singleton
+from .misc import singleton
+SENSOR_GPIO = CFG.get_option('sensor_gpio')
+BOUNCE_TIME = CFG.get_option('input_bounce_time')
 
 
 @singleton
@@ -35,7 +37,7 @@ class RPiGPIOSensor(SensorMixin):
             try:
                 channel = GPIO.wait_for_edge(self.gpio, change,
                                              timeout=timeout*1000,
-                                             bouncetime=INPUT_BOUNCE_TIME)
+                                             bouncetime=BOUNCE_TIME)
                 if channel is None:
                     raise MachineStopped
                 else:

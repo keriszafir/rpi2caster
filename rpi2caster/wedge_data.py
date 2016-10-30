@@ -2,9 +2,9 @@
 """Wedge data model for rpi2caster"""
 from itertools import zip_longest
 # Default user interface
-from .global_config import UI
+from .rpi2caster import UI
 # Constants for known normal wedge unit values
-from . import wedge_unit_values as wu
+from . import wedge_unit_values as WU
 
 
 class Wedge(object):
@@ -20,7 +20,7 @@ class Wedge(object):
             data = parse_name(wedge_name)
         else:
             # Default S5-12E
-            data = ['5', 12, True, wu.S5]
+            data = ['5', 12, True, WU.S5]
         # Now set the values
         self.series, self.set_width, self.is_brit_pica, self.units = data
 
@@ -66,7 +66,7 @@ class Wedge(object):
     @property
     def units(self):
         """Gets the unit values for the wedge's rows"""
-        units = self.__dict__.get('_units', None) or wu.S5
+        units = self.__dict__.get('_units', None) or WU.S5
         # Add 0 at the beginning so that the list can be indexed with
         # row numbers - i.e. units[1] for row 1
         if units[0] is not 0:
@@ -125,7 +125,7 @@ class Wedge(object):
 def enter_name(default='S5-12E'):
     """Enter the wedge's name"""
     # Ask for wedge name and set width as it is written on the wedge
-    al_it = iter(wu.ALIASES)
+    al_it = iter(WU.ALIASES)
     # Group by three
     grouper = zip_longest(al_it, al_it, al_it, fillvalue='')
     old_wedges = '\n'.join('\t'.join(z) for z in grouper)
@@ -167,7 +167,7 @@ def parse_name(wedge_name):
             set_width = UI.enter_data(prompt, float)
     # We have the wedge name, so we can look the wedge up in known wedges
     # (no need to enter the unit values manually)
-    units = wu.UNITS.get(series, None)
+    units = WU.UNITS.get(series, None)
     while not units:
         # Enter manually if not found:
         prompt = ('Enter the wedge unit values for rows 1...15 '

@@ -4,7 +4,7 @@
 
 from .exceptions import UnitArrangementNotFound, UnitValueNotFound
 from .styles import Styles
-from .global_config import UI
+from .rpi2caster import UI
 
 # Accented letters will use the same unit arrangement value as their
 # non-accented counterparts. We need a collection for determining

@@ -7,8 +7,7 @@ from . import exceptions as e
 # Constants module
 from . import constants as c
 # Default user interface
-from .global_config import UI
-from .global_config import SIGNALS_ARRANGEMENT, SENSOR, OUTPUT, BACKEND_SELECT
+from .rpi2caster import UI, CFG
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
@@ -361,7 +360,8 @@ class OutputMixin(object):
     """Mockup for a driver for 32 pneumatic outputs"""
     name = 'generic output driver'
 
-    def __init__(self, signals_arrangement=SIGNALS_ARRANGEMENT):
+    def __init__(self,
+                 signals_arrangement=CFG.get_option('signals_arrangement')):
         self.lock = False
         self.signals_arrangement = signals_arrangement
         self.working = True
@@ -549,7 +549,9 @@ class CasterMode(object):
         return interface_factory(self)
 
 
-def interface_factory(mode, default_sensor=SENSOR, default_output=OUTPUT):
+def interface_factory(mode,
+                      default_sensor=CFG.get_option('sensor'),
+                      default_output=CFG.get_option('output')):
     """Interface factory combines the sensor and output modules into
     an Interface class. Returns an instance of this class."""
     def sysfs_sensor():
@@ -627,7 +629,7 @@ def interface_factory(mode, default_sensor=SENSOR, default_output=OUTPUT):
         # Use simulation mode if set in configuration
         simulation = True if 'simulation' in backend else mode.simulation
         # If we don't know whether simulation is on or off - ask
-        if simulation is None and BACKEND_SELECT:
+        if simulation is None and CFG.get_option('choose_backend'):
             prompt = 'Use real caster? (no = simulation mode)'
             simulation = not UI.confirm(prompt, True)
         # Use parallel interface

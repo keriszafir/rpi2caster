@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Style manager"""
-from .global_config import UI
+from .rpi2caster import UI
 
 
 class Styles(object):

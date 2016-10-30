@@ -2,7 +2,7 @@
 """Decorator functions and classes for rpi2caster"""
 
 # Start by choosing the user interface
-from .global_config import UI
+from .rpi2caster import UI
 from .exceptions import CastingAborted
 from .wedge_data import Wedge
 from .measure import Measure
@@ -107,16 +107,3 @@ def temp_measure(routine):
             # Just do it
             return routine(self, *args, **kwargs)
     return wrapper
-
-
-def singleton(cls):
-    """Decorator function for singletons"""
-    instances = {}
-
-    def getinstance():
-        """Check whether we already have an instance of the class"""
-        if cls not in instances:
-            instances[cls] = cls()
-        return instances[cls]
-
-    return getinstance

@@ -7,12 +7,14 @@ import io
 import select
 # Debounce timers need this
 from time import time
-# Constants shared between modules
-from .global_config import UI, SENSOR_GPIO, INPUT_BOUNCE_TIME
+# Get the UI and configuration engine
+from .rpi2caster import UI, CFG
 # Custom exceptions
 from .exceptions import MachineStopped
 # Caster prototype
 from .monotype import SensorMixin
+BOUNCE_TIME = CFG.get_option('bounce_time') * 0.001
+SENSOR_GPIO = CFG.get_option('sensor_gpio')
 
 
 class SysfsSensor(SensorMixin):
@@ -70,7 +72,7 @@ class SysfsSensor(SensorMixin):
                         if signals.poll(timeout):
                             state = get_state()
                             # Input bounce time is given in milliseconds
-                            if time() - debounce > INPUT_BOUNCE_TIME * 0.001:
+                            if time() - debounce > BOUNCE_TIME:
                                 self.last_state = state
                             debounce = time()
                         else:

@@ -10,16 +10,18 @@ except ImportError:
 # Import mockup output driver from monotype
 from .monotype import OutputMixin
 from .exceptions import WrongConfiguration
-from .global_config import PIN_BASE, MCP0, MCP1
-from .decorators import singleton
+from .rpi2caster import CFG
+from .misc import singleton
 
 
 @singleton
 class WiringPiOutputDriver(OutputMixin):
     """A 32-channel control interface based on two MCP23017 chips"""
 
-    def __init__(self, mcp0_address=MCP0, mcp1_address=MCP1,
-                 pin_base=PIN_BASE):
+    def __init__(self,
+                 mcp0_address=CFG.get_option('mcp0'),
+                 mcp1_address=CFG.get_option('mcp1'),
+                 pin_base=CFG.get_option('pin_base')):
         super().__init__()
         self.name = 'MCP23017 driver using wiringPi2-Python library'
         # Set up an output interface on two MCP23017 chips

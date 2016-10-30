@@ -3,14 +3,14 @@
 
 import io
 from collections import deque
-from .justification import Box, Glue, Penalty, ObjectList
 from . import exceptions as e
 from . import typesetting_funcs as tsf
+from .justification import Box, Glue, Penalty, ObjectList
 from .measure import Measure
 from .typesetting_data import Ribbon
 from .matrix_data import Diecase, Matrix, diecase_operations, EMPTY_DIECASE
 from .wedge_data import Wedge
-from .global_config import UI
+from .rpi2caster import UI
 
 
 class TypesettingContext(object):

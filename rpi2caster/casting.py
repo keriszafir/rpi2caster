@@ -30,7 +30,7 @@ from .monotype import MonotypeCaster
 # Casting stats
 from .casting_stats import Stats
 # Globally selected UI
-from .global_config import UI
+from .rpi2caster import UI
 # Typecase casting needs this
 from . import letter_frequencies
 # Typesetting functions

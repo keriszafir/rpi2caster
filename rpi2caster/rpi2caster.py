@@ -4,8 +4,11 @@ from os import system
 from sys import argv
 import argparse
 from . import exceptions as e
-from .text_ui import confirm, menu
-from .matrix_data import diecase_operations, list_diecases, Diecase
+from . import text_ui as UI
+from .global_config import Config
+from .database import Database
+CFG = Config()
+DB = Database()
 
 
 def casting_job(args):
@@ -17,7 +20,6 @@ def casting_job(args):
                               wedge_name=args.wedge_name)
     session.caster.mode.simulation = args.simulation or None
     session.caster.mode.punching = args.punching
-    casting.UI.DEBUG_MODE = args.debug
     # Skip menu if casting directly or testing
     if args.input_text is not None:
         session.quick_typesetting(args.input_text)
@@ -35,7 +37,6 @@ def typesetting_job(args):
                                       text_file=args.text_file,
                                       ribbon_file=args.ribbon_file,
                                       diecase_id=args.diecase_id)
-    typesetting.UI.DEBUG_MODE = args.debug
     session.main_menu()
 
 
@@ -43,8 +44,8 @@ def update(args):
     """Updates the software"""
     # Upgrade routine
     dev_prompt = 'Testing version (newest features, but unstable)? '
-    if confirm('Update the software?', default=False):
-        use_dev_version = args.testing or confirm(dev_prompt, default=False)
+    if UI.confirm('Update the software?', default=False):
+        use_dev_version = args.testing or UI.confirm(dev_prompt, default=False)
         pre = '--pre' if use_dev_version else ''
         print('You may be asked for the admin password...')
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)
@@ -52,16 +53,17 @@ def update(args):
 
 def inventory(args):
     """Inventory management - diecase manipulation etc."""
+    from . import matrix_data
     if args.list_diecases:
         # Just show what we have
-        list_diecases()
+        matrix_data.list_diecases()
     elif args.diecase_id:
         # Work on a specific diecase
-        diecase = Diecase(args.diecase_id)
+        diecase = matrix_data.Diecase(args.diecase_id)
         diecase.manipulation_menu()
     else:
         # Choose diecase and work on it
-        diecase_operations()
+        matrix_data.diecase_operations()
 
 
 def meow(_):
@@ -119,7 +121,7 @@ def main_menu(args):
                     {True: 'Use a real machine',
                      False: 'Use a mockup for testing'}[args.simulation])]
         try:
-            menu(options, header=header, footer='')(args)
+            UI.menu(options, header=header, footer='')(args)
         except (e.ReturnToMenu, e.MenuLevelUp):
             pass
         except (KeyboardInterrupt, EOFError):
@@ -136,9 +138,6 @@ def main():
         parser = cmds.add_parser('cast', aliases=['c'],
                                  help=('Casting with a Monotype caster '
                                        'or mockup caster for testing'))
-        # Debug mode
-        parser.add_argument('-d', '--debug', help='debug mode',
-                            action="store_true")
         # Choose specific diecase
         parser.add_argument('-m', '--diecase', metavar='ID',
                             dest='diecase_id',
@@ -184,9 +183,6 @@ def main():
         # Choose diecase layout
         parser.add_argument('-m', '--diecase', dest='diecase_id', metavar='ID',
                             help='diecase ID for typesetting')
-        # Debug mode
-        parser.add_argument('-d', '--debug', help='debug mode',
-                            action="store_true")
         # Input filename option
         parser.add_argument('text_file', metavar='text_file', nargs='?',
                             help='source (text) file to translate',
@@ -216,9 +212,6 @@ def main():
         """Inventory management parser"""
         parser = cmds.add_parser('inventory', aliases=['i', 'inv'],
                                  help='Matrix case management')
-        # Debug mode
-        parser.add_argument('-d', '--debug', help='debug mode',
-                            action="store_true")
         # List the diecases and exit
         parser.add_argument('-l', '--list_diecases', action='store_true',
                             help='list all diecases and finish')
@@ -238,13 +231,21 @@ def main():
                'Typesetting is not ready yet.' % argv[0])
         # Initialize the main arguments parser
         parser = argparse.ArgumentParser(description=desc, epilog=epi)
+        # Debug mode
+        parser.add_argument('-d', '--debug', help='debug mode',
+                            action="store_true")
+        parser.add_argument('--database', metavar='FILE',
+                            help='path to alternative sqlite3 database file')
+        parser.add_argument('--config', metavar='FILE',
+                            help='path to alternative configuration file')
         # Set default values for all options globally
         parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
                             ribbon_id='', source=None, simulation=False,
                             punching=False, text_file='',
                             manual_mode=False, list_diecases=False,
                             diecase_id='', wedge_name='', input_text=None,
-                            direct=False, testing=False)
+                            direct=False, testing=False, database=None,
+                            config=None)
         return parser
 
     # Build the parsers and get the arguments
@@ -256,8 +257,12 @@ def main():
     build_inv_parser()
     build_misc_parsers()
     main_parser.parse_args()
+    args = main_parser.parse_args()
+    UI.DEBUG_MODE = args.debug
+    global DB, CFG
+    CFG = Config(args.config)
+    DB = Database(args.database)
     try:
-        args = main_parser.parse_args()
         args.job(args)
     except (e.ReturnToMenu, e.MenuLevelUp):
         pass

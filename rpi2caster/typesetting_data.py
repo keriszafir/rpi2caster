@@ -6,11 +6,8 @@ import io
 from . import exceptions as e
 # Constants for rpi2caster
 from .constants import ASSIGNMENT_SYMBOLS
-# User interface
-from .global_config import UI
-# Database
-from . import database
-DB = database.Database()
+# User interface, database backend
+from .rpi2caster import UI, DB
 
 
 class Ribbon(object):

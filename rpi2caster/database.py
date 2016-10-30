@@ -8,25 +8,12 @@ Database-related classes for rpi2caster suite.
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 import json
-# this module uses sqlite3 database for storing caster, interface,
-# wedge, diecase & matrix parameters:
-import sqlite3
 # Custom exceptions
 from . import exceptions
-# Get database paths from configuration
-from .global_config import DATABASE_PATHS
+from .misc import singleton
 
 
-class Singleton(type):
-    """Make only one object"""
-    instance = None
-
-    def __call__(cls, *args, **kw):
-        if not cls.instance:
-            cls.instance = super(Singleton, cls).__call__(*args, **kw)
-        return cls.instance
-
-
+@singleton
 class Database(object):
     """Database(database_path, confFilePath):
 
@@ -50,26 +37,77 @@ class Database(object):
     passed as an argument. It is necessary that the user who's running
     this program for setup has write access to the database file.
     """
-    __metaclass__ = Singleton
-
-    def __init__(self):
-        # Connect to the database
-        for path in DATABASE_PATHS:
+    def __init__(self, database_path=None):
+        def engine_sqlite3():
+            """use SQLite3 as database engine"""
+            import sqlite3
+            self.engine = sqlite3
+            from .defaults import GLOBAL_DB_PATH
+            cfg_path = CFG.get_option('db_path', 'database') or GLOBAL_DB_PATH
+            # Connect to the database - try specified path first
+            use_path = database_path or cfg_path
             try:
-                self.path = path
-                self.db_connection = sqlite3.connect(path)
-                # End on first successful find
-                break
+                self.db_connection = sqlite3.connect(use_path)
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                # Continue looping
-                pass
-        else:
-            # Fell off the end of the loop
-            raise exceptions.WrongConfiguration('Cannot connect to '
-                                                'database file %s' % path)
+                print('Cannot connect to database at %s' % use_path)
 
-    def __repr__(self):
-        return self.path
+        def engine_psycopg2():
+            """use psycopg2 as database engine for postgresql"""
+            import psycopg2
+            self.engine = psycopg2
+            # Get configured parameters
+            db_name = CFG.get_option('name', 'database')
+            db_username = CFG.get_option('username', 'database')
+            db_port = CFG.get_option('port', 'database') or 5432
+            db_host = CFG.get_option('host', 'database')
+            db_password = CFG.get_option('password', 'database')
+            # Try setting up the database
+            try:
+                self.db_connection = psycopg2.connect(database=db_name,
+                                                      port=db_port,
+                                                      user=db_username,
+                                                      password=db_password,
+                                                      host=db_host)
+            except (psycopg2.OperationalError, psycopg2.DatabaseError):
+                print('Cannot connect to postgresql database %s at %s:%s, '
+                      'username: %s, password: %s'
+                      % (db_name, db_host, db_port, db_username, db_password))
+
+        def engine_mysql():
+            """use mysql as database engine"""
+            import pymysql
+            self.engine = pymysql
+            db_name = CFG.get_option('name', 'database')
+            db_username = CFG.get_option('username', 'database')
+            db_port = CFG.get_option('port', 'database') or 3306
+            db_host = CFG.get_option('host', 'database')
+            db_password = CFG.get_option('password', 'database')
+            # Try setting up the database
+            try:
+                self.db_connection = pymysql.connect(database=db_name,
+                                                     port=db_port,
+                                                     user=db_username,
+                                                     password=db_password,
+                                                     host=db_host)
+            except (pymysql.OperationalError, pymysql.DatabaseError):
+                print('Cannot connect to postgresql database %s at %s:%s, '
+                      'username: %s, password: %s'
+                      % (db_name, db_host, db_port, db_username, db_password))
+
+        self.engine = None
+        self.db_connection = None
+        from .rpi2caster import CFG
+        engines_available = {'sqlite3': engine_sqlite3,
+                             'sqlite': engine_sqlite3,
+                             'psycopg2': engine_psycopg2,
+                             'postgres': engine_psycopg2,
+                             'postgresql': engine_psycopg2,
+                             'pgsql': engine_psycopg2,
+                             'mysql': engine_mysql}
+        # Determine and use the correct engine
+        engine_configured = CFG.get_option('engine', 'database')
+        engine_used = engines_available.get(engine_configured, engine_sqlite3)
+        engine_used()
 
     def __enter__(self):
         return self
@@ -89,7 +127,7 @@ class Database(object):
                 if not results:
                     raise exceptions.NoMatchingData
                 return results
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
@@ -114,7 +152,7 @@ class Database(object):
                                ') VALUES (?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
@@ -146,7 +184,7 @@ class Database(object):
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise exceptions.NoMatchingData
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
@@ -158,7 +196,7 @@ class Database(object):
                 cursor.execute('DELETE FROM matrix_cases WHERE diecase_id = ?',
                                [diecase.diecase_id])
                 return True
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
@@ -173,7 +211,7 @@ class Database(object):
                 if not results:
                     raise exceptions.NoMatchingData
                 return results
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
@@ -198,7 +236,7 @@ class Database(object):
                                ') VALUES (?, ?, ?, ?, ?)''', data)
                 self.db_connection.commit()
                 return True
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
@@ -220,7 +258,7 @@ class Database(object):
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise exceptions.NoMatchingData
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError
 
@@ -233,6 +271,6 @@ class Database(object):
                 cursor.execute('DELETE FROM ribbons WHERE ribbon_id = ?',
                                [ribbon.ribbon_id])
                 return True
-            except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
                 raise exceptions.DatabaseQueryError

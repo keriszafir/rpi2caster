@@ -18,14 +18,10 @@ from . import unit_arrangements as ua
 from .styles import Styles
 # Wedge operations for several matrix-case management functions
 from .wedge_data import Wedge
-# User interface
-from .global_config import UI, APPDIR
+# User interface, donfiguration and database backends
+from .rpi2caster import UI, CFG, DB
 # Letter frequency for completeness testing
 from .letter_frequencies import CharFreqs
-# Database backend
-from .database import Database
-# Make or use existing database instance
-DB = Database()
 
 
 class Diecase(object):
@@ -284,7 +280,7 @@ class Diecase(object):
         """Exports the matrix case layout to file."""
         name = self.diecase_id or 'NewDiecase'
         # Save the exported diecase layout in the default directory
-        filename = APPDIR + '/%s.csv' % name
+        filename = '%s/%s.csv' % (CFG.user_data_dir, name)
         with io.open(filename, 'a') as output_file:
             csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
                                     quoting=csv.QUOTE_ALL)
