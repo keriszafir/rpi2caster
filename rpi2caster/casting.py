@@ -57,8 +57,9 @@ class Casting(TypesettingContext):
 
     def __init__(self, ribbon_file='', ribbon_id='', diecase_id='',
                  wedge_name='', measure=''):
-        super().__init__(ribbon_file, ribbon_id, diecase_id, wedge_name,
-                         measure)
+        super().__init__(ribbon_file=ribbon_file, ribbon_id=ribbon_id,
+                         diecase_id=diecase_id, wedge_name=wedge_name,
+                         measure=measure)
         # Caster for this job
         self.caster = MonotypeCaster()
         self.stats = Stats(self)

@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
-"""
-Database:
+"""Database-related classes for rpi2caster suite.
 
-Database-related classes for rpi2caster suite.
-"""
+Supports SQLite3, PostgreSQL and MySQL."""
 # IMPORTS:
 # Used for serializing lists stored in database, and for communicating
 # with the web application (in the future):
 import json
+import io
+import os
 # Custom exceptions
-from . import exceptions
-from .misc import singleton
+from . import exceptions as e
 
 
-@singleton
 class Database(object):
     """Database(database_path, confFilePath):
 
@@ -37,19 +35,32 @@ class Database(object):
     passed as an argument. It is necessary that the user who's running
     this program for setup has write access to the database file.
     """
-    def __init__(self, database_path=None):
+    def __init__(self, database_path=None, database_engine=None):
         def engine_sqlite3():
             """use SQLite3 as database engine"""
             import sqlite3
             self.engine = sqlite3
+            # Determine the database file path
             from .defaults import GLOBAL_DB_PATH
-            cfg_path = CFG.get_option('db_path', 'database') or GLOBAL_DB_PATH
-            # Connect to the database - try specified path first
-            use_path = database_path or cfg_path
+            configured_path = CFG.get_option('path', 'database')
+            db_path = (database_path if database_path
+                       else configured_path if configured_path
+                       else GLOBAL_DB_PATH)
+            # Check if the file exists at all, if not - try to create it
+            if not os.access(db_path, os.F_OK):
+                with io.open(db_path, 'w+'):
+                    print('Creating a brand new database at %s' % db_path)
+            # Check if the file is writable and readable
+            error_message = 'Database file %s is not %s!' % (db_path, '%s')
+            if not os.access(db_path, os.W_OK):
+                raise PermissionError(error_message % 'writable')
+            if not os.access(db_path, os.R_OK):
+                raise PermissionError(error_message % 'readable')
+            # We can access the file
             try:
-                self.db_connection = sqlite3.connect(use_path)
+                self.db_connection = sqlite3.connect(db_path)
             except (sqlite3.OperationalError, sqlite3.DatabaseError):
-                print('Cannot connect to database at %s' % use_path)
+                print('Cannot connect to database at %s' % db_path)
 
         def engine_psycopg2():
             """use psycopg2 as database engine for postgresql"""
@@ -62,16 +73,11 @@ class Database(object):
             db_host = CFG.get_option('host', 'database')
             db_password = CFG.get_option('password', 'database')
             # Try setting up the database
-            try:
-                self.db_connection = psycopg2.connect(database=db_name,
-                                                      port=db_port,
-                                                      user=db_username,
-                                                      password=db_password,
-                                                      host=db_host)
-            except (psycopg2.OperationalError, psycopg2.DatabaseError):
-                print('Cannot connect to postgresql database %s at %s:%s, '
-                      'username: %s, password: %s'
-                      % (db_name, db_host, db_port, db_username, db_password))
+            self.db_connection = psycopg2.connect(database=db_name,
+                                                  port=db_port,
+                                                  user=db_username,
+                                                  password=db_password,
+                                                  host=db_host)
 
         def engine_mysql():
             """use mysql as database engine"""
@@ -83,17 +89,13 @@ class Database(object):
             db_host = CFG.get_option('host', 'database')
             db_password = CFG.get_option('password', 'database')
             # Try setting up the database
-            try:
-                self.db_connection = pymysql.connect(database=db_name,
-                                                     port=db_port,
-                                                     user=db_username,
-                                                     password=db_password,
-                                                     host=db_host)
-            except (pymysql.OperationalError, pymysql.DatabaseError):
-                print('Cannot connect to postgresql database %s at %s:%s, '
-                      'username: %s, password: %s'
-                      % (db_name, db_host, db_port, db_username, db_password))
+            self.db_connection = pymysql.connect(database=db_name,
+                                                 port=db_port,
+                                                 user=db_username,
+                                                 password=db_password,
+                                                 host=db_host)
 
+        # Determine the correct engine
         self.engine = None
         self.db_connection = None
         from .rpi2caster import CFG
@@ -104,10 +106,14 @@ class Database(object):
                              'postgresql': engine_psycopg2,
                              'pgsql': engine_psycopg2,
                              'mysql': engine_mysql}
-        # Determine and use the correct engine
-        engine_configured = CFG.get_option('engine', 'database')
-        engine_used = engines_available.get(engine_configured, engine_sqlite3)
-        engine_used()
+        engine_name = (database_engine if database_engine is not None
+                       else 'sqlite3' if database_path
+                       else CFG.get_option('engine', 'database')).lower()
+        try:
+            engines_available[engine_name]()
+        except KeyError:
+            raise e.WrongConfiguration('Unrecognized database type: %s'
+                                       % engine_name)
 
     def __enter__(self):
         return self
@@ -125,11 +131,11 @@ class Database(object):
                 results = cursor.fetchall()
                 # Check if we got any:
                 if not results:
-                    raise exceptions.NoMatchingData
+                    raise e.NoMatchingData
                 return results
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError
 
     def add_diecase(self, diecase):
         """Registers a diecase in our database."""
@@ -154,7 +160,7 @@ class Database(object):
                 return True
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError
 
     def get_diecase(self, diecase_id):
         """Searches for diecase metadata, based on the unique diecase ID."""
@@ -165,7 +171,7 @@ class Database(object):
                 cursor.execute(sql, [diecase_id])
                 row = cursor.fetchone()
                 if not row:
-                    raise exceptions.NoMatchingData
+                    raise e.NoMatchingData
                 diecase = list(row)
                 # De-serialize the diecase layout, convert it back to a list
                 raw_layout = json.loads(diecase.pop())
@@ -183,10 +189,10 @@ class Database(object):
                 return diecase
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
-                raise exceptions.NoMatchingData
+                raise e.NoMatchingData
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError
 
     def delete_diecase(self, diecase):
         """Deletes a diecase with given unique ID from the database."""
@@ -198,7 +204,7 @@ class Database(object):
                 return True
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError
 
     def get_all_ribbons(self):
         """Gets all ribbons stored in database"""
@@ -209,11 +215,11 @@ class Database(object):
                 # Check if we got any:
                 results = cursor.fetchall()
                 if not results:
-                    raise exceptions.NoMatchingData
+                    raise e.NoMatchingData
                 return results
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError
 
     def add_ribbon(self, ribbon):
         """Registers a ribbon in our database."""
@@ -238,7 +244,7 @@ class Database(object):
                 return True
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError
 
     def get_ribbon(self, ribbon_id):
         """Searches for ribbon, based on the unique ribbon ID."""
@@ -257,10 +263,10 @@ class Database(object):
                 return ribbon
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
-                raise exceptions.NoMatchingData
+                raise e.NoMatchingData
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError
 
     def delete_ribbon(self, ribbon):
         """Deletes a ribbon entry from database."""
@@ -273,4 +279,4 @@ class Database(object):
                 return True
             except (self.engine.OperationalError, self.engine.DatabaseError):
                 # Database failed
-                raise exceptions.DatabaseQueryError
+                raise e.DatabaseQueryError

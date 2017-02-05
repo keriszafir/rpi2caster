@@ -4,11 +4,9 @@ for every application-wide setting."""
 import io
 import configparser
 from . import defaults
-from .misc import singleton
 from .constants import TRUE_ALIASES, FALSE_ALIASES
 
 
-@singleton
 class Config(object):
     """Configuration manager class"""
     def __init__(self, config_path=''):
@@ -157,5 +155,3 @@ def change_type(option_value, datatype):
         except KeyError:
             # Try coercing into a desired datatype
             return datatype(option_value)
-
-CFG = Config()

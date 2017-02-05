@@ -33,10 +33,11 @@ def casting_job(args):
 def typesetting_job(args):
     """Text to ribbon translation and justification"""
     from . import typesetting
-    session = typesetting.Typesetting(manual_mode=args.manual_mode,
-                                      text_file=args.text_file,
+    session = typesetting.Typesetting(text_file=args.text_file,
                                       ribbon_file=args.ribbon_file,
-                                      diecase_id=args.diecase_id)
+                                      diecase_id=args.diecase_id,
+                                      wedge_name=args.wedge_name,
+                                      measure=args.measure)
     session.main_menu()
 
 
@@ -177,9 +178,6 @@ def main():
         """Typesetting a.k.a. text translation options"""
         parser = cmds.add_parser('translate', aliases=['t', 'set'],
                                  help='Typesetting program')
-        # Manual mode option - more control for user
-        parser.add_argument('-M', '--manual', help='use manual mode',
-                            dest='manual_mode', action='store_true')
         # Choose diecase layout
         parser.add_argument('-m', '--diecase', dest='diecase_id', metavar='ID',
                             help='diecase ID for typesetting')
@@ -191,6 +189,13 @@ def main():
         parser.add_argument('ribbon_file', metavar='ribbon_file', nargs='?',
                             help='ribbon file to generate',
                             type=argparse.FileType('w', encoding='UTF-8'))
+        # Measure (line length)
+        parser.add_argument('-M', '--measure',
+                            metavar='measure', dest='measure',
+                            help='line length with units e.g. 16cc')
+        # Wedge name to use instead of diecase's assigned wedge
+        parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
+                            help='wedge to use: [s]series-set_width[e]')
         # Default action
         parser.set_defaults(job=typesetting_job)
 
@@ -241,11 +246,10 @@ def main():
         # Set default values for all options globally
         parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
                             ribbon_id='', source=None, simulation=False,
-                            punching=False, text_file='',
-                            manual_mode=False, list_diecases=False,
+                            punching=False, text_file='', list_diecases=False,
                             diecase_id='', wedge_name='', input_text=None,
                             direct=False, testing=False, database=None,
-                            config=None)
+                            config=None, measure='')
         return parser
 
     # Build the parsers and get the arguments
@@ -260,6 +264,7 @@ def main():
     args = main_parser.parse_args()
     UI.DEBUG_MODE = args.debug
     global DB, CFG
+    # Update configuration and database
     CFG = Config(args.config)
     DB = Database(args.database)
     try:

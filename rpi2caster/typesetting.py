@@ -5,7 +5,7 @@ import io
 from collections import deque
 from . import exceptions as e
 from . import typesetting_funcs as tsf
-from .justification import Box, Glue, Penalty, ObjectList
+# from .justification import Box, Glue, Penalty, ObjectList
 from .measure import Measure
 from .typesetting_data import Ribbon
 from .matrix_data import Diecase, Matrix, diecase_operations, EMPTY_DIECASE
@@ -15,11 +15,13 @@ from .rpi2caster import UI
 
 class TypesettingContext(object):
     """Mixin for setting diecase, wedge and measure"""
-    def __init__(self, ribbon_file='', ribbon_id='', diecase_id='',
-                 wedge_name='', measure=''):
+    def __init__(self, text_file='', ribbon_file='', ribbon_id='',
+                 diecase_id='', wedge_name='', measure=''):
+        self.spaceset, self.charset = [], {}
         self.diecase = Diecase(diecase_id)
         self.measure = Measure(self, measure)
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
+        self.source = open_file(text_file) if text_file else ''
         self.wedge = Wedge(wedge_name) if wedge_name else self.diecase.wedge
 
     @property
@@ -55,6 +57,12 @@ class TypesettingContext(object):
     def diecase(self, diecase):
         """Set a diecase; reset the wedge"""
         self.__dict__['_diecase'] = diecase
+        self.spaceset = self.diecase.spaceset
+        # A charset is a dictionary of {style: {char: Matrix object}}
+        # So, we can get all matrices for style by self.charset[style]
+        # and a particular matrix by self.charset[style][char]
+        self.charset = {style: {char: self.diecase.charset[(char, style)]}
+                        for (char, style) in self.diecase.charset}
 
     def choose_diecase(self):
         """Chooses a diecase from database"""
@@ -73,22 +81,28 @@ class TypesettingContext(object):
         """Chooses a ribbon from database or file"""
         self.ribbon = Ribbon(manual_choice=True)
 
+    def edit_text(self):
+        """Edits the input text"""
+        self.source = UI.edit(self.source)
+
 
 class Typesetting(TypesettingContext):
     """Typesetting session - choose and translate text with control codes
     into a sequence of Monotype control codes, which can be sent to
     the machine to cast composed and justified type.
     """
+    # Style and alignment codes (will be constant)
+    style_codes = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
+                   '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
+                   '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
+    align_codes = {'^CR': tsf.justify_left, '^CC': tsf.justify_center,
+                   '^CL': tsf.justify_right, '^CF': tsf.justify_both}
+
     def __init__(self, text_file='', ribbon_file='', ribbon_id='',
-                 diecase_id='', wedge_name='', measure='', manual_mode=False):
-        super().__init__(ribbon_file, ribbon_id, diecase_id, wedge_name,
-                         measure)
-        self.source = open_file(text_file) if text_file else []
-        # Use a manual compositor (user decides where to break the line)
-        # or automatic compositor (hyphenation and justification is done
-        # automatically with the Knuth-Plass algorithm)
-        self.compositor = (ManualCompositor(self) if manual_mode
-                           else AutoCompositor(self))
+                 diecase_id='', wedge_name='', measure='', manual=True):
+        super().__init__(text_file, ribbon_file, ribbon_id, diecase_id,
+                         wedge_name, measure)
+        self.compose = self.manual_compose if manual else self.auto_compose
 
     def main_menu(self):
         """Main menu for the typesetting utility."""
@@ -101,22 +115,27 @@ class Typesetting(TypesettingContext):
             """Build a list of options, adding an option"""
             # Options are described with tuples:
             # (function, description, condition)
-            opts = [(finish, 'Exit', 'Exits the program'),
+            opts = [(finish, 'Exit', 'Exits the program', True),
+                    (self.edit_text, 'Edit the source text',
+                    'Enter or edit the text you want to translate', True),
+                    (self.compose, 'Typesetting', 'Translate the text',
+                     self.diecase and self.source),
                     (self.choose_diecase, 'Select diecase',
                      'Select a matrix case from database (current: %s)'
-                     % (self.diecase or 'not selected')),
+                     % (self.diecase or 'not selected'), True),
                     (self.choose_wedge, 'Select wedge',
                      'Enter a wedge designation (current: %s)'
-                     % self.diecase.alt_wedge),
+                     % self.diecase.alt_wedge, True),
                     (self.change_measure, 'Change measure',
-                     'Set new line length (current: %s)' % self.measure),
+                     'Set new line length (current: %s)' % self.measure, True),
                     (self.diecase.show_layout, 'Show diecase layout',
-                     'View the matrix case layout'),
+                     'View the matrix case layout', True),
                     (diecase_operations, 'Matrix manipulation',
-                     'Work on matrix cases')]
+                     'Work on matrix cases', True)]
             # Built a list of menu options conditionally
-            return [(function, description, long_description)
-                    for (function, description, long_description) in opts]
+            return [(func, desc, long_desc)
+                    for (func, desc, long_desc, condition) in opts
+                    if condition]
 
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.\n\n'
@@ -131,23 +150,18 @@ class Typesetting(TypesettingContext):
                 # Will skip to the end of the loop, and start all over
                 pass
 
+    def manual_compose(self):
+        """Manual composition engine. As the end of the line is reached,
+        the user decides where to break (with or without hyphenation)."""
+        print('roman', self.charset.get('r'))
+        print('bold', self.charset.get('b'))
+        input('Enter to continue')
 
-class Compositor(object):
-    """Composition engine class"""
-    def __init__(self, context):
-        self.context = context
-
-
-class ManualCompositor(Compositor):
-    """Manual composition - allows more control over typesetting process"""
-    def __init__(self, context):
-        super().__init__(context)
-
-
-class AutoCompositor(Compositor):
-    """Automatic composition with hyphenation and justification"""
-    def __init__(self, context):
-        super().__init__(context)
+    def auto_compose(self):
+        """Automatic composition engine. Hyphenates and justifies on its own,
+        giving less control over the typesetting proces, but saving a lot
+        of time for the user, especially for repetitive work."""
+        pass
 
 
 class InputText(object):
@@ -169,6 +183,8 @@ class InputText(object):
         style_commands = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
                           '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
                           '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
+        alignments = {'^CR': tsf.justify_left, '^CC': tsf.justify_center,
+                      '^CL': tsf.justify_right, '^CF': tsf.justify_both}
         # This variable will prevent yielding a number of subsequent chars
         # after a ligature or command has been found and yielded.
         skip_steps = 0
@@ -196,6 +212,9 @@ class InputText(object):
                     elif char in style_commands:
                         style = style_commands.get(char, 'r')
                         break
+                   #  elif char in alignments:
+                   #      yield alignments[char]
+                   #      break
                     elif char in spaceset:
                         yield spaceset.get(char)
                         break
@@ -206,89 +225,12 @@ class InputText(object):
                     pass
 
 
-class Justify(object):
-    """Justification class"""
-    def __init__(self, method='both'):
-        pass
-
-
-class Line(deque):
-    """A line of type, justified to the left, center,right or both."""
-    def __init__(self, length):
-        super().__init__()
-        self.length = length
-
-    def __add__(self, new):
-        if isinstance(new, Matrix):
-            self.append(new)
-        elif isinstance(new, (int, float)):
-            self.length += new
-        elif isinstance(new, (tuple, list, iter)):
-            self.extend([x for x in new])
-
-    def __radd__(self, new):
-        if isinstance(new, Matrix):
-            self.appendleft(new)
-        elif isinstance(new, (int, float)):
-            self.length += new
-        elif isinstance(new, (tuple, list, iter)):
-            self.extendleft([x for x in new])
-
-    def render(self):
-        """Renders a line into a series of Matrix objects with appropriate
-        widths, and justified spaces."""
-        # TODO
-        pass
-
-    def _align_left(self):
-        """Aligns the previous chunk to the left."""
-        pass
-
-    def _align_right(self):
-        """Aligns the previous chunk to the right."""
-        pass
-
-    def _align_center(self):
-        """Aligns the previous chunk to the center."""
-        pass
-
-    def _align_both(self):
-        """Aligns the previous chunk to both edges and ends the line."""
-        pass
-
-
 class Paragraph(object):
     """A page is broken into a series of paragraphs."""
-    def __init__(self, width, style, indent, justification):
-        self.width = width
-        self.style = style
-        self.indent = indent
-        self.justification = justification
-
-    def __iter__(self):
-        return (x for x in self.nodes)
-
-    def render(self):
-        """Render all lines into combinations of Monotype codes"""
-        pass
-
-    @property
-    def nodes(self):
-        """Nodes are all characters, including ligatures, spaces
-        and line-breaks"""
-        return (node for line in self.lines for node in line)
-
-    @property
-    def lines(self):
-        """Paragraph's lines"""
-        return (line for line in self.lines)
-
-
-class Page(object):
-    """A page is a collection of paragraphs"""
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
+    def __init__(self, text, alignment):
+        self.text = text
+        self.alignment = alignment
+        self.lines = []
 
 
 class GalleyBuilder(object):
@@ -410,4 +352,4 @@ def open_file(filename=''):
             return []
         # Open it
         with io.open(filename, 'r') as text_file:
-            return text_file.readlines()
+            return '\n'.join(text_file.readlines())

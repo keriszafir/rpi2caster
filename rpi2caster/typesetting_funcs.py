@@ -2,9 +2,65 @@
 """
 typesetting_funcs:
 
-Contains functions used for calculating line length, justification,
-setting wedge positions, breaking the line etc.
+Contains functions used for typesetting, justification, control sequences etc.
 """
+
+
+def token_parser(source, skip_unknown=True, *token_sources):
+    """Yields tokens (characters, control sequences), one by one,
+    as they are found in the source.
+    input_stream - iterable;
+    skip_unknown - yield only the characters found in token_sources (default),
+                   otherwise, unknown characters are also yielded
+    token_sources - any number of iterables containing the tokens
+                    we are looking for"""
+    # Collect all tokens (characters, control sequences) from token_sources
+    tokens = [token for sequence in token_sources for token in sequence]
+    # Determine the maximum length of a token
+    max_len = max(len(t) for t in tokens)
+    # We have to skip a number of subsequent input stream characters
+    # after a multi-character token is encountered
+    skip_steps = 0
+    # Characters which will be ignored and not redirected to output
+    ignored = ('\n',)
+    # What if char in text not present in diecase? Hmmm...
+    for index, _ in enumerate(source):
+        if skip_steps:
+            # Skip the characters to be skipped
+            skip_steps -= 1
+            continue
+        for i in range(max_len, 0, -1):
+            # Start from longest, end with shortest
+            try:
+                chunk = source[index:index+i]
+                skip_steps = i - 1
+                if chunk in ignored:
+                    break
+                elif chunk in tokens or not skip_unknown:
+                    yield chunk
+                    break
+            except (TypeError, AttributeError, ValueError):
+                pass
+
+
+def justify_left(text):
+    """Adds spaces at the end of the line"""
+    pass
+
+
+def justify_right(text):
+    """Adds spaces at the beginning of the line"""
+    pass
+
+
+def justify_center(text):
+    """Adds spaces at both sides, centering the line"""
+    pass
+
+
+def justify_both(text):
+    """Uses variable spaces to stretch the text between edges"""
+    pass
 
 
 def single_justification(wedge_positions=(3, 8),

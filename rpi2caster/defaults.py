@@ -11,7 +11,7 @@ GLOBAL_DB_PATH = '/var/local/rpi2caster/rpi2caster.db'
 USER_DB_PATH = '/%s/rpi2caster.db' % USER_DATA_DIR
 # Options and their default values
 OPTIONS = {}
-OPTIONS['preferences'] = {'default_measure': 25,
+OPTIONS['preferences'] = {'default_measure': '25',
                           'measurement_unit': 'cc',
                           'choose_backend': False}
 OPTIONS['interface'] = {'signals_arrangement': SIGNALS,
