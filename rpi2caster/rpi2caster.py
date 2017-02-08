@@ -287,7 +287,7 @@ def main():
     # Figure out if additional arguments are provided
     try:
         entry_point, *arguments = routine_retval
-        entry_point(arguments)
+        entry_point(*arguments)
     except TypeError:
         # Use case: no additional arguments provided
         # A single or None value is returned
