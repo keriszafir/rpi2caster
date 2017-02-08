@@ -4,6 +4,7 @@ typesetting_funcs:
 
 Contains functions used for typesetting, justification, control sequences etc.
 """
+from contextlib import ignored
 
 
 def token_parser(source, skip_unknown=True, *token_sources):
@@ -22,7 +23,7 @@ def token_parser(source, skip_unknown=True, *token_sources):
     # after a multi-character token is encountered
     skip_steps = 0
     # Characters which will be ignored and not redirected to output
-    ignored = ('\n',)
+    ignored_tokens = ('\n',)
     # What if char in text not present in diecase? Hmmm...
     for index, _ in enumerate(source):
         if skip_steps:
@@ -31,16 +32,14 @@ def token_parser(source, skip_unknown=True, *token_sources):
             continue
         for i in range(max_len, 0, -1):
             # Start from longest, end with shortest
-            try:
+            with ignored(TypeError, AttributeError, ValueError):
                 chunk = source[index:index+i]
                 skip_steps = i - 1
-                if chunk in ignored:
+                if chunk in ignored_tokens:
                     break
                 elif chunk in tokens or not skip_unknown:
                     yield chunk
                     break
-            except (TypeError, AttributeError, ValueError):
-                pass
 
 
 def justify_left(text):

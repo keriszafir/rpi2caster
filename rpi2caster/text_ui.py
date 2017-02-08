@@ -7,7 +7,7 @@ import os
 import readline
 import glob
 import click
-
+from contextlib import ignored
 from . import exceptions as e
 from . import constants as c
 
@@ -293,8 +293,6 @@ def simple_menu(message, options):
             return options[ans.lower()]
         elif ans.upper() in options:
             return options[ans.upper()]
-        else:
-            pass
 
 
 def confirm(question, default=None):
@@ -473,7 +471,7 @@ def edit_diecase_layout(diecase):
         print('\nCurrent diecase layout:\n')
         display_diecase_layout(diecase)
         print()
-        try:
+        with ignored(IndexError, KeyboardInterrupt, TypeError, AttributeError):
             ans = input(prompt).upper()
             if ans == 'S' and can_save:
                 diecase.save_to_db()
@@ -488,13 +486,8 @@ def edit_diecase_layout(diecase):
             elif ans.startswith('SWAP'):
                 swap(ans)
             elif ans:
-                try:
+                with ignored(IndexError, TypeError, AttributeError):
                     mats = [mat for mat in diecase if mat.code == ans.upper()]
                     edit(mats[0])
-                except (IndexError, TypeError, AttributeError):
-                    # Loop over again
-                    pass
             else:
                 return diecase.matrices
-        except (IndexError, KeyboardInterrupt, TypeError, AttributeError):
-            pass

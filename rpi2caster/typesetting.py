@@ -189,7 +189,7 @@ class InputText(object):
         # Default style is roman
         style = 'r'
         # Characters which will be skipped
-        ignored = ('\n',)
+        ignored_tokens = ('\n',)
         # Determine the length of character combinations parsed
         # Min = command length i.e. 3
         # Max = ligature length - dictated by diecase
@@ -205,7 +205,7 @@ class InputText(object):
                 with suppress(KeyError):
                     chunk = self.text[index:index+i]
                     skip_steps = i - 1
-                    if chunk in ignored:
+                    if chunk in ignored_tokens:
                         break
                     elif chunk in STYLE_COMMANDS:
                         style = STYLE_COMMANDS.get(chunk, 'r')
