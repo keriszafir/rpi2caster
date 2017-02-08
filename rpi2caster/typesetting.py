@@ -2,22 +2,30 @@
 """Typesetter program"""
 
 import io
-from collections import deque
+from contextlib import suppress
+# from collections import deque
 from . import exceptions as e
 from . import typesetting_funcs as tsf
 # from .justification import Box, Glue, Penalty, ObjectList
 from .measure import Measure
 from .typesetting_data import Ribbon
-from .matrix_data import Diecase, Matrix, diecase_operations, EMPTY_DIECASE
+from .matrix_data import Diecase, diecase_operations, EMPTY_DIECASE
 from .wedge_data import Wedge
 from .rpi2caster import UI
+
+# Constants for control codes
+STYLE_COMMANDS = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
+                  '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
+                  '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
+ALIGNMENTS = {'^CR': tsf.justify_left, '^CC': tsf.justify_center,
+              '^CL': tsf.justify_right, '^CF': tsf.justify_both,
+              '\n\n': tsf.justify_both}
 
 
 class TypesettingContext(object):
     """Mixin for setting diecase, wedge and measure"""
     def __init__(self, text_file='', ribbon_file='', ribbon_id='',
                  diecase_id='', wedge_name='', measure=''):
-        self.spaceset, self.charset = [], {}
         self.diecase = Diecase(diecase_id)
         self.measure = Measure(self, measure)
         self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
@@ -53,16 +61,20 @@ class TypesettingContext(object):
         """Get a diecase or empty diecase"""
         return self.__dict__.get('_diecase') or EMPTY_DIECASE
 
+    @property
+    def charset(self):
+        """Get a {style: {char: Matrix object}} charset from the diecase"""
+        return self.diecase.charset
+
+    @property
+    def spaceset(self):
+        """Get a set of spaces for the diecase currently assigned."""
+        return self.diecase.spaceset
+
     @diecase.setter
     def diecase(self, diecase):
         """Set a diecase; reset the wedge"""
         self.__dict__['_diecase'] = diecase
-        self.spaceset = self.diecase.spaceset
-        # A charset is a dictionary of {style: {char: Matrix object}}
-        # So, we can get all matrices for style by self.charset[style]
-        # and a particular matrix by self.charset[style][char]
-        self.charset = {style: {char: self.diecase.charset[(char, style)]}
-                        for (char, style) in self.diecase.charset}
 
     def choose_diecase(self):
         """Chooses a diecase from database"""
@@ -91,12 +103,6 @@ class Typesetting(TypesettingContext):
     into a sequence of Monotype control codes, which can be sent to
     the machine to cast composed and justified type.
     """
-    # Style and alignment codes (will be constant)
-    style_codes = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
-                   '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
-                   '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
-    align_codes = {'^CR': tsf.justify_left, '^CC': tsf.justify_center,
-                   '^CL': tsf.justify_right, '^CF': tsf.justify_both}
 
     def __init__(self, text_file='', ribbon_file='', ribbon_id='',
                  diecase_id='', wedge_name='', measure='', manual=True):
@@ -117,7 +123,7 @@ class Typesetting(TypesettingContext):
             # (function, description, condition)
             opts = [(finish, 'Exit', 'Exits the program', True),
                     (self.edit_text, 'Edit the source text',
-                    'Enter or edit the text you want to translate', True),
+                     'Enter or edit the text you want to translate', True),
                     (self.compose, 'Typesetting', 'Translate the text',
                      self.diecase and self.source),
                     (self.choose_diecase, 'Select diecase',
@@ -143,16 +149,13 @@ class Typesetting(TypesettingContext):
         # Keep displaying the menu and go back here after any method ends
         finished = False
         while not finished:
-            # Catch any known exceptions here
-            try:
+            with suppress(e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
                 UI.menu(menu_options(), header=header, footer='')()
-            except (e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
-                # Will skip to the end of the loop, and start all over
-                pass
 
     def manual_compose(self):
         """Manual composition engine. As the end of the line is reached,
         the user decides where to break (with or without hyphenation)."""
+        print(self.charset)
         print('roman', self.charset.get('r'))
         print('bold', self.charset.get('b'))
         input('Enter to continue')
@@ -180,11 +183,6 @@ class InputText(object):
         # them ad hoc
         charset = self.context.diecase.charset
         spaceset = self.context.diecase.spaceset
-        style_commands = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
-                          '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
-                          '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
-        alignments = {'^CR': tsf.justify_left, '^CC': tsf.justify_center,
-                      '^CL': tsf.justify_right, '^CF': tsf.justify_both}
         # This variable will prevent yielding a number of subsequent chars
         # after a ligature or command has been found and yielded.
         skip_steps = 0
@@ -204,26 +202,17 @@ class InputText(object):
                 continue
             for i in range(max_len, 0, -1):
                 # Start from longest, end with shortest
-                try:
-                    char = self.text[index:index+i]
+                with suppress(KeyError):
+                    chunk = self.text[index:index+i]
                     skip_steps = i - 1
-                    if char in ignored:
+                    if chunk in ignored:
                         break
-                    elif char in style_commands:
-                        style = style_commands.get(char, 'r')
+                    elif chunk in STYLE_COMMANDS:
+                        style = STYLE_COMMANDS.get(chunk, 'r')
                         break
-                   #  elif char in alignments:
-                   #      yield alignments[char]
-                   #      break
-                    elif char in spaceset:
-                        yield spaceset.get(char)
+                    else:
+                        yield spaceset.get(chunk) or charset[style][chunk]
                         break
-                    elif (char, style) in charset:
-                        yield charset.get((char, style))
-                        break
-                except (TypeError, AttributeError, ValueError):
-                    pass
-
 
 class Paragraph(object):
     """A page is broken into a series of paragraphs."""

@@ -2,6 +2,7 @@
 """rpi2caster - top-level script for starting the components"""
 from os import system
 from sys import argv
+from contextlib import suppress
 import argparse
 from . import exceptions as e
 from . import text_ui as UI
@@ -20,14 +21,15 @@ def casting_job(args):
                               wedge_name=args.wedge_name)
     session.caster.mode.simulation = args.simulation or None
     session.caster.mode.punching = args.punching
-    # Skip menu if casting directly or testing
-    if args.input_text is not None:
-        session.quick_typesetting(args.input_text)
+    # Skip menu if casting directly, typesetting or testing
+    if args.input_text:
+        return session.quick_typesetting, args.input_text
+    elif args.direct:
+        return session.cast_composition
+    elif args.testing:
+        return session.diagnostics_submenu
     else:
-        entry_point = (session.cast_composition if args.direct
-                       else session.diagnostics_submenu if args.testing
-                       else session.main_menu)
-        entry_point()
+        return session.main_menu
 
 
 def typesetting_job(args):
@@ -38,7 +40,7 @@ def typesetting_job(args):
                                       diecase_id=args.diecase_id,
                                       wedge_name=args.wedge_name,
                                       measure=args.measure)
-    session.main_menu()
+    return session.main_menu
 
 
 def update(args):
@@ -46,7 +48,8 @@ def update(args):
     # Upgrade routine
     dev_prompt = 'Testing version (newest features, but unstable)? '
     if UI.confirm('Update the software?', default=False):
-        use_dev_version = args.testing or UI.confirm(dev_prompt, default=False)
+        use_dev_version = (args.testing or
+                           UI.confirm(dev_prompt, default=False))
         pre = '--pre' if use_dev_version else ''
         print('You may be asked for the admin password...')
         system('sudo pip3 install %s --upgrade rpi2caster' % pre)
@@ -57,37 +60,35 @@ def inventory(args):
     from . import matrix_data
     if args.list_diecases:
         # Just show what we have
-        matrix_data.list_diecases()
+        return matrix_data.list_diecases
     elif args.diecase_id:
         # Work on a specific diecase
         diecase = matrix_data.Diecase(args.diecase_id)
-        diecase.manipulation_menu()
+        return diecase.manipulation_menu
     else:
         # Choose diecase and work on it
-        matrix_data.diecase_operations()
+        return matrix_data.diecase_operations
 
 
 def meow(_):
     "Easter egg"
     try:
         from . import easteregg
-        easteregg.show()
+        return easteregg.show
     except (OSError, FileNotFoundError):
         print('There are no Easter Eggs in this program.')
 
 
-def toggle_punching(args):
-    """Switch between punching and casting modes"""
-    args.punching = not args.punching
-
-
-def toggle_simulation(args):
-    """Switch between simulation and casting/punching modes"""
-    args.simulation = not args.simulation
-
-
 def main_menu(args):
     """Main menu - choose the module"""
+    def toggle_punching(args):
+        """Switch between punching and casting modes"""
+        args.punching = not args.punching
+
+    def toggle_simulation(args):
+        """Switch between simulation and casting/punching modes"""
+        args.simulation = not args.simulation
+
     def exit_program(*_):
         """Breaks out of menu"""
         nonlocal finished
@@ -122,7 +123,17 @@ def main_menu(args):
                     {True: 'Use a real machine',
                      False: 'Use a mockup for testing'}[args.simulation])]
         try:
-            UI.menu(options, header=header, footer='')(args)
+            job = UI.menu(options, header=header, footer='')
+            # Determine the subroutine and arguments
+            # Job retval can contain additional arguments
+            routine_retval = job(args)
+            try:
+                entry_point, *arguments = routine_retval
+                entry_point(arguments)
+            except TypeError:
+                # A single or None value is returned
+                with suppress(TypeError):
+                    routine_retval()
         except (e.ReturnToMenu, e.MenuLevelUp):
             pass
         except (KeyboardInterrupt, EOFError):
@@ -267,17 +278,25 @@ def main():
     # Update configuration and database
     CFG = Config(args.config)
     DB = Database(args.database)
+    # Parse the arguments, get the entry point
     try:
-        args.job(args)
-    except (e.ReturnToMenu, e.MenuLevelUp):
-        pass
+        routine_retval = args.job(args)
+    except AttributeError:
+        # User provided wrong command line arguments. Display help and quit.
+        main_parser.print_help()
+    # Figure out if additional arguments are provided
+    try:
+        entry_point, *arguments = routine_retval
+        entry_point(arguments)
+    except TypeError:
+        # Use case: no additional arguments provided
+        # A single or None value is returned
+        with suppress(TypeError):
+            routine_retval()
     except (KeyboardInterrupt, EOFError):
         print('\nInterrupted by user.')
-    except AttributeError:
-        if args.debug:
-            raise
-        else:
-            main_parser.print_help()
+    except (e.ReturnToMenu, e.MenuLevelUp):
+        pass
     finally:
         print('Goodbye!')
 

@@ -6,6 +6,7 @@ diecase storing, parameter searches.
 import io
 import csv
 from copy import copy
+from contextlib import suppress
 # Some functions raise custom exceptions
 from . import exceptions as e
 # Constants module
@@ -85,8 +86,16 @@ class Diecase(object):
     @property
     def charset(self):
         """Diecase character set"""
-        return {(mat.char, style): copy(mat) for mat in self.matrices
-                for style in mat.styles}
+        charset = {}
+        for mat in self.matrices:
+            for style in mat.styles:
+                try:
+                    charset[style][mat.char] = mat
+                except KeyError:
+                    # Initialize the empty style dictionary
+                    charset[style] = {}
+                    charset[style][mat.char] = mat
+        return charset
 
     @property
     def ligature_length(self):
@@ -294,14 +303,14 @@ class Diecase(object):
         """Enter the string and parse the diecase to see if any of the
         specified characters are missing."""
         input_string = input_string or UI.enter_data('Text to check?')
-        charset = {char for char in input_string}
+        test_char_set = {char for char in input_string}
         # Return True unless any characters are missing
         retval = True
         for style, description in Styles(styles).items():
-            chars_found = {mat.char for mat in self for char in charset
+            chars_found = {mat.char for mat in self for char in test_char_set
                            if char == mat.char and
                            (mat.is_space or style in mat.styles)}
-            missing = sorted(charset.difference(chars_found))
+            missing = sorted(test_char_set.difference(chars_found))
             if missing:
                 UI.display('Missing mats for %s: %s'
                            % (description, ', '.join(missing)))
@@ -558,12 +567,10 @@ class MatrixMixin(object):
         retval = 0
         for style, ua_id in self.diecase.ua_mapping:
             if style in self.styles:
-                try:
+                with suppress(AttributeError, TypeError, KeyError, ValueError,
+                              e.UnitArrangementNotFound, e.UnitValueNotFound):
                     retval = ua.get_unit_value(ua_id, self.char, self.styles)
                     break
-                except (AttributeError, TypeError, KeyError, ValueError,
-                        e.UnitArrangementNotFound, e.UnitValueNotFound):
-                    pass
         return retval
 
     def wedge_positions(self, unit_correction=0):

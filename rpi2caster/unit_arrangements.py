@@ -37,6 +37,14 @@ ACCENTS = {'a': 'ąäáãâạà',
 for unaccented_char in [char for char in ACCENTS]:
     ACCENTS[unaccented_char.upper()] = ACCENTS.get(unaccented_char).upper()
 
+# Ligatures are multiple-character glyphs, using a single matrix,
+# cast as a single sort of type. Typical ligatures listed below, with
+# a possibility of adding more in the future. We never know everything.
+# Not all ligatures are present in capitals or small caps (e.g. f-ligatures
+# are lowercase only).
+LIGATURES = ['ae', 'oe', 'AE', 'OE', 'fi', 'fl', 'ff', 'fb', 'fh', 'fk',
+             'fj', 'ffi', 'ffl', 'ij', 'IJ', 'st', 'ct']
+
 # Define unit arrangements for the fonts
 # This may in future be stored in data files (JSON-encoded?)
 UA = {'82': {'r': {5: ['f', 'i', 'I', 'j', 'J', 'l'],
@@ -172,7 +180,10 @@ def get_unit_value(ua_id, char, styles):
 
 
 def ua_by_style(styles_string=''):
-    """Ask for styles and assign them a unit arrangement"""
+    """Ask for styles and assign them a unit arrangement.
+    Return a list of tuples: [(style1, ua1), (style2, ua2)...]
+    for each style in styles_string (if called without arguments,
+    let user choose the styles manually)"""
     styles = Styles(styles_string, allow_multiple=True)
     mapping = []
     ua_numbers = ', '.join([x for x in sorted(UA)])
@@ -190,7 +201,8 @@ def ua_by_style(styles_string=''):
 
 
 def char_unit_values(mapping):
-    """Get a dictionary of unit values based on style-to-UA assignment"""
+    """Get a dictionary of unit values based on style-to-UA assignment.
+    Use a [(style1, ua1), (style2, ua2)] mapping."""
     data = {}
     for style, ua_number in mapping:
         # Look for the style in UA; if not found, fall back to roman
@@ -213,17 +225,15 @@ def char_unit_values(mapping):
 
 
 def display_unit_values(mapping=None):
-    """Print a list on the screen with unit values for each character"""
+    """Print a list on the screen with unit values for each character.
+    Use a [(style1, ua1), (style2, ua2)] mapping.
+    If mapping is not provided, user will choose style manually."""
     mapping = mapping or ua_by_style()
     styles = [x for (x, y) in mapping]
     source = char_unit_values(mapping)
     alphabet = 'abcdefghijklmnopqrstuvwxyz'
     digits = '0123456789'
-    ligatures = ['ae', 'oe', 'AE', 'OE', 'fi', 'fl', 'ff', 'fb', 'fh', 'fk',
-                 'fj', 'ffi', 'ffl', 'ij', 'IJ', 'st', 'ct']
-    charset = alphabet + alphabet.upper() + digits
-    charset = [x for x in charset]
-    charset.extend(ligatures)
+    characters = [x for x in alphabet + alphabet.upper() + digits] + LIGATURES
     # Unit values by styles and chars
     header = ('Character'.ljust(15) +
               ''.join([Styles.style_dict.get(style).ljust(15)
@@ -232,7 +242,7 @@ def display_unit_values(mapping=None):
     UI.display('Unit values for characters:\n')
     UI.display(header)
     UI.display('-' * len(header))
-    for char in charset:
+    for char in characters:
         row = ''.join([char.ljust(15)] +
                       [str(source.get(style, {}).get(char)).ljust(15)
                        for style in styles])
@@ -242,7 +252,7 @@ def display_unit_values(mapping=None):
     for units in range(4, 25):
         strings = []
         for style in 'rbislu':
-            chars = ', '.join([char for char in charset
+            chars = ', '.join([char for char in characters
                                if source.get(style, {}).get(char) == units])
             if chars:
                 style_name = Styles.style_dict.get(style)

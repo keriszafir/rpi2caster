@@ -2,6 +2,7 @@
 """Caster object for either,  real or virtual Monotype composition caster"""
 # Built-in time module
 from time import time, sleep
+from contextlib import suppress
 # Custom exceptions module
 from . import exceptions as e
 # Constants module
@@ -231,14 +232,12 @@ class MonotypeCaster(object):
         self.output.valves_off()
         while self.pump_working:
             UI.display('The pump is still working - turning it off...')
-            try:
+            with suppress(e.MachineStopped, KeyboardInterrupt, EOFError):
                 # Run two full sequences to be sure
                 send_stop_signals()
                 send_stop_signals()
                 UI.display('Pump is now off.')
                 self.pump_working = False
-            except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                pass
 
 
 class SensorMixin(object):

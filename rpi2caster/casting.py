@@ -16,6 +16,7 @@ A module for everything related to working on a Monotype composition caster:
 
 # IMPORTS:
 from collections import deque
+from contextlib import suppress
 from time import sleep
 # Signals parsing methods for rpi2caster
 from . import parsing as p
@@ -662,12 +663,8 @@ class Casting(TypesettingContext):
         # Keep displaying the menu and go back here after any method ends
         finished = False
         while not finished:
-            try:
-                # Catch "return to menu" and "exit program" exceptions here
+            with suppress(e.ReturnToMenu):
                 UI.menu(menu_options(), header=header)(self)
-            except e.ReturnToMenu:
-                # Stay in the menu
-                pass
 
     def main_menu(self):
         """Main menu for the type casting utility."""
@@ -739,11 +736,8 @@ class Casting(TypesettingContext):
                       'and casts the type on a composition caster.'
                       '\n\n%s Menu:' % job)
             # Catch any known exceptions here
-            try:
+            with suppress(e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
                 UI.menu(menu_options(), header=header, footer='')()
-            except (e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
-                # Will skip to the end of the loop, and start all over
-                pass
 
     def _display_details(self):
         """Collect ribbon, diecase and wedge data here"""
