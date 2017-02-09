@@ -30,13 +30,13 @@ def casting_job(args):
     # Skip menu if casting directly, typesetting or testing
     if args.input_text:
         # TODO use object properties instead of arguments/parameters
-        return session.quick_typesetting, args.input_text
+        session.quick_typesetting(args.input_text)
     elif args.direct:
-        return session.cast_composition
+        session.cast_composition()
     elif args.testing:
-        return session.diagnostics_submenu
+        session.diagnostics_submenu()
     else:
-        return session.main_menu
+        session.main_menu()
 
 
 def typesetting_job(args):
@@ -52,7 +52,7 @@ def typesetting_job(args):
     session.manual_mode = args.manual_mode
     session.line_length = args.measure
     # Only one method here
-    return session.main_menu
+    session.main_menu()
 
 
 def update(args):
@@ -72,21 +72,21 @@ def inventory(args):
     from . import matrix_data
     if args.list_diecases:
         # Just show what we have
-        return matrix_data.list_diecases
+        matrix_data.list_diecases()
     elif args.diecase_id:
         # Work on a specific diecase
         diecase = matrix_data.Diecase(args.diecase_id)
-        return diecase.manipulation_menu
+        diecase.manipulation_menu()
     else:
         # Choose diecase and work on it
-        return matrix_data.diecase_operations
+        matrix_data.diecase_operations()
 
 
 def meow(_):
     "Easter egg"
     try:
         from . import easteregg
-        return easteregg.show
+        easteregg.show()
     except (OSError, FileNotFoundError):
         print('There are no Easter Eggs in this program.')
 
@@ -136,16 +136,7 @@ def main_menu(args):
                      False: 'Use a mockup for testing'}[args.simulation])]
         try:
             job = UI.menu(options, header=header, footer='')
-            # Determine the subroutine and arguments
-            # Job retval can contain additional arguments
-            routine_retval = job(args)
-            try:
-                entry_point, *arguments = routine_retval
-                entry_point(arguments)
-            except TypeError:
-                # A single or None value is returned
-                with suppress(TypeError):
-                    routine_retval()
+            job(args)
         except (e.ReturnToMenu, e.MenuLevelUp):
             pass
         except (KeyboardInterrupt, EOFError):
@@ -303,19 +294,13 @@ def main():
     DB = Database(args.database)
     # Parse the arguments, get the entry point
     try:
-        routine_retval = args.job(args)
+        job = args.job
     except AttributeError:
         # User provided wrong command line arguments. Display help and quit.
         main_parser.print_help()
-    # Figure out if additional arguments are provided
+    # Run the routine
     try:
-        entry_point, *arguments = routine_retval
-        entry_point(*arguments)
-    except TypeError:
-        # Use case: no additional arguments provided
-        # A single or None value is returned
-        with suppress(TypeError):
-            routine_retval()
+        job(args)
     except (KeyboardInterrupt, EOFError):
         print('\nInterrupted by user.')
     except (e.ReturnToMenu, e.MenuLevelUp):

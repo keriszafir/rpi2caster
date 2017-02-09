@@ -40,7 +40,11 @@ class Ribbon(object):
         elif file:
             data = import_ribbon_from_file(file)
         elif manual_choice:
-            data = choose_ribbon_from_db() or import_ribbon_from_file()
+            # TODO: simplify this big ball o'fur&mud
+            data = choose_ribbon_from_db()
+            if not data:
+                ribbon_file = UI.import_file()
+                data = import_ribbon_from_file(ribbon_file)
         # Got data - unpack them, set the attributes
         if not data:
             data = ['', 'New ribbon', 'No customer', '', 'S5-12E', []]
