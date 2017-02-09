@@ -154,7 +154,7 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     def manual_mode(self):
         """Decides whether to use an automatic or manual typesetting engine."""
         # On by default
-        return self.__dict__.get('_manual_mode') or True
+        return self.__dict__.get('_manual_mode') or False
 
     @manual_mode.setter
     def manual_mode(self, manual_mode):
@@ -231,6 +231,10 @@ class Typesetting(TypesettingContext):
                     (self.change_alignment, 'Change default alignment',
                      'Set a text alignment if no code is present (current: %s)'
                      % self.default_alignment, True),
+                    (self.toggle_manual_mode, 'Change the typesetting mode',
+                     'Switch to automatic typesetting', self.manual_mode),
+                    (self.toggle_manual_mode, 'Change the typesetting mode',
+                     'Switch to manual typesetting', not self.manual_mode),
                     (self.diecase.show_layout, 'Show diecase layout',
                      'View the matrix case layout', True),
                     (diecase_operations, 'Matrix manipulation',

@@ -225,6 +225,10 @@ def main():
         # Wedge name to use instead of diecase's assigned wedge
         parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
                             help='wedge to use: [s]series-set_width[e]')
+        # Automatic typesetting
+        parser.add_argument('--manual', dest='manual_mode',
+                            action='store_true',
+                            help='use manual typesetting engine')
         # Default action
         parser.set_defaults(job=typesetting_job)
 
@@ -279,7 +283,7 @@ def main():
                             list_diecases=False,
                             diecase_id=None, wedge_name=None, input_text=None,
                             direct=False, testing=False, database=None,
-                            config=None, measure=None, manual_mode=True)
+                            config=None, measure=None, manual_mode=False)
         return parser
 
     # Build the parsers and get the arguments
