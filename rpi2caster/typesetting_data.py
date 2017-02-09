@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """Operations on ribbon and scheme objects: creating, editing and deleting. """
-# File operations
-import io
+from contextlib import suppress
 # Some functions raise custom exceptions
 from . import exceptions as e
+# Default user data directory
+from .defaults import USER_DATA_DIR
 # Constants for rpi2caster
 from .constants import ASSIGNMENT_SYMBOLS
 # User interface, database backend
@@ -29,17 +30,15 @@ class Ribbon(object):
     export_to_file - store the metadata and contents in text file
     store_in_db - store the metadata and contents in db
     set_[description, customer, diecase_id] - set parameters manually"""
-    def __init__(self, ribbon_id='', filename='', manual_choice=False):
+    def __init__(self, ribbon_id='', file=None, manual_choice=False):
         data = None
-        self.filename = ''
         if ribbon_id:
             try:
                 data = DB.get_ribbon(ribbon_id)
             except (e.NoMatchingData, e.DatabaseQueryError):
                 UI.display('Ribbon choice failed. Starting a new one.')
-        elif filename:
-            self.filename = filename
-            data = import_ribbon_from_file(filename)
+        elif file:
+            data = import_ribbon_from_file(file)
         elif manual_choice:
             data = choose_ribbon_from_db() or import_ribbon_from_file()
         # Got data - unpack them, set the attributes
@@ -96,8 +95,7 @@ class Ribbon(object):
     @property
     def parameters(self):
         """Gets a list of parameters"""
-        return [(self.filename, 'File name'),
-                (self.ribbon_id, 'Ribbon ID'),
+        return [(self.ribbon_id, 'Ribbon ID'),
                 (self.description, 'Description'),
                 (self.customer, 'Customer'),
                 (self.diecase_id, 'Matrix case ID'),
@@ -142,21 +140,19 @@ class Ribbon(object):
             DB.delete_ribbon(self)
             UI.display('Ribbon deleted successfully.')
 
-    def import_from_file(self, filename=None):
+    def import_from_file(self):
         """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
-        self.filename = filename
-        (self.ribbon_id, self.description, self.customer, self.diecase_id,
-         self.wedge_name, self.contents) = import_ribbon_from_file()
+        with suppress(UI.Abort):
+            file = UI.import_file()
+            (self.ribbon_id, self.description, self.customer, self.diecase_id,
+             self.wedge_name, self.contents) = import_ribbon_from_file(file)
 
-    def export_to_file(self, filename=None):
+    def export_to_file(self):
         """Exports the ribbon to a text file"""
         UI.display_parameters({'Ribbon data': self.parameters})
-        try:
-            # Choose file, write metadata, write contents
-            filename = filename or UI.enter_output_filename()
-        except e.ReturnToMenu:
-            return
-        with io.open(filename, mode='w+') as ribbon_file:
+        # Choose file, write metadata, write contents
+        filename = '%s/%s.rib' % (USER_DATA_DIR, self.ribbon_id)
+        with suppress(UI.Abort), UI.export_file(filename) as ribbon_file:
             ribbon_file.write('description: ' + self.description)
             ribbon_file.write('customer: ' + self.customer)
             ribbon_file.write('diecase: ' + self.diecase_id)
@@ -191,7 +187,7 @@ def list_ribbons():
     return results
 
 
-def import_ribbon_from_file(filename=None):
+def import_ribbon_from_file(ribbon_file):
     """Imports ribbon from file, parses parameters, returns a list of them"""
     def get_value(line, symbol):
         """Helper function - strips whitespace and symbols"""
@@ -199,16 +195,8 @@ def import_ribbon_from_file(filename=None):
         # strip any whitespace or multipled symbols
         return line.split(symbol, 1)[-1].strip(symbol).strip()
 
-    UI.display('Loading the ribbon from file...')
-    try:
-        filename = filename or UI.enter_input_filename()
-        with io.open(filename, mode='r') as ribbon_file:
-            ribbon = [line.strip() for line in ribbon_file if line.strip()]
-    except (FileNotFoundError, IOError):
-        UI.pause('Cannot open ribbon file %s' % filename)
-        return False
-    except e.ReturnToMenu:
-        return False
+    with ribbon_file:
+        ribbon = [line.strip() for line in ribbon_file if line.strip()]
     # What to look for
     keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer',
                 'wedge', 'stopbar']

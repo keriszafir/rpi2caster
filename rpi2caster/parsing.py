@@ -3,21 +3,17 @@
 
 This module contains file- and line-parsing functions for the casting program.
 """
-import io
 from . import constants
 # Check if alternate comment symbols are configured
 from .constants import COMMENT_SYMBOLS
 
 
-def read_file(filename):
-    """Returns file contents (if file is readable), or False otherwise.
+def read_file(input_file):
+    """Accepts a file-like object.
+    Returns file contents, or False otherwise.
     Strips whitespace and removes empty lines."""
-    # Open a file with signals, test if it's readable and return its contents
-    try:
-        with io.open(filename, 'r') as input_file:
-            return [l.strip() for l in input_file if l.strip()]
-    except (IOError, FileNotFoundError):
-        return False
+    with input_file:
+        return [l.strip() for l in input_file if l.strip()]
 
 
 def parse_record(input_data):

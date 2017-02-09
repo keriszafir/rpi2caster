@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """Typesetter program"""
-
-import io
 from contextlib import suppress
 # from collections import deque
 from . import exceptions as e
@@ -17,19 +15,24 @@ from .rpi2caster import UI
 STYLE_COMMANDS = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
                   '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
                   '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
-ALIGNMENTS = {'^CR': tsf.justify_left, '^CC': tsf.justify_center,
-              '^CL': tsf.justify_right, '^CF': tsf.justify_both,
-              '\n\n': tsf.justify_both}
+ALIGNMENTS = {'^CR': 'left', '^CC': 'center', '^CL': 'right', '^CF': 'both'}
 
 
 class TypesettingContext(object):
     """Mixin for setting diecase, wedge and measure"""
-    def __init__(self, text_file='', ribbon_file='', ribbon_id='',
+    def __init__(self, text_file=None, ribbon_file=None, ribbon_id='',
                  diecase_id='', wedge_name='', measure=''):
         self.diecase = Diecase(diecase_id)
         self.measure = Measure(self, measure)
-        self.ribbon = Ribbon(filename=ribbon_file, ribbon_id=ribbon_id)
-        self.source = open_file(text_file) if text_file else ''
+        self.ribbon = Ribbon(file=ribbon_file, ribbon_id=ribbon_id)
+        self.default_alignment = 'both'
+        # Try to open and read the file...
+        try:
+            with text_file:
+                self.source = ''.join([line for line in text_file])
+        except AttributeError:
+            # ...otherwise work with an empty source
+            self.source = ''
         self.wedge = Wedge(wedge_name) if wedge_name else self.diecase.wedge
 
     @property
@@ -97,6 +100,13 @@ class TypesettingContext(object):
         """Edits the input text"""
         self.source = UI.edit(self.source)
 
+    def change_alignment(self):
+        """Changes the default text alignment"""
+        UI.display('Default alignment for paragraphs:')
+        message = 'Choose alignment: [L]eft, [C]enter, [R]ight, [B]oth? '
+        options = {'l': 'left', 'r': 'right', 'c': 'center', 'b': 'both'}
+        self.default_alignment = UI.simple_menu(message, options)
+
 
 class Typesetting(TypesettingContext):
     """Typesetting session - choose and translate text with control codes
@@ -104,10 +114,11 @@ class Typesetting(TypesettingContext):
     the machine to cast composed and justified type.
     """
 
-    def __init__(self, text_file='', ribbon_file='', ribbon_id='',
+    def __init__(self, text_file=None, ribbon_file=None, ribbon_id='',
                  diecase_id='', wedge_name='', measure='', manual=True):
-        super().__init__(text_file, ribbon_file, ribbon_id, diecase_id,
-                         wedge_name, measure)
+        super().__init__(text_file=text_file, ribbon_file=ribbon_file,
+                         ribbon_id=ribbon_id, diecase_id=diecase_id,
+                         wedge_name=wedge_name, measure=measure)
         self.compose = self.manual_compose if manual else self.auto_compose
 
     def main_menu(self):
@@ -134,6 +145,9 @@ class Typesetting(TypesettingContext):
                      % self.diecase.alt_wedge, True),
                     (self.change_measure, 'Change measure',
                      'Set new line length (current: %s)' % self.measure, True),
+                    (self.change_alignment, 'Change default alignment',
+                     'Set a text alignment if no code is present (current: %s)'
+                     % self.default_alignment, True),
                     (self.diecase.show_layout, 'Show diecase layout',
                      'View the matrix case layout', True),
                     (diecase_operations, 'Matrix manipulation',
@@ -149,22 +163,56 @@ class Typesetting(TypesettingContext):
         # Keep displaying the menu and go back here after any method ends
         finished = False
         while not finished:
-            with suppress(e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
+            with suppress(e.ReturnToMenu, e.MenuLevelUp,
+                          UI.Abort, EOFError, KeyboardInterrupt):
                 UI.menu(menu_options(), header=header, footer='')()
+
+    def get_paragraphs(self):
+        """Parse a text into paragraphs with justification modes."""
+        # Get a dict of alignment codes
+        # Add a default alignment for double line break i.e. new paragraph
+        alignments = {k: v for (k, v) in ALIGNMENTS.items()}
+        alignments['\n\n'] = self.default_alignment
+        # Make a generator function and loop over it
+        paragraph_generator = token_parser(self.source, alignments,
+                                           skip_unknown=False)
+        paragraphs, tokens = [], []
+        finished = False
+        while not finished:
+            try:
+                token = next(paragraph_generator)
+            except StopIteration:
+                # Processed the whole text; any non-whitespace remaining part
+                # must be also cast! (will be left-justified)
+                end_text = ''.join(tokens).strip()
+                if end_text:
+                    last = Paragraph(end_text, self.default_alignment)
+                    paragraphs.append(last)
+                finished = True
+            try:
+                # Justification token detected - end paragrapgh
+                justification = ALIGNMENTS[token]
+                current_text = ''.join(tokens)
+                # Reset the tokens on line currently worked on
+                tokens = []
+                paragraphs.append(Paragraph(current_text, justification))
+            except KeyError:
+                # No justification detected = keep adding more characters
+                tokens.append(token)
+        return paragraphs
 
     def manual_compose(self):
         """Manual composition engine. As the end of the line is reached,
         the user decides where to break (with or without hyphenation)."""
-        print(self.charset)
-        print('roman', self.charset.get('r'))
-        print('bold', self.charset.get('b'))
-        input('Enter to continue')
+        paragraphs = self.get_paragraphs()
+        for paragraph in paragraphs:
+            paragraph.display_text()
 
     def auto_compose(self):
         """Automatic composition engine. Hyphenates and justifies on its own,
         giving less control over the typesetting proces, but saving a lot
         of time for the user, especially for repetitive work."""
-        pass
+        print('Auto compositor')
 
 
 class InputText(object):
@@ -214,12 +262,17 @@ class InputText(object):
                         yield spaceset.get(chunk) or charset[style][chunk]
                         break
 
+
 class Paragraph(object):
     """A page is broken into a series of paragraphs."""
     def __init__(self, text, alignment):
         self.text = text
         self.alignment = alignment
         self.lines = []
+
+    def display_text(self):
+        """Prints the text"""
+        UI.display(self.text)
 
 
 class GalleyBuilder(object):
@@ -331,14 +384,37 @@ class GalleyBuilder(object):
         return queue
 
 
-def open_file(filename=''):
-    """Opens a text file with text that will be typeset"""
-    while True:
-        # Choose file
-        try:
-            filename = filename or UI.enter_input_filename()
-        except e.ReturnToMenu:
-            return []
-        # Open it
-        with io.open(filename, 'r') as text_file:
-            return '\n'.join(text_file.readlines())
+def token_parser(source, *token_sources, skip_unknown=True):
+    """Yields tokens (characters, control sequences), one by one,
+    as they are found in the source.
+    input_stream - iterable;
+    skip_unknown - yield only the characters found in token_sources (default),
+                   otherwise, unknown characters are also yielded
+    token_sources - any number of iterables containing the tokens
+                    we are looking for"""
+    # Collect all tokens (characters, control sequences) from token_sources
+    tokens = [token for sequence in token_sources for token in sequence]
+    # Determine the maximum length of a token
+    max_len = max(len(t) for t in tokens)
+    # We have to skip a number of subsequent input stream characters
+    # after a multi-character token is encountered
+    skip_steps = 0
+    # Characters which will be ignored and not redirected to output
+    ignored_tokens = ('\n',)
+    # What if char in text not present in diecase? Hmmm...
+    for index, _ in enumerate(source):
+        if skip_steps:
+            # Skip the characters to be skipped
+            skip_steps -= 1
+            continue
+        for i in range(max_len, 0, -1):
+            # Start from longest, end with shortest
+            with suppress(TypeError, AttributeError, ValueError):
+                chunk = source[index:index+i]
+                skip_steps = i - 1
+                if chunk in ignored_tokens:
+                    break
+                elif chunk in tokens or i == 1 and not skip_unknown:
+                    # Make sure that the function will yield chunks of 1 char
+                    yield chunk
+                    break

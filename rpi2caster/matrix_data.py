@@ -3,7 +3,6 @@
 diecase storing, parameter searches.
 """
 # File operations
-import io
 import csv
 from copy import copy
 from contextlib import suppress
@@ -20,7 +19,9 @@ from .styles import Styles
 # Wedge operations for several matrix-case management functions
 from .wedge_data import Wedge
 # User interface, donfiguration and database backends
-from .rpi2caster import UI, CFG, DB
+from .rpi2caster import UI, DB
+# Default user data directory
+from .defaults import USER_DATA_DIR
 # Letter frequency for completeness testing
 from .letter_frequencies import CharFreqs
 
@@ -266,13 +267,14 @@ class Diecase(object):
     def import_layout(self):
         """Imports a layout from file"""
         # Load the layout from file
-        submitted_layout = [x for x in import_layout_file()]
-        if not submitted_layout:
-            UI.pause('File does not contain a proper layout!')
-            return False
-        # Update the empty layout with characters read from file
-        # record = (char, styles, coordinates, units)
         try:
+            file = UI.import_file()
+            submitted_layout = [x for x in import_layout_from_file(file)]
+            if not submitted_layout:
+                UI.pause('File does not contain a proper layout!')
+                return False
+            # Update the empty layout with characters read from file
+            # record = (char, styles, coordinates, units)
             self.layout = generate_empty_layout()
             for matrix in self.matrices:
                 for record in submitted_layout:
@@ -281,6 +283,9 @@ class Diecase(object):
                         matrix.char = char
                         matrix.styles = styles
                         matrix.units = units
+            return True
+        except UI.Abort:
+            return False
         except (TypeError, ValueError):
             UI.pause('Cannot process the uploaded layout!')
             return False
@@ -289,15 +294,17 @@ class Diecase(object):
         """Exports the matrix case layout to file."""
         name = self.diecase_id or 'NewDiecase'
         # Save the exported diecase layout in the default directory
-        filename = '%s/%s.csv' % (CFG.user_data_dir, name)
-        with io.open(filename, 'a') as output_file:
-            csv_writer = csv.writer(output_file, delimiter=';', quotechar='"',
-                                    quoting=csv.QUOTE_ALL)
-            csv_writer.writerow(['Char', 'Styles', 'Coordinates', 'Units'])
-            for matrix in self.matrices:
-                csv_writer.writerow(matrix.get_record())
-        UI.pause('File %s successfully saved.' % filename)
-        return True
+        filename = '%s/%s.csv' % (USER_DATA_DIR, name)
+        with suppress(UI.Abort):
+            output_file = UI.export_file(filename)
+            with output_file:
+                csv_writer = csv.writer(output_file, delimiter=';',
+                                        quotechar='"', quoting=csv.QUOTE_ALL)
+                csv_writer.writerow(['Char', 'Styles', 'Coordinates', 'Units'])
+                for matrix in self.matrices:
+                    csv_writer.writerow(matrix.get_record())
+            UI.pause('File %s successfully saved.' % filename)
+            return True
 
     def test_characters(self, input_string='', styles='r'):
         """Enter the string and parse the diecase to see if any of the
@@ -845,14 +852,11 @@ class Space(MatrixMixin):
 
 def diecase_operations():
     """Matrix case operations menu for inventory management"""
-    try:
+    with suppress(UI.Abort, e.ReturnToMenu):
         UI.display_header('Matrix case manipulation')
         while True:
             # Choose a diecase or initialize a new one
             Diecase(manual_choice=True).manipulation_menu()
-    except e.ReturnToMenu:
-        # Exit diecase operations
-        return True
 
 
 def list_diecases():
@@ -902,19 +906,14 @@ def choose_diecase():
             return None
 
 
-def import_layout_file():
+def import_layout_from_file(layout_file):
     """Reads a matrix case arrangement from a text or csv file.
     The format should be: "character";"styles";"coordinates";"unit_width"."""
-    # Give us a file or end here
-    try:
-        filename = UI.enter_input_filename()
-    except e.ReturnToMenu:
-        return False
     # Initialize the records list
     raw_records = []
     # This will store the processed combinations - and whenever a duplicate
     # is detected, the function will raise an exception
-    with io.open(filename, 'r') as layout_file:
+    with layout_file:
         input_data = csv.reader(layout_file, delimiter=';', quotechar='"')
         raw_records = [record for record in input_data]
         displayed_lines = [' '.join(record) for record in raw_records[:5]]

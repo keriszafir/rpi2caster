@@ -182,6 +182,7 @@ def main():
                             help='ribbon ID to choose from database')
         # Ribbon - input file specification
         parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
+                            type=argparse.FileType('r', encoding='UTF-8'),
                             help='ribbon file name')
         parser.set_defaults(job=casting_job)
 
@@ -199,7 +200,7 @@ def main():
         # Output filename option
         parser.add_argument('ribbon_file', metavar='ribbon_file', nargs='?',
                             help='ribbon file to generate',
-                            type=argparse.FileType('w', encoding='UTF-8'))
+                            type=argparse.FileType('w+', encoding='UTF-8'))
         # Measure (line length)
         parser.add_argument('-M', '--measure',
                             metavar='measure', dest='measure',

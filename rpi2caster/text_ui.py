@@ -7,7 +7,7 @@ import os
 import readline
 import glob
 import click
-from contextlib import ignored
+from contextlib import suppress
 from . import exceptions as e
 from . import constants as c
 
@@ -52,6 +52,11 @@ class FormattedText(object):
             return chunk[1:]
         else:
             return chunk
+
+
+class Abort(Exception):
+    """Exception - abort the current process"""
+    pass
 
 
 def menu(options, header='', footer='', no_debug=False):
@@ -243,9 +248,10 @@ def tab_complete(text, state):
     return (glob.glob(text+'*')+[None])[state]
 
 
-def enter_input_filename():
+def import_file(filename=''):
     """Allows to enter the input filename and checks if it is readable.
     Repeats until proper filename or nothing is given.
+    Returns a file object.
     Raises ReturnToMenu if filename not specified."""
     # Set readline parameters
     readline.set_completer_delims(' \t\n;')
@@ -253,27 +259,40 @@ def enter_input_filename():
     readline.set_completer(tab_complete)
     # Enter the input filename; check if the file is readable
     while True:
-        prompt = 'Enter the input file name (leave blank to abort)'
-        filename = enter_data_or_exception(prompt, e.ReturnToMenu)
+        if filename:
+            prompt = 'Enter the input file name'
+            filename = enter_data_or_default(prompt, filename)
+        else:
+            prompt = 'Enter the input file name (leave blank to abort)'
+            filename = enter_data_or_exception(prompt, Abort)
         filename = os.path.realpath(filename)
         try:
-            with io.open(filename, 'r'):
-                return filename
+            return io.open(filename, 'r')
         except (IOError, FileNotFoundError):
             print('Wrong filename or file not readable!\n')
+        except (EOFError, KeyboardInterrupt):
+            raise Abort
 
 
-def enter_output_filename():
+def export_file(filename=''):
     """Allows user to enter output filename (without checking if readable).
+    Returns a file object.
     Raises ReturnToMenu if filename not specified."""
     # Set readline parameters
     readline.set_completer_delims(' \t\n;')
     readline.parse_and_bind('tab: complete')
     readline.set_completer(tab_complete)
     # Enter the output filename; no check here
-    prompt = 'Enter the input file name (leave blank to abort)'
-    filename = enter_data_or_exception(prompt, e.ReturnToMenu)
-    return os.path.realpath(filename)
+    try:
+        if filename:
+            prompt = 'Enter the file name to export'
+            filename = enter_data_or_default(prompt, filename)
+        else:
+            prompt = 'Enter the file name to export (leave blank to abort)'
+            filename = enter_data_or_exception(prompt, Abort)
+        return io.open(os.path.realpath(filename), 'w+')
+    except (EOFError, KeyboardInterrupt):
+        raise Abort
 
 
 def simple_menu(message, options):
@@ -471,7 +490,8 @@ def edit_diecase_layout(diecase):
         print('\nCurrent diecase layout:\n')
         display_diecase_layout(diecase)
         print()
-        with ignored(IndexError, KeyboardInterrupt, TypeError, AttributeError):
+        with suppress(IndexError, KeyboardInterrupt,
+                      TypeError, AttributeError):
             ans = input(prompt).upper()
             if ans == 'S' and can_save:
                 diecase.save_to_db()
@@ -486,7 +506,7 @@ def edit_diecase_layout(diecase):
             elif ans.startswith('SWAP'):
                 swap(ans)
             elif ans:
-                with ignored(IndexError, TypeError, AttributeError):
+                with suppress(IndexError, TypeError, AttributeError):
                     mats = [mat for mat in diecase if mat.code == ans.upper()]
                     edit(mats[0])
             else:

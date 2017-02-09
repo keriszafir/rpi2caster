@@ -56,7 +56,7 @@ class Casting(TypesettingContext):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
 
-    def __init__(self, ribbon_file='', ribbon_id='', diecase_id='',
+    def __init__(self, ribbon_file=None, ribbon_id='', diecase_id='',
                  wedge_name='', measure=''):
         super().__init__(ribbon_file=ribbon_file, ribbon_id=ribbon_id,
                          diecase_id=diecase_id, wedge_name=wedge_name,
@@ -663,7 +663,7 @@ class Casting(TypesettingContext):
         # Keep displaying the menu and go back here after any method ends
         finished = False
         while not finished:
-            with suppress(e.ReturnToMenu):
+            with suppress(UI.Abort, e.ReturnToMenu):
                 UI.menu(menu_options(), header=header)(self)
 
     def main_menu(self):
@@ -736,7 +736,8 @@ class Casting(TypesettingContext):
                       'and casts the type on a composition caster.'
                       '\n\n%s Menu:' % job)
             # Catch any known exceptions here
-            with suppress(e.ReturnToMenu, e.MenuLevelUp, KeyboardInterrupt):
+            with suppress(e.ReturnToMenu, e.MenuLevelUp, UI.Abort,
+                          EOFError, KeyboardInterrupt):
                 UI.menu(menu_options(), header=header, footer='')()
 
     def _display_details(self):
