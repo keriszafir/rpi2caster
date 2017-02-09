@@ -15,14 +15,21 @@ DB = Database()
 def casting_job(args):
     """Casting on an actual caster or simulation"""
     from . import casting
-    session = casting.Casting(ribbon_file=args.ribbon_file,
-                              ribbon_id=args.ribbon_id,
-                              diecase_id=args.diecase_id,
-                              wedge_name=args.wedge_name)
+    session = casting.Casting()
+    session.ribbon_file = args.ribbon_file
+    session.text_file = args.text_file
+    session.input_text = args.input_text
+    session.ribbon_id = args.ribbon_id
+    session.diecase_id = args.diecase_id
+    session.wedge_name = args.wedge_name
+    session.manual_mode = args.manual_mode
+    session.line_length = args.measure
     session.caster.mode.simulation = args.simulation or None
     session.caster.mode.punching = args.punching
+    # Method dispatcher
     # Skip menu if casting directly, typesetting or testing
     if args.input_text:
+        # TODO use object properties instead of arguments/parameters
         return session.quick_typesetting, args.input_text
     elif args.direct:
         return session.cast_composition
@@ -35,11 +42,16 @@ def casting_job(args):
 def typesetting_job(args):
     """Text to ribbon translation and justification"""
     from . import typesetting
-    session = typesetting.Typesetting(text_file=args.text_file,
-                                      ribbon_file=args.ribbon_file,
-                                      diecase_id=args.diecase_id,
-                                      wedge_name=args.wedge_name,
-                                      measure=args.measure)
+    session = typesetting.Typesetting()
+    session.text_file = args.text_file
+    session.input_text = args.input_text
+    session.ribbon_file = args.ribbon_file
+    session.ribbon_id = args.ribbon_id
+    session.diecase_id = args.diecase_id
+    session.wedge_name = args.wedge_name
+    session.manual_mode = args.manual_mode
+    session.line_length = args.measure
+    # Only one method here
     return session.main_menu
 
 
@@ -197,6 +209,11 @@ def main():
         parser.add_argument('text_file', metavar='text_file', nargs='?',
                             help='source (text) file to translate',
                             type=argparse.FileType('r', encoding='UTF-8'))
+        # Quick typesetting feature
+        parser.add_argument('-t', '--text', dest='input_text',
+                            metavar='"input text"',
+                            help=('compose and cast the '
+                                  'single- or double-quoted input text'))
         # Output filename option
         parser.add_argument('ribbon_file', metavar='ribbon_file', nargs='?',
                             help='ribbon file to generate',
@@ -256,12 +273,13 @@ def main():
         parser.add_argument('--config', metavar='FILE',
                             help='path to alternative configuration file')
         # Set default values for all options globally
-        parser.set_defaults(job=main_menu, debug=False, ribbon_file='',
-                            ribbon_id='', source=None, simulation=False,
-                            punching=False, text_file='', list_diecases=False,
-                            diecase_id='', wedge_name='', input_text=None,
+        parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
+                            ribbon_id=None, simulation=False,
+                            punching=False, text_file=None,
+                            list_diecases=False,
+                            diecase_id=None, wedge_name=None, input_text=None,
                             direct=False, testing=False, database=None,
-                            config=None, measure='')
+                            config=None, measure=None, manual_mode=True)
         return parser
 
     # Build the parsers and get the arguments

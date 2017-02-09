@@ -56,11 +56,7 @@ class Casting(TypesettingContext):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
 
-    def __init__(self, ribbon_file=None, ribbon_id='', diecase_id='',
-                 wedge_name='', measure=''):
-        super().__init__(ribbon_file=ribbon_file, ribbon_id=ribbon_id,
-                         diecase_id=diecase_id, wedge_name=wedge_name,
-                         measure=measure)
+    def __init__(self):
         # Caster for this job
         self.caster = MonotypeCaster()
         self.stats = Stats(self)

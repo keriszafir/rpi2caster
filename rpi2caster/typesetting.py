@@ -18,23 +18,90 @@ STYLE_COMMANDS = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
 ALIGNMENTS = {'^CR': 'left', '^CC': 'center', '^CL': 'right', '^CF': 'both'}
 
 
-class TypesettingContext(object):
-    """Mixin for setting diecase, wedge and measure"""
-    def __init__(self, text_file=None, ribbon_file=None, ribbon_id='',
-                 diecase_id='', wedge_name='', measure=''):
-        self.diecase = Diecase(diecase_id)
-        self.measure = Measure(self, measure)
-        self.ribbon = Ribbon(file=ribbon_file, ribbon_id=ribbon_id)
-        self.default_alignment = 'both'
-        # Try to open and read the file...
-        try:
-            with text_file:
-                self.source = ''.join([line for line in text_file])
-        except AttributeError:
-            # ...otherwise work with an empty source
-            self.source = ''
+class SourceMixin(object):
+    """Mixin for source text"""
+    @property
+    def source(self):
+        """Source text for typesetting"""
+        return self.__dict__.get('_source') or ''
+
+    @source.setter
+    def source(self, text):
+        """Source setter"""
+        self.__dict__['_source'] = text
+
+    @source.setter
+    def input_text(self, text):
+        """Set a string of text as the typesetting source"""
+        if text:
+            self.source = text
+
+    @source.setter
+    def text_file(self, text_file):
+        """Use a file object as a source of text"""
+        # If a string or None is passed as an argument,
+        # AttributeError would be raised. We'd rather ignore it.
+        with suppress(AttributeError), text_file:
+            self.source = ''.join(text_file.readlines())
+
+    def edit_text(self):
+        """Edits the input text"""
+        self.source = UI.edit(self.source)
+
+
+class DiecaseMixin(object):
+    """Mixin for diecase-related operations"""
+    @property
+    def wedge(self):
+        """Get the diecase's alternative wedge"""
+        return self.diecase.alt_wedge
+
+    @wedge.setter
+    def wedge(self, wedge):
+        """Set the diecase's alternative wedge"""
+        self.diecase.alt_wedge = wedge
+
+    @wedge.setter
+    def wedge_name(self, wedge_name):
+        """Set the wedge with a given name"""
         self.wedge = Wedge(wedge_name) if wedge_name else self.diecase.wedge
 
+    @property
+    def diecase(self):
+        """Get a diecase or empty diecase"""
+        return self.__dict__.get('_diecase') or EMPTY_DIECASE
+
+    @diecase.setter
+    def diecase(self, diecase):
+        """Set a diecase; reset the wedge"""
+        self.__dict__['_diecase'] = diecase
+
+    @diecase.setter
+    def diecase_id(self, diecase_id):
+        """Set a diecase with a given diecase ID"""
+        self.diecase = Diecase(diecase_id)
+
+    @property
+    def charset(self):
+        """Get a {style: {char: Matrix object}} charset from the diecase"""
+        return self.diecase.charset
+
+    @property
+    def spaceset(self):
+        """Get a set of spaces for the diecase currently assigned."""
+        return self.diecase.spaceset
+
+    def choose_diecase(self):
+        """Chooses a diecase from database"""
+        self.diecase = Diecase(manual_choice=True)
+
+    def choose_wedge(self):
+        """Chooses a wedge from registered ones"""
+        self.wedge = Wedge(manual_choice=True)
+
+
+class RibbonMixin(object):
+    """Mixin for ribbon-related operations"""
     @property
     def ribbon(self):
         """Ribbon for the casting session"""
@@ -49,56 +116,76 @@ class TypesettingContext(object):
         if ribbon.wedge_name:
             self.wedge = Wedge(ribbon.wedge_name)
 
-    @property
-    def wedge(self):
-        """Get the diecase's alternative wedge"""
-        return self.diecase.alt_wedge
+    @ribbon.setter
+    def ribbon_file(self, ribbon_file):
+        """Use a ribbon file"""
+        if ribbon_file:
+            self.ribbon = Ribbon(file=ribbon_file)
 
-    @wedge.setter
-    def wedge(self, wedge):
-        """Set the diecase's alternative wedge"""
-        self.diecase.alt_wedge = wedge
-
-    @property
-    def diecase(self):
-        """Get a diecase or empty diecase"""
-        return self.__dict__.get('_diecase') or EMPTY_DIECASE
-
-    @property
-    def charset(self):
-        """Get a {style: {char: Matrix object}} charset from the diecase"""
-        return self.diecase.charset
-
-    @property
-    def spaceset(self):
-        """Get a set of spaces for the diecase currently assigned."""
-        return self.diecase.spaceset
-
-    @diecase.setter
-    def diecase(self, diecase):
-        """Set a diecase; reset the wedge"""
-        self.__dict__['_diecase'] = diecase
-
-    def choose_diecase(self):
-        """Chooses a diecase from database"""
-        self.diecase = Diecase(manual_choice=True)
-
-    def choose_wedge(self):
-        """Chooses a wedge from registered ones"""
-        self.wedge = Wedge(manual_choice=True)
-
-    def change_measure(self):
-        """Change a line length"""
-        UI.display('Set the galley width...')
-        self.measure = Measure(self, manual_choice=True)
+    @ribbon.setter
+    def ribbon_id(self, ribbon_id):
+        """Use a ribbon with a given ID"""
+        self.ribbon = Ribbon(ribbon_id=ribbon_id)
 
     def choose_ribbon(self):
         """Chooses a ribbon from database or file"""
         self.ribbon = Ribbon(manual_choice=True)
 
-    def edit_text(self):
-        """Edits the input text"""
-        self.source = UI.edit(self.source)
+
+class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
+    """Mixin for setting diecase, wedge and measure"""
+    @property
+    def measure(self):
+        """Typesetting measure i.e. line length"""
+        return self.__dict__.get('_measure') or Measure(self)
+
+    @measure.setter
+    def measure(self, measure):
+        """Measure setter"""
+        self.__dict__['_measure'] = measure
+
+    @measure.setter
+    def line_length(self, measure):
+        """Set the line length for typesetting"""
+        if measure:
+            self.measure = Measure(self, measure)
+
+    @property
+    def manual_mode(self):
+        """Decides whether to use an automatic or manual typesetting engine."""
+        # On by default
+        return self.__dict__.get('_manual_mode') or True
+
+    @manual_mode.setter
+    def manual_mode(self, manual_mode):
+        """Manual mode setter"""
+        self.__dict__['_manual_mode'] = True if manual_mode else False
+
+    @property
+    def default_alignment(self):
+        """Default alignment:
+        Determines how paragraphs ending with a double newline ("\n\n")
+        and the end of the source text will be aligned.
+        Valid options: "left", "right", "center", "both".
+        """
+        return self.__dict__.get('_default_alignment') or 'left'
+
+    @default_alignment.setter
+    def default_alignment(self, alignment):
+        """Default alignment setter"""
+        options = {'cr': 'left', 'cc': 'center', 'cl': 'right', 'cf': 'both',
+                   'left': 'left', 'center': 'center', 'right': 'right',
+                   'flat': 'both', 'both': 'both', 'f': 'both',
+                   'l': 'left', 'c': 'center', 'r': 'right', 'b': 'both'}
+        string = alignment.strip().replace('^', '').lower()
+        value = options.get(string)
+        if value:
+            self.__dict__['_default_alignment'] = value
+
+    def change_measure(self):
+        """Change a line length"""
+        UI.display('Set the galley width...')
+        self.measure = Measure(self, manual_choice=True)
 
     def change_alignment(self):
         """Changes the default text alignment"""
@@ -107,20 +194,16 @@ class TypesettingContext(object):
         options = {'l': 'left', 'r': 'right', 'c': 'center', 'b': 'both'}
         self.default_alignment = UI.simple_menu(message, options)
 
+    def toggle_manual_mode(self):
+        """Changes the manual/automatic typesetting mode"""
+        self.manual_mode = not self.manual_mode
+
 
 class Typesetting(TypesettingContext):
     """Typesetting session - choose and translate text with control codes
     into a sequence of Monotype control codes, which can be sent to
     the machine to cast composed and justified type.
     """
-
-    def __init__(self, text_file=None, ribbon_file=None, ribbon_id='',
-                 diecase_id='', wedge_name='', measure='', manual=True):
-        super().__init__(text_file=text_file, ribbon_file=ribbon_file,
-                         ribbon_id=ribbon_id, diecase_id=diecase_id,
-                         wedge_name=wedge_name, measure=measure)
-        self.compose = self.manual_compose if manual else self.auto_compose
-
     def main_menu(self):
         """Main menu for the typesetting utility."""
         def finish():
@@ -201,18 +284,11 @@ class Typesetting(TypesettingContext):
                 tokens.append(token)
         return paragraphs
 
-    def manual_compose(self):
-        """Manual composition engine. As the end of the line is reached,
-        the user decides where to break (with or without hyphenation)."""
+    def compose(self):
+        """Main composition engine."""
         paragraphs = self.get_paragraphs()
         for paragraph in paragraphs:
             paragraph.display_text()
-
-    def auto_compose(self):
-        """Automatic composition engine. Hyphenates and justifies on its own,
-        giving less control over the typesetting proces, but saving a lot
-        of time for the user, especially for repetitive work."""
-        print('Auto compositor')
 
 
 class InputText(object):

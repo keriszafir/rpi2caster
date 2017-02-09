@@ -35,6 +35,7 @@ class Diecase(object):
             try:
                 data = DB.get_diecase(diecase_id)
             except (e.NoMatchingData, e.DatabaseQueryError):
+                UI.display('%s: diecase not found in database' % diecase_id)
                 data = choose_diecase()
         else:
             data = None
