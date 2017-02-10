@@ -229,7 +229,7 @@ def enter_data_or_default(prompt, default=1, datatype=str):
             print('Incorrect value or data type!')
 
 
-def enter_data_or_exception(prompt, exception=ValueError, datatype=str):
+def enter_data_or_exception(prompt, exception=Abort, datatype=str):
     """Enter a value and raise an exception if it is blank,
     or try to convert to the specified datatype."""
     while True:
@@ -264,7 +264,7 @@ def import_file(filename=''):
             filename = enter_data_or_default(prompt, filename)
         else:
             prompt = 'Enter the input file name (leave blank to abort)'
-            filename = enter_data_or_exception(prompt, Abort)
+            filename = enter_data_or_exception(prompt)
         filename = os.path.realpath(filename)
         try:
             return io.open(filename, 'r')
@@ -289,7 +289,7 @@ def export_file(filename=''):
             filename = enter_data_or_default(prompt, filename)
         else:
             prompt = 'Enter the file name to export (leave blank to abort)'
-            filename = enter_data_or_exception(prompt, Abort)
+            filename = enter_data_or_exception(prompt)
         return io.open(os.path.realpath(filename), 'w+')
     except (EOFError, KeyboardInterrupt):
         raise Abort

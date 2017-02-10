@@ -26,30 +26,11 @@ class Ribbon(object):
         ask and select ribbon manually from database, and if that fails
         ask and load ribbon from file
     read_from_file - select a file, parse the metadata, set the attributes
-    get_from_db - get data from database
     export_to_file - store the metadata and contents in text file
     store_in_db - store the metadata and contents in db
     set_[description, customer, diecase_id] - set parameters manually"""
-    def __init__(self, ribbon_id='', file=None, manual_choice=False):
-        data = None
-        if ribbon_id:
-            try:
-                data = DB.get_ribbon(ribbon_id)
-            except (e.NoMatchingData, e.DatabaseQueryError):
-                UI.display('Ribbon choice failed. Starting a new one.')
-        elif file:
-            data = import_ribbon_from_file(file)
-        elif manual_choice:
-            # TODO: simplify this big ball o'fur&mud
-            data = choose_ribbon_from_db()
-            if not data:
-                ribbon_file = UI.import_file()
-                data = import_ribbon_from_file(ribbon_file)
-        # Got data - unpack them, set the attributes
-        if not data:
-            data = ['', 'New ribbon', 'No customer', '', 'S5-12E', []]
-        (self.ribbon_id, self.description, self.customer, self.diecase_id,
-         self.wedge_name, self.contents) = data
+    def __init__(self, parameters=None):
+        self.update(parameters)
 
     def __iter__(self):
         return iter(self.contents)
@@ -62,39 +43,6 @@ class Ribbon(object):
 
     def __bool__(self):
         return bool(self.contents)
-
-    def set_ribbon_id(self, ribbon_id=None):
-        """Sets the ribbon ID"""
-        prompt = 'Ribbon ID? (leave blank to exit) : '
-        ribbon_id = (ribbon_id or UI.enter_data_or_blank(prompt) or
-                     self.ribbon_id)
-        # Ask if we are sure we want to update this
-        # if self.ribbon_id was set earlier
-        prompt = 'Are you sure to change the ribbon ID?'
-        condition = not self.ribbon_id or UI.confirm(prompt, default=False)
-        if condition:
-            self.ribbon_id = ribbon_id
-            return True
-
-    def set_description(self, description=None):
-        """Manually sets the ribbon's description"""
-        prompt = 'Enter the title: '
-        self.description = (description or
-                            UI.enter_data_or_blank(prompt) or self.description)
-
-    def set_customer(self, customer=None):
-        """Manually sets the customer"""
-        prompt = 'Enter the customer\'s name for this ribbon: '
-        self.customer = (customer or
-                         UI.enter_data_or_blank(prompt) or self.customer)
-
-    def set_diecase(self, diecase_id=''):
-        """Chooses the diecase for this ribbon"""
-        self.diecase_id = diecase_id
-
-    def set_wedge(self, wedge_name=None):
-        """Sets a wedge for the ribbon"""
-        self.wedge_name = wedge_name
 
     @property
     def parameters(self):
@@ -119,12 +67,22 @@ class Ribbon(object):
             # Press ctrl-C to abort displaying long ribbons
             UI.pause('Aborted', UI.MSG_MENU)
 
-    def get_from_db(self):
-        """Gets the ribbon from database"""
-        data = choose_ribbon_from_db()
-        if data and UI.confirm('Override current data?', default=False):
-            (self.ribbon_id, self.description, self.customer, self.diecase_id,
-             self.wedge_name, self.contents) = data
+    def update(self, source=None):
+        """Updates the object attributes with a dictionary"""
+        # Allow to use this method to initialize a new empty ribbon
+        if not source:
+            source = {}
+        try:
+            UI.debug_info('Processing ribbon data...')
+            self.ribbon_id = source.get('ribbon_id', '')
+            self.description = source.get('description', '')
+            self.customer = source.get('customer', '')
+            self.diecase_id = source.get('diecase_id', '')
+            self.wedge_name = source.get('wedge_name', '')
+            self.contents = source.get('contents', [])
+        except AttributeError:
+            UI.debug_info('ERROR: Cannot process ribbon data')
+            UI.debug_info(source)
 
     def store_in_db(self):
         """Stores the ribbon in database"""
@@ -144,12 +102,48 @@ class Ribbon(object):
             DB.delete_ribbon(self)
             UI.display('Ribbon deleted successfully.')
 
-    def import_from_file(self):
-        """Reads a ribbon file, parses its contents, sets the ribbon attrs"""
-        with suppress(UI.Abort):
-            file = UI.import_file()
-            (self.ribbon_id, self.description, self.customer, self.diecase_id,
-             self.wedge_name, self.contents) = import_ribbon_from_file(file)
+    def import_from_file(self, ribbon_file):
+        """Imports ribbon from file, parses parameters, sets attributes"""
+        def get_value(line, symbol):
+            """Helper function - strips whitespace and symbols"""
+            # Split the line on an assignment symbol, get the second part,
+            # strip any whitespace or multipled symbols
+            return line.split(symbol, 1)[-1].strip(symbol).strip()
+
+        try:
+            # Try to open that and get only the lines containing non-whitespace
+            with ribbon_file:
+                raw_data = (line.strip() for line in ribbon_file.readlines())
+                ribbon = [line for line in raw_data if line]
+        except AttributeError:
+            return False
+        # What to look for
+        keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer',
+                    'wedge', 'stopbar']
+        targets = ['diecase_id', 'description', 'description', 'diecase_id',
+                   'customer', 'wedge_name', 'wedge_name']
+        parameters = dict(zip(keywords, targets))
+        # Metadata (anything found), contents (the rest)
+        metadata = {}
+        contents = []
+        # Look for parameters line per line, get parameter value
+        # If parameters exhausted, append the line to contents
+        for line in ribbon:
+            for keyword, target in parameters.items():
+                if line.startswith(keyword):
+                    for sym in ASSIGNMENT_SYMBOLS:
+                        if sym in line:
+                            # Data found
+                            metadata[target] = get_value(line, sym)
+                            break
+                    break
+            else:
+                contents.append(line)
+        # We need to add contents too
+        metadata['contents'] = contents
+        # Update the attributes with what we found
+        self.update(metadata)
+        return True
 
     def export_to_file(self):
         """Exports the ribbon to a text file"""
@@ -163,6 +157,90 @@ class Ribbon(object):
             ribbon_file.write('wedge: ' + self.wedge_name)
             for line in self.contents:
                 ribbon_file.write(line)
+
+    def import_from_db(self, ribbon_id):
+        """Import a ribbon with a given ribbon ID from database"""
+        try:
+            UI.debug_info('Getting ribbon ID=%s from database...' % ribbon_id)
+            result = DB.get_ribbon(ribbon_id)
+            self.update(result)
+            return True
+        except (e.DatabaseQueryError, e.NoMatchingData):
+            UI.debug_info('ERROR: Cannot find ribbon!')
+            return False
+
+    def choose_from_db(self):
+        """Choosea ribbon from database"""
+        prompt = 'Number of a ribbon? (0 for a new one, leave blank to exit): '
+        while True:
+            try:
+                # Manual choice if function was called without arguments
+                data = list_ribbons()
+                choice = UI.enter_data_or_exception(prompt, datatype=int)
+                ribbon_id = data[choice]
+                # Inform the caller if import was successful or not
+                return self.import_from_db(ribbon_id)
+            except KeyError:
+                UI.pause('Ribbon number is incorrect. Choose again.')
+            except (e.DatabaseQueryError, e.NoMatchingData):
+                UI.debug_info('WARNING: Cannot find any ribbon data!')
+                return False
+            except UI.Abort:
+                return False
+
+
+class RibbonMixin(object):
+    """Mixin for ribbon-related operations"""
+    @property
+    def ribbon(self):
+        """Ribbon for the casting session"""
+        return self.__dict__.get('_ribbon') or Ribbon()
+
+    @ribbon.setter
+    def ribbon(self, ribbon):
+        """Ribbon setter"""
+        self.__dict__['_ribbon'] = ribbon or Ribbon()
+
+    @ribbon.setter
+    def ribbon_file(self, ribbon_file):
+        """Use a ribbon file"""
+        self.ribbon.import_from_file(ribbon_file)
+
+    @ribbon.setter
+    def ribbon_id(self, ribbon_id):
+        """Use a ribbon with a given ID"""
+        self.ribbon.import_from_db(ribbon_id)
+
+    def choose_ribbon(self):
+        """Chooses a ribbon from database or file"""
+        def from_db():
+            """Choose a ribbon from database"""
+            prompt = 'Number of a ribbon? (0 for a new one, blank to abort): '
+            while True:
+                try:
+                    # Manual choice if function was called without arguments
+                    data = list_ribbons()
+                    choice = UI.enter_data_or_exception(prompt, datatype=int)
+                    ribbon_id = data[choice]
+                    # Inform the caller if import was successful or not
+                    return self.import_from_db(ribbon_id)
+                except KeyError:
+                    UI.pause('Ribbon number is incorrect. Choose again.')
+                except (e.DatabaseQueryError, e.NoMatchingData):
+                    UI.debug_info('WARNING: Cannot find any ribbon data!')
+                    return False
+                except UI.Abort:
+                    return False
+
+        def from_file():
+            """Choose a ribbon from file"""
+            # Open the file manually if calling the method without arguments
+            try:
+                ribbon_file = UI.import_file()
+                self.ribbon.import_from_file(ribbon_file)
+            except UI.Abort:
+                return False
+        self.ribbon.choose_from_db() or self.ribbon.import_from_file()
 
 
 def list_ribbons():
@@ -189,60 +267,3 @@ def list_ribbons():
     UI.display('\n\n')
     # Now we can return the number - ribbon ID pairs
     return results
-
-
-def import_ribbon_from_file(ribbon_file):
-    """Imports ribbon from file, parses parameters, returns a list of them"""
-    def get_value(line, symbol):
-        """Helper function - strips whitespace and symbols"""
-        # Split the line on an assignment symbol, get the second part,
-        # strip any whitespace or multipled symbols
-        return line.split(symbol, 1)[-1].strip(symbol).strip()
-
-    with ribbon_file:
-        ribbon = [line.strip() for line in ribbon_file if line.strip()]
-    # What to look for
-    keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer',
-                'wedge', 'stopbar']
-    # Metadata (anything found), contents (the rest)
-    metadata = {}
-    contents = []
-    # Look for parameters line per line, get parameter value
-    # If parameters exhausted, append the line to contents
-    for line in ribbon:
-        for keyword in keywords:
-            if line.startswith(keyword):
-                for sym in ASSIGNMENT_SYMBOLS:
-                    if sym in line:
-                        # Data found
-                        metadata[keyword] = get_value(line, sym)
-                        break
-                break
-        else:
-            contents.append(line)
-    # Metadata parsing
-    ribbon_id = None
-    description = metadata.get('description', '') or metadata.get('desc', '')
-    customer = metadata.get('customer', '')
-    diecase_id = metadata.get('diecase', '') or metadata.get('diecase_id', '')
-    wedge = metadata.get('wedge', '') or metadata.get('stopbar', '')
-    # Add the whole contents as the attribute
-    return (ribbon_id, description, customer, diecase_id, wedge, contents)
-
-
-def choose_ribbon_from_db():
-    """Chooses ribbon data from database"""
-    prompt = 'Number of a ribbon? (0 for a new one, leave blank to exit): '
-    while True:
-        try:
-            data = list_ribbons()
-            choice = UI.enter_data_or_exception(prompt, e.ReturnToMenu, int)
-            if not choice:
-                return None
-            else:
-                return DB.get_ribbon(data[choice])
-        except KeyError:
-            UI.pause('Ribbon number is incorrect!')
-        except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.display('No ribbons found in database')
-            return None

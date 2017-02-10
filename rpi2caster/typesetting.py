@@ -6,8 +6,8 @@ from . import exceptions as e
 from . import typesetting_funcs as tsf
 # from .justification import Box, Glue, Penalty, ObjectList
 from .measure import Measure
-from .typesetting_data import Ribbon
-from .matrix_data import Diecase, diecase_operations, EMPTY_DIECASE
+from .typesetting_data import RibbonMixin
+from .matrix_data import DiecaseMixin, diecase_operations, EMPTY_DIECASE
 from .wedge_data import Wedge
 from .rpi2caster import UI
 
@@ -47,89 +47,6 @@ class SourceMixin(object):
     def edit_text(self):
         """Edits the input text"""
         self.source = UI.edit(self.source)
-
-
-class DiecaseMixin(object):
-    """Mixin for diecase-related operations"""
-    @property
-    def wedge(self):
-        """Get the diecase's alternative wedge"""
-        return self.diecase.alt_wedge
-
-    @wedge.setter
-    def wedge(self, wedge):
-        """Set the diecase's alternative wedge"""
-        self.diecase.alt_wedge = wedge
-
-    @wedge.setter
-    def wedge_name(self, wedge_name):
-        """Set the wedge with a given name"""
-        self.wedge = Wedge(wedge_name) if wedge_name else self.diecase.wedge
-
-    @property
-    def diecase(self):
-        """Get a diecase or empty diecase"""
-        return self.__dict__.get('_diecase') or EMPTY_DIECASE
-
-    @diecase.setter
-    def diecase(self, diecase):
-        """Set a diecase; reset the wedge"""
-        self.__dict__['_diecase'] = diecase
-
-    @diecase.setter
-    def diecase_id(self, diecase_id):
-        """Set a diecase with a given diecase ID"""
-        self.diecase = Diecase(diecase_id)
-
-    @property
-    def charset(self):
-        """Get a {style: {char: Matrix object}} charset from the diecase"""
-        return self.diecase.charset
-
-    @property
-    def spaceset(self):
-        """Get a set of spaces for the diecase currently assigned."""
-        return self.diecase.spaceset
-
-    def choose_diecase(self):
-        """Chooses a diecase from database"""
-        self.diecase = Diecase(manual_choice=True)
-
-    def choose_wedge(self):
-        """Chooses a wedge from registered ones"""
-        self.wedge = Wedge(manual_choice=True)
-
-
-class RibbonMixin(object):
-    """Mixin for ribbon-related operations"""
-    @property
-    def ribbon(self):
-        """Ribbon for the casting session"""
-        return self.__dict__.get('_ribbon') or Ribbon()
-
-    @ribbon.setter
-    def ribbon(self, ribbon):
-        """Ribbon setter"""
-        self.__dict__['_ribbon'] = ribbon or Ribbon()
-        if ribbon.diecase_id:
-            self.diecase = Diecase(ribbon.diecase_id)
-        if ribbon.wedge_name:
-            self.wedge = Wedge(ribbon.wedge_name)
-
-    @ribbon.setter
-    def ribbon_file(self, ribbon_file):
-        """Use a ribbon file"""
-        if ribbon_file:
-            self.ribbon = Ribbon(file=ribbon_file)
-
-    @ribbon.setter
-    def ribbon_id(self, ribbon_id):
-        """Use a ribbon with a given ID"""
-        self.ribbon = Ribbon(ribbon_id=ribbon_id)
-
-    def choose_ribbon(self):
-        """Chooses a ribbon from database or file"""
-        self.ribbon = Ribbon(manual_choice=True)
 
 
 class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):

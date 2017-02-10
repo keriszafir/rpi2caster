@@ -186,5 +186,5 @@ def choose_language():
     descriptions = '\n'.join('\t'.join(z) for z in grouper)
     UI.display('Choose language:\n\n%s\n' % descriptions)
     prompt = 'Language code (e.g. "en") or leave blank to go back to menu'
-    lang_code = UI.enter_data_or_exception(prompt, ReturnToMenu)
+    lang_code = UI.enter_data_or_exception(prompt)
     return lang_code

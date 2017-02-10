@@ -172,9 +172,9 @@ class Database(object):
                 row = cursor.fetchone()
                 if not row:
                     raise e.NoMatchingData
-                diecase = list(row)
+                data = list(row)
                 # De-serialize the diecase layout, convert it back to a list
-                raw_layout = json.loads(diecase.pop())
+                raw_layout = json.loads(data.pop())
                 # Make sure the layout has specified units
                 layout = []
                 for record in raw_layout:
@@ -185,8 +185,9 @@ class Database(object):
                         units = 0
                     record = (char, styles, coordinates, units)
                     layout.append(record)
-                diecase.append(layout)
-                return diecase
+                data.append(layout)
+                fields = ['diecase_id', 'typeface', 'wedge_name', 'layout']
+                return dict(zip(fields, data))
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise e.NoMatchingData
@@ -253,14 +254,16 @@ class Database(object):
                 cursor = self.db_connection.cursor()
                 cursor.execute('SELECT * FROM ribbons WHERE ribbon_id = ?',
                                [ribbon_id])
-                ribbon = list(cursor.fetchone())
+                data = list(cursor.fetchone())
                 # Take the last item which is contents
                 # De-serialize it, convert it back to a list
-                raw_contents = json.loads(ribbon.pop())
+                raw_contents = json.loads(data.pop())
                 # Add the contents
-                ribbon.append(raw_contents)
-                # Return the list
-                return ribbon
+                data.append(raw_contents)
+                # Return the dictionary
+                fields = ['ribbon_id', 'description', 'customer', 'diecase_id',
+                          'wedge_name', 'contents']
+                return dict(zip(fields, data))
             except (TypeError, ValueError, IndexError):
                 # No data or cannot process it
                 raise e.NoMatchingData

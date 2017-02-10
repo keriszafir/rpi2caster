@@ -29,6 +29,7 @@ from .letter_frequencies import CharFreqs
 class Diecase(object):
     """Diecase: matrix case attributes and operations"""
     def __init__(self, diecase_id='', manual_choice=False):
+        # TODO refactor this big ball o'fur&mud
         if manual_choice:
             data = choose_diecase()
         elif diecase_id:
@@ -38,17 +39,11 @@ class Diecase(object):
                 UI.display('%s: diecase not found in database' % diecase_id)
                 data = choose_diecase()
         else:
-            data = None
-        if not data:
-            # Use default diecase
             UI.debug_info('Using empty 15x17 diecase with S5-12E wedge...')
-            data = ['', '', 'S5-12E', []]
-        UI.debug_info('Processing diecase data...')
-        (self.diecase_id, self.typeface, wedge_name, layout) = data
-        self.wedge = Wedge(wedge_name, manual_choice=not wedge_name)
-        self.alt_wedge = self.wedge
-        self.layout = layout
-        self.ua_mapping = ()
+            data = {'diecase_id': '', 'typeface': '', 'wedge_name': '',
+                    'layout': []}
+            data = {}
+        self.update(data)
 
     def __iter__(self):
         return iter(self.matrices)
@@ -174,6 +169,21 @@ class Diecase(object):
         """Support for overhanging characters with type body narrower than
         the character; used for adding many units"""
         return Space(width, is_low_space=False, diecase=self)
+
+    def update(self, source):
+        """Update the attributes with data found in the source"""
+        try:
+            UI.debug_info('Processing diecase data...')
+            self.diecase_id = source.get('diecase_id', '')
+            self.typeface = source.get('typeface', '')
+            wedge_name = source.get('wedge_name')
+            self.wedge = Wedge(wedge_name)
+            self.alt_wedge = self.wedge
+            self.layout = source.get('layout')
+            self.ua_mapping = ()
+        except AttributeError:
+            UI.debug_info('Cannot process the diecase data - wrong source')
+            UI.debug_info(source)
 
     def show_layout(self):
         """Shows the diecase layout"""
@@ -452,7 +462,58 @@ class Diecase(object):
             return True
 
 
-class MatrixMixin(object):
+class DiecaseMixin(object):
+    """Mixin for diecase-related operations"""
+    @property
+    def wedge(self):
+        """Get the diecase's alternative wedge"""
+        return self.diecase.alt_wedge
+
+    @wedge.setter
+    def wedge(self, wedge):
+        """Set the diecase's alternative wedge"""
+        self.diecase.alt_wedge = wedge
+
+    @wedge.setter
+    def wedge_name(self, wedge_name):
+        """Set the wedge with a given name"""
+        self.wedge = Wedge(wedge_name) if wedge_name else self.diecase.wedge
+
+    @property
+    def diecase(self):
+        """Get a diecase or empty diecase"""
+        return self.__dict__.get('_diecase') or EMPTY_DIECASE
+
+    @diecase.setter
+    def diecase(self, diecase):
+        """Set a diecase; reset the wedge"""
+        self.__dict__['_diecase'] = diecase
+
+    @diecase.setter
+    def diecase_id(self, diecase_id):
+        """Set a diecase with a given diecase ID"""
+        self.diecase = Diecase(diecase_id)
+
+    @property
+    def charset(self):
+        """Get a {style: {char: Matrix object}} charset from the diecase"""
+        return self.diecase.charset
+
+    @property
+    def spaceset(self):
+        """Get a set of spaces for the diecase currently assigned."""
+        return self.diecase.spaceset
+
+    def choose_diecase(self):
+        """Chooses a diecase from database"""
+        self.diecase = Diecase(manual_choice=True)
+
+    def choose_wedge(self):
+        """Chooses a wedge from registered ones"""
+        self.wedge = Wedge(manual_choice=True)
+
+
+class MatrixBase(object):
     """This class contains methods used by all matrices -
     characters and spaces"""
     def __repr__(self):
@@ -622,7 +683,7 @@ class MatrixMixin(object):
         return [self.char, self.styles, self.code, self.units]
 
 
-class Matrix(MatrixMixin):
+class Matrix(MatrixBase):
     """A class for single matrices - all matrix data"""
     def __init__(self, **kwargs):
         self.diecase = kwargs.get('diecase', EMPTY_DIECASE)
@@ -706,7 +767,7 @@ class Matrix(MatrixMixin):
         self.styles = style_manager()
 
 
-class Space(MatrixMixin):
+class Space(MatrixBase):
     """Space - low or high, with a given position"""
     def __init__(self, width='', is_low_space=True, diecase=None):
         # Automatically choose a space from the
@@ -895,15 +956,14 @@ def choose_diecase():
         try:
             UI.display('Choose a matrix case:', end='\n\n')
             data = list_diecases()
-            choice = UI.enter_data_or_exception(prompt, e.ReturnToMenu, int)
-            if not choice:
-                return None
-            else:
-                return DB.get_diecase(data[choice])
+            choice = UI.enter_data_or_exception(prompt, datatype=int)
+            return DB.get_diecase(data[choice])
         except KeyError:
             UI.pause('Diecase number is incorrect!')
         except (e.NoMatchingData, e.DatabaseQueryError):
             UI.display('No diecases found in database')
+            return None
+        except UI.Abort:
             return None
 
 
