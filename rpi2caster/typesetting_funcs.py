@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
-"""
-typesetting_funcs:
+"""Contains functions used for justification, control sequences etc."""
 
-Contains functions used for typesetting, justification, control sequences etc.
-"""
+
 def single_justification(wedge_positions=(3, 8),
                          comment='Single justification'):
     """Add 0075 + pos_0075, then 0005 + pos_0005"""

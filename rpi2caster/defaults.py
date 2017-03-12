@@ -7,8 +7,7 @@ from .constants import SIGNALS
 USER_DATA_DIR = get_app_dir('rpi2caster', force_posix=True, roaming=True)
 USER_CFG_PATH = '%s/rpi2caster.conf' % USER_DATA_DIR
 GLOBAL_CFG_PATHS = ['/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
-GLOBAL_DB_PATH = '/var/local/rpi2caster/rpi2caster.db'
-USER_DB_PATH = '/%s/rpi2caster.db' % USER_DATA_DIR
+USER_DB_PATH = '%s/rpi2caster.db' % USER_DATA_DIR
 # Options and their default values
 OPTIONS = {}
 OPTIONS['preferences'] = {'default_measure': '25',
@@ -23,14 +22,7 @@ OPTIONS['interface'] = {'signals_arrangement': SIGNALS,
                         'pin_base': 65,
                         'sensor': 'simulation',
                         'output': 'simulation'}
-OPTIONS['database'] = {'path': USER_DB_PATH,
-                       'engine': 'sqlite3',
-                       'host': 'localhost',
-                       'port': 0,
-                       'name': 'rpi2caster',
-                       'username': 'monotype',
-                       # not very safe, but will have to suffice...
-                       'password': 'rpi2caster'}
+OPTIONS['database'] = {'url': 'sqlite:///%s' % USER_DB_PATH}
 # Option aliases - alternate names for options in files
 ALIASES = [['signals_arrangement', 'signals', 'arrangement'],
            ['choose_backend', 'backend_select'],

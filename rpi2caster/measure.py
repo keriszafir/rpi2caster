@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """Line length and character width module"""
-from .rpi2caster import UI, CFG
 from .constants import UNITS
+from .ui import UIFactory
+from .global_config import Config
 
+CFG = Config()
+UI = UIFactory()
 DEFAULT_UNIT = CFG.get_option('measurement_unit')
 DEFAULT_MEASURE = CFG.get_option('default_measure')
 
@@ -50,10 +53,9 @@ def enter(input_value='', what='galley width'):
 
     prompt = 'Enter the %s value and unit (or "?" for help)' % what
     value, unit = parse_measure(input_value)
-    default_value = '%s%s' % (value, unit)
     while True:
         # If 0, use default
-        raw_string = UI.enter_data_or_default(prompt, default_value)
+        raw_string = UI.enter(prompt, default='%s%s' % (value, unit))
         if '?' in raw_string:
             # Display help message and start again
             unit_help()

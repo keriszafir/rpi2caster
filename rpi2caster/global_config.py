@@ -4,15 +4,27 @@ for every application-wide setting."""
 import io
 import configparser
 from . import defaults
+from .misc import weakref_singleton, PubSub
 from .constants import TRUE_ALIASES, FALSE_ALIASES
 
+# message queue
+MQ = PubSub()
 
+
+@weakref_singleton
 class Config(object):
     """Configuration manager class"""
     def __init__(self, config_path=''):
         self.data = {}
         self.reset()
-        self.load(config_path)
+        MQ.subscribe(self, 'config')
+        self.update({'config_path': config_path})
+
+    def update(self, source):
+        """Update parameters with a dictionary of values"""
+        config_path = source.get('config_path')
+        if config_path is not None:
+            self.load(config_path)
 
     def reset(self):
         """Resets the config to default values"""

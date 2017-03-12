@@ -6,8 +6,9 @@ All data is letter occurences relative to all letters in a sample of text.
 """
 from math import ceil
 from itertools import chain, zip_longest
-from .rpi2caster import UI
-from .exceptions import ReturnToMenu
+from .ui import UIFactory, Abort
+
+UI = UIFactory()
 
 FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'f': 2.027, 'v': 2.415, 'n': 8.542, 'å': 1.338, 'g': 2.862,
@@ -84,7 +85,7 @@ FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'ś': 0.814, 'ć': 0.743, 'p': 2.445, 'y': 3.206, 'a': 10.503,
                 'm': 2.515, 'ó': 1.141, 'x': 0.004, 'j': 1.836, 'z': 4.852,
                 'ę': 1.035, 'h': 1.015, 't': 2.475, 'c': 3.895, 'i': 8.328,
-                'e': 7.352, 'ł': 2.109, 'ż': 0.706, 'ź': 0.078, 'y': 4.200},
+                'e': 7.352, 'ł': 2.109, 'ż': 0.706, 'ź': 0.078},
          'tr': {'r': 7.722, 'u': 3.235, 'd': 5.206, 'l': 5.922, 'f': 0.461,
                 'ğ': 1.125, 'v': 0.959, 'n': 7.987, 'g': 1.253, 'b': 2.844,
                 'o': 2.976, 'k': 5.683, 'ı': 5.114, 'p': 0.886, 'y': 3.336,
@@ -168,12 +169,12 @@ class CharFreqs(object):
                   'The quantities of other characters will be calculated\n'
                   'based on the letter frequency of the language.\n'
                   'Minimum of 10 characters each will be cast.')
-        self.scale = UI.enter_data_or_default(prompt, 100, int)
+        self.scale = UI.enter(prompt, default=100, datatype=int)
 
     def define_case_ratio(self):
         """Define uppercase to lowercase ratio"""
         prompt = ('Uppercase to lowercase ratio in %?')
-        self.case_ratio = UI.enter_data_or_default(prompt, 20, float) / 100.0
+        self.case_ratio = UI.enter(prompt, default=20, datatype=float) / 100.0
 
 
 def choose_language():
@@ -186,5 +187,5 @@ def choose_language():
     descriptions = '\n'.join('\t'.join(z) for z in grouper)
     UI.display('Choose language:\n\n%s\n' % descriptions)
     prompt = 'Language code (e.g. "en") or leave blank to go back to menu'
-    lang_code = UI.enter_data_or_exception(prompt)
+    lang_code = UI.enter(prompt, exception=Abort)
     return lang_code

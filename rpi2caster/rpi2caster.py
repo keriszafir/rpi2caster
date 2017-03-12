@@ -2,13 +2,17 @@
 """rpi2caster - top-level script for starting the components"""
 from os import system
 from sys import argv
-from contextlib import suppress
 import argparse
 from . import exceptions as e
-from . import text_ui as UI
+from .ui import UIFactory
 from .global_config import Config
-from .database import Database
+from .models import Database
+from .misc import PubSub
+
+# greedily instantiate the singleton backends
+UI = UIFactory()
 CFG = Config()
+MQ = PubSub()
 DB = Database()
 
 
@@ -69,17 +73,17 @@ def update(args):
 
 def inventory(args):
     """Inventory management - diecase manipulation etc."""
-    from . import matrix_data
+    from . import matrix_controller
     if args.list_diecases:
         # Just show what we have
-        matrix_data.list_diecases()
+        matrix_controller.list_diecases()
     elif args.diecase_id:
         # Work on a specific diecase
-        diecase = matrix_data.Diecase(args.diecase_id)
-        diecase.manipulation_menu()
+        diecase = matrix_controller.get_diecase(args.diecase_id)
+        matrix_controller.diecase_manipulation(diecase)
     else:
         # Choose diecase and work on it
-        matrix_data.diecase_operations()
+        matrix_controller.diecase_operations()
 
 
 def meow(_):
@@ -87,7 +91,7 @@ def meow(_):
     try:
         from . import easteregg
         easteregg.show()
-    except (OSError, FileNotFoundError):
+    except (OSError, ImportError, FileNotFoundError):
         print('There are no Easter Eggs in this program.')
 
 
@@ -287,11 +291,10 @@ def main():
     build_misc_parsers()
     main_parser.parse_args()
     args = main_parser.parse_args()
-    UI.DEBUG_MODE = args.debug
-    global DB, CFG
+    UI.verbosity = 3 if args.debug else 0
     # Update configuration and database
-    CFG = Config(args.config)
-    DB = Database(args.database)
+    MQ.update('config', {'config_path': args.config})
+    MQ.update('database', {'url': args.database, 'debug': args.debug})
     # Parse the arguments, get the entry point
     try:
         job = args.job

@@ -3,11 +3,15 @@
 import time
 from parallel import Parallel
 from .monotype import SensorMixin, OutputMixin
-from .rpi2caster import UI, CFG
-from .misc import singleton
+from .misc import weakref_singleton
+from .global_config import Config
+from .ui import UIFactory
+
+UI = UIFactory()
+CFG = Config()
 
 
-@singleton
+@weakref_singleton
 class ParallelInterface(SensorMixin, OutputMixin):
     """Output driver for parallel port. Sends four bytes in sequence:
     byte0: O N M L K J I H
@@ -56,10 +60,11 @@ class ParallelInterface(SensorMixin, OutputMixin):
             # Turn off the valves
             byte0 = byte1 = byte2 = byte3 = 0x00
         # Display debug information about the bytes
-        UI.debug_info('%s %s %s %s' % (format(byte0, 'b').zfill(8),
-                                       format(byte1, 'b').zfill(8),
-                                       format(byte2, 'b').zfill(8),
-                                       format(byte3, 'b').zfill(8)))
+        UI.display('%s %s %s %s' % (format(byte0, 'b').zfill(8),
+                                    format(byte1, 'b').zfill(8),
+                                    format(byte2, 'b').zfill(8),
+                                    format(byte3, 'b').zfill(8)),
+                   min_verbosity=3)
         for byte in (byte0, byte1, byte2, byte3):
             self._send(byte)
 

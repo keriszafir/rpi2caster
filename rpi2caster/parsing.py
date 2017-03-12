@@ -4,8 +4,6 @@
 This module contains file- and line-parsing functions for the casting program.
 """
 from . import constants
-# Check if alternate comment symbols are configured
-from .constants import COMMENT_SYMBOLS
 
 
 def read_file(input_file):
@@ -46,7 +44,7 @@ def parse_record(input_data):
     raw_signals = input_data
     comment = ''
     # ...then look for comment symbols and parse them:
-    for symbol in COMMENT_SYMBOLS:
+    for symbol in constants.COMMENT_SYMBOLS:
         if symbol in input_data:
             # Split on the first encountered symbol
             [raw_signals, comment] = input_data.split(symbol, 1)
@@ -160,6 +158,11 @@ def get_row(signals):
         return next(generator)
     except StopIteration:
         return 15
+
+
+def get_coordinates(signals):
+    """Get the column and row from signals"""
+    return get_column(signals), get_row(signals)
 
 
 def check_0075(signals):

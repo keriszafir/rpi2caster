@@ -7,8 +7,12 @@ from contextlib import suppress
 from . import exceptions as e
 # Constants module
 from . import constants as c
-# Default user interface
-from .rpi2caster import UI, CFG
+from .ui import UIFactory
+from .global_config import Config
+
+UI = UIFactory()
+CFG = Config()
+
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
@@ -123,7 +127,7 @@ class MonotypeCaster(object):
             UI.display('Caster is already busy!')
         else:
             self.lock = True
-            UI.debug_pause('Entering the caster context...')
+            UI.pause('Entering the caster context...', min_verbosity=3)
             sensor, output = self.mode.get_casting_backend()
             self.sensor = sensor()
             self.output = output()
@@ -131,7 +135,7 @@ class MonotypeCaster(object):
                 return self
 
     def __exit__(self, *_):
-        UI.debug_pause('Caster no longer in use.')
+        UI.pause('Caster no longer in use.', min_verbosity=3)
         self.sensor = None
         self.output = None
         self.lock = False
@@ -252,11 +256,12 @@ class SensorMixin(object):
     def __enter__(self):
         if not self.lock:
             self.lock = True
-            UI.debug_pause('Using a %s for machine feedback' % self.name)
+            UI.pause('Using a %s for machine feedback' % self.name,
+                     min_verbosity=2)
             return self
 
     def __exit__(self, *_):
-        UI.debug_pause('The %s is no longer in use' % self.name)
+        UI.pause('The %s is no longer in use' % self.name, min_verbosity=3)
         # Reset manual mode
         self.manual_mode = True
         self.lock = False
@@ -290,13 +295,14 @@ class SensorMixin(object):
         """Waits for a keypress to emulate machine cycle, unless user
         switches to auto mode, where all combinations are processed in batch"""
         status = {True: 'ON', False: 'OFF'}
-        UI.debug_info('The sensor is going %s' % status[new_state])
+        UI.display('The sensor is going %s' % status[new_state],
+                   min_verbosity=3)
         if self.manual_mode:
             start_time = time()
             # Ask whether to cast or simulate machine stop
             prompt = ('[A] to switch to automatic mode, [S] to stop\n'
                       'or leave blank to continue?')
-            answer = UI.enter_data_or_blank(prompt) or ' '
+            answer = UI.enter(prompt, blank_ok=True) or ' '
             if answer in 'aA':
                 self.manual_mode = False
             elif answer in 'sS':
@@ -366,17 +372,19 @@ class OutputMixin(object):
         self.working = True
 
     def __del__(self):
-        UI.debug_pause('Deleting the %s' % self.name)
+        UI.pause('Deleting the %s' % self.name, min_verbosity=3)
 
     def __enter__(self):
         if not self.lock:
             self.lock = True
-            UI.debug_pause('Using the %s for sending signals...' % self.name)
+            UI.pause('Using the %s for sending signals...' % self.name,
+                     min_verbosity=2)
             return self
 
     def __exit__(self, *_):
         self.valves_off()
-        UI.debug_pause('Driver for %s no longer in use.' % self.name)
+        UI.pause('Driver for %s no longer in use.' % self.name,
+                 min_verbosity=3)
         self.lock = False
 
     @property
@@ -388,14 +396,14 @@ class OutputMixin(object):
     def one_on(self, sig):
         """Looks a signal up in arrangement and turns it on"""
         try:
-            UI.debug_info(sig + ' on')
+            UI.display(sig + ' on', min_verbosity=2)
         except KeyError:
             raise e.WrongConfiguration('Signal %s not defined!' % sig)
 
     def one_off(self, sig):
         """Looks a signal up in arrangement and turns it on"""
         try:
-            UI.debug_info(sig + ' off')
+            UI.display(sig + ' off', min_verbosity=2)
         except KeyError:
             raise e.WrongConfiguration('Signal %s not defined!' % sig)
 

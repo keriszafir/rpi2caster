@@ -8,11 +8,15 @@ import select
 # Debounce timers need this
 from time import time
 # Get the UI and configuration engine
-from .rpi2caster import UI, CFG
+from .global_config import Config
+from .ui import UIFactory
 # Custom exceptions
 from .exceptions import MachineStopped
 # Caster prototype
 from .monotype import SensorMixin
+
+UI = UIFactory()
+CFG = Config()
 BOUNCE_TIME = CFG.get_option('bounce_time') * 0.001
 SENSOR_GPIO = CFG.get_option('sensor_gpio')
 

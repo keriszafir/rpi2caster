@@ -24,14 +24,12 @@ from . import parsing as p
 from . import exceptions as e
 # Constants shared between modules
 from . import constants as c
-# Style manager
-from .styles import Styles
 # Caster backend
 from .monotype import MonotypeCaster
 # Casting stats
 from .casting_stats import Stats
 # Globally selected UI
-from .rpi2caster import UI
+from .ui import UIFactory, Abort
 # Typecase casting needs this
 from . import letter_frequencies
 # Typesetting functions
@@ -39,8 +37,10 @@ from . import typesetting_funcs as tsf
 # Decorator functions
 from . import decorators as dec
 # Matrix, wedge and typesetting data models
-from .typesetting import TypesettingContext, InputText, GalleyBuilder
-from .matrix_data import diecase_operations
+from .ribbon_controller import TypesettingContext
+from .typesetting import GalleyBuilder
+
+UI = UIFactory()
 
 
 class Casting(TypesettingContext):
@@ -117,7 +117,7 @@ class Casting(TypesettingContext):
             # Set the number of runs before starting the job
             runs = -1 if mode.casting else 1
             while runs < 0:
-                runs = enter_data(prompt, 1, int)
+                runs = UI.enter(prompt, default=1, datatype=int)
             self.stats.runs = runs
 
         def set_session_lines_skipped():
@@ -129,7 +129,7 @@ class Casting(TypesettingContext):
                 # Skip lines effective for ALL runs
                 lines_skipped = -1
                 while not 0 <= lines_skipped < lines_in_ribbon:
-                    lines_skipped = enter_data(prompt, 0, int)
+                    lines_skipped = UI.enter(prompt, default=0, datatype=int)
             else:
                 lines_skipped = 0
             self.stats.session_lines_skipped = lines_skipped
@@ -149,7 +149,8 @@ class Casting(TypesettingContext):
                                % (lines_ok, lines_in_ribbon - 2))
                 lines_skipped = -1
                 while not 0 <= lines_skipped <= lines_in_ribbon - 2:
-                    lines_skipped = enter_data(prompt, lines_ok, int)
+                    lines_skipped = UI.enter(prompt,
+                                             default=lines_ok, datatype=int)
             else:
                 lines_skipped = 0
             self.stats.run_lines_skipped = lines_skipped
@@ -166,7 +167,7 @@ class Casting(TypesettingContext):
             # enable by default in casting, disable in calibration
             casting = mode.casting or mode.calibration
             if casting and UI.confirm(prompt, not mode.calibration):
-                quad = self.diecase.quad
+                quad = self.quad
                 quad_qty = int(self.measure.wedge_set_units // quad.units)
                 text = 'Casting quads for mould heatup'
                 heatup = (['%s preheat' % quad] * quad_qty +
@@ -221,7 +222,8 @@ class Casting(TypesettingContext):
                 # Add some runs more if necessary after finished
                 prompt = 'Casting finished; add more runs - how many?'
                 while more_runs < 0:
-                    more_runs = (enter_data(prompt, 0, int) if mode.casting
+                    more_runs = (UI.enter(prompt, default=0, datatype=int)
+                                 if mode.casting
                                  else 1 if UI.confirm('Repeat?', True) else 0)
                 self.stats.runs += more_runs
             else:
@@ -242,7 +244,6 @@ class Casting(TypesettingContext):
 
         # Helpful aliases
         mode = self.caster.mode
-        enter_data = UI.enter_data_or_default
         queue = ribbon
         try:
             new_stats()
@@ -279,10 +280,11 @@ class Casting(TypesettingContext):
         """
         order = []
         while True:
-            char = UI.enter_data_or_blank('Character?') if self.diecase else ''
-            matrix = self.diecase.find_matrix(char)
+            char = (UI.enter('Character?', blank_ok=True) if self.diecase
+                    else '')
+            matrix = self.find_matrix(char)
             matrix.specify_units()
-            qty = UI.enter_data_or_default('How many sorts?', 10, int)
+            qty = UI.enter('How many sorts?', default=10, datatype=int)
             order.append((matrix, qty))
             prompt = 'More sorts? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
@@ -293,28 +295,23 @@ class Casting(TypesettingContext):
     @dec.temp_wedge
     def cast_typecases(self):
         """Casting typecases according to supplied font scheme."""
-        enter = UI.enter_data_or_default
         freqs = letter_frequencies.CharFreqs()
         freqs.define_case_ratio()
         freqs.define_scale()
-        supported_styles = self.diecase.styles
-        UI.display('Styles to cast?')
-        # Order specified numbers of sorts from desired matrices
+        style_mgr = self.diecase.styles
+        style_mgr.choose()
         order = []
-        style_manager = Styles(supported_styles)
-        style_manager.choose()
-        styles = style_manager.keys()
-        for style, name in style_manager.items():
-            # Display style name
-            UI.display_header(name)
-            if len(styles) == 1 or style == 'r':
+        for style in style_mgr:
+            UI.display_header(style.name.capitalize())
+            if len(style_mgr.list) == 1 or style is style_mgr.default:
                 scale = 1.0
             else:
-                scale = enter('Scale for %s?' % name, 100, float) / 100.0
+                scale = UI.enter('Scale for %s?' % style.name,
+                                 default=100, datatype=float) / 100.0
             for char, chars_qty in freqs.type_bill:
                 qty = int(scale * chars_qty)
                 UI.display('%s: %s' % (char, chars_qty))
-                matrix = self.diecase[(char, style)]
+                matrix = self.find_matrix(char, style, manual_choice=True)
                 order.append((matrix, qty))
         self.cast_galley(order)
 
@@ -325,9 +322,9 @@ class Casting(TypesettingContext):
         """
         order = []
         while True:
-            matrix = self.diecase.get_space(width=None, is_low_space=None)
+            matrix = self.get_space(width=None, is_low_space=None)
             prompt = 'How many lines?'
-            lines = UI.enter_data_or_default(prompt, 1, int)
+            lines = UI.enter(prompt, default=1, datatype=int)
             order.extend([(matrix, 0)] * lines)
             prompt = 'More spaces? Otherwise, start casting'
             if not UI.confirm(prompt, default=True):
@@ -353,7 +350,7 @@ class Casting(TypesettingContext):
             e.return_to_menu()
         # 1 quad before and after the line
         quad_padding = 1
-        quad = self.diecase.decode_matrix('O15')
+        quad = self.diecase.layout.get_space(units=18)
         # Leave some slack to adjust the line
         length = self.measure.ems - 2 * quad_padding * quad.ems
         # Build a sequence of matrices for casting
@@ -396,8 +393,9 @@ class Casting(TypesettingContext):
         # without selecting a diecase
         if not self.diecase:
             e.return_to_menu()
-        text = text or UI.edit()
-        matrix_stream = InputText(self, text).parse_input()
+        self.source = text or ''
+        self.edit_text()
+        matrix_stream = self.old_parse_input()
         builder = GalleyBuilder(self, matrix_stream)
         queue = builder.build_galley()
         UI.display('Each line will have two em-quads at the start '
@@ -501,7 +499,7 @@ class Casting(TypesettingContext):
                 UI.display('Enter the signals to send to the caster, '
                            'or leave empty to return to menu: ')
                 prompt = 'Signals? (leave blank to exit)'
-                signals = p.parse_signals(UI.enter_data_or_blank(prompt))
+                signals = p.parse_signals(UI.enter(prompt, blank_ok=True))
                 if signals:
                     self.caster.output.valves_off()
                     UI.display('Activating ' + ' '.join(signals))
@@ -594,7 +592,7 @@ class Casting(TypesettingContext):
             # Build character list
             matrix_stream = []
             for char in ('  ', 'n', '--'):
-                mat = self.diecase[char, '']
+                mat = self.find_matrix(char, '', manual_choice=True)
                 mat.specify_units()
                 matrix_stream.append(mat)
                 matrix_stream.append(mat)
@@ -659,7 +657,7 @@ class Casting(TypesettingContext):
         # Keep displaying the menu and go back here after any method ends
         finished = False
         while not finished:
-            with suppress(UI.Abort, e.ReturnToMenu):
+            with suppress(Abort, e.ReturnToMenu):
                 UI.menu(menu_options(), header=header)(self)
 
     def main_menu(self):
@@ -687,9 +685,9 @@ class Casting(TypesettingContext):
                     (self.choose_diecase, 'Select diecase',
                      'Select a matrix case from database' + diecase_info,
                      casting),
-                    (self.ribbon.display_contents, 'View codes',
+                    (self.display_ribbon_contents, 'View codes',
                      'Display all codes in the selected ribbon', ribbon),
-                    (self.diecase.show_layout, 'Show diecase layout',
+                    (self.display_diecase_layout, 'Show diecase layout',
                      'View the matrix case layout', diecase and casting),
                     (self.quick_typesetting, 'Quick typesetting',
                      'Compose and cast a line of text', diecase and casting),
@@ -709,7 +707,7 @@ class Casting(TypesettingContext):
                      casting),
                     (self._display_details, 'Show details...',
                      'Display ribbon and interface details', punching),
-                    (diecase_operations, 'Matrix manipulation...',
+                    (self.diecase_manipulation, 'Matrix manipulation...',
                      'Work on matrix cases', True),
                     (self.diecase_proof, 'Diecase proof',
                      'Cast every character from the diecase', True),
@@ -732,7 +730,7 @@ class Casting(TypesettingContext):
                       'and casts the type on a composition caster.'
                       '\n\n%s Menu:' % job)
             # Catch any known exceptions here
-            with suppress(e.ReturnToMenu, e.MenuLevelUp, UI.Abort,
+            with suppress(e.ReturnToMenu, e.MenuLevelUp, Abort,
                           EOFError, KeyboardInterrupt):
                 UI.menu(menu_options(), header=header, footer='')()
 

@@ -8,10 +8,13 @@ from .defaults import USER_DATA_DIR
 # Constants for rpi2caster
 from .constants import ASSIGNMENT_SYMBOLS
 # User interface, database backend
-from .rpi2caster import UI, DB
+from .rpi2caster import UI, Abort
+from rpi2caster.database import Base, Database, Column, Text
+from sqlalchemy.schema import ForeignKey
+DB = Database()
 
 
-class Ribbon(object):
+class Ribbon(Base):
     """Ribbon objects - no matter whether files or database entries.
 
     A ribbon has the following attributes:
@@ -29,6 +32,16 @@ class Ribbon(object):
     export_to_file - store the metadata and contents in text file
     store_in_db - store the metadata and contents in db
     set_[description, customer, diecase_id] - set parameters manually"""
+    __tablename__ = 'ribbons'
+    ribbon_id = Column('ribbon_id', Text, primary_key=True,
+                       default='New Ribbon')
+    description = Column('description', Text, default='')
+    customer = Column('customer', Text, default='')
+    diecase_id = Column('diecase_id', Text,
+                        ForeignKey('matrix_cases.diecase_id'))
+    wedge_name = Column('wedge', Text, default='', nullable=False)
+    contents = Column('contents', Text, default='', nullable=False)
+
     def __init__(self, parameters=None):
         self.update(parameters)
 
@@ -73,7 +86,7 @@ class Ribbon(object):
         if not source:
             source = {}
         try:
-            UI.debug_info('Processing ribbon data...')
+            UI.display('Processing ribbon data...', min_verbosity=2)
             self.ribbon_id = source.get('ribbon_id', '')
             self.description = source.get('description', '')
             self.customer = source.get('customer', '')
@@ -81,15 +94,15 @@ class Ribbon(object):
             self.wedge_name = source.get('wedge_name', '')
             self.contents = source.get('contents', [])
         except AttributeError:
-            UI.debug_info('ERROR: Cannot process ribbon data')
-            UI.debug_info(source)
+            UI.display('ERROR: Cannot process ribbon data', min_verbosity=2)
+            UI.display(source, min_verbosity=2)
 
     def store_in_db(self):
         """Stores the ribbon in database"""
         UI.display_parameters({'Ribbon data': self.parameters})
         # Ask for confirmation
         try:
-            DB.add_ribbon(self)
+            DB.session.add(self)
             UI.pause('Ribbon added successfully.')
             return True
         except (e.DatabaseQueryError, e.NoMatchingData):
@@ -99,7 +112,7 @@ class Ribbon(object):
     def delete_from_db(self):
         """Deletes a ribbon from database."""
         if UI.confirm('Are you sure?', default=False):
-            DB.delete_ribbon(self)
+            DB.session.delete(self)
             UI.display('Ribbon deleted successfully.')
 
     def import_from_file(self, ribbon_file):
@@ -150,7 +163,7 @@ class Ribbon(object):
         UI.display_parameters({'Ribbon data': self.parameters})
         # Choose file, write metadata, write contents
         filename = '%s/%s.rib' % (USER_DATA_DIR, self.ribbon_id)
-        with suppress(UI.Abort), UI.export_file(filename) as ribbon_file:
+        with suppress(Abort), UI.export_file(filename) as ribbon_file:
             ribbon_file.write('description: ' + self.description)
             ribbon_file.write('customer: ' + self.customer)
             ribbon_file.write('diecase: ' + self.diecase_id)
@@ -161,12 +174,13 @@ class Ribbon(object):
     def import_from_db(self, ribbon_id):
         """Import a ribbon with a given ribbon ID from database"""
         try:
-            UI.debug_info('Getting ribbon ID=%s from database...' % ribbon_id)
+            UI.display('Getting ribbon ID=%s from database...' % ribbon_id,
+                       min_verbosity=3)
             result = DB.get_ribbon(ribbon_id)
             self.update(result)
             return True
         except (e.DatabaseQueryError, e.NoMatchingData):
-            UI.debug_info('ERROR: Cannot find ribbon!')
+            UI.display('ERROR: Cannot find ribbon!', min_verbosity=2)
             return False
 
     def choose_from_db(self):
@@ -176,16 +190,17 @@ class Ribbon(object):
             try:
                 # Manual choice if function was called without arguments
                 data = list_ribbons()
-                choice = UI.enter_data_or_exception(prompt, datatype=int)
+                choice = UI.enter(prompt, exception=Abort, datatype=int)
                 ribbon_id = data[choice]
                 # Inform the caller if import was successful or not
                 return self.import_from_db(ribbon_id)
             except KeyError:
                 UI.pause('Ribbon number is incorrect. Choose again.')
             except (e.DatabaseQueryError, e.NoMatchingData):
-                UI.debug_info('WARNING: Cannot find any ribbon data!')
+                UI.display('WARNING: Cannot find any ribbon data!',
+                           min_verbosity=2)
                 return False
-            except UI.Abort:
+            except Abort:
                 return False
 
 
@@ -220,16 +235,17 @@ class RibbonMixin(object):
                 try:
                     # Manual choice if function was called without arguments
                     data = list_ribbons()
-                    choice = UI.enter_data_or_exception(prompt, datatype=int)
+                    choice = UI.enter(prompt, exception=Abort, datatype=int)
                     ribbon_id = data[choice]
                     # Inform the caller if import was successful or not
                     return self.import_from_db(ribbon_id)
                 except KeyError:
                     UI.pause('Ribbon number is incorrect. Choose again.')
                 except (e.DatabaseQueryError, e.NoMatchingData):
-                    UI.debug_info('WARNING: Cannot find any ribbon data!')
+                    UI.display('WARNING: Cannot find any ribbon data!',
+                               min_verbosity=2)
                     return False
-                except UI.Abort:
+                except Abort:
                     return False
 
         def from_file():
@@ -238,7 +254,7 @@ class RibbonMixin(object):
             try:
                 ribbon_file = UI.import_file()
                 self.ribbon.import_from_file(ribbon_file)
-            except UI.Abort:
+            except Abort:
                 return False
         self.ribbon.choose_from_db() or self.ribbon.import_from_file()
 

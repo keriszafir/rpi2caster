@@ -2,9 +2,11 @@
 """Wedge data model for rpi2caster"""
 from itertools import zip_longest
 # Default user interface
-from .rpi2caster import UI
+from .ui import UIFactory
 # Constants for known normal wedge unit values
 from . import wedge_unit_values as WU
+
+UI = UIFactory()
 
 
 class Wedge(object):
@@ -133,7 +135,7 @@ def enter_name(default='S5-12E'):
               '\n\nIf you have one of those, '
               'enter the corresponding new-style number (like S5-xx.yE).'
               '\n\nWedge designation?' % old_wedges)
-    return UI.enter_data_or_default(prompt, default)
+    return UI.enter(prompt, default=default)
 
 
 def parse_name(wedge_name):
@@ -164,7 +166,7 @@ def parse_name(wedge_name):
         except (TypeError, ValueError):
             prompt = ('Enter the set width as a decimal fraction '
                       'divisible by 0.25 - e.g. 12.25: ')
-            set_width = UI.enter_data(prompt, float)
+            set_width = UI.enter(prompt, datatype=float)
     # We have the wedge name, so we can look the wedge up in known wedges
     # (no need to enter the unit values manually)
     units = WU.UNITS.get(series, None)
@@ -176,7 +178,7 @@ def parse_name(wedge_name):
         # and the value written to database is a list of integers
         try:
             units = [int(i.strip())
-                     for i in UI.enter_data(prompt).split(',')]
+                     for i in UI.enter(prompt).split(',')]
             # Display warning if the number of steps is not
             # 15 or 16 (15 is most common, 16 was used for HMN and KMN).
             if not 15 <= len(units) <= 16:

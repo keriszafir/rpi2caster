@@ -1,28 +1,25 @@
 # -*- coding: utf-8 -*-
 """Decorator functions and classes for rpi2caster"""
 
-# Start by choosing the user interface
-from .rpi2caster import UI
+from .ui import UIFactory
 from .exceptions import CastingAborted
-from .wedge_data import Wedge
+from .models import Wedge
 from .measure import Measure
+
+UI = UIFactory()
 
 
 def choose_sensor_and_driver(casting_routine):
     """Checks current modes (simulation, perforation, testing)"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        def debug():
-            """Show some info"""
-            mode = self.caster.mode
-            UI.debug_pause('About to %s...' %
-                           ('cast composition' if mode.casting
-                            else 'test the outputs' if mode.testing
-                            else 'calibrate the machine' if mode.calibration
-                            else 'punch the ribbon' if mode.punching
-                            else 'blow'))
-
-        debug()
+        mode = self.caster.mode
+        what = ('cast composition' if mode.casting
+                else 'test the outputs' if mode.testing
+                else 'calibrate the machine' if mode.calibration
+                else 'punch the ribbon' if mode.punching
+                else 'blow')
+        UI.pause('About to %s...' % what, min_verbosity=3)
         with self.caster:
             return casting_routine(self, *args, **kwargs)
 

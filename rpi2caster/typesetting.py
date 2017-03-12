@@ -1,119 +1,21 @@
 # -*- coding: utf-8 -*-
 """Typesetter program"""
 from contextlib import suppress
+from copy import deepcopy
 # from collections import deque
 from . import exceptions as e
 from . import typesetting_funcs as tsf
 # from .justification import Box, Glue, Penalty, ObjectList
-from .measure import Measure
-from .typesetting_data import RibbonMixin
-from .matrix_data import DiecaseMixin, diecase_operations, EMPTY_DIECASE
-from .wedge_data import Wedge
-from .rpi2caster import UI
+from .ribbon_controller import TypesettingContext
+from .ui import UIFactory, Abort
+
+UI = UIFactory()
 
 # Constants for control codes
 STYLE_COMMANDS = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
                   '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
                   '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
 ALIGNMENTS = {'^CR': 'left', '^CC': 'center', '^CL': 'right', '^CF': 'both'}
-
-
-class SourceMixin(object):
-    """Mixin for source text"""
-    @property
-    def source(self):
-        """Source text for typesetting"""
-        return self.__dict__.get('_source') or ''
-
-    @source.setter
-    def source(self, text):
-        """Source setter"""
-        self.__dict__['_source'] = text
-
-    @source.setter
-    def input_text(self, text):
-        """Set a string of text as the typesetting source"""
-        if text:
-            self.source = text
-
-    @source.setter
-    def text_file(self, text_file):
-        """Use a file object as a source of text"""
-        # If a string or None is passed as an argument,
-        # AttributeError would be raised. We'd rather ignore it.
-        with suppress(AttributeError), text_file:
-            self.source = ''.join(text_file.readlines())
-
-    def edit_text(self):
-        """Edits the input text"""
-        self.source = UI.edit(self.source)
-
-
-class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
-    """Mixin for setting diecase, wedge and measure"""
-    @property
-    def measure(self):
-        """Typesetting measure i.e. line length"""
-        return self.__dict__.get('_measure') or Measure(self)
-
-    @measure.setter
-    def measure(self, measure):
-        """Measure setter"""
-        self.__dict__['_measure'] = measure
-
-    @measure.setter
-    def line_length(self, measure):
-        """Set the line length for typesetting"""
-        if measure:
-            self.measure = Measure(self, measure)
-
-    @property
-    def manual_mode(self):
-        """Decides whether to use an automatic or manual typesetting engine."""
-        # On by default
-        return self.__dict__.get('_manual_mode') or False
-
-    @manual_mode.setter
-    def manual_mode(self, manual_mode):
-        """Manual mode setter"""
-        self.__dict__['_manual_mode'] = True if manual_mode else False
-
-    @property
-    def default_alignment(self):
-        """Default alignment:
-        Determines how paragraphs ending with a double newline ("\n\n")
-        and the end of the source text will be aligned.
-        Valid options: "left", "right", "center", "both".
-        """
-        return self.__dict__.get('_default_alignment') or 'left'
-
-    @default_alignment.setter
-    def default_alignment(self, alignment):
-        """Default alignment setter"""
-        options = {'cr': 'left', 'cc': 'center', 'cl': 'right', 'cf': 'both',
-                   'left': 'left', 'center': 'center', 'right': 'right',
-                   'flat': 'both', 'both': 'both', 'f': 'both',
-                   'l': 'left', 'c': 'center', 'r': 'right', 'b': 'both'}
-        string = alignment.strip().replace('^', '').lower()
-        value = options.get(string)
-        if value:
-            self.__dict__['_default_alignment'] = value
-
-    def change_measure(self):
-        """Change a line length"""
-        UI.display('Set the galley width...')
-        self.measure = Measure(self, manual_choice=True)
-
-    def change_alignment(self):
-        """Changes the default text alignment"""
-        UI.display('Default alignment for paragraphs:')
-        message = 'Choose alignment: [L]eft, [C]enter, [R]ight, [B]oth? '
-        options = {'l': 'left', 'r': 'right', 'c': 'center', 'b': 'both'}
-        self.default_alignment = UI.simple_menu(message, options)
-
-    def toggle_manual_mode(self):
-        """Changes the manual/automatic typesetting mode"""
-        self.manual_mode = not self.manual_mode
 
 
 class Typesetting(TypesettingContext):
@@ -142,7 +44,7 @@ class Typesetting(TypesettingContext):
                      % (self.diecase or 'not selected'), True),
                     (self.choose_wedge, 'Select wedge',
                      'Enter a wedge designation (current: %s)'
-                     % self.diecase.alt_wedge, True),
+                     % self.wedge, True),
                     (self.change_measure, 'Change measure',
                      'Set new line length (current: %s)' % self.measure, True),
                     (self.change_alignment, 'Change default alignment',
@@ -152,9 +54,9 @@ class Typesetting(TypesettingContext):
                      'Switch to automatic typesetting', self.manual_mode),
                     (self.toggle_manual_mode, 'Change the typesetting mode',
                      'Switch to manual typesetting', not self.manual_mode),
-                    (self.diecase.show_layout, 'Show diecase layout',
+                    (self.display_diecase_layout, 'Show diecase layout',
                      'View the matrix case layout', True),
-                    (diecase_operations, 'Matrix manipulation',
+                    (self.diecase_manipulation, 'Matrix manipulation',
                      'Work on matrix cases', True)]
             # Built a list of menu options conditionally
             return [(func, desc, long_desc)
@@ -168,14 +70,14 @@ class Typesetting(TypesettingContext):
         finished = False
         while not finished:
             with suppress(e.ReturnToMenu, e.MenuLevelUp,
-                          UI.Abort, EOFError, KeyboardInterrupt):
+                          Abort, EOFError, KeyboardInterrupt):
                 UI.menu(menu_options(), header=header, footer='')()
 
     def get_paragraphs(self):
         """Parse a text into paragraphs with justification modes."""
         # Get a dict of alignment codes
         # Add a default alignment for double line break i.e. new paragraph
-        alignments = {k: v for (k, v) in ALIGNMENTS.items()}
+        alignments = deepcopy(ALIGNMENTS)
         alignments['\n\n'] = self.default_alignment
         # Make a generator function and loop over it
         paragraph_generator = token_parser(self.source, alignments,
@@ -210,54 +112,6 @@ class Typesetting(TypesettingContext):
         paragraphs = self.get_paragraphs()
         for paragraph in paragraphs:
             paragraph.display_text()
-
-
-class InputText(object):
-    """Gets the input text, parses it, generates a sequence of characters
-    or commands"""
-
-    def __init__(self, context, text):
-        self.context = context
-        self.text = text
-
-    def parse_input(self):
-        """Generates a sequence of characters from the input text.
-        For each character, this function predicts what two next characters
-        and one next character are."""
-        # Cache the character set and spaces instead of generating
-        # them ad hoc
-        charset = self.context.diecase.charset
-        spaceset = self.context.diecase.spaceset
-        # This variable will prevent yielding a number of subsequent chars
-        # after a ligature or command has been found and yielded.
-        skip_steps = 0
-        # Default style is roman
-        style = 'r'
-        # Characters which will be skipped
-        ignored_tokens = ('\n',)
-        # Determine the length of character combinations parsed
-        # Min = command length i.e. 3
-        # Max = ligature length - dictated by diecase
-        max_len = max(3, self.context.diecase.ligature_length)
-        # What if char in text not present in diecase? Hmmm...
-        for index, _ in enumerate(self.text):
-            if skip_steps:
-                # Skip the characters to be skipped
-                skip_steps -= 1
-                continue
-            for i in range(max_len, 0, -1):
-                # Start from longest, end with shortest
-                with suppress(KeyError):
-                    chunk = self.text[index:index+i]
-                    skip_steps = i - 1
-                    if chunk in ignored_tokens:
-                        break
-                    elif chunk in STYLE_COMMANDS:
-                        style = STYLE_COMMANDS.get(chunk, 'r')
-                        break
-                    else:
-                        yield spaceset.get(chunk) or charset[style][chunk]
-                        break
 
 
 class Paragraph(object):
@@ -297,7 +151,7 @@ class GalleyBuilder(object):
             if mat:
                 parameters['wedges'] = mat.wedge_positions()
                 parameters['units'] = mat.units
-                parameters['code'] = str(mat)
+                parameters['code'] = mat.pos + mat.comment
                 parameters['lowspace'] = mat.is_low_space
             return parameters
 
@@ -343,7 +197,7 @@ class GalleyBuilder(object):
                     # Exit and loop further
                     return
             # Finish the line
-            var_sp = self.diecase.decode_matrix('G1')
+            var_sp = self.diecase.layout.get_space(units=6)
             wedges = current_wedges
             current_wedges = None
             if self.fill_line:
@@ -368,8 +222,8 @@ class GalleyBuilder(object):
             units_left = 0
 
         # Store the code and wedge positions to speed up the process
-        space = decode_mat(self.diecase.decode_matrix('G1'))
-        quad = decode_mat(self.diecase.decode_matrix('O15'))
+        space = decode_mat(self.diecase.get_space(units=6))
+        quad = decode_mat(self.diecase.get_space(units=18))
         working_mat = None
         current_wedges = None
         queue, units_left = tsf.end_casting(), 0
