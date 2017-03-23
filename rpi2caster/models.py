@@ -436,8 +436,8 @@ class Matrix(object):
     def code(self):
         """Code present in ribbon"""
         if self.column and self.row:
-            s_signal = 'S' if self.units != self.get_row_units() else ''
-            return ''.join([self.column, s_signal, self.row])
+            s_signal = (self.units != self.get_row_units) * 'S'
+            return ''.join([self.column, s_signal, str(self.row)])
         else:
             return ''
 

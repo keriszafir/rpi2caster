@@ -24,7 +24,7 @@ class ParsedRecord:
     comment, rows, columns, justification, use_s_needle = '', [], [], [], False
 
     def __init__(self, signals_iterable, signal_o15=False, default_o15=False,
-                 row_16_addressing=None):
+                 row_16_addressing=c.OFF):
         self._parse_record(signals_iterable)
         self.row_16_addressing = row_16_addressing or None
         self.signal_o15, self.default_o15 = signal_o15, default_o15
@@ -114,7 +114,7 @@ class ParsedRecord:
                 column_set.update('D')
             return column_set
 
-        routine = {None: do_not_convert, c.UNIT_SHIFT: unit_shift, c.HMN: hmn,
+        routine = {c.OFF: do_not_convert, c.UNIT_SHIFT: unit_shift, c.HMN: hmn,
                    c.KMN: kmn}.get(self.row_16_addressing, do_not_convert)
         # determine if explicit O15 would be used
         use_o15 = any(('O' in self.columns, 15 in self.rows,

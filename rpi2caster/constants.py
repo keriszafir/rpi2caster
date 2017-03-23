@@ -31,4 +31,4 @@ DEFAULT_HIGH_SPACE_POSITIONS = (('O', 16))
 SPACE_NAMES = {'   ': 'low em quad', '  ': 'low en quad', ' ': 'low space',
                '___': 'high em quad', '__': 'high en quad', '_': 'high space'}
 # Row 16 addressing modes
-HMN, KMN, UNIT_SHIFT = 1, 2, 3
+OFF, HMN, KMN, UNIT_SHIFT = 0, 1, 2, 3

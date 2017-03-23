@@ -20,15 +20,12 @@ class ParallelInterface(SensorBase, OutputBase):
     byte2: A 1 2 3 4 5 6 7
     byte3: 8 9 10 11 12 13 14 0005
     """
+    working = False
+    # port will be lazily instantiated when entering context
+    port = None
+    name = 'Symbiosys parallel port interface'
     numbers = (2 ** x for x in range(31, -1, -1))
     mapping = dict(zip(CFG.get_option('signals_arrangement'), numbers))
-
-    def __init__(self):
-        super().__init__()
-        self.name = 'Symbiosys parallel port interface'
-        self.working = False
-        self.port = Parallel()
-        self.lock = False
 
     def __enter__(self):
         if not self.lock:

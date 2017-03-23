@@ -171,16 +171,15 @@ class Casting(TypesettingContext):
             """Casts the sequence of codes in given sequence.
             This function is executed until the sequence is exhausted
             or casting is stopped by machine or user."""
-            par = p.ParsedRecord
-            source = sequence or queue
             # in punching mode, lack of row will trigger signal 15,
             # lack of column will trigger signal O
-            def_o15 = mode.punching
             # in punching and testing mode, signal O or 15 will be present
             # in the output combination as O15
-            sig_o15 = mode.punching or mode.testing
-            for record in (par(item, default_o15=def_o15, signal_o15=sig_o15)
-                           for item in source):
+            parsed = p.ParsedRecord
+            for item in sequence or queue:
+                record = parsed(item, row_16_addressing=mode.row_16_addressing,
+                                default_o15=mode.punching,
+                                signal_o15=mode.punching or mode.testing)
                 try:
                     if not record.signals:
                         UI.display_header(record.comment)

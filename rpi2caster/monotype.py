@@ -21,10 +21,10 @@ AIR_OFF = False
 class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
+    lock, pump_working = False, False
+
     def __init__(self):
         self.mode = CasterMode()
-        self.lock = False
-        self.pump_working = False
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
@@ -152,11 +152,7 @@ class MonotypeCaster(object):
 class SensorBase(object):
     """Mockup for a machine cycle sensor"""
     name = 'generic machine cycle sensor'
-
-    def __init__(self):
-        self.lock = False
-        self.manual_mode = True
-        self.last_state = False
+    lock, last_state, manual_mode = False, True, True
 
     def __enter__(self):
         if not self.lock:
@@ -274,12 +270,11 @@ class TestSensor(SensorBase):
 class OutputBase(object):
     """Mockup for a driver for 32 pneumatic outputs"""
     name = 'generic output driver'
+    lock = False
 
     def __init__(self,
                  signals_arrangement=CFG.get_option('signals_arrangement')):
-        self.lock = False
         self.signals_arrangement = signals_arrangement
-        self.working = True
 
     def __del__(self):
         UI.pause('Deleting the %s' % self.name, min_verbosity=3)
@@ -423,10 +418,9 @@ class CasterMode(object):
             prm = ('Your ribbon contains codes from the 16th row.\n'
                    'It is supported by special attachments for the machine.\n'
                    'Which mode does your caster use: HMN, KMN, Unit-Shift?\n\n'
-                   'If none - characters from row 15 will be cast instead.\n\n'
-                   'Your choice: [U]nit-Shift, [H]MN, [K]MN '
-                   '(leave blank for none)?: ')
-            options = {'U': c.UNIT_SHIFT, 'H': c.HMN, 'K': c.KMN, '': None}
+                   'If off - characters from row 15 will be cast instead.\n\n'
+                   'Your choice: [U]nit-Shift, [H]MN, [K]MN, blank = off?: ')
+            options = {'U': c.UNIT_SHIFT, 'H': c.HMN, 'K': c.KMN, '': c.OFF}
             self.row_16_addressing = UI.simple_menu(prm, options)
 
         names = {c.HMN: 'HMN', c.KMN: 'KMN', c.UNIT_SHIFT: 'unit-shift'}
@@ -438,7 +432,8 @@ class CasterMode(object):
         if is_required and not is_active:
             choose_row16_addressing()
         elif is_active and not is_required:
-            UI.pause('Turn off the %s attachment' % attachment_name)
+            UI.pause('\nTurn off the %s attachment.\n' % attachment_name)
+            self.row_16_addressing = c.OFF
         elif is_required and is_active:
             UI.display('The %s attachment is turned on - OK...'
                        % attachment_name)

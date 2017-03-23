@@ -284,14 +284,16 @@ class ClickUI(object):
         Message: prompt - string displayed on screen;
         options: a dict {ans1:opt1, ans2:opt2...}.
         """
-        opt = None
-        while not opt:
-            ans = click.prompt(message)
+        while True:
+            ans = click.prompt(message, default='')
             click.echo('\n')
-            opt = (options.get(ans) or
-                   options.get(ans.lower()) or
-                   options.get(ans.upper()))
-        return opt
+            for key in (ans, ans.lower(), ans.upper()):
+                # default to some nonsensical string for wrong dict hits
+                # make it possible to have None as options
+                # (https://en.wikipedia.org/wiki/Etaoin_shrdlu)
+                match = options.get(key, 'etaoin shrdlu cmfwyp')
+                if match is not 'etaoin shrdlu cmfwyp':
+                    return match
 
     def confirm(self, question, default=None):
         """Asks a simple question with yes or no answers.
