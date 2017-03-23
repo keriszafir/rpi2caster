@@ -1,4 +1,8 @@
+# -*- coding: utf-8 -*-
+"""Setuptools for rpi2caster."""
+
 from setuptools import setup, find_packages
+from rpi2caster import __version__
 
 with open('README.rst', 'r') as readme_file:
     long_description = readme_file.read()
@@ -12,7 +16,7 @@ clas = ['Development Status :: 3 - Alpha',
         'Topic :: Artistic Software']
 
 setup(name='rpi2caster',
-      version='0.6dev9',
+      version=__version__,
       description='Raspberry Pi controls a Monotype composition caster',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',

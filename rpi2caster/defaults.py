@@ -10,7 +10,7 @@ GLOBAL_CFG_PATHS = ['/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
 USER_DB_PATH = '%s/rpi2caster.db' % USER_DATA_DIR
 # Options and their default values
 OPTIONS = {}
-OPTIONS['preferences'] = {'default_measure': '25',
+OPTIONS['preferences'] = {'default_measure': '25cc',
                           'measurement_unit': 'cc',
                           'choose_backend': False}
 OPTIONS['interface'] = {'signals_arrangement': SIGNALS,

@@ -18,100 +18,6 @@ AIR_ON = True
 AIR_OFF = False
 
 
-def adjust_signals(signal_processing_routine):
-    """Adjusts the signals received by caster so that:
-    1. O15 is stripped unless we are in testing mode (if explicitly stated)
-        or in punching mode (always - it helps drive the punches)
-    2. row 16 is addressed according to the selected method: HMN, unit-shift
-        or is not addressed for plain machines (O15 will be cast instead)
-    """
-    def wrapper(self, signals, *args, **kw):
-        """Changes the signals to match the selected method of addressing
-        16th row on the matrix case"""
-
-        def convert_unitshift(signals):
-            """Adjust signals for unit-shift:
-            replace D column with EF;
-            add D for shifting the diecase to row 16.
-            Normal wedge stays where it was; only the diecase moves.
-            The width of characters in row 16 is the same as for row 15,
-            unless 0005 & 0075 wedge corrections are applied.
-            """
-            if 'D' in signals:
-                signals.remove('D')
-                signals.extend(['E', 'F'])
-            if '16' in signals:
-                signals.append('D')
-
-        def convert_hmn(signals):
-            """Adjust signals for HMN as commented below.
-            The HMN attachment was rare and required special normal wedges
-            with additional step for 16th row."""
-            if 'H' in signals:
-                # H -> HN
-                signals.append('N')
-            elif 'N' in signals and not ('I' in signals or 'L' in signals):
-                # N -> MN
-                signals.append('M')
-            elif 'N' in signals or 'M' in signals:
-                # NI, NL, M -> HNI, HNL, HM
-                signals.append('H')
-            elif [x for x in 'ABCDEFGIJKL' if x in signals]:
-                # A...G, I...L -> HMA...G, HMI...L
-                signals.extend(['H', 'M'])
-            else:
-                # O15 (no other signals) -> HMN
-                signals.extend(['H', 'M', 'N'])
-
-        def convert_kmn(signals):
-            """Adjust signals for the rare KMN attachment.
-            This attachment was made by one of Monotype's customers,
-            and HMN was based off it - so it's even less common..."""
-            if 'K' in signals:
-                # K16: add N
-                signals.append('N')
-            elif 'M' in signals:
-                # M16: add K
-                signals.append('K')
-            elif 'N' in signals and ('I' in signals or 'L' in signals):
-                # NI16, NL16: add K
-                signals.append('K')
-            elif 'N' in signals:
-                # N16: add M
-                signals.append('M')
-            elif [x for x in 'ABCDEFGHIJL' if x in signals]:
-                # All signals apart from above and O16: add KM
-                signals.extend(['K', 'M'])
-            else:
-                # O16: add KMN
-                signals.extend(['K', 'M', 'N'])
-
-        # No signals = no casting!
-        if not signals:
-            return False
-        if self.mode.hmn and '16' in signals:
-            convert_hmn(signals)
-        elif self.mode.kmn and '16' in signals:
-            convert_kmn(signals)
-        elif self.mode.unitshift:
-            # Unit-shift is active for all rows, not just 16
-            convert_unitshift(signals)
-        # Return a list of "normal" signals i.e. with no signal 16,
-        # arranged in Monotype order (NMLK...13, 14, 0005, O15)
-        # Scrap O15 signal unless we're in testing mode, where it can
-        # be explicitly turned on.
-        signals = [sig for sig in c.SIGNALS if sig in signals and
-                   (sig is not 'O15' or self.mode.testing)]
-        # Always add O15 for punching ribbons
-        if self.mode.punching and 'O15' not in signals:
-            signals.append('O15')
-        # Adjust the signals just before casting; show the new combination
-        UI.display('Sending %s' % (' '.join(signals) if signals
-                                   else 'no signals'))
-        return signal_processing_routine(self, signals, *args, **kw)
-    return wrapper
-
-
 class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
@@ -167,7 +73,6 @@ class MonotypeCaster(object):
         # Collect data from I/O drivers
         return self.sensor.parameters + self.output.parameters
 
-    @adjust_signals
     def process(self, signals):
         """process(signals):
 
@@ -244,7 +149,7 @@ class MonotypeCaster(object):
                 self.pump_working = False
 
 
-class SensorMixin(object):
+class SensorBase(object):
     """Mockup for a machine cycle sensor"""
     name = 'generic machine cycle sensor'
 
@@ -272,7 +177,7 @@ class SensorMixin(object):
         return [(self.name, 'Sensor driver'),
                 (self.manual_mode, 'Manual mode')]
 
-    def check_if_machine_is_working(self):
+    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
         """Detect machine cycles and alert if it's not working"""
         UI.display('Turn on the air, motor, pump (if put out) and machine.')
         UI.display('Checking if the machine is running...')
@@ -285,11 +190,11 @@ class SensorMixin(object):
                     UI.display(cycles)
                     self.wait_for(new_state=True, timeout=30)
                     cycles -= 1
-                return True
+                return
             except (e.MachineStopped, KeyboardInterrupt, EOFError):
                 prompt = 'Machine is not running. Y to try again or N to exit?'
                 if not UI.confirm(prompt, default=False):
-                    return False
+                    raise exception
 
     def wait_for(self, new_state, timeout=30, time_on=0.1, time_off=0.1):
         """Waits for a keypress to emulate machine cycle, unless user
@@ -316,27 +221,29 @@ class SensorMixin(object):
             sleep(time_on)
 
 
-class SimulationSensor(SensorMixin):
+class SimulationSensor(SensorBase):
     """Simulate casting with no actual machine"""
     name = 'simulation - mockup casting interface'
 
-    def check_if_machine_is_working(self):
+    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
         """Warn that this is just a simulation"""
         UI.display('Simulation mode - no machine is used.\n'
                    'This will emulate the actual casting sequence '
                    'as closely as possible.\n')
-        return super().check_if_machine_is_working()
+        return super().check_if_machine_is_working(exception)
 
 
-class PunchingSensor(SensorMixin):
+class PunchingSensor(SensorBase):
     """A special sensor class for perforators"""
     name = 'timer-driven or manual advance for perforator'
 
-    def check_if_machine_is_working(self):
+    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
         """Ask for user confirmation before punching"""
-        UI.pause('\nRibbon punching: \n'
-                 'Put the ribbon on the perforator and turn on the air.')
-        return True
+        try:
+            UI.pause('\nRibbon punching: \n'
+                     'Put the ribbon on the perforator and turn on the air.')
+        except KeyboardInterrupt:
+            raise exception
 
     def wait_for(self, new_state, timeout=30, time_on=0.25, time_off=0.4):
         """Calls simulation sensor's function, but with different timings"""
@@ -346,7 +253,7 @@ class PunchingSensor(SensorMixin):
             sleep(time_off)
 
 
-class TestSensor(SensorMixin):
+class TestSensor(SensorBase):
     """A keyboard-operated "sensor" for testing inputs.
     No automatic mode is supported."""
     name = 'manual advance for testing'
@@ -356,12 +263,15 @@ class TestSensor(SensorMixin):
         if not new_state:
             UI.pause('Next combination?')
 
-    def check_if_machine_is_working(self):
+    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
         """Do nothing here"""
-        return True
+        try:
+            return True
+        except KeyboardInterrupt:
+            raise exception
 
 
-class OutputMixin(object):
+class OutputBase(object):
     """Mockup for a driver for 32 pneumatic outputs"""
     name = 'generic output driver'
 
@@ -393,14 +303,16 @@ class OutputMixin(object):
         return [(self.name, 'Output driver'),
                 (' '.join(self.signals_arrangement), 'Signals arrangement')]
 
-    def one_on(self, sig):
+    @staticmethod
+    def one_on(sig):
         """Looks a signal up in arrangement and turns it on"""
         try:
             UI.display(sig + ' on', min_verbosity=2)
         except KeyError:
             raise e.WrongConfiguration('Signal %s not defined!' % sig)
 
-    def one_off(self, sig):
+    @staticmethod
+    def one_off(sig):
         """Looks a signal up in arrangement and turns it on"""
         try:
             UI.display(sig + ' off', min_verbosity=2)
@@ -418,13 +330,15 @@ class OutputMixin(object):
             self.one_off(sig)
 
 
-class SimulationOutput(OutputMixin):
+class SimulationOutput(OutputBase):
     """Simulation output driver - don't control any hardware"""
     name = 'simulation - mockup casting interface'
 
 
 class CasterMode(object):
     """Session mode: casting / simulation / perforation"""
+    row_16_addressing = None
+
     def __init__(self):
         self.punching = False
         self.testing = False
@@ -488,68 +402,46 @@ class CasterMode(object):
         return not self.punching and not self.testing and not self.calibration
 
     @property
-    def hmn(self):
-        """Check if HMN mode is currently on"""
-        return self.__dict__.get('_hmn', False)
+    def needs_row_16(self):
+        """Check if row 16 is currently needed."""
+        return self.__dict__.get('_needs_row_16') or False
 
-    @hmn.setter
-    def hmn(self, value):
-        """Set the HMN mode"""
-        value = value and True or False
-        self.__dict__['_hmn'] = value
+    @needs_row_16.setter
+    def needs_row_16(self, value):
+        """Choose the diecase row 16 addressing mode, if needed.
 
-    @property
-    def kmn(self):
-        """Check if KMN mode is currently on"""
-        return self.__dict__.get('_kmn', False)
+        Row 16 is needed and currently off:
+        Ask which row 16 addressing system the user's machine has, if any.
 
-    @kmn.setter
-    def kmn(self, value):
-        """Set the KMN mode"""
-        self.__dict__['_kmn'] = value
+        Row 16 is not needed and currently on:
+        Tell the user to turn off the attachment.
 
-    @property
-    def unitshift(self):
-        """Check if the unit shift mode is currently on"""
-        return self.__dict__.get('_unit-shift', False)
+        Row 16 is not needed and is off, or is needed and is on: do nothing.
+        """
+        def choose_row16_addressing():
+            """Let user decide which way to address row 16"""
+            prm = ('Your ribbon contains codes from the 16th row.\n'
+                   'It is supported by special attachments for the machine.\n'
+                   'Which mode does your caster use: HMN, KMN, Unit-Shift?\n\n'
+                   'If none - characters from row 15 will be cast instead.\n\n'
+                   'Your choice: [U]nit-Shift, [H]MN, [K]MN '
+                   '(leave blank for none)?: ')
+            options = {'U': c.UNIT_SHIFT, 'H': c.HMN, 'K': c.KMN, '': None}
+            self.row_16_addressing = UI.simple_menu(prm, options)
 
-    @unitshift.setter
-    def unitshift(self, value):
-        """Set the unit-shift mode"""
-        self.__dict__['_unit-shift'] = value
+        names = {c.HMN: 'HMN', c.KMN: 'KMN', c.UNIT_SHIFT: 'unit-shift'}
+        attachment_name = names.get(self.row_16_addressing) or ''
 
-    def choose_row16_addressing(self):
-        """Let user decide which way to address row 16"""
-        def hmn_on():
-            """Turn on the HMN 16x17 attachment"""
-            UI.display('Turn the HMN attachment ON')
-            self.hmn = True
-
-        def kmn_on():
-            """Turn on the rare KMN 16x17 attachment"""
-            UI.display('Turn the KMN attachment ON')
-            self.kmn = True
-
-        def unitshift_on():
-            """Turn on the unit-shift attachment (introduced in 1960s)"""
-            UI.display('Turn the attachment ON - switch under the paper tower')
-            self.unitshift = True
-
-        def do_nothing():
-            """User can choose not to use any attachment"""
-            return None
-
-        prompt = ('Your ribbon contains codes from the 16th row.\n'
-                  'It is supported by special attachments for the machine.\n'
-                  'Which mode does your caster use: HMN, KMN, Unit-Shift?\n\n'
-                  'If none - characters from row 15 will be cast instead.\n\n'
-                  'Your choice: [U]nit-Shift, [H]MN, [K]MN '
-                  '(leave blank for none)?: ')
-        options = {'U': unitshift_on,
-                   'H': hmn_on,
-                   'K': kmn_on,
-                   '': do_nothing}
-        UI.simple_menu(prompt, options)()
+        is_required = bool(value)
+        is_active = bool(self.row_16_addressing)
+        self.__dict__['_needs_row_16'] = is_required
+        if is_required and not is_active:
+            choose_row16_addressing()
+        elif is_active and not is_required:
+            UI.pause('Turn off the %s attachment' % attachment_name)
+        elif is_required and is_active:
+            UI.display('The %s attachment is turned on - OK...'
+                       % attachment_name)
 
     def get_casting_backend(self):
         """Use the interface factory method to determine sensor and output"""

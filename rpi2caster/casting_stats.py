@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Casting stats - implements stats getting and setting"""
+from contextlib import suppress
 from . import parsing as p
 
 
@@ -114,10 +115,13 @@ class Stats(object):
         session = self.__dict__.get('_session', {})
         # Some options are viable only if we have more than one repetition
         multiple_runs = session.get('runs', 1) > 1
-        # What to do with current code: is it a char or newline?
-        is_new_line = p.check_newline(current.get('signals', []))
         # Process the data to display, starting with general data
-        data = [(' '.join(current.get('signals', [])), 'Signals from ribbon')]
+        data = []
+        with suppress(AttributeError):
+            data.append((current.get('record').signals_string,
+                         'Signals found in ribbon'))
+            data.append((current.get('record').adjusted_signals_string,
+                         'Sending signals'))
         # For casting and punching:
         if not self.session.caster.mode.diagnostics:
             # Codes per run
@@ -129,11 +133,14 @@ class Stats(object):
             if multiple_runs:
                 data.append(build_data(session, 'run', 'Run / job'))
             data.append((session.get('failed_runs', 0), 'Failed runs'))
+        # Casting-only stats
         if self.session.caster.mode.casting:
             # Displayed pump status
             pump_working = current.get('pump_working', False)
-            data.append((is_new_line and run.get('current_line', 1),
-                         'Starting a new line'))
+            with suppress(AttributeError, KeyError):
+                if current.get('record').code.is_new_line:
+                    data.append((run.get('current_line', 1),
+                                 'Starting a new line'))
             # Characters per run
             if multiple_runs:
                 data.append(build_data(run, 'char', 'Character / run'))
@@ -150,68 +157,71 @@ class Stats(object):
         return data
 
     @session_parameters.setter
-    def ribbon(self, ribbon_contents):
+    def ribbon(self, ribbon):
         """Parses the ribbon, counts combinations, lines and characters"""
-        mode = self.session.caster.mode
+        parsed_records = (p.ParsedRecord(string) for string in ribbon)
+        checks = [rec.code for rec in parsed_records if rec.signals]
+        # number of codes is just a number of valid combinations
+        codes = len(checks)
+        # number of lines in ribbon: there's always a starting and
+        # ending newline (0075+0005), so num. of lines is 1 less,
+        # safeguard against negative number
+        lines = max(sum(1 for code in checks if code.is_newline), 0)
         # Reset counters
-        self.__dict__['_ribbon'] = {'lines': -1, 'codes': 0, 'chars': 0}
+        self.__dict__['_ribbon'] = {'lines': lines, 'codes': codes, 'chars': 0}
         self.__dict__['_session'] = {'lines': 0, 'codes': 0, 'chars': 0,
                                      'lines_skipped': 0, 'current_run': 1,
                                      'runs_done': 0}
-        self.__dict__['_current'] = {}
-        self.__dict__['_previous'] = {}
-        ribbon = self.__dict__['_ribbon']
-        code_generator = (code for (code, _) in
-                          (p.parse_record(x) for x in ribbon_contents) if code)
-        for code in code_generator:
-            # Guards against empty combination i.e. line with comment only
-            ribbon['codes'] += 1
-            # When row 16 is encountered, ask user for addressing mode
-            # (depends on the machine - most common is 15x17 and unit-shift)
-            row_16_supported = mode.unitshift or mode.hmn or mode.kmn
-            if '16' in code and not row_16_supported:
-                # Do it now - before casting starts!
-                mode.choose_row16_addressing()
-            if p.check_newline(code):
-                ribbon['lines'] += 1
-            elif p.check_character(code):
-                ribbon['chars'] += 1
+        self.__dict__['_current'], self.__dict__['_previous'] = {}, {}
+        # Check if row 16 addressing is needed
+        needs_row_16 = any((code.is_row_16 for code in checks))
+        self.session.caster.mode.needs_row_16 = needs_row_16
 
     @ribbon_parameters.setter
     def queue(self, queue):
         """Parses the ribbon, counts combinations, lines and characters"""
-        # Clear and start with -1 line for the initial galley trip
-        self.__dict__['_run'] = {'lines': -1, 'codes': 0, 'chars': 0,
-                                 'lines_skipped': 0}
-        run = self.__dict__['_run']
-        code_generator = (code for (code, _) in
-                          (p.parse_record(x) for x in queue) if code)
-        for code in code_generator:
-            # Guards against empty combination i.e. line with comment only
-            run['codes'] += 1
-            if p.check_newline(code):
-                run['lines'] += 1
-            elif p.check_character(code):
-                run['chars'] += 1
+        # get all signals and filter those that are valid
+        records = (p.ParsedRecord(string) for string in queue)
+        # check all valid signals
+        checks = [rec.code for rec in records if rec.signals]
+        # all codes is a number of valid signals
+        codes = len(checks)
+        # clear and start with -1 line for the initial galley trip
+        lines = max(sum(1 for code in checks if code.is_newline) - 1, 0)
+        # determine number of characters
+        chars = sum(1 for code in checks if code.is_char)
+        # update run statistics
+        self.__dict__['_run'] = {'lines': lines, 'codes': codes,
+                                 'chars': chars, 'lines_skipped': 0}
 
     @code_parameters.setter
-    def signals(self, signals):
-        """Updates the stats based on current combination"""
-        if not signals:
-            return
-        # Save previous state
+    def parsed_record(self, parsed_record):
+        """Updates the stats based on parsed signals.
+        parsed_record - namedtuple(signals_list, comment, signals_string)
+        """
         current = self.__dict__['_current']
-        run = self.__dict__['_run']
-        session = self.__dict__['_session']
+        run, session = self.__dict__['_run'], self.__dict__['_session']
+        # Save previous state
         self.__dict__['_previous'] = {k: v for k, v in current.items()}
-        # Update combination info
-        current['signals'] = signals
+        previous = self.__dict__['_previous']
+        # Update record info
+        current['record'] = parsed_record
+        # advance or set the run and session code counters
         run['current_code'] = run.get('current_code', 0) + 1
         session['current_code'] = session.get('current_code', 0) + 1
-        if p.check_character(signals):
+        # detect 0075+0005(+pos_0005)->0075(+pos_0075) = double justification
+        # this means starting new line
+        try:
+            double_justification = (previous['record'].code.is_newline and
+                                    current['record'].code.is_pump_start)
+        except(KeyError, AttributeError):
+            double_justification = False
+        if parsed_record.code.is_char:
+            # advance or set the character counters
             run['current_char'] = run.get('current_char', 0) + 1
             session['current_char'] = session.get('current_char', 0) + 1
-        elif self._check_double_justification():
+        elif double_justification:
+            # advance or set the line counters
             run['current_line'] = run.get('current_line', 0) + 1
             session['current_line'] = session.get('current_line', 0) + 1
         # Check the pump working/non-working status in the casting mode
@@ -221,43 +231,30 @@ class Stats(object):
 
     def _check_pump(self):
         """Checks pump based on current and previous combination"""
-        prev_signals = self.__dict__.get('_previous', {}).get('signals', [])
-        curr_signals = self.__dict__.get('_current', {}).get('signals', [])
+        previous = self.__dict__.get('_previous', {}).get('record', [])
+        current = self.__dict__.get('_current', {}).get('record', [])
+        was_working = self.session.caster.pump_working
+        was_started, is_started, is_stopped = False, False, False
+        with suppress(AttributeError):
+            was_started = previous.code.is_pump_start
+        with suppress(AttributeError):
+            is_started = current.code.is_pump_start
+            is_stopped = current.code.is_pump_stop
         # Was it running until now? Get it from the caster
-        running = self.session.caster.pump_working
-        # Was it started before (0075 with or without 0005)?
-        started = p.check_0075(prev_signals)
-        # Was it stopped (0005 without 0075)
-        stopped = p.check_0005(prev_signals) and not p.check_0075(prev_signals)
-        # Is 0005 or 0075 in current combination? (if so - temporary stop)
-        on_hold = p.check_0005(curr_signals) or p.check_0075(curr_signals)
-        # Determine the current status
-        pump_status = (running or started) and not stopped and not on_hold
-        current = self.__dict__.get('_current', {})
-        current['pump_working'] = pump_status
+        pump_on = (was_working or was_started) and not is_stopped or is_started
+        self.__dict__.setdefault('_current', {})['pump_working'] = pump_on
         # Feed it back to the caster object
-        self.session.caster.pump_working = current.get('pump_working', False)
+        self.session.caster.pump_working = pump_on
 
     def _update_wedge_positions(self):
         """Gets current positions of 0005 and 0075 wedges"""
-        combination = self.__dict__.get('_current', {}).get('signals', [])
-        # Check 0005
-        if p.check_0005(combination):
-            candidates = [x for x in range(15) if str(x) in combination]
-            self.__dict__['_current']['0005'] = (str(max(candidates))
-                                                 if candidates else '15')
-        # Check 0075
-        if p.check_0075(combination):
-            candidates = [x for x in range(15) if str(x) in combination]
-            self.__dict__['_current']['0075'] = (str(max(candidates))
-                                                 if candidates else'15')
-
-    def _check_double_justification(self):
-        """Checks the current and previous signals for 0075+0005 -> 0075
-        transition (which is used for detecting new line accurately)."""
-        before = self.__dict__.get('_previous', {}).get('signals', [])
-        now = self.__dict__.get('_current', {}).get('signals', [])
-        return p.check_newline(before) and p.check_pump_start(now)
+        record = self.__dict__.get('_current', {}).get('record')
+        if not record:
+            return
+        if record.code.has_0005:
+            self.__dict__['_current']['0005'] = record.row_pin
+        if record.code.has_0075:
+            self.__dict__['_current']['0075'] = record.row_pin
 
 
 def build_data(source, parameter, data_name=''):

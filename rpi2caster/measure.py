@@ -10,11 +10,12 @@ DEFAULT_UNIT = CFG.get_option('measurement_unit')
 DEFAULT_MEASURE = CFG.get_option('default_measure')
 
 
-def parse_measure(raw_string=''):
+def parse_measure(raw_string='', default_value=DEFAULT_MEASURE,
+                  default_unit=DEFAULT_UNIT):
     """Parse the entered value with units; return the value and unit"""
     # Safeguard against giving a 0, '', None - use default value instead
     if not raw_string:
-        raw_string = DEFAULT_MEASURE
+        raw_string = default_value
     # Sanitize the input value
     string = ''.join(x for x in str(raw_string) if x.isalnum() or x in ',.')
     # Determine and strip the unit
@@ -25,7 +26,7 @@ def parse_measure(raw_string=''):
             unit = symbol
             break
     else:
-        unit = DEFAULT_UNIT
+        unit = default_unit
     # Filter the string to remove all letters, round the value to 2
     num_string = ''.join(x for x in string if x.isdigit() or x in '.,')
     value = round(float(num_string), 2)
@@ -70,8 +71,8 @@ class Measure(object):
     """Chooses and represents a line length"""
     default_value, default_unit = parse_measure()
 
-    def __init__(self, context, value='', what='galley width',
-                 manual_choice=False):
+    def __init__(self, value='', what='galley width',
+                 manual_choice=False, context=None):
         self.context = context
         # Enter the value manually if needed
         if manual_choice:

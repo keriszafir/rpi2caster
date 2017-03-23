@@ -24,3 +24,11 @@ UNITS = OrderedDict({'pc': 12.0, 'pt': 1.0,
                      'cc': 12*0.1776/0.1667, 'dd': 0.1776/0.1667,
                      'cf': 12*0.1628/0.1667, 'ff': 0.1628/0.1667,
                      'cm': 0.3937*72, 'mm': 0.03937*72, '"': 72.0, 'in': 72.0})
+
+# Default space positions
+DEFAULT_LOW_SPACE_POSITIONS = (('G', 1), ('G', 2), ('G', 5), ('O', 15))
+DEFAULT_HIGH_SPACE_POSITIONS = (('O', 16))
+SPACE_NAMES = {'   ': 'low em quad', '  ': 'low en quad', ' ': 'low space',
+               '___': 'high em quad', '__': 'high en quad', '_': 'high space'}
+# Row 16 addressing modes
+HMN, KMN, UNIT_SHIFT = 1, 2, 3

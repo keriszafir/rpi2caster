@@ -4,14 +4,14 @@
 import RPi.GPIO as GPIO
 from .rpi2caster import CFG
 from .exceptions import MachineStopped
-from .monotype import SensorMixin
+from .monotype import SensorBase
 from .misc import singleton
 SENSOR_GPIO = CFG.get_option('sensor_gpio')
 BOUNCE_TIME = CFG.get_option('input_bounce_time')
 
 
 @singleton
-class RPiGPIOSensor(SensorMixin):
+class RPiGPIOSensor(SensorBase):
     """Simple RPi.GPIO input driver for photocell"""
     def __init__(self, gpio=SENSOR_GPIO):
         super().__init__()

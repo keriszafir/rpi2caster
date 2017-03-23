@@ -8,14 +8,14 @@ except ImportError:
     print('You must install wiringpi!')
 
 # Import mockup output driver from monotype
-from .monotype import OutputMixin
+from .monotype import OutputBase
 from .exceptions import WrongConfiguration
 from .rpi2caster import CFG
 from .misc import singleton
 
 
 @singleton
-class WiringPiOutputDriver(OutputMixin):
+class WiringPiOutputDriver(OutputBase):
     """A 32-channel control interface based on two MCP23017 chips"""
 
     def __init__(self,

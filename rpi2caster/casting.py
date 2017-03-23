@@ -17,6 +17,7 @@ A module for everything related to working on a Monotype composition caster:
 # IMPORTS:
 from collections import deque
 from contextlib import suppress
+from itertools import cycle
 from time import sleep
 # Signals parsing methods for rpi2caster
 from . import parsing as p
@@ -75,18 +76,6 @@ class Casting(TypesettingContext):
         or ctrl-C interrupt) - in this case, lines cast successfully
         may be skipped, and the rest will be cast.
         """
-        def new_stats():
-            """Use new stats manager"""
-            self.stats = Stats(self)
-
-        def update_queue_stats():
-            """Order the stats manager to update the queue stats"""
-            self.stats.queue = queue
-
-        def update_ribbon_stats():
-            """Order the stats manager to update the queue stats"""
-            self.stats.ribbon = ribbon
-
         def rewind_if_needed():
             """Decide whether to rewind the ribbon or not"""
             nonlocal ribbon
@@ -107,14 +96,16 @@ class Casting(TypesettingContext):
             code = ''
             queue = deque(ribbon)
             while lines_skipped > 0:
-                code = queue.popleft()
-                lines_skipped -= 1 * p.check_newline(code)
+                parsed = p.ParsedRecord(queue.popleft())
+                lines_skipped -= 1 * parsed.code.is_newline
+            # give the last code back
             queue.appendleft(code)
 
         def set_runs():
             """Set a number of casting runs"""
             prompt = 'How many times do you want to cast this?'
             # Set the number of runs before starting the job
+            # 0 is a valid option here
             runs = -1 if mode.casting else 1
             while runs < 0:
                 runs = UI.enter(prompt, default=1, datatype=int)
@@ -155,11 +146,6 @@ class Casting(TypesettingContext):
                 lines_skipped = 0
             self.stats.run_lines_skipped = lines_skipped
 
-        def check_machine_running():
-            """Raise an exception if stopped"""
-            if not self.caster.sensor.check_if_machine_is_working():
-                raise e.ReturnToMenu
-
         def preheat_if_needed():
             """Things to do only once during the whole casting session"""
             prompt = 'Cast two lines of quads to heat up the mould?'
@@ -175,8 +161,8 @@ class Casting(TypesettingContext):
                 old_stats = self.stats
                 try:
                     # Use different stats for preheat quads
-                    new_stats()
-                    check_machine_running()
+                    self.stats = Stats(self)
+                    self.caster.sensor.check_if_machine_is_working()
                     cast_queue(reversed(heatup))
                 finally:
                     self.stats = old_stats
@@ -185,30 +171,32 @@ class Casting(TypesettingContext):
             """Casts the sequence of codes in given sequence.
             This function is executed until the sequence is exhausted
             or casting is stopped by machine or user."""
+            par = p.ParsedRecord
             source = sequence or queue
-            generator = (p.parse_record(item) for item in source)
-            while True:
+            # in punching mode, lack of row will trigger signal 15,
+            # lack of column will trigger signal O
+            def_o15 = mode.punching
+            # in punching and testing mode, signal O or 15 will be present
+            # in the output combination as O15
+            sig_o15 = mode.punching or mode.testing
+            for record in (par(item, default_o15=def_o15, signal_o15=sig_o15)
+                           for item in source):
                 try:
-                    signals, comment = next(generator)
-                    if comment and not signals:
-                        UI.display('\n\n%s\n' % comment + '-' * len(comment))
+                    if not record.signals:
+                        UI.display_header(record.comment)
                         continue
-                    self.stats.signals = signals
-                    UI.display_parameters({comment:
+                    self.stats.parsed_record = record
+                    UI.display_parameters({record.comment:
                                            self.stats.code_parameters})
-                    # Let the caster do the job
-                    self.caster.process(signals)
-                except StopIteration:
-                    # End of ribbon = casting/punching finished successfully
-                    # This is the case for empty ribbon as well.
-                    return True
+                    self.caster.process(record.adjusted_signals)
                 except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                    # Allow resume in punching mode
+                    # Allow resume in punching mode, otherwise stop
                     if (mode.punching and not mode.testing and
                             UI.confirm('Resume punching?', default=True)):
-                        self.caster.process(signals)
+                        self.caster.process(record.adjusted_signals)
                     else:
                         return False
+            return True
 
         def after_casting(casting_success):
             """After the run is finished, decide whether to repeat or not
@@ -246,10 +234,10 @@ class Casting(TypesettingContext):
         mode = self.caster.mode
         queue = ribbon
         try:
-            new_stats()
+            self.stats = Stats(self)
             # Ribbon pre-processing and casting parameters setup
             rewind_if_needed()
-            update_ribbon_stats()
+            self.stats.ribbon = ribbon
             UI.display_parameters({'Ribbon info':
                                    self.stats.ribbon_parameters})
             set_runs()
@@ -263,9 +251,9 @@ class Casting(TypesettingContext):
             while self.stats.runs_remaining:
                 # Prepare the ribbon ad hoc
                 skip_lines()
-                update_queue_stats()
+                self.stats.queue = queue
                 # Make sure the machine is turning
-                check_machine_running()
+                self.caster.sensor.check_if_machine_is_working()
                 # Cast the run
                 outcome = cast_queue()
                 after_casting(outcome)
@@ -283,7 +271,7 @@ class Casting(TypesettingContext):
             char = (UI.enter('Character?', blank_ok=True) if self.diecase
                     else '')
             matrix = self.find_matrix(char)
-            matrix.specify_units()
+            self.specify_units(matrix)
             qty = UI.enter('How many sorts?', default=10, datatype=int)
             order.append((matrix, qty))
             prompt = 'More sorts? Otherwise, start casting'
@@ -322,7 +310,8 @@ class Casting(TypesettingContext):
         """
         order = []
         while True:
-            matrix = self.get_space(width=None, is_low_space=None)
+            matrix = self.get_space()
+            self.specify_space_width(matrix)
             prompt = 'How many lines?'
             lines = UI.enter(prompt, default=1, datatype=int)
             order.extend([(matrix, 0)] * lines)
@@ -350,7 +339,7 @@ class Casting(TypesettingContext):
             e.return_to_menu()
         # 1 quad before and after the line
         quad_padding = 1
-        quad = self.diecase.layout.get_space(units=18)
+        quad = self.get_space(units=18)
         # Leave some slack to adjust the line
         length = self.measure.ems - 2 * quad_padding * quad.ems
         # Build a sequence of matrices for casting
@@ -499,13 +488,13 @@ class Casting(TypesettingContext):
                 UI.display('Enter the signals to send to the caster, '
                            'or leave empty to return to menu: ')
                 prompt = 'Signals? (leave blank to exit)'
-                signals = p.parse_signals(UI.enter(prompt, blank_ok=True))
-                if signals:
-                    self.caster.output.valves_off()
-                    UI.display('Activating ' + ' '.join(signals))
-                    self.caster.output.valves_on(signals)
-                else:
+                string = UI.enter(prompt, blank_ok=True)
+                record = p.ParsedRecord(string, signal_o15=True)
+                self.caster.output.valves_off()
+                if not record.signals:
                     break
+                UI.display('Sending %s' % record.signals_string)
+                self.caster.output.valves_on(record.signals)
 
         @dec.testing_mode
         @dec.choose_sensor_and_driver
@@ -513,18 +502,17 @@ class Casting(TypesettingContext):
             """Blow all signals for a short time; add NI, NL also"""
             UI.pause('Blowing air through all air pins on both pinblocks...')
             queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
-                     'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14',
+                     'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14', 'O15',
                      '0075', '0005', 'S']
             duration = 0.3
             try:
-                while True:
-                    for combination in queue:
-                        signals = p.parse_signals(combination)
-                        sleep(duration)
-                        UI.display('Activating ' + ' '.join(signals))
-                        self.caster.output.valves_on(signals)
-                        sleep(duration)
-                        self.caster.output.valves_off()
+                for sig in cycle(queue):
+                    record = p.ParsedRecord(sig, signal_o15=True)
+                    sleep(duration)
+                    UI.display('Activating %s' % record.signals_string)
+                    self.caster.output.valves_on(record.signals)
+                    sleep(duration)
+                    self.caster.output.valves_off()
                     if not UI.confirm('Repeat?', True):
                         break
             except (KeyboardInterrupt, EOFError):
@@ -592,10 +580,10 @@ class Casting(TypesettingContext):
             # Build character list
             matrix_stream = []
             for char in ('  ', 'n', '--'):
-                mat = self.find_matrix(char, '', manual_choice=True)
-                mat.specify_units()
-                matrix_stream.append(mat)
-                matrix_stream.append(mat)
+                matrix = self.find_matrix(char, '', manual_choice=True)
+                self.specify_units(matrix)
+                matrix_stream.append(matrix)
+                matrix_stream.append(matrix)
             builder = GalleyBuilder(self, matrix_stream)
             builder.fill_line = False
             queue = builder.build_galley()

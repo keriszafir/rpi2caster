@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """Typesetting context routines"""
 from contextlib import suppress
-from . import exceptions as e
+from collections import OrderedDict
+from sqlalchemy.orm import exc as orm_exc
 from .models import Database, Ribbon
 from .matrix_controller import DiecaseMixin
 from .measure import Measure
@@ -11,12 +12,76 @@ UI = UIFactory()
 DB = Database()
 
 
+def get_all_ribbons():
+    """Lists all ribbons we have."""
+    ribbons = OrderedDict(enumerate(DB.query(Ribbon).all(), start=1))
+    return ribbons
+
+
+def list_ribbons(data=get_all_ribbons()):
+    """Display all ribbons in a dictionary, plus an empty new one"""
+    UI.display('\nAvailable ribbons:\n\n' +
+               'No.'.ljust(4) +
+               'Ribbon ID'.ljust(20) +
+               'Diecase ID'.ljust(20) +
+               'Wedge name'.ljust(12) +
+               'Customer'.ljust(20) +
+               'Description')
+    for index, ribbon in data.items():
+        row = ''.join([str(index).ljust(4),
+                       ribbon.ribbon_id.ljust(20),
+                       ribbon.diecase_id.ljust(20),
+                       ribbon.wedge.name.ljust(12),
+                       ribbon.customer.ljust(20),
+                       ribbon.description])
+        UI.display(row)
+
+
+def ribbon_from_file():
+    """Choose the ribbon from file"""
+    ribbon = Ribbon()
+    ribbon_file = UI.import_file()
+    ribbon.import_from_file(ribbon_file)
+    return ribbon
+
+
+def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
+    """Select ribbons from database and let the user choose one of them"""
+    prompt = 'Number? (0: %s, leave blank to exit)' % fallback_description
+    while True:
+        try:
+            data = get_all_ribbons()
+            if not data:
+                return fallback()
+            else:
+                UI.display('Choose a ribbon:', end='\n\n')
+                list_ribbons(data)
+                choice = UI.enter(prompt, exception=Abort, datatype=int)
+                data[0] = None
+                return data[choice] or fallback()
+        except KeyError:
+            UI.pause('Ribbon number is incorrect!')
+
+
+def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
+    """Get a ribbon with given ribbon_id"""
+    try:
+        return DB.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id).one()
+    except orm_exc.NoResultFound:
+        return fallback()
+
+
 class RibbonMixin(object):
     """Mixin for ribbon-related operations"""
     @property
     def ribbon(self):
         """Ribbon for the casting session"""
-        return self.__dict__.get('_ribbon') or Ribbon()
+        ribbon = self.__dict__.get('_ribbon')
+        if not ribbon:
+            # instantiate a new one and cache it
+            ribbon = Ribbon()
+            self.__dict__['_ribbon'] = ribbon
+        return ribbon
 
     @ribbon.setter
     def ribbon(self, ribbon):
@@ -26,44 +91,23 @@ class RibbonMixin(object):
     @ribbon.setter
     def ribbon_file(self, ribbon_file):
         """Use a ribbon file"""
-        self.ribbon.import_from_file(ribbon_file)
+        with suppress(Abort):
+            new_ribbon = Ribbon()
+            new_ribbon.import_from_file(ribbon_file)
+            self.ribbon = new_ribbon
 
     @ribbon.setter
     def ribbon_id(self, ribbon_id):
-        """Use a ribbon with a given ID"""
-        self.ribbon.import_from_db(ribbon_id)
+        """Use a ribbon with a given ID, or an empty one"""
+        with suppress(Abort):
+            self.ribbon = get_ribbon(ribbon_id, fallback=self.ribbon)
 
     def choose_ribbon(self):
         """Chooses a ribbon from database or file"""
-        def from_db():
-            """Choose a ribbon from database"""
-            prompt = 'Number of a ribbon? (0 for a new one, blank to abort): '
-            while True:
-                try:
-                    # Manual choice if function was called without arguments
-                    data = list_ribbons()
-                    choice = UI.enter(prompt, exception=Abort, datatype=int)
-                    ribbon_id = data[choice]
-                    # Inform the caller if import was successful or not
-                    return self.import_from_db(ribbon_id)
-                except KeyError:
-                    UI.pause('Ribbon number is incorrect. Choose again.')
-                except (e.DatabaseQueryError, e.NoMatchingData):
-                    UI.display('WARNING: Cannot find any ribbon data!',
-                               min_verbosity=1)
-                    return False
-                except Abort:
-                    return False
-
-        def from_file():
-            """Choose a ribbon from file"""
-            # Open the file manually if calling the method without arguments
-            try:
-                ribbon_file = UI.import_file()
-                self.ribbon.import_from_file(ribbon_file)
-            except Abort:
-                return False
-        self.ribbon.choose_from_db() or self.ribbon.import_from_file()
+        with suppress(Abort):
+            ribbon = choose_ribbon(fallback=ribbon_from_file,
+                                   fallback_description='import from file')
+            self.ribbon = ribbon
 
     def display_ribbon_contents(self):
         """Displays the ribbon's contents, line after line"""
@@ -74,10 +118,10 @@ class RibbonMixin(object):
                 UI.display(contents_generator.__next__())
         except StopIteration:
             # End of generator
-            UI.pause('Finished', UI.MSG_MENU)
+            UI.pause('\nFinished')
         except (EOFError, KeyboardInterrupt):
             # Press ctrl-C to abort displaying long ribbons
-            UI.pause('Aborted', UI.MSG_MENU)
+            UI.pause('\nAborted')
 
 
 class SourceMixin(object):
@@ -116,7 +160,7 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     @property
     def measure(self):
         """Typesetting measure i.e. line length"""
-        return self.__dict__.get('_measure') or Measure(self)
+        return self.__dict__.get('_measure') or Measure(context=self)
 
     @measure.setter
     def measure(self, measure):
@@ -127,7 +171,7 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     def line_length(self, measure):
         """Set the line length for typesetting"""
         if measure:
-            self.measure = Measure(self, measure)
+            self.measure = Measure(measure, context=self)
 
     @property
     def manual_mode(self):
@@ -164,7 +208,7 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     def change_measure(self):
         """Change a line length"""
         UI.display('Set the galley width...')
-        self.measure = Measure(self, manual_choice=True)
+        self.measure = Measure(manual_choice=True, context=self)
 
     def change_alignment(self):
         """Changes the default text alignment"""

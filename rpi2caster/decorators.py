@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """Decorator functions and classes for rpi2caster"""
 
+from contextlib import suppress
 from .ui import UIFactory
 from .exceptions import CastingAborted
-from .models import Wedge
+from .matrix_controller import choose_wedge
 from .measure import Measure
 
 UI = UIFactory()
@@ -30,18 +31,9 @@ def cast_or_punch_result(ribbon_source):
     """Get the ribbon from decorated routine and cast it"""
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        mode = self.caster.mode
-        try:
+        with suppress(CastingAborted):
             ribbon = ribbon_source(self, *args, **kwargs)
-            if ribbon:
-                self.cast_ribbon(ribbon)
-        except CastingAborted:
-            pass
-        finally:
-            # Reset row 16 addressing modes
-            mode.kmn = False
-            mode.hmn = False
-            mode.unitshift = False
+            return self.cast_ribbon(ribbon) if ribbon else None
     return wrapper
 
 
@@ -78,7 +70,7 @@ def temp_wedge(routine):
         """Wrapper function"""
         # Assign a temporary wedge
         old_wedge = self.wedge
-        self.wedge = Wedge(wedge_name=self.wedge.name, manual_choice=True)
+        self.wedge = choose_wedge(old_wedge.name)
         UI.display_parameters({'Wedge parameters': self.wedge.parameters})
         UI.display('\n\n')
         retval = routine(self, *args, **kwargs)
@@ -96,7 +88,8 @@ def temp_measure(routine):
         if UI.confirm(prompt, False):
             # Change measure before, restore after
             old_measure = self.measure
-            self.measure = Measure(self, value=None, manual_choice=True)
+            self.measure = Measure(value=None, manual_choice=True,
+                                   context=self)
             retval = routine(self, *args, **kwargs)
             self.measure = old_measure
             return retval

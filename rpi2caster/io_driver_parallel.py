@@ -2,7 +2,8 @@
 """Parallel port input and output driver"""
 import time
 from parallel import Parallel
-from .monotype import SensorMixin, OutputMixin
+from . import exceptions as e
+from .monotype import SensorBase, OutputBase
 from .misc import weakref_singleton
 from .global_config import Config
 from .ui import UIFactory
@@ -12,7 +13,7 @@ CFG = Config()
 
 
 @weakref_singleton
-class ParallelInterface(SensorMixin, OutputMixin):
+class ParallelInterface(SensorBase, OutputBase):
     """Output driver for parallel port. Sends four bytes in sequence:
     byte0: O N M L K J I H
     byte1: G F S E D 0075 C B
@@ -126,9 +127,12 @@ class ParallelInterface(SensorMixin, OutputMixin):
         if self.port:
             self.port.setInitOut(True)
 
-    def check_if_machine_is_working(self):
+    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
         """Reset the interface if needed and go on"""
-        UI.pause('Turn on the machine... (or ctrl-C to abort)')
+        try:
+            UI.pause('Turn on the machine...')
+        except KeyboardInterrupt:
+            raise exception
 
     def wait_for(self, *args, **kw):
         """Do nothing"""

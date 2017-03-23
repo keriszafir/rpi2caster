@@ -13,7 +13,7 @@ from .ui import UIFactory
 # Custom exceptions
 from .exceptions import MachineStopped
 # Caster prototype
-from .monotype import SensorMixin
+from .monotype import SensorBase
 
 UI = UIFactory()
 CFG = Config()
@@ -21,7 +21,7 @@ BOUNCE_TIME = CFG.get_option('bounce_time') * 0.001
 SENSOR_GPIO = CFG.get_option('sensor_gpio')
 
 
-class SysfsSensor(SensorMixin):
+class SysfsSensor(SensorBase):
     """Optical cycle sensor using kernel sysfs interface"""
     def __init__(self, gpio=SENSOR_GPIO):
         super().__init__()

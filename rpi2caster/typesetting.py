@@ -197,7 +197,7 @@ class GalleyBuilder(object):
                     # Exit and loop further
                     return
             # Finish the line
-            var_sp = self.diecase.layout.get_space(units=6)
+            var_sp = self.get_space(units=6)
             wedges = current_wedges
             current_wedges = None
             if self.fill_line:
@@ -222,8 +222,8 @@ class GalleyBuilder(object):
             units_left = 0
 
         # Store the code and wedge positions to speed up the process
-        space = decode_mat(self.diecase.get_space(units=6))
-        quad = decode_mat(self.diecase.get_space(units=18))
+        space = decode_mat(self.get_space(units=6))
+        quad = decode_mat(self.get_space(units=18))
         working_mat = None
         current_wedges = None
         queue, units_left = tsf.end_casting(), 0

@@ -205,12 +205,12 @@ class ClickUI(object):
             """raise an exception"""
             raise exception
 
-        suffix = ' [%s] : ' % default if default else ' : '
+        suffix = ' [%s] : ' % default if default is not None else ' : '
         while True:
             value = input(prompt + suffix)
             click.echo()
             if not value:
-                if default:
+                if default is not None:
                     return datatype(default)
                 elif exception:
                     throw(exception)
@@ -219,6 +219,7 @@ class ClickUI(object):
                         with suppress(TypeError, ValueError):
                             return datatype(cand)
             # we now should have a value
+            # accept 0 as a valid option here
             try:
                 value = datatype(value)
                 if value or value == 0:
@@ -295,13 +296,7 @@ class ClickUI(object):
     def confirm(self, question, default=None):
         """Asks a simple question with yes or no answers.
         Returns True for yes and False for no."""
-        options = {'Y': True, 'N': False}
-        def_string = ''
-        if default is True or default is False:
-            options[''] = default
-            def_string = ', default: %s' % ('Y' if default is True else 'N')
-        return self.simple_menu('%s [Y / N%s]: '
-                                % (question, def_string), options)
+        return click.confirm(question, default)
 
 
 @weakref_singleton

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Style manager"""
+# for ANSI escape codes, visit:
+# http://misc.flogisoft.com/bash/tip_colors_and_formatting
 from .ui import UIFactory
 
 UI = UIFactory()
@@ -12,6 +14,7 @@ class Roman:
     all_names = '%s (%s)' % (name, alternatives)
     short = 'r'
     codes = ['^rr', '^RR', '^00']
+    ansi = ''
 
 
 class Italic:
@@ -21,6 +24,8 @@ class Italic:
     all_names = name
     short = 'i'
     codes = ['^ii', '^II', '^01']
+    # italic ANSI escape code, not supported everywhere!
+    ansi = '3'
 
 
 class Bold:
@@ -30,6 +35,7 @@ class Bold:
     all_names = name
     short = 'b'
     codes = ['^bb', '^BB', '^03']
+    ansi = '1'
 
 
 class SmallCaps:
@@ -39,6 +45,8 @@ class SmallCaps:
     all_names = name
     short = 's'
     codes = ['^sc', '^ss', '^SC', '^SS', '^02']
+    # underline
+    ansi = '4'
 
 
 class Inferior:
@@ -48,6 +56,8 @@ class Inferior:
     all_names = '%s (%s)' % (name, alternatives)
     short = 'l'
     codes = ['^ll', '^LL', '^05']
+    # yellow
+    ansi = '33'
 
 
 class Superior:
@@ -57,6 +67,8 @@ class Superior:
     all_names = '%s (%s)' % (name, alternatives)
     short = 'u'
     codes = ['^uu', '^UU', '^04']
+    # magenta
+    ansi = '35'
 
 
 STYLES = [Roman, Bold, Italic, SmallCaps, Inferior, Superior]
@@ -65,10 +77,11 @@ STYLES = [Roman, Bold, Italic, SmallCaps, Inferior, Superior]
 class StylesCollection:
     """Styles collection grouping styles and allowing for edit.
     styles: any iterable containing styles to parse,
-            valid options: r, b, i, s, l, u
+            valid options: r, b, i, s, l, u;
+            a or * denotes all styles
     """
 
-    def __init__(self, styles='a', default=Roman, multiple=True):
+    def __init__(self, styles='*', default=Roman, multiple=True):
         self.style_list = []
         self.default = default
         self.parse(styles, multiple)
@@ -80,7 +93,7 @@ class StylesCollection:
         return self.string
 
     def __repr__(self):
-        return '<styles manager: %s>' % self.string
+        return '<StylesCollection: %s>' % self.string
 
     def __add__(self, other):
         try:
@@ -102,7 +115,7 @@ class StylesCollection:
     @property
     def names(self):
         """Get the long names of styles"""
-        if self.string == 'rbislu':
+        if self.use_all:
             return 'all styles'
         else:
             return ', '.join(style.name for style in self.style_list)
@@ -118,17 +131,27 @@ class StylesCollection:
     @property
     def use_all(self):
         """Check if the collection has every style"""
-        return len(self.style_list) == 6
+        return set(self.string) == set('rbislu')
 
     def items(self):
         """Get items - so that the object can be iterated like a dict"""
         return ((style.name, style) for style in self.style_list)
 
+    def ansi_format(self, formatted_string):
+        """Use ANSI escape sequences to format a string"""
+        params = [style.ansi for style in self.style_list]
+        par_string = ';'.join(params)
+        if self.use_all or not par_string:
+            return formatted_string
+        else:
+            start, end = '\033[', '\033[0m'
+            return ''.join([start, par_string, 'm', formatted_string, end])
+
     def choose(self, multiple=True):
         """Choose one or more styles"""
         if multiple:
             header = 'Choose one or more text styles.'
-            all_styles = ',\na - all styles.\n'
+            all_styles = ',\na or * - all styles.\n'
         else:
             header = 'Choose a style.'
             all_styles = '.\n'
@@ -160,10 +183,8 @@ class StylesCollection:
         def iterable():
             """A string, dict, list, set, tuple, generator etc. is supplied"""
             try:
-                if 'a' in raw_data:
-                    return 'rbislu'
-                else:
-                    return [x for x in 'rbislu' if x in raw_data]
+                return [x for x in 'rbislu'
+                        if x in raw_data or '*' in raw_data or 'a' in raw_data]
             except TypeError:
                 return []
 
