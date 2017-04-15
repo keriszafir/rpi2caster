@@ -10,7 +10,7 @@ from string import ascii_lowercase, ascii_uppercase, digits
 from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import USER_DATA_DIR, CFG
-from .models import DB, Diecase
+from .database_models import DB, Diecase
 from .ui import UI, Abort, Finish, option
 
 PREFS_CFG = CFG.preferences
@@ -443,8 +443,8 @@ class DiecaseMixin:
 
         def _edit_space_width():
             """Edits the space width"""
-            width = bc.enter_measure('1em', what='space width',
-                                     set_width=self.wedge.set_width)
+            width = bc.set_measure('1em', what='space width',
+                                   set_width=self.wedge.set_width)
             matrix.units = width.units
 
         with suppress(Abort):

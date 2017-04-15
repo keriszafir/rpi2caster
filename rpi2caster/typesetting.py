@@ -1,78 +1,19 @@
 # -*- coding: utf-8 -*-
 """Typesetter program"""
 
-from collections import OrderedDict
 from contextlib import suppress
-from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import CFG
 from .matrix_controller import DiecaseMixin
-from .models import DB, Ribbon
+from .database_models import Ribbon
+from .parsing import token_parser
+from . import typesetting_functions as tsf
 from .ui import UI, Abort, option
 
 PREFS_CFG = CFG.preferences
 
 
-def get_all_ribbons():
-    """Lists all ribbons we have."""
-    ribbons = OrderedDict(enumerate(DB.query(Ribbon).all(), start=1))
-    return ribbons
-
-
-def list_ribbons(data=get_all_ribbons()):
-    """Display all ribbons in a dictionary, plus an empty new one"""
-    UI.display('\nAvailable ribbons:\n\n' +
-               'No.'.ljust(4) +
-               'Ribbon ID'.ljust(20) +
-               'Diecase ID'.ljust(20) +
-               'Wedge name'.ljust(12) +
-               'Customer'.ljust(20) +
-               'Description')
-    for index, ribbon in data.items():
-        row = ''.join([str(index).ljust(4),
-                       ribbon.ribbon_id.ljust(20),
-                       ribbon.diecase_id.ljust(20),
-                       ribbon.wedge.name.ljust(12),
-                       ribbon.customer.ljust(20),
-                       ribbon.description])
-        UI.display(row)
-
-
-def ribbon_from_file():
-    """Choose the ribbon from file"""
-    ribbon = Ribbon()
-    ribbon_file = UI.import_file()
-    ribbon.import_from_file(ribbon_file)
-    return ribbon
-
-
-def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
-    """Select ribbons from database and let the user choose one of them"""
-    prm = 'Number? (0: {}, leave blank to exit)'.format(fallback_description)
-    while True:
-        try:
-            data = get_all_ribbons()
-            if not data:
-                return fallback()
-            else:
-                UI.display('Choose a ribbon:', end='\n\n')
-                list_ribbons(data)
-                choice = UI.enter(prm, default=Abort, datatype=int)
-                data[0] = None
-                return data[choice] or fallback()
-        except KeyError:
-            UI.pause('Ribbon number is incorrect!')
-
-
-def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
-    """Get a ribbon with given ribbon_id"""
-    try:
-        return DB.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id).one()
-    except orm_exc.NoResultFound:
-        return fallback()
-
-
-class RibbonMixin(object):
+class RibbonMixin:
     """Mixin for ribbon-related operations"""
     @property
     def ribbon(self):
@@ -101,13 +42,13 @@ class RibbonMixin(object):
     def ribbon_id(self, ribbon_id):
         """Use a ribbon with a given ID, or an empty one"""
         with suppress(Abort):
-            self.ribbon = get_ribbon(ribbon_id, fallback=self.ribbon)
+            self.ribbon = bc.get_ribbon(ribbon_id, fallback=self.ribbon)
 
     def choose_ribbon(self):
         """Chooses a ribbon from database or file"""
         with suppress(Abort):
-            ribbon = choose_ribbon(fallback=ribbon_from_file,
-                                   fallback_description='import from file')
+            ribbon = bc.choose_ribbon(fallback=bc.ribbon_from_file,
+                                      fallback_description='import from file')
             self.ribbon = ribbon
 
     def display_ribbon_contents(self):
@@ -213,7 +154,7 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
 
     def change_measure(self):
         """Change a line length"""
-        measure = bc.enter_measure(self.measure, 'line length / galley width')
+        measure = bc.set_measure(self.measure, 'line length / galley width')
         self.measure = measure
 
     def change_alignment(self):
@@ -339,37 +280,110 @@ class Paragraph(object):
         UI.display(self.text)
 
 
-def token_parser(source, *token_sources, skip_unknown=True):
-    """Yields tokens (characters, control sequences), one by one,
-    as they are found in the source.
-    input_stream - iterable;
-    skip_unknown - yield only the characters found in token_sources (default),
-                   otherwise, unknown characters are also yielded
-    token_sources - any number of iterables containing the tokens
-                    we are looking for"""
-    # Collect all tokens (characters, control sequences) from token_sources
-    tokens = [token for sequence in token_sources for token in sequence]
-    # Determine the maximum length of a token
-    max_len = max(len(t) for t in tokens)
-    # We have to skip a number of subsequent input stream characters
-    # after a multi-character token is encountered
-    skip_steps = 0
-    # Characters which will be ignored and not redirected to output
-    ignored_tokens = ('\n',)
-    # What if char in text not present in diecase? Hmmm...
-    for index, _ in enumerate(source):
-        if skip_steps:
-            # Skip the characters to be skipped
-            skip_steps -= 1
-            continue
-        for i in range(max_len, 0, -1):
-            # Start from longest, end with shortest
-            with suppress(TypeError, AttributeError, ValueError):
-                chunk = source[index:index+i]
-                skip_steps = i - 1
-                if chunk in ignored_tokens:
-                    break
-                elif chunk in tokens or i == 1 and not skip_unknown:
-                    # Make sure that the function will yield chunks of 1 char
-                    yield chunk
-                    break
+class GalleyBuilder(object):
+    """Builds a galley from input sequence"""
+    def __init__(self, context, source):
+        self.source = (x for x in source)
+        self.diecase = context.diecase
+        self.units = context.measure.units
+        # Cooldown: whether to separate sorts with spaces
+        self.cooldown_spaces = False
+        # Fill line: will add quads/spaces nutil length is met
+        self.fill_line = True
+        self.quad_padding = 1
+
+    def make_ribbon(self):
+        """Instantiates a Ribbon() object from whatever we've generated"""
+        pass
+
+    def build_galley(self):
+        """Builds a line of characters from source"""
+        def decode_mat(mat):
+            """Gets the mat's parameters and stores them
+            to avoid recalculation"""
+            parameters = {}
+            if mat:
+                parameters['wedges'] = mat.wedge_positions()
+                parameters['units'] = mat.units
+                parameters['code'] = str(mat)
+                parameters['lowspace'] = mat.islowspace()
+            return parameters
+
+        def start_line():
+            """Starts a new line"""
+            nonlocal units_left, queue
+            units_left = self.units - 2 * self.quad_padding * quad['units']
+            quads = [quad['code'] + ' quad padding'] * self.quad_padding
+            queue.extend(quads)
+
+        def build_line():
+            """Puts the matrix in the queue, changing the justification
+            wedges if needed, and adding a space for cooldown, if needed."""
+            # Declare variables in non-local scope to preserve them
+            # after the function exits
+            nonlocal queue, units_left, working_mat, current_wedges
+            # Take a mat from stash if there is any
+            working_mat = working_mat or decode_mat(next(self.source, None))
+            # Try to add another character to the line
+            # Empty mat = end of line, start filling
+            if units_left > working_mat.get('units', 1000):
+                # Store wedge positions
+                new_wedges = working_mat.get('wedges', (3, 8))
+                # Wedges change? Drop in some single justification
+                # (not needed if wedge positions were 3, 8)
+                if current_wedges != new_wedges:
+                    if current_wedges and current_wedges != (3, 8):
+                        queue.extend(tsf.single_justification(current_wedges))
+                    current_wedges = new_wedges
+                # Add the mat
+                queue.append(working_mat['code'])
+                units_left -= working_mat['units']
+                # We need to know what comes next
+                working_mat = decode_mat(next(self.source, None))
+                if working_mat:
+                    next_units = space['units'] + working_mat['units']
+                    space_needed = (units_left > next_units and not
+                                    working_mat.get('lowspace', True))
+                    if self.cooldown_spaces and space_needed:
+                        # Add a space for matrix cooldown
+                        queue.append(space['code'] + ' for cooldown')
+                        units_left -= space['units']
+                    # Exit and loop further
+                    return
+            # Finish the line
+            var_sp = self.diecase.get_space(units=6)
+            wedges = current_wedges
+            current_wedges = None
+            if self.fill_line:
+                while units_left > quad['units']:
+                    # Coarse fill with quads
+                    queue.append(quad['code'] + ' coarse filling line')
+                    units_left -= quad['units']
+                while units_left > space['units'] * 2:
+                    # Fine fill with fixed spaces
+                    queue.append(space['code'] + ' fine filling line')
+                    units_left -= space['units']
+                if units_left >= var_sp.get_min_units():
+                    # Put an adjustable space if possible to keep lines equal
+                    if wedges:
+                        queue.extend(tsf.single_justification(wedges))
+                    var_sp.units = units_left
+                    queue.append(str(var_sp))
+                    wedges = var_sp.wedge_positions()
+            # Always cast as many quads as needed, then put the line out
+            queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
+            queue.extend(tsf.double_justification(wedges or (3, 8)))
+            units_left = 0
+
+        # Store the code and wedge positions to speed up the process
+        space = decode_mat(self.diecase.layout.get_space(units=6))
+        quad = decode_mat(self.diecase.layout.get_space(units=18))
+        working_mat = None
+        current_wedges = None
+        queue, units_left = tsf.end_casting(), 0
+        # Build the whole galley, line by line
+        while working_mat != {}:
+            start_line()
+            while units_left > 0:
+                build_line()
+        return queue

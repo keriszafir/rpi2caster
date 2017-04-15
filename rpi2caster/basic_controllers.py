@@ -2,10 +2,13 @@
 """Basic controller routines - elementary setters/getters.
 Depend on models. Used by higher-order controllers."""
 
+from collections import OrderedDict
 from functools import wraps
 from itertools import zip_longest
+from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, definitions as d
 from .config import CFG
+from .database_models import DB, Ribbon
 from .ui import UI, Abort
 from .wedge_units import UNITS, ALIASES as wedge_name_aliases
 
@@ -51,8 +54,8 @@ def get_letter_frequencies():
 
 # Measure controller routines
 
-def enter_measure(input_value=PREFS_CFG.default_measure,
-                  what='measure', set_width=12.0):
+def set_measure(input_value=PREFS_CFG.default_measure,
+                what='measure', set_width=12.0):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).
     Return length in DTP points."""
@@ -94,7 +97,7 @@ def temp_measure(routine):
         if UI.confirm(prompt, default=False):
             # Change measure before, restore after
             old_measure = self.measure
-            self.measure = enter_measure(old_measure, description)
+            self.measure = set_measure(old_measure, description)
             retval = routine(self, *args, **kwargs)
             self.measure = old_measure
             return retval
@@ -210,3 +213,65 @@ def temp_wedge(routine):
         self.wedge = old_wedge
         return retval
     return wrapper
+
+
+# Ribbon control routines
+
+def get_all_ribbons():
+    """Lists all ribbons we have."""
+    ribbons = OrderedDict(enumerate(DB.query(Ribbon).all(), start=1))
+    return ribbons
+
+
+def list_ribbons(data=get_all_ribbons()):
+    """Display all ribbons in a dictionary, plus an empty new one"""
+    UI.display('\nAvailable ribbons:\n\n' +
+               'No.'.ljust(4) +
+               'Ribbon ID'.ljust(20) +
+               'Diecase ID'.ljust(20) +
+               'Wedge name'.ljust(12) +
+               'Customer'.ljust(20) +
+               'Description')
+    for index, ribbon in data.items():
+        row = ''.join([str(index).ljust(4),
+                       ribbon.ribbon_id.ljust(20),
+                       ribbon.diecase_id.ljust(20),
+                       ribbon.wedge.name.ljust(12),
+                       ribbon.customer.ljust(20),
+                       ribbon.description])
+        UI.display(row)
+
+
+def ribbon_from_file():
+    """Choose the ribbon from file"""
+    ribbon = Ribbon()
+    ribbon_file = UI.import_file()
+    ribbon.import_from_file(ribbon_file)
+    return ribbon
+
+
+def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
+    """Select ribbons from database and let the user choose one of them"""
+    prm = 'Number? (0: {}, leave blank to exit)'.format(fallback_description)
+    while True:
+        try:
+            data = get_all_ribbons()
+            if not data:
+                return fallback()
+            else:
+                UI.display('Choose a ribbon:', end='\n\n')
+                list_ribbons(data)
+                choice = UI.enter(prm, default=Abort, datatype=int)
+                data[0] = None
+                return data[choice] or fallback()
+        except KeyError:
+            UI.pause('Ribbon number is incorrect!')
+
+
+def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
+    """Get a ribbon with given ribbon_id"""
+    try:
+        return DB.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id).one()
+    except orm_exc.NoResultFound:
+        return fallback()
+

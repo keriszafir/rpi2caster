@@ -6,7 +6,7 @@ from collections import namedtuple
 # define some namedtuple objects so that returning data is easier
 # namedtuple for matrix coordinates
 Coordinates = namedtuple('Coordinates', 'column row')
-# some parameter namedtuples for ParsedRecords
+# some parameter namedtuples for records
 Settings = namedtuple('Settings',
                       'row_16_mode explicit_o15 add_missing_o15')
 Content = namedtuple('Content',

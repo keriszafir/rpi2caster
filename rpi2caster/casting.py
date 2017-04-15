@@ -15,13 +15,14 @@ A module for everything related to working on a Monotype composition caster:
 """
 
 # IMPORTS:
-from collections import defaultdict, deque, OrderedDict
+from collections import deque
 from contextlib import suppress
 from time import sleep
 from functools import wraps
 from . import basic_models as bm, basic_controllers as bc, definitions as d
+from .casting_model import Stats, Record
 from . import monotype, parsing as p, typesetting_funcs as tsf
-from .typesetting import TypesettingContext
+from .typesetting import TypesettingContext, GalleyBuilder
 from .ui import UI, Abort, Finish, option
 
 
@@ -88,8 +89,8 @@ class Casting(TypesettingContext):
             code = ''
             queue = deque(ribbon)
             while lines_skipped > 0:
-                parsed = p.ParsedRecord(queue.popleft())
-                lines_skipped -= 1 * parsed.code.is_newline
+                record = Record(queue.popleft())
+                lines_skipped -= 1 * record.code.is_newline
             # give the last code back
             queue.appendleft(code)
 
@@ -163,9 +164,8 @@ class Casting(TypesettingContext):
             # lack of column will trigger signal O
             # in punching and testing mode, signal O or 15 will be present
             # in the output combination as O15
-            parsed = p.ParsedRecord
             for item in sequence or queue:
-                record = parsed(item,
+                record = Record(item,
                                 row_16_mode=machine.row_16_mode,
                                 default_o15=machine.punching,
                                 signal_o15=machine.punching or machine.testing)
@@ -504,7 +504,7 @@ class Casting(TypesettingContext):
                            'or leave empty to return to menu: ')
                 prompt = 'Signals? (leave blank to exit)'
                 string = UI.enter(prompt, default=Abort)
-                record = p.ParsedRecord(string, signal_o15=True)
+                record = Record(string, signal_o15=True)
                 self.caster.output.valves_off()
                 UI.display('Sending {}'.format(record.signals_string))
                 self.caster.output.valves_on(record.signals)
@@ -520,7 +520,7 @@ class Casting(TypesettingContext):
             duration = 0.3
             while True:
                 for sig in queue:
-                    record = p.ParsedRecord(sig, signal_o15=True)
+                    record = Record(sig, signal_o15=True)
                     sleep(duration)
                     UI.display('Activating {}'.format(record.signals_string))
                     self.caster.output.valves_on(record.signals)
@@ -769,338 +769,3 @@ class Casting(TypesettingContext):
                 self.caster.parameters]
         UI.display_parameters(*data)
         UI.pause()
-
-
-class GalleyBuilder(object):
-    """Builds a galley from input sequence"""
-    def __init__(self, context, source):
-        self.source = (x for x in source)
-        self.diecase = context.diecase
-        self.units = context.measure.units
-        # Cooldown: whether to separate sorts with spaces
-        self.cooldown_spaces = False
-        # Fill line: will add quads/spaces nutil length is met
-        self.fill_line = True
-        self.quad_padding = 1
-
-    def make_ribbon(self):
-        """Instantiates a Ribbon() object from whatever we've generated"""
-        pass
-
-    def build_galley(self):
-        """Builds a line of characters from source"""
-        def decode_mat(mat):
-            """Gets the mat's parameters and stores them
-            to avoid recalculation"""
-            parameters = {}
-            if mat:
-                parameters['wedges'] = mat.wedge_positions()
-                parameters['units'] = mat.units
-                parameters['code'] = str(mat)
-                parameters['lowspace'] = mat.islowspace()
-            return parameters
-
-        def start_line():
-            """Starts a new line"""
-            nonlocal units_left, queue
-            units_left = self.units - 2 * self.quad_padding * quad['units']
-            quads = [quad['code'] + ' quad padding'] * self.quad_padding
-            queue.extend(quads)
-
-        def build_line():
-            """Puts the matrix in the queue, changing the justification
-            wedges if needed, and adding a space for cooldown, if needed."""
-            # Declare variables in non-local scope to preserve them
-            # after the function exits
-            nonlocal queue, units_left, working_mat, current_wedges
-            # Take a mat from stash if there is any
-            working_mat = working_mat or decode_mat(next(self.source, None))
-            # Try to add another character to the line
-            # Empty mat = end of line, start filling
-            if units_left > working_mat.get('units', 1000):
-                # Store wedge positions
-                new_wedges = working_mat.get('wedges', (3, 8))
-                # Wedges change? Drop in some single justification
-                # (not needed if wedge positions were 3, 8)
-                if current_wedges != new_wedges:
-                    if current_wedges and current_wedges != (3, 8):
-                        queue.extend(tsf.single_justification(current_wedges))
-                    current_wedges = new_wedges
-                # Add the mat
-                queue.append(working_mat['code'])
-                units_left -= working_mat['units']
-                # We need to know what comes next
-                working_mat = decode_mat(next(self.source, None))
-                if working_mat:
-                    next_units = space['units'] + working_mat['units']
-                    space_needed = (units_left > next_units and not
-                                    working_mat.get('lowspace', True))
-                    if self.cooldown_spaces and space_needed:
-                        # Add a space for matrix cooldown
-                        queue.append(space['code'] + ' for cooldown')
-                        units_left -= space['units']
-                    # Exit and loop further
-                    return
-            # Finish the line
-            var_sp = self.diecase.get_space(units=6)
-            wedges = current_wedges
-            current_wedges = None
-            if self.fill_line:
-                while units_left > quad['units']:
-                    # Coarse fill with quads
-                    queue.append(quad['code'] + ' coarse filling line')
-                    units_left -= quad['units']
-                while units_left > space['units'] * 2:
-                    # Fine fill with fixed spaces
-                    queue.append(space['code'] + ' fine filling line')
-                    units_left -= space['units']
-                if units_left >= var_sp.get_min_units():
-                    # Put an adjustable space if possible to keep lines equal
-                    if wedges:
-                        queue.extend(tsf.single_justification(wedges))
-                    var_sp.units = units_left
-                    queue.append(str(var_sp))
-                    wedges = var_sp.wedge_positions()
-            # Always cast as many quads as needed, then put the line out
-            queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
-            queue.extend(tsf.double_justification(wedges or (3, 8)))
-            units_left = 0
-
-        # Store the code and wedge positions to speed up the process
-        space = decode_mat(self.diecase.layout.get_space(units=6))
-        quad = decode_mat(self.diecase.layout.get_space(units=18))
-        working_mat = None
-        current_wedges = None
-        queue, units_left = tsf.end_casting(), 0
-        # Build the whole galley, line by line
-        while working_mat != {}:
-            start_line()
-            while units_left > 0:
-                build_line()
-        return queue
-
-
-class Stats:
-    """Casting statistics gathering and displaying functions"""
-    _ribbon = defaultdict(int)
-    _run, _session = defaultdict(int), defaultdict(int)
-    _current = defaultdict(lambda: defaultdict(str))
-    _previous = defaultdict(lambda: defaultdict(str))
-
-    def __init__(self, machine):
-        self.machine = machine
-
-    @property
-    def runs(self):
-        """Gets the runs (repetitions) number"""
-        return self._session['runs']
-
-    @runs.setter
-    def runs(self, runs=1):
-        """Sets the runs (repetitions) number"""
-        # Update whenever we change runs number via one_more_run
-        self._session['runs'] = runs
-        self._session['codes'] = runs * self._ribbon['codes']
-        self._session['chars'] = runs * self._ribbon['chars']
-        self._session['lines'] = runs * self._ribbon['lines']
-
-    def get_ribbon_lines(self):
-        """Gets number of lines per ribbon"""
-        return self._ribbon['lines']
-
-    def get_run_lines_skipped(self):
-        """Get a number of lines to skip - decide whether to use
-        the run or ribbon skipped lines"""
-        return self._run['lines_skipped'] or self._session['lines_skipped']
-
-    def set_session_lines_skipped(self, lines):
-        """Set the number of lines that will be skipped for every run
-        in the casting session, unless overridden by the run lines skipped"""
-        self._session['lines_skipped'] = lines
-
-    def set_run_lines_skipped(self, lines):
-        """Set the number of lines that will be skipped for the following run
-        (used mostly for continuing the interrupted casting job)"""
-        self._run['lines_skipped'] = lines
-
-    @property
-    def ribbon_parameters(self):
-        """Gets ribbon parameters"""
-        if self.machine.diagnostics:
-            return {}
-        parameters = OrderedDict({'': 'Ribbon parameters'})
-        parameters['Combinations in ribbon'] = self._ribbon['codes']
-        parameters['Characters incl. spaces'] = self._ribbon['chars']
-        parameters['Lines to cast'] = self._ribbon['lines']
-        return parameters
-
-    @property
-    def session_parameters(self):
-        """Displays the ribbon data"""
-        # display this only for multi-run sessions
-        if self.machine.diagnostics or self._session['runs'] < 2:
-            return {}
-        parameters = OrderedDict({'': 'Casting session parameters'})
-        parameters['Casting runs'] = self._session['runs']
-        parameters['All codes'] = self._session['codes']
-        parameters['All chars'] = self._session['chars']
-        parameters['All lines'] = self._session['lines']
-        return parameters
-
-    @property
-    def code_parameters(self):
-        """Displays info about the current combination"""
-        record = self._current['record']
-        runs_number = self._session['runs']
-        # display comment as a header
-        data = OrderedDict({'': record.comment})
-        # display codes
-        data['Raw signals from ribbon'] = record.raw_signals
-        data['Parsed signals'] = record.signals_string
-        data['Sending signals'] = record.adjusted_signals_string
-        # for casting and punching:
-        if not self.machine.diagnostics:
-            if record.code.is_newline:
-                data['Starting a new line'] = self._run['current_line']
-            if runs_number > 1:
-                data['Code / run'] = self.build_data(self._run, 'code')
-                data['Char / run'] = self.build_data(self._run, 'char')
-                data['Line / run'] = self.build_data(self._run, 'line')
-                data['Run / job'] = self.build_data(self._session, 'run')
-                data['Failed runs'] = self._session['failed_runs']
-            data['Code / job'] = self.build_data(self._session, 'code')
-            data['Char / job'] = self.build_data(self._session, 'char')
-            data['Line / job'] = self.build_data(self._session, 'line')
-        # casting-only stats
-        if self.machine.casting:
-            data['Wedge 0075 now at'] = self._current['0075'] or '15'
-            data['Wedge 0005 now at'] = self._current['0005'] or '15'
-            data['Pump is'] = 'ON' if self._current['pump_working'] else 'OFF'
-
-        return data
-
-    def process_ribbon(self, ribbon):
-        """Parses the ribbon, counts combinations, lines and characters"""
-        # first, reset counters
-        self._session, self._ribbon = defaultdict(int), defaultdict(int)
-        self._current = defaultdict(lambda: defaultdict(str))
-        self._previous = defaultdict(lambda: defaultdict(str))
-        # parse the ribbon to read its stats and determine if we need
-        # to use a 16-row addressing system
-        records_gen = (p.ParsedRecord(string) for string in ribbon)
-        records = [record for record in records_gen if record.code.has_signals]
-        # Check if row 16 addressing is needed
-        use_row_16 = any((record.code.uses_row_16 for record in records))
-        self.machine.use_row_16 = use_row_16
-        # number of codes is just a number of valid combinations
-        num_codes = len(records)
-        # ribbon starts and ends with newline, so lines = newline codes - 1
-        num_lines = sum(1 for record in records if record.code.is_newline) - 1
-        # characters: if combination has no justification codes
-        num_chars = sum(1 for record in records if record.code.is_char)
-        # Set ribbon and session counters
-        self._ribbon.update(codes=num_codes, chars=num_chars,
-                            lines=max(0, num_lines))
-        self._session.update(current_run=1)
-
-    def process_queue(self, queue):
-        """Parses the ribbon, counts combinations, lines and characters"""
-        # get all signals and filter those that are valid
-        records = (p.ParsedRecord(string) for string in queue)
-        # check all valid signals
-        reports = [rec.code for rec in records if rec.code.has_signals]
-        # all codes is a number of valid signals
-        num_codes = len(reports)
-        # clear and start with -1 line for the initial galley trip
-        n_lines = sum(1 for code in reports if code.is_newline) - 1
-        num_lines = max(n_lines, 0)
-        # determine number of characters
-        num_chars = sum(1 for code in reports if code.is_char)
-        # update run statistics
-        self._run.update(lines_skipped=0,
-                         current_line=0, current_code=0, current_char=0,
-                         lines=num_lines, codes=num_codes, chars=num_chars)
-
-    def process_record(self, record):
-        """Updates the stats based on parsed signals."""
-        # Update previous stats and current record
-        self._previous, self._current['record'] = self._current.copy(), record
-        # advance or set the run and session code counters
-        self._run['current_code'] += 1
-        self._session['current_code'] += 1
-        # detect 0075+0005(+pos_0005)->0075(+pos_0075) = double justification
-        # this means starting new line
-        with suppress(AttributeError):
-            was_newline = self._previous['record'].code.is_newline
-            if was_newline and record.code.is_pump_start:
-                self._run['current_line'] += 1
-                self._session['current_line'] += 1
-        # advance or set the character counters
-        self._run['current_char'] += 1 * record.code.is_char
-        self._session['current_char'] += 1 * record.code.is_char
-        # Check the pump working/non-working status in the casting mode
-        if self.machine.casting:
-            self._update_wedge_positions()
-            self._check_pump()
-
-    def get_remaining_runs(self):
-        """Gets the runs left number"""
-        diff = self._session['runs'] - self._session['runs_done']
-        return max(0, diff)
-
-    def end_run(self):
-        """Updates the info about the runs"""
-        self._session['runs_done'] += 1
-        self._session['current_run'] += 1
-
-    def reset_last_run_stats(self):
-        """Subtracts the current run stats from all runs stats;
-        this is called before repeating a failed casting run."""
-        self._session['failed_runs'] += 1
-        for par in ('current_line', 'current_code', 'current_char',
-                    'lines', 'codes', 'chars'):
-            self._session[par] -= self._run[par]
-
-    def get_lines_done(self):
-        """Gets the current run line number"""
-        return max(0, self._run['current_line'] - 1)
-
-    def _check_pump(self):
-        """Checks pump based on current and previous combination"""
-        was_working = self.machine.pump_working
-        was_started, is_started, is_stopped = False, False, False
-        with suppress(AttributeError):
-            was_started = self._previous['record'].code.is_pump_start
-        with suppress(AttributeError):
-            is_started = self._current['record'].code.is_pump_start
-            is_stopped = self._current['record'].code.is_pump_stop
-        # Was it running until now? Get it from the caster
-        pump_on = (was_working or was_started) and not is_stopped or is_started
-        self._current['pump_working'] = pump_on
-        # Feed it back to the caster object
-        self.machine.pump_working = pump_on
-
-    def _update_wedge_positions(self):
-        """Gets current positions of 0005 and 0075 wedges"""
-        with suppress(AttributeError):
-            if self._current['record'].code.has_0005:
-                self._current['0005'] = self._current['record'].row_pin
-            if self._current['record'].code.has_0075:
-                self._current['0075'] = self._current['record'].row_pin
-
-    @staticmethod
-    def build_data(source, name):
-        """Builds data to display based on the given parameter"""
-        current_name = 'current_{}'.format(name)
-        current_value = source[current_name]
-        total_name = '{}s'.format(name)
-        total_value = source[total_name]
-        if not total_value:
-            return '{current}'.format(current=current_value)
-        done = max(0, current_value - 1)
-        remaining = total_value - current_value
-        percent = done / total_value * 100
-        desc = ('{current} of {total} [{percent:.2f}%], '
-                '{done} done, {left} left')
-        return desc.format(current=current_value, total=total_value,
-                           percent=percent, done=done, left=remaining)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""models - all data models for diecases, ribbons"""
+"""database_models - all database-dependent models for rpi2caster"""
 
 from collections import OrderedDict
 from contextlib import suppress

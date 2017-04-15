@@ -74,8 +74,8 @@ class MonotypeCaster(object):
         UI.pause('Caster no longer in use.', min_verbosity=3)
         self.output.valves_off()
         # release resources
-        self.sensor = None
-        self.output = None
+        self.sensor, self.output = None, None
+        return True
 
     @property
     def sensor(self):
@@ -278,6 +278,7 @@ class SensorBase(object):
                  min_verbosity=3)
         # Reset manual mode
         self.manual_mode = True
+        return True
 
     @property
     def parameters(self):
@@ -394,6 +395,7 @@ class OutputBase(object):
         self.valves_off()
         UI.pause('Driver for {} is no longer in use.'.format(self.name),
                  min_verbosity=3)
+        return True
 
     @property
     def mapping(self):
@@ -543,6 +545,7 @@ class RPiGPIOSensor(SensorBase):
 
     def __exit__(self, *_):
         GPIO.cleanup(self.gpio)
+        return True
 
     @property
     def parameters(self):
@@ -619,6 +622,7 @@ class SMBusOutput(OutputBase):
     def __exit__(self, *_):
         self.valves_off()
         self.port = None
+        return True
 
 
 @weakref_singleton

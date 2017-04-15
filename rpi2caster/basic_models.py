@@ -356,9 +356,8 @@ class DiecaseLayout:
         return self
 
     def __repr__(self):
-        return ('<DiecaseLayout diecase_id: {}, size: {} rows, {} columns>'
-                .format(self.diecase.diecase_id,
-                        self.size.rows, self.size.columns))
+        return ('<DiecaseLayout ({} rows, {} columns)>'
+                .format(self.size.rows, self.size.columns))
 
     def __iter__(self):
         return (mat for mat in self.used_mats.values())
@@ -534,16 +533,12 @@ class DiecaseLayout:
         results = [mat for mat in self.used_mats.values() if match(mat)]
         return results
 
-    def select_one(self, char=None, styles=None, position=None, units=None,
-                   islowspace=None, ishighspace=None):
+    def select_one(self, *args, **kwargs):
         """Get a matrix with denoted parameters"""
-        candidates = self.select_many(char, styles, position, units,
-                                      islowspace, ishighspace)
-        try:
-            mat = candidates[0]
-            return mat
-        except IndexError:
-            raise MatrixNotFound
+        with suppress(IndexError):
+            search_results = self.select_many(*args, **kwargs)
+            return search_results[0]
+        raise MatrixNotFound
 
     def get_space(self, units=6, low=True):
         """Find a suitable space in the diecase layout"""
@@ -879,25 +874,26 @@ class Wedge:
             self.units = source.get('units') or self.units
 
 
-class CharFreqs(object):
+class CharFreqs:
     """Read and calculate char frequencies, translate that to casting order"""
     scale, case_ratio = 1.0, 1.0
 
     def __init__(self, lang=None):
         language = str(lang).strip()
+        self.lang = language
         self.freqs = FREQS[language.lower()]
 
     def __getitem__(self, item):
         return self.freqs.get(item, 0)
 
     def __repr__(self):
-        return self.lang
+        return '<CharFreqs for {}>'.format(d.LANGS[self.lang])
 
     def __str__(self):
-        return CharFreqs.langs.get(self.lang, '')
+        return d.LANGS.get(self.lang, '')
 
     def __iter__(self):
-        return (char for char in self.freqs)
+        return (char for char in sorted(self.freqs))
 
     @property
     def type_bill(self):
