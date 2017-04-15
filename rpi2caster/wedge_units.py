@@ -1,10 +1,7 @@
-"""Wedge unit values definitions
+"""Wedge definitions and unit values.
 
 Thanks to John Cornelisse and Alembic Press for those data!
 """
-# S5 wedge unit values
-S5 = [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18]
-
 # Wedge unit values
 UNITS = {'2': [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],
          '5': [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18],

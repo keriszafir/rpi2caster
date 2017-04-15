@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """miscellaneous functions and classes"""
 from weakref import WeakSet, WeakValueDictionary
-from collections import OrderedDict
 from contextlib import suppress
 
 
@@ -35,7 +34,6 @@ def weakref_singleton(cls):
     return getinstance
 
 
-@singleton
 class PubSub:
     """Publish/subscribe engine for object updates"""
     def __init__(self):
@@ -85,48 +83,5 @@ class PubSub:
                 observer.update(message)
 
 
-class Parameters:
-    """Data structure for grouping parameters to display"""
-    def __init__(self, title, data=()):
-        self.title = title
-        self.storage = OrderedDict(data)
-
-    def __str__(self):
-        return self.text_block
-
-    def __iter__(self):
-        return self.contents_iterator()
-
-    def __getitem__(self, item):
-        return self.storage.get(item)
-
-    def __setitem__(self, item, value):
-        self.storage[item] = value
-
-    def __delitem__(self, item):
-        with suppress(KeyError):
-            del self.storage[item]
-
-    def __contains__(self, item):
-        return item in self.storage
-
-    def get(self, item, default=None):
-        """facade for dict get method of self.storage"""
-        return self.storage.get(item, default)
-
-    @property
-    def contents_iterator(self):
-        """Get an iterator of name: value parameters"""
-        return ('%s: %s' % (k, v) for k, v in self.storage.items())
-
-    @property
-    def contents_string(self):
-        """Get a string listing all contents"""
-        return '\n'.join(self.contents_iterator)
-
-    @property
-    def text_block(self):
-        """Get a text block complete with a header"""
-        dashes = '-' * len(self.title)
-        return '\n'.join(['', dashes, self.title, dashes, '',
-                          self.contents_string, ''])
+# Make exactly one message queue
+MQ = PubSub()

@@ -1,50 +1,81 @@
 # -*- coding: utf-8 -*-
 """Caster object for either,  real or virtual Monotype composition caster"""
-# Built-in time module
-from time import time, sleep
-from contextlib import suppress
-# Custom exceptions module
-from . import exceptions as e
-# Constants module
-from . import constants as c
-from .ui import UIFactory
-from .global_config import Config
+# Standard library imports
+import io
+import os
+import select
+import time
+from collections import OrderedDict
+from functools import wraps
 
-UI = UIFactory()
-CFG = Config()
+# Driver library imports
+# RPi.GPIO I/O control library (PyPI: RPi.GPIO, Debian: python3-rpi.gpio)
+try:
+    import RPi.GPIO as GPIO
+except (ImportError, RuntimeError):
+    GPIO = None
+# Parallel port controller (PyPI: pyparallel, Debian: python3-parallel)
+try:
+    from parallel import Parallel
+except (ImportError, RuntimeError):
+    Parallel = None
+# SMBus i2c controller (PyPI: smbus-cffi, Debian: python3-smbus)
+try:
+    from smbus import SMBus
+except (ImportError, RuntimeError):
+    SMBus = None
+# WiringPi i/o controller (PyPI: wiringpi)
+try:
+    import wiringpi
+except (ImportError, RuntimeError):
+    wiringpi = None
 
+# Intra-package imports
+from .config import CFG
+from .definitions import OFF, HMN, KMN, UNIT_SHIFT
+from .misc import singleton, weakref_singleton
+from .ui import UI, option
+
+# Interface config
+INTERFACE_CFG = CFG.interface
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
+# Output latch registers for SMBus MCP23017 control
+OLATA, OLATB = 0x14, 0x15
+# Port direction registers for SMBus MCP23017 control
+IODIRA, IODIRB = 0x00, 0x10
+
+
+class MachineStopped(Exception):
+    """Machine stopped exception"""
+    pass
 
 
 class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
-    lock, pump_working = False, False
-
-    def __init__(self):
-        self.mode = CasterMode()
+    pump_working = False
+    # caster modes
+    testing, simulation, punching, calibration = False, False, False, False
+    need_row_16, row_16_mode = False, OFF
 
     def __enter__(self):
         """Lock the resource so that only one object can use it
         with context manager"""
-        if self.lock:
-            UI.display('Caster is already busy!')
-        else:
-            self.lock = True
-            UI.pause('Entering the caster context...', min_verbosity=3)
-            sensor, output = self.mode.get_casting_backend()
-            self.sensor = sensor()
-            self.output = output()
-            with self.sensor, self.output:
-                return self
+        UI.pause('Entering the caster context...', min_verbosity=3)
+        sensor, output = self.interface_factory()
+        self.sensor = sensor()
+        self.output = output()
+        with self.sensor, self.output:
+            return self
 
     def __exit__(self, *_):
         UI.pause('Caster no longer in use.', min_verbosity=3)
+        self.output.valves_off()
+        # release resources
         self.sensor = None
         self.output = None
-        self.lock = False
 
     @property
     def sensor(self):
@@ -71,293 +102,10 @@ class MonotypeCaster(object):
     def parameters(self):
         """Gets a list of parameters"""
         # Collect data from I/O drivers
-        return self.sensor.parameters + self.output.parameters
-
-    def process(self, signals):
-        """process(signals):
-
-        Checks for the machine's rotation, sends the signals (activates
-        solenoid valves) after the caster is in the "air bar down" position.
-
-        If no machine rotation is detected (sensor input doesn't change
-        its state) during cycle_timeout, calls a function to ask user
-        what to do (can be useful for resuming casting after manually
-        stopping the machine for a short time - not recommended as the
-        mould cools down and type quality can deteriorate).
-
-        If the pump was working, the program will store 0075/0005 wedge
-        positions, send 0005 to stop the pump and display the menu.
-        If the operator decides to go on with casting, the aborted sequence
-        will be re-cast so as to avoid missing characters in the composition.
-        If the pump was working before, its operation will be resumed
-        and the wedges will be reset to previous positions.
-
-        When casting, the pace is dictated by the caster and its RPM. Thus,
-        we can't arbitrarily set the intervals between valve ON and OFF
-        signals. We need to get feedback from the machine, and we can use
-        contact switch (unreliable in the long run), magnet & reed switch
-        (not precise enough) or a photocell sensor + LED (very precise).
-        We can use a paper tower's operating lever for obscuring the sensor
-        (like John Cornelisse did), or we can use a partially obscured disc
-        attached to the caster's shaft (like Bill Welliver did).
-        Both ways are comparable; the former can be integrated with the
-        valve block assembly, and the latter allows for very precise tweaking
-        of duty cycle (bright/dark area ratio) and phase shift (disc's position
-        relative to 0 degrees caster position).
-        """
-        busy = True
-        while busy:
-            # Escape this only by returning True on success, or raising
-            # exceptions handled by the methods of the Casting class
-            try:
-                # Casting cycle
-                # (sensor on - valves on - sensor off - valves off)
-                self.sensor.wait_for(AIR_ON)
-                self.output.valves_on(signals)
-                self.sensor.wait_for(AIR_OFF)
-                self.output.valves_off()
-                busy = False
-                # Successful ending - the combination has been cast
-            except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                # Machine stopped during casting - clean up
-                # Punching doesn't need this at all
-                UI.display('Emergency stop!')
-                if not self.mode.punching:
-                    self.pump_stop()
-                # Exception will be handled in session
-                raise e.MachineStopped
-
-    def pump_stop(self):
-        """Forces pump stop - won't end until it is turned off"""
-        def send_stop_signals():
-            """Send a combination - full cycle"""
-            self.output.valves_off()
-            self.sensor.wait_for(AIR_ON, 30)
-            self.output.valves_on(['N', 'J', 'S', '0005'])
-            self.sensor.wait_for(AIR_OFF, 30)
-            self.output.valves_off()
-
-        UI.display('Turning all valves off - just in case...')
-        self.output.valves_off()
-        while self.pump_working:
-            UI.display('The pump is still working - turning it off...')
-            with suppress(e.MachineStopped, KeyboardInterrupt, EOFError):
-                # Run two full sequences to be sure
-                send_stop_signals()
-                send_stop_signals()
-                UI.display('Pump is now off.')
-                self.pump_working = False
-
-
-class SensorBase(object):
-    """Mockup for a machine cycle sensor"""
-    name = 'generic machine cycle sensor'
-    lock, last_state, manual_mode = False, True, True
-
-    def __enter__(self):
-        if not self.lock:
-            self.lock = True
-            UI.pause('Using a %s for machine feedback' % self.name,
-                     min_verbosity=2)
-            return self
-
-    def __exit__(self, *_):
-        UI.pause('The %s is no longer in use' % self.name, min_verbosity=3)
-        # Reset manual mode
-        self.manual_mode = True
-        self.lock = False
-
-    @property
-    def parameters(self):
-        """Gets a list of parameters"""
-        return [(self.name, 'Sensor driver'),
-                (self.manual_mode, 'Manual mode')]
-
-    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
-        """Detect machine cycles and alert if it's not working"""
-        UI.display('Turn on the air, motor, pump (if put out) and machine.')
-        UI.display('Checking if the machine is running...')
-        cycles = 3
-        while True:
-            try:
-                self.wait_for(new_state=True, timeout=30)
-                while cycles:
-                    # Run a new cycle
-                    UI.display(cycles)
-                    self.wait_for(new_state=True, timeout=30)
-                    cycles -= 1
-                return
-            except (e.MachineStopped, KeyboardInterrupt, EOFError):
-                prompt = 'Machine is not running. Y to try again or N to exit?'
-                if not UI.confirm(prompt, default=False):
-                    raise exception
-
-    def wait_for(self, new_state, timeout=30, time_on=0.1, time_off=0.1):
-        """Waits for a keypress to emulate machine cycle, unless user
-        switches to auto mode, where all combinations are processed in batch"""
-        status = {True: 'ON', False: 'OFF'}
-        UI.display('The sensor is going %s' % status[new_state],
-                   min_verbosity=3)
-        if self.manual_mode:
-            start_time = time()
-            # Ask whether to cast or simulate machine stop
-            prompt = ('[A] to switch to automatic mode, [S] to stop\n'
-                      'or leave blank to continue?')
-            answer = UI.enter(prompt, blank_ok=True) or ' '
-            if answer in 'aA':
-                self.manual_mode = False
-            elif answer in 'sS':
-                raise e.MachineStopped
-            elif time() - start_time > timeout:
-                UI.display('Timeout - you answered after %ds' % timeout)
-                raise e.MachineStopped
-        elif new_state:
-            sleep(time_off)
-        else:
-            sleep(time_on)
-
-
-class SimulationSensor(SensorBase):
-    """Simulate casting with no actual machine"""
-    name = 'simulation - mockup casting interface'
-
-    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
-        """Warn that this is just a simulation"""
-        UI.display('Simulation mode - no machine is used.\n'
-                   'This will emulate the actual casting sequence '
-                   'as closely as possible.\n')
-        return super().check_if_machine_is_working(exception)
-
-
-class PunchingSensor(SensorBase):
-    """A special sensor class for perforators"""
-    name = 'timer-driven or manual advance for perforator'
-
-    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
-        """Ask for user confirmation before punching"""
-        try:
-            UI.pause('\nRibbon punching: \n'
-                     'Put the ribbon on the perforator and turn on the air.')
-        except KeyboardInterrupt:
-            raise exception
-
-    def wait_for(self, new_state, timeout=30, time_on=0.25, time_off=0.4):
-        """Calls simulation sensor's function, but with different timings"""
-        if new_state:
-            super().wait_for(new_state, timeout, time_on, time_off)
-        else:
-            sleep(time_off)
-
-
-class TestSensor(SensorBase):
-    """A keyboard-operated "sensor" for testing inputs.
-    No automatic mode is supported."""
-    name = 'manual advance for testing'
-
-    def wait_for(self, new_state, *_):
-        """Waits for keypress before turning the line off"""
-        if not new_state:
-            UI.pause('Next combination?')
-
-    def check_if_machine_is_working(self, exception=e.ReturnToMenu):
-        """Do nothing here"""
-        try:
-            return True
-        except KeyboardInterrupt:
-            raise exception
-
-
-class OutputBase(object):
-    """Mockup for a driver for 32 pneumatic outputs"""
-    name = 'generic output driver'
-    lock = False
-
-    def __init__(self,
-                 signals_arrangement=CFG.get_option('signals_arrangement')):
-        self.signals_arrangement = signals_arrangement
-
-    def __del__(self):
-        UI.pause('Deleting the %s' % self.name, min_verbosity=3)
-
-    def __enter__(self):
-        if not self.lock:
-            self.lock = True
-            UI.pause('Using the %s for sending signals...' % self.name,
-                     min_verbosity=2)
-            return self
-
-    def __exit__(self, *_):
-        self.valves_off()
-        UI.pause('Driver for %s no longer in use.' % self.name,
-                 min_verbosity=3)
-        self.lock = False
-
-    @property
-    def parameters(self):
-        """Gets a list of parameters"""
-        return [(self.name, 'Output driver'),
-                (' '.join(self.signals_arrangement), 'Signals arrangement')]
-
-    @staticmethod
-    def one_on(sig):
-        """Looks a signal up in arrangement and turns it on"""
-        try:
-            UI.display(sig + ' on', min_verbosity=2)
-        except KeyError:
-            raise e.WrongConfiguration('Signal %s not defined!' % sig)
-
-    @staticmethod
-    def one_off(sig):
-        """Looks a signal up in arrangement and turns it on"""
-        try:
-            UI.display(sig + ' off', min_verbosity=2)
-        except KeyError:
-            raise e.WrongConfiguration('Signal %s not defined!' % sig)
-
-    def valves_on(self, signals_list):
-        """Turns on multiple valves"""
-        for sig in signals_list:
-            self.one_on(sig)
-
-    def valves_off(self):
-        """Turns off all the valves"""
-        for sig in self.signals_arrangement:
-            self.one_off(sig)
-
-
-class SimulationOutput(OutputBase):
-    """Simulation output driver - don't control any hardware"""
-    name = 'simulation - mockup casting interface'
-
-
-class CasterMode(object):
-    """Session mode: casting / simulation / perforation"""
-    row_16_addressing = None
-
-    def __init__(self):
-        self.punching = False
-        self.testing = False
-        self.calibration = False
-
-    @property
-    def simulation(self):
-        """Simulation mode"""
-        return self.__dict__.get('simulation')
-
-    @simulation.setter
-    def simulation(self, value):
-        """Set the simulation mode"""
-        self.__dict__['simulation'] = value
-
-    @property
-    def calibration(self):
-        """Machine calibration mode"""
-        return self.__dict__.get('_calibration', False)
-
-    @calibration.setter
-    def calibration(self, value):
-        """Set the machine calibration mode"""
-        self.__dict__['_calibration'] = value
+        parameters = OrderedDict({'': 'Caster parameters'})
+        parameters.update(**self.sensor.parameters)
+        parameters.update(**self.output.parameters)
+        return parameters
 
     @property
     def diagnostics(self):
@@ -372,37 +120,17 @@ class CasterMode(object):
             self.calibration = False
 
     @property
-    def punching(self):
-        """Punching mode"""
-        return self.__dict__.get('_punching', False)
-
-    @punching.setter
-    def punching(self, value):
-        """Set the punching mode"""
-        self.__dict__['_punching'] = value
-
-    @property
-    def testing(self):
-        """Testing mode"""
-        return self.__dict__.get('_testing', False)
-
-    @testing.setter
-    def testing(self, value):
-        """Set the testing mode"""
-        self.__dict__['_testing'] = value
-
-    @property
     def casting(self):
         """Check if the machine is casting"""
         return not self.punching and not self.testing and not self.calibration
 
     @property
-    def needs_row_16(self):
+    def use_row_16(self):
         """Check if row 16 is currently needed."""
-        return self.__dict__.get('_needs_row_16') or False
+        return self.__dict__.get('_use_row_16') or False
 
-    @needs_row_16.setter
-    def needs_row_16(self, value):
+    @use_row_16.setter
+    def use_row_16(self, value):
         """Choose the diecase row 16 addressing mode, if needed.
 
         Row 16 is needed and currently off:
@@ -413,137 +141,628 @@ class CasterMode(object):
 
         Row 16 is not needed and is off, or is needed and is on: do nothing.
         """
-        def choose_row16_addressing():
-            """Let user decide which way to address row 16"""
-            prm = ('Your ribbon contains codes from the 16th row.\n'
-                   'It is supported by special attachments for the machine.\n'
-                   'Which mode does your caster use: HMN, KMN, Unit-Shift?\n\n'
-                   'If off - characters from row 15 will be cast instead.\n\n'
-                   'Your choice: [U]nit-Shift, [H]MN, [K]MN, blank = off?: ')
-            options = {'U': c.UNIT_SHIFT, 'H': c.HMN, 'K': c.KMN, '': c.OFF}
-            self.row_16_addressing = UI.simple_menu(prm, options)
-
-        names = {c.HMN: 'HMN', c.KMN: 'KMN', c.UNIT_SHIFT: 'unit-shift'}
-        attachment_name = names.get(self.row_16_addressing) or ''
+        names = {HMN: 'HMN', KMN: 'KMN', UNIT_SHIFT: 'unit-shift'}
+        att_name = names.get(self.row_16_mode) or ''
 
         is_required = bool(value)
-        is_active = bool(self.row_16_addressing)
-        self.__dict__['_needs_row_16'] = is_required
+        is_active = bool(self.row_16_mode)
+        # store the attribute
+        self.__dict__['_use_row_16'] = is_required
+        # check and notify the user
         if is_required and not is_active:
-            choose_row16_addressing()
+            self.choose_row16_addressing()
         elif is_active and not is_required:
-            UI.pause('\nTurn off the %s attachment.\n' % attachment_name)
-            self.row_16_addressing = c.OFF
+            UI.pause('\nTurn off the {} attachment.\n'.format(att_name))
+            self.row_16_mode = OFF
         elif is_required and is_active:
-            UI.display('The %s attachment is turned on - OK...'
-                       % attachment_name)
+            UI.display('The {} attachment is turned on - OK.'.format(att_name))
 
-    def get_casting_backend(self):
-        """Use the interface factory method to determine sensor and output"""
-        return interface_factory(self)
+    def choose_row16_addressing(self):
+        """Let user decide which way to address row 16"""
+        prompt = ('Your ribbon contains codes from the 16th row.\n'
+                  'It is supported by special attachments for the machine.\n'
+                  'Which mode does your caster use: HMN, KMN, Unit-Shift?\n\n'
+                  'If off - characters from row 15 will be cast instead.')
+        options = [option(key='h', value=HMN, seq=1, text='HMN'),
+                   option(key='k', value=KMN, seq=2, text='KMN'),
+                   option(key='u', value=UNIT_SHIFT, seq=3, text='Unit shift'),
+                   option(key='o', value=OFF, seq=4,
+                          text='Off - cast from row 15 instead')]
+        mode = UI.simple_menu(prompt, options,
+                              default_key='o', allow_abort=True)
+        self.row_16_mode = mode
+
+    def process(self, signals, timeout=None):
+        """Control a Monotype composition caster
+        for one revolution of its main shaft.
+
+        Wait until the machine is in the position to turn on the valves
+        (machine cycle sensor goes ON - air bar lowering on the paper tower).
+        Send signals to the control interface.
+        After the cycle sensor goes OFF (air bar rising), switch all
+        of the valves off and end here, so the caller can continue
+        and send next signals.
+        """
+        # Casting cycle
+        # (sensor on - valves on - sensor off - valves off)
+        self.output.valves_off()
+        self.sensor.wait_for(AIR_ON, timeout=timeout)
+        self.output.valves_on(signals)
+        self.sensor.wait_for(AIR_OFF, timeout=timeout)
+        self.output.valves_off()
+        # Successful ending with no exceptions - the combination has been cast
+
+    def interface_factory(self, default_sensor=INTERFACE_CFG.sensor,
+                          default_output=INTERFACE_CFG.output):
+        """Interface factory combines the sensor and output modules into
+        an Interface class. Returns an instance of this class."""
+        def test_sensor():
+            """Sensor used for testing - manual advance ONLY"""
+            self.testing = True
+            return TestingSensor()
+
+        def simulation_sensor():
+            """Sensor used for simulation - manual or automatic advance,
+            can simulate machine stop"""
+            self.simulation = True
+            return SimulationSensor()
+
+        def punching_sensor():
+            """Manual or time-driven advance, no machine stop detection"""
+            self.punching = True
+            return PunchingSensor()
+
+        def simulation_output():
+            """Simulate valves instead of using real hardware"""
+            self.simulation = True
+            return SimulationOutput()
+
+        def make_interface():
+            """Get the sensor and output drivers"""
+            sensor_names = {'simulation': simulation_sensor,
+                            'sysfs': SysfsSensor,
+                            'rpi.gpio': RPiGPIOSensor,
+                            'parallel': ParallelInterface,
+                            'testing': test_sensor,
+                            'punching': punching_sensor}
+            output_names = {'simulation': simulation_output,
+                            'wiringpi': WiringPiOutput,
+                            'smbus': SMBusOutput,
+                            'parallel': ParallelInterface}
+            # First get the backend from configuration
+            backend = [default_sensor, default_output]
+            # Use simulation mode if set in configuration
+            simulation = True if 'simulation' in backend else self.simulation
+            # If we don't know whether simulation is on or off - ask
+            if simulation is None and INTERFACE_CFG.choose_backend:
+                prompt = 'Use real caster? (no = simulation mode)'
+                simulation = not UI.confirm(prompt, default=True)
+            # Use parallel interface
+            parallel = (True if 'parallel' in backend and not simulation
+                        else False)
+            punching = True if 'punching' in backend else self.punching
+            # Override the backend for parallel and simulation
+            # Use parallel sensor above all else
+            # Testing and punching sensor overrides simulation sensor
+            sensor = ('parallel' if parallel
+                      else 'testing' if self.testing
+                      else 'punching' if punching
+                      else 'simulation' if simulation
+                      else default_sensor)
+            output = ('parallel' if parallel
+                      else 'simulation' if simulation
+                      else default_output)
+            # Get the function for building the interface based on name
+            # These functions will be executed when needed
+            sensor_function = sensor_names.get(sensor, SimulationSensor)
+            output_function = output_names.get(output, SimulationOutput)
+            return sensor_function, output_function
+
+        return make_interface()
 
 
-def interface_factory(mode,
-                      default_sensor=CFG.get_option('sensor'),
-                      default_output=CFG.get_option('output')):
-    """Interface factory combines the sensor and output modules into
-    an Interface class. Returns an instance of this class."""
-    def sysfs_sensor():
-        """Gets hardware sensor - prevents import loop"""
-        from .input_driver_sysfs import SysfsSensor
-        return SysfsSensor()
+class SensorBase(object):
+    """Mockup for a machine cycle sensor"""
+    name = 'generic machine cycle sensor'
+    gpio = INTERFACE_CFG.sensor_gpio
+    last_state, manual_mode, signals = True, True, None
+    timeout, time_on, time_off = 30, 0.1, 0.1
 
-    def rpigpio_sensor():
-        """Gets hardware sensor with RPi.GPIO backend"""
-        from .input_driver_rpi_gpio import RPiGPIOSensor
-        return RPiGPIOSensor()
+    def __enter__(self):
+        UI.pause('Using a {} for machine feedback'.format(self.name),
+                 min_verbosity=2)
+        return self
 
-    def parallel_sensor():
-        """A parallel port valve control for John Cornelisse's
-        old interface built by Symbiosys"""
-        from .io_driver_parallel import ParallelInterface
+    def __exit__(self, *_):
+        UI.pause('The {} is no longer in use'.format(self.name),
+                 min_verbosity=3)
+        # Reset manual mode
+        self.manual_mode = True
+
+    @property
+    def parameters(self):
+        """Gets a list of parameters"""
+        parameters = OrderedDict()
+        parameters['Sensor driver'] = self.name
+        parameters['Manual mode'] = self.manual_mode
+        return parameters
+
+    def check_if_machine_is_working(self):
+        """Detect machine cycles and alert if it's not working"""
+        UI.display('Turn on the air, motor, pump (if put out) and machine.')
+        UI.display('Checking if the machine is running...')
+        cycles = 3
+        while True:
+            try:
+                self.wait_for(new_state=True, timeout=30)
+                while cycles:
+                    # Run a new cycle
+                    UI.display(cycles)
+                    self.wait_for(new_state=True, timeout=30)
+                    cycles -= 1
+                return
+
+            except (MachineStopped, KeyboardInterrupt, EOFError):
+                prompt = 'Machine is not running. Y to try again or N to exit?'
+                UI.confirm(prompt, default=True, abort_answer=False)
+
+    def wait_for(self, new_state, **_):
+        """Waits for a keypress to emulate machine cycle, unless user
+        switches to auto mode, where all combinations are processed in batch"""
+        def switch_to_auto():
+            """Switch to automatic mode"""
+            self.manual_mode = False
+
+        prompt = 'The sensor is going {}'
+        UI.display(prompt.format('ON' if new_state else 'OFF'),
+                   min_verbosity=3)
+
+        if new_state and self.manual_mode:
+            # Ask whether to cast or simulate machine stop
+            options = [option(key='a', text='Switch to automatic mode',
+                              value=switch_to_auto, seq=1),
+                       option(key='s', text='Stop',
+                              value=MachineStopped, seq=2),
+                       option(key='enter', text='Continue',
+                              value=lambda: 0, seq=3)]
+
+            UI.simple_menu('Simulation mode: decide what to do.',
+                           options, default_key='enter')()
+        elif new_state:
+            time.sleep(self.time_off)
+        else:
+            time.sleep(self.time_on)
+
+
+class SimulationSensor(SensorBase):
+    """Simulate casting with no actual machine"""
+    name = 'simulation - mockup casting interface'
+
+    def check_if_machine_is_working(self):
+        """Warn that this is just a simulation"""
+        UI.display('Simulation mode - no machine is used.\n'
+                   'This will emulate the actual casting sequence '
+                   'as closely as possible.\n')
+        return super().check_if_machine_is_working()
+
+
+class PunchingSensor(SensorBase):
+    """A special sensor class for perforators"""
+    name = 'timer-driven or manual advance for perforator'
+    time_on, time_off = 0.25, 0.4
+
+    @staticmethod
+    def check_if_machine_is_working():
+        """Ask for user confirmation before punching"""
+        UI.confirm('\nRibbon punching: \n'
+                   'Put the ribbon on the perforator and turn on the air.',
+                   abort_answer=False, default=True, force_answer=True)
+
+
+class TestingSensor(SensorBase):
+    """A keyboard-operated "sensor" for testing inputs.
+    No automatic mode is supported."""
+    name = 'manual advance for testing'
+
+    def wait_for(self, new_state, **_):
+        """Waits for keypress before turning the line off"""
+        if not new_state:
+            UI.pause('Next combination?')
+
+    @staticmethod
+    def check_if_machine_is_working():
+        """Do nothing here"""
+        pass
+
+
+class OutputBase(object):
+    """Mockup for a driver for 32 pneumatic outputs"""
+    signals_arrangement = INTERFACE_CFG.signals_arrangement
+    mcp0_address = INTERFACE_CFG.mcp0
+    mcp1_address = INTERFACE_CFG.mcp1
+    i2c_bus_number = INTERFACE_CFG.i2c_bus
+    signal_numbers = [*range(1, 33)]
+    working, port = False, None
+    name = 'generic output driver'
+
+    def __enter__(self):
+        UI.pause('Using the {} for sending signals...'.format(self.name),
+                 min_verbosity=2)
+        return self
+
+    def __exit__(self, *_):
+        self.valves_off()
+        UI.pause('Driver for {} is no longer in use.'.format(self.name),
+                 min_verbosity=3)
+
+    @property
+    def mapping(self):
+        """Signal-to-number mapping (memoize for multiple use)"""
+        assoc = self.__dict__.get('_mapping')
+        if not assoc:
+            assoc = dict(zip(INTERFACE_CFG.signals_arrangement,
+                             self.signal_numbers))
+            self.__dict__['_mapping'] = assoc
+        return assoc
+
+    @property
+    def parameters(self):
+        """Gets a list of parameters"""
+        parameters = OrderedDict()
+        parameters['Output driver'] = self.name
+        parameters['Signals arrangement'] = ' '.join(self.signals_arrangement)
+        return parameters
+
+    @staticmethod
+    def valves_on(signals_list):
+        """Turns on multiple valves"""
+        for sig in signals_list:
+            UI.display(sig + ' on', min_verbosity=2)
+
+    def valves_off(self):
+        """Turns off all the valves"""
+        for sig in self.signals_arrangement:
+            UI.display(sig + ' off', min_verbosity=2)
+
+
+class SimulationOutput(OutputBase):
+    """Simulation output driver - don't control any hardware"""
+    name = 'simulation - mockup casting interface'
+
+
+# HARDWARE DRIVERS
+class SysfsSensor(SensorBase):
+    """Optical cycle sensor using kernel sysfs interface"""
+    name = 'Kernel SysFS interface for photocell sensor GPIO'
+    bounce_time = INTERFACE_CFG.bounce_time * 0.001
+    timeout = 5
+
+    def __init__(self, gpio=None):
+        self.value_file = self._configure_sysfs_interface(gpio)
+
+    @property
+    def parameters(self):
+        """Gets a list of parameters"""
+        parameters = OrderedDict()
+        parameters['Sensor driver'] = self.name
+        parameters['GPIO number'] = self.gpio
+        parameters['Value file path'] = self.value_file
+        return parameters
+
+    def wait_for(self, new_state, timeout=None, **_):
+        """
+        Waits until the sensor is in the desired state.
+        new_state = True or False.
+        timeout means that if no signals in given time, raise MachineStopped.
+        force_cycle means that if last_state == new_state, a full cycle must
+        pass before exit.
+        Uses software debouncing set at 5ms
+        """
+        def get_state():
+            """Reads current input state"""
+            gpiostate.seek(0)
+            # File can contain "1\n" or "0\n"; convert it to boolean
+            return bool(int(gpiostate.read().strip()))
+
+        _timeout = timeout or self.timeout
+        # Set debounce time to now
+        debounce = time.time()
+        # Prevent sudden exit if the current state is the desired state
+        with io.open(self.value_file, 'r') as gpiostate:
+            if get_state() == new_state:
+                self.last_state = not new_state
+        with io.open(self.value_file, 'r') as gpiostate:
+            while True:
+                try:
+                    signals = select.epoll()
+                    signals.register(gpiostate, select.POLLPRI)
+                    while self.last_state != new_state:
+                        # Keep polling or raise MachineStopped on timeout
+                        if signals.poll(_timeout):
+                            state = get_state()
+                            # Input bounce time is given in milliseconds
+                            if time.time() - debounce > self.bounce_time:
+                                self.last_state = state
+                            debounce = time.time()
+                        else:
+                            raise MachineStopped
+
+                    # state changed
+                    return
+
+                except RuntimeError:
+                    continue
+                except (KeyboardInterrupt, EOFError):
+                    raise MachineStopped
+
+    @staticmethod
+    def _configure_sysfs_interface(gpio):
+        """configure_sysfs_interface(gpio):
+
+        Sets up the sysfs interface for reading events from GPIO
+        (general purpose input/output). Checks if path/file is readable.
+        Returns the value and edge filenames for this GPIO.
+        """
+        # Set up an input polling file for machine cycle sensor:
+        gpio_sysfs_path = '/sys/class/gpio/gpio{}/'.format(gpio)
+        gpio_value_file = gpio_sysfs_path + 'value'
+        gpio_edge_file = gpio_sysfs_path + 'edge'
+
+        # Run the gauntlet to make sure GPIO is configured properly
+        if not os.access(gpio_value_file, os.R_OK):
+            message = ('GPIO value file does not exist or cannot be read. '
+                       'You must export the GPIO no {} as input first!')
+            raise OSError(13, message.format(gpio), gpio_value_file)
+
+        if not os.access(gpio_edge_file, os.R_OK):
+            message = ('GPIO edge file does not exist or cannot be read. '
+                       'You must export the GPIO no {} as input first!')
+            raise OSError(13, message.format(gpio), gpio_edge_file)
+
+        with io.open(gpio_edge_file, 'r') as edge_file:
+            message = ('GPIO {} must be set to generate interrupts '
+                       'on both rising AND falling edge!')
+            if 'both' not in edge_file.read():
+                raise OSError(19, message.format(gpio), gpio_edge_file)
+
+        return gpio_value_file
+
+
+@singleton
+class RPiGPIOSensor(SensorBase):
+    """Simple RPi.GPIO input driver for photocell"""
+    name = 'RPi.GPIO input driver'
+    timeout = 5
+    gpio = INTERFACE_CFG.sensor_gpio
+    bounce_time = INTERFACE_CFG.bounce_time
+
+    def __enter__(self):
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.gpio, GPIO.IN)
+        return self
+
+    def __exit__(self, *_):
+        GPIO.cleanup(self.gpio)
+
+    @property
+    def parameters(self):
+        """Gets a list of parameters"""
+        parameters = OrderedDict()
+        parameters['Sensor driver'] = self.name
+        parameters['GPIO number'] = self.gpio
+        return parameters
+
+    def wait_for(self, new_state, timeout=None, **_):
+        """Use interrupt handlers in RPi.GPIO for triggering the change"""
+        _timeout = timeout or self.timeout
+
+        change = GPIO.RISING if new_state else GPIO.FALLING
+        while True:
+            try:
+                channel = GPIO.wait_for_edge(self.gpio, change,
+                                             timeout=_timeout*1000,
+                                             bouncetime=self.bounce_time)
+                if channel is None:
+                    raise MachineStopped
+                else:
+                    return
+            except RuntimeError:
+                # In case RuntimeError: Error waiting for edge is raised...
+                continue
+            except (KeyboardInterrupt, EOFError):
+                # Emergency stop by keyboard
+                raise MachineStopped
+
+
+class SMBusOutput(OutputBase):
+    """Python SMBus-based output controller for rpi2caster."""
+    name = 'SMBus output driver'
+    # define a signal-to-bit mapping
+    # NOTE: reverse the range if signals are backwards
+    signal_numbers = [2 ** x for x in range(31, -1, -1)]
+
+    def _send(self, byte0, byte1, byte2, byte3):
+        """Write 4 bytes of data to all ports (A, B) on all devices (0, 1)"""
+        self.port.write_byte_data(self.mcp0_address, OLATA, byte0)
+        self.port.write_byte_data(self.mcp0_address, OLATB, byte1)
+        self.port.write_byte_data(self.mcp1_address, OLATA, byte2)
+        self.port.write_byte_data(self.mcp1_address, OLATB, byte3)
+
+    def valves_on(self, signals=()):
+        """Get the signals, transform them to numeric value and send
+        the bytes to i2c devices"""
+        if signals:
+            number = sum(self.mapping.get(signal, 0) for signal in signals)
+            # Split it to four bytes sent in sequence
+            byte0 = (number >> 24) & 0xff
+            byte1 = (number >> 16) & 0xff
+            byte2 = (number >> 8) & 0xff
+            byte3 = number & 0xff
+        else:
+            byte0 = byte1 = byte2 = byte3 = 0x00
+
+        UI.display('{:08b} {:08b} {:08b} {:08b}'
+                   .format(byte0, byte1, byte2, byte3), min_verbosity=3)
+        self._send(byte0, byte1, byte2, byte3)
+
+    def valves_off(self):
+        """Turn off all the valves"""
+        self._send(0x00, 0x00, 0x00, 0x00)
+
+    def __enter__(self):
+        self.port = SMBus(self.i2c_bus_number)
+        for address in self.mcp0_address, self.mcp1_address:
+            for register in IODIRA, IODIRB, OLATA, OLATB:
+                self.port.write_byte_data(address, register, 0x00)
+        return self
+
+    def __exit__(self, *_):
+        self.valves_off()
+        self.port = None
+
+
+@weakref_singleton
+class ParallelInterface(SensorBase, SMBusOutput):
+    """Output driver for parallel port. Sends four bytes in sequence:
+    byte0: O N M L K J I H
+    byte1: G F S E D 0075 C B
+    byte2: A 1 2 3 4 5 6 7
+    byte3: 8 9 10 11 12 13 14 0005
+    Uses pyparallel package (or python3-parallel from debian repo)
+    """
+    signal_numbers = [2 ** x for x in range(31, -1, -1)]
+    name = 'Symbiosys parallel port interface'
+
+    def __enter__(self):
+        self.port = self.port or Parallel()
+        if self.port and not self.working:
+            # Check for working to avoid re-initialization
+            # toggle the init on and off for a moment
+            self.port.setInitOut(False)
+            # 5us sleep
+            time.sleep(0.000005)
+            self.port.setInitOut(True)
+            # interface is initialized and waiting until button press
+            UI.display_header('Press the button on the interface...')
+            self._wait_until_not_busy()
+            self.working = True
+        return self
+
+    def _send(self, *data):
+        """Send the codes through the data port"""
+        def send_byte(single_byte):
+            """Send a single byte of data"""
+            # nothing to do if port is not there...
+            if not self.port:
+                return
+            # wait until we can send the codes
+            self._wait_until_not_busy()
+            # set the byte on port lines
+            self.port.setData(single_byte)
+            # strobe on (negative logic)
+            # signal that we finished and wait until interface acknowledges
+            self.port.setDataStrobe(False)
+            # 5us sleep
+            time.sleep(0.000005)
+            # wait until interface signals BUSY
+            while self.port.getInBusy():
+                pass
+            # strobe off (again, negative logic)
+            self.port.setDataStrobe(True)
+            self._wait_until_not_busy()
+
+        for byte in data:
+            send_byte(byte)
+
+    def _wait_until_not_busy(self):
+        """Wait until busy goes OFF"""
+        while not self.port.getInBusy():
+            time.sleep(0.01)
+
+    def check_if_machine_is_working(self):
+        """Reset the interface if needed and go on"""
+        UI.confirm('Turn on the machine...', default=True, abort_answer=False)
+
+    def valves_off(self):
+        """Deactivate the valves - actually, do nothing"""
+        pass
+
+    def wait_for(self, *args, **kw):
+        """Do nothing"""
+        pass
+
+
+@singleton
+class WiringPiOutput(OutputBase):
+    """A 32-channel control interface based on two MCP23017 chips"""
+    name = 'MCP23017 driver using wiringPi2-Python library'
+    pin_base = INTERFACE_CFG.pin_base
+    signal_numbers = [*range(pin_base, pin_base+32)]
+
+    def __init__(self):
+        # Set up an output interface on two MCP23017 chips
+        wiringpi.mcp23017Setup(self.pin_base, self.mcp0_address)
+        wiringpi.mcp23017Setup(self.pin_base + 16, self.mcp1_address)
+        # Set all I/O lines on MCP23017s as outputs - mode=1
+        for pin in self.mapping.values():
+            wiringpi.pinMode(pin, 1)
+
+    def valves_on(self, signals=()):
+        """Looks a signal up in arrangement and turns it on"""
+        for sig in signals:
+            pin_number = self.mapping.get(sig)
+            if not pin_number:
+                continue
+            wiringpi.digitalWrite(pin_number, 1)
+
+    def valves_off(self):
+        """Looks a signal up in arrangement and turns it off"""
+        for pin in self.mapping.values():
+            wiringpi.digitalWrite(pin, 0)
+
+
+def caster_context(casting_routine):
+    """Decorator for casting routines.
+    Checks current modes (simulation, perforation, testing)"""
+    @wraps(casting_routine)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        what = ('cast composition' if self.caster.casting
+                else 'test the outputs' if self.caster.testing
+                else 'calibrate the machine' if self.caster.calibration
+                else 'punch the ribbon' if self.caster.punching
+                else 'blow')
+        UI.pause('About to {}...'.format(what), min_verbosity=3)
+        with self.caster:
+            return casting_routine(self, *args, **kwargs)
+
+    return wrapper
+
+
+def calibration_mode(routine):
+    """Use a calibration mode for the routine.
+    This will affect casting statistics and some prompts."""
+    @wraps(routine)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        # Turn on the calibration mode
         try:
-            return ParallelInterface()
-        except (FileNotFoundError, IOError, OSError):
-            UI.pause('ERROR: Cannot access the parallel port!\n'
-                     'Check your hardware and OS configuration...\n'
-                     'Using simulation interface instead.')
-            return (punching_sensor() if mode.punching
-                    else test_sensor() if mode.testing
-                    else simulation_sensor())
+            self.caster.calibration = True
+            return routine(self, *args, **kwargs)
+        finally:
+            self.caster.calibration = False
+    return wrapper
 
-    def parallel_output():
-        """A parallel port valve control for John Cornelisse's
-        old interface built by Symbiosys"""
-        from .io_driver_parallel import ParallelInterface
+
+def testing_mode(routine):
+    """Output testing mode - skip some steps in casting"""
+    @wraps(routine)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        # Turn on the testing mode
         try:
-            return ParallelInterface()
-        except (FileNotFoundError, IOError, OSError):
-            return simulation_output()
-
-    def test_sensor():
-        """Sensor used for testing - manual advance ONLY"""
-        mode.testing = True
-        return TestSensor()
-
-    def simulation_sensor():
-        """Sensor used for simulation - manual or automatic advance,
-        can simulate machine stop"""
-        mode.simulation = True
-        return SimulationSensor()
-
-    def punching_sensor():
-        """Manual or time-driven advance, no machine stop detection"""
-        mode.punching = True
-        return PunchingSensor()
-
-    def wiringpi_output():
-        """Gets hardware output - prevents import loop"""
-        from .output_driver_wiringpi import WiringPiOutputDriver
-        return WiringPiOutputDriver()
-
-    def simulation_output():
-        """Simulate valves instead of using real hardware"""
-        mode.simulation = True
-        return SimulationOutput()
-
-    def get_classes():
-        """Get the sensor and output drivers"""
-        sensor_names = {'simulation': simulation_sensor,
-                        'sysfs': sysfs_sensor,
-                        'rpi.gpio': rpigpio_sensor,
-                        'parallel': parallel_sensor,
-                        'testing': test_sensor,
-                        'punching': punching_sensor}
-        output_names = {'simulation': simulation_output,
-                        'wiringpi': wiringpi_output,
-                        'parallel': parallel_output}
-        # First get the backend from configuration
-        backend = [default_sensor, default_output]
-        # Use simulation mode if set in configuration
-        simulation = True if 'simulation' in backend else mode.simulation
-        # If we don't know whether simulation is on or off - ask
-        if simulation is None and CFG.get_option('choose_backend'):
-            prompt = 'Use real caster? (no = simulation mode)'
-            simulation = not UI.confirm(prompt, True)
-        # Use parallel interface
-        parallel = True if 'parallel' in backend and not simulation else False
-        punching = True if 'punching' in backend else mode.punching
-        # Override the backend for parallel and simulation
-        # Use parallel sensor above all else
-        # Testing and punching sensor overrides simulation sensor
-        sensor = ('parallel' if parallel
-                  else 'testing' if mode.testing
-                  else 'punching' if punching
-                  else 'simulation' if simulation
-                  else default_sensor)
-        output = ('parallel' if parallel
-                  else 'simulation' if simulation
-                  else default_output)
-        # Get the function for building the interface based on name
-        # These functions will be executed when needed
-        sensor_function = sensor_names.get(sensor, SimulationSensor)
-        output_function = output_names.get(output, SimulationOutput)
-        return sensor_function, output_function
-
-    return get_classes()
+            self.caster.testing = True
+            return routine(self, *args, **kwargs)
+        finally:
+            self.caster.testing = False
+    return wrapper

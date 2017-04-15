@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Functions for parsing layouts and ribbons"""
-import json
-from collections import namedtuple
-from . import constants as c
+"""Functions and classes for parsing strings/iterables for usable data."""
+from . import definitions as d
 
 
 class ParsedRecord:
@@ -11,96 +9,99 @@ class ParsedRecord:
     Properties:
         signals - returns signals list
         signals_string - returns ' '.join(signals),
-        adjusted_signals - returns signals adjusted to row_16_addressing,
+        adjusted_signals - returns signals adjusted to row_16_mode,
         adjusted_signals_string - returns ' '.join(adjusted_signals),
         code - perform additional checks on signals and return a namedtuple,
         comment - comment found in code,
         row_pin - a row pin the caster jaws will stop on (1...15),
-        column_pin - a column pin the caster jaws will stop on (NI, NL, A...O).
+        column_pin - a column pin the caster jaws will stop on (NI, NL, A...O)
     Methods:
         _parse_record(code) - sets the comment, columns, rows, justification,
                               use_s_needle instance attributes
     """
-    comment, rows, columns, justification, use_s_needle = '', [], [], [], False
+    __slots__ = ('content', 'settings', '_report')
 
-    def __init__(self, signals_iterable, signal_o15=False, default_o15=False,
-                 row_16_addressing=c.OFF):
-        self._parse_record(signals_iterable)
-        self.row_16_addressing = row_16_addressing or None
-        self.signal_o15, self.default_o15 = signal_o15, default_o15
+    def __init__(self, signals_iterable,
+                 signal_o15=False, default_o15=False, row_16_mode=0):
+        # get the content and settings
+        self.settings = d.Settings(row_16_mode=row_16_mode,
+                                   explicit_o15=signal_o15,
+                                   add_missing_o15=default_o15)
+        self.content = parse_record(signals_iterable)
+        # generate when needed
+        self._report = None
 
     @property
     def signals(self):
         """Return a list of all signals"""
         # Add O15 if it was desired (explicit O or 15, lack of rows/columns)
         # only if signal_o15 flag was enabled.
-        use_o15 = any(('O' in self.columns, 15 in self.rows,
-                       self.default_o15 and not self.columns,
-                       self.default_o15 and not self.rows))
-        es_needle = ['S'] * self.use_s_needle
-        o15 = ['O15'] * self.signal_o15 and use_o15
-        rows = [str(x) for x in self.rows]
-        return self.justification + self.columns + es_needle + rows + o15
+        use_o15 = ('O' in self.content.columns, 15 in self.content.rows,
+                   not self.content.columns and self.settings.add_missing_o15,
+                   not self.content.rows and self.settings.add_missing_o15)
+        column_set = set(self.content.columns)
+        column_set.discard('O')
+
+        # build the output list
+        justification = [x for x in self.content.justification]
+        columns = [x for x in d.COLUMNS_15 if x in column_set]
+        es_needle = ['S'] * self.content.use_s_needle
+        rows = [str(x) for x in self.content.rows if x < 15]
+        o15 = ['O15'] * (self.settings.explicit_o15 and any(use_o15))
+
+        return justification + columns + es_needle + rows + o15
+
+    @property
+    def comment(self):
+        """Getter for a comment string."""
+        return self.content.comment
+
+    @property
+    def raw_signals(self):
+        """Getter for raw (unparsed) signals string."""
+        return self.content.raw_signals
+
+    @property
+    def original_entry(self):
+        """Getter for unparsed ribbon entry."""
+        return self.content.original_entry
 
     @property
     def adjusted_signals(self):
         """Return a list of signals adjusted to HMN/KMN/unit-shift addressing
         modes."""
-        def do_not_convert(column_set):
+        def do_not_convert():
             """No mode conversion needed"""
-            return column_set
 
-        def hmn(column_set):
+        def hmn():
             """HMN addressing mode - developed by Monotype, based on KMN.
             Uncommon."""
-            # detect the signals as they appear in the pin block
-            if 16 in self.rows:
-                if column_set.issuperset('NI') or column_set.issuperset('NL'):
-                    # NI, NL -> add H -> HNI, HNL
-                    column_set.update('H')
-                elif column_set.intersection('ABCDEFG'):
-                    # {ABCDEFG} -> add HM -> HM{ABCDEFG}
-                    column_set.update('HM')
-                elif 'H' in column_set:
-                    # H -> add N -> HN
-                    column_set.update('N')
-                elif column_set.intersection('IJKLM'):
-                    # {IJKL} -> add HM -> HM{IJKL}
-                    # M -> add H -> HM
-                    column_set.update('HM')
-                elif 'N' in column_set:
-                    # N -> add M -> MN
-                    column_set.update('M')
-                elif not column_set or 'O' in column_set:
-                    # O -> HMN
-                    column_set.update('HMN')
-            return column_set
+            # NI, NL, M -> add H -> HNI, HNL, HM
+            # H -> add N -> HN
+            # N -> add M -> MN
+            # O -> add HMN
+            # {ABCDEFGIJKL} -> add HM -> HM{ABCDEFGIJKL}
+            additional = {'NI': 'H', 'NL': 'H',
+                          'H': 'N', 'M': 'H', 'N': 'M', 'O': 'HMN'}
+            if is_row_16:
+                extra_signals = additional.get(self.column_pin, 'HM')
+                column_set.update(extra_signals)
 
-        def kmn(column_set):
+        def kmn():
             """KMN addressing mode - invented by a British printshop.
             Very uncommon."""
-            if 16 in self.rows:
-                if column_set.issuperset('NI') or column_set.issuperset('NL'):
-                    # NI, NL -> add K -> KNI, KNL
-                    column_set.update('K')
-                elif column_set.intersection('ABCDEFGHIJ'):
-                    # {ABCDEFGHIJ} -> add KM -> KM{ABCDEFGHIJ}
-                    column_set.update('HM')
-                elif 'K' in column_set:
-                    # K -> add N -> KN
-                    column_set.update('N')
-                elif 'L' in column_set:
-                    # L -> add KM -> KML
-                    column_set.update('KM')
-                elif 'N' in column_set:
-                    # N -> add M -> MN
-                    column_set.update('M')
-                elif not column_set or 'O' in column_set:
-                    # O -> KMN
-                    column_set.update('KMN')
-            return column_set
+            # NI, NL, M -> add K -> KNI, KNL, KM
+            # K -> add N -> KN
+            # N -> add M -> MN
+            # O -> add KMN
+            # {ABCDEFGHIJL} -> add KM -> KM{ABCDEFGHIJL}
+            additional = {'NI': 'K', 'NL': 'K',
+                          'K': 'N', 'M': 'K', 'N': 'M', 'O': 'KMN'}
+            if is_row_16:
+                extra_signals = additional.get(self.column_pin, 'KM')
+                column_set.update(extra_signals)
 
-        def unit_shift(column_set):
+        def unit_shift():
             """Unit-shift addressing mode - rather common,
             designed by Monotype and introduced in 1963"""
             if 'D' in column_set:
@@ -109,23 +110,37 @@ class ParsedRecord:
                 # this pin is activated by EF combination instead
                 column_set.discard('D')
                 column_set.update('EF')
-            if set(self.rows) == {16}:
+            if is_row_16:
                 # use unit shift if, and only if, the only row signal is 16
                 column_set.update('D')
-            return column_set
 
-        routine = {c.OFF: do_not_convert, c.UNIT_SHIFT: unit_shift, c.HMN: hmn,
-                   c.KMN: kmn}.get(self.row_16_addressing, do_not_convert)
+        functions = {d.OFF: do_not_convert, d.UNIT_SHIFT: unit_shift,
+                     d.HMN: hmn, d.KMN: kmn}
+
+        # determine which conversion routine to use based on addressing mode
+        conversion = functions.get(self.settings.row_16_mode, do_not_convert)
+        column_set = set(self.content.columns)
+        column_set.discard('O')
+
         # determine if explicit O15 would be used
-        use_o15 = any(('O' in self.columns, 15 in self.rows,
-                       self.default_o15 and not self.columns,
-                       self.default_o15 and not self.rows))
-        converted_columns = routine(set(self.columns))
-        columns = [x for x in c.COLUMNS_15 if x in converted_columns]
-        rows = [str(x) for x in self.rows if x < 15]
-        es_needle = ['S'] * self.use_s_needle
-        o15 = ['O15'] * self.signal_o15 and use_o15
-        return self.justification + columns + es_needle + rows + o15
+        use_o15 = ('O' in self.content.columns, 15 in self.content.rows,
+                   not self.content.columns and self.settings.add_missing_o15,
+                   not self.content.rows and self.settings.add_missing_o15)
+
+        # check if this combination is row 16 and not earlier
+        is_row_16 = set(self.content.rows) == {16}
+        # apply signals conversion
+        conversion()
+
+        # compose the output signal list
+        justification = [x for x in self.content.justification]
+        columns = [x for x in d.COLUMNS_15 if x in column_set]
+        es_needle = ['S'] * self.content.use_s_needle
+        rows = [str(x) for x in self.content.rows if x < 15]
+        o15 = ['O15'] * (self.settings.explicit_o15 and any(use_o15))
+
+        # got result
+        return justification + columns + es_needle + rows + o15
 
     @property
     def signals_string(self):
@@ -140,121 +155,146 @@ class ParsedRecord:
     @property
     def code(self):
         """Check signals for control codes"""
-        j_codes = self.justification
-        is_row_16 = 16 in self.rows
-        has_0005 = '0005' in j_codes or {'N', 'J'}.issubset(self.columns)
-        has_0075 = '0075' in j_codes or {'N', 'K'}.issubset(self.columns)
-        is_pump_start = has_0075
-        is_pump_stop = has_0005 and not has_0075
-        is_pump_hold = has_0005 or has_0075
-        is_newline = has_0005 and has_0075
-        is_char = any(self.signals) and not is_pump_hold
-        fields = ('has_0005', 'has_0075', 'is_pump_start', 'is_pump_stop',
-                  'is_pump_hold', 'is_newline', 'is_char', 'is_row_16')
-        result = namedtuple('check_results', fields)
-        return result(has_0005, has_0075, is_pump_start, is_pump_stop,
-                      is_pump_hold, is_newline, is_char, is_row_16)
+        if self._report:
+            return self._report
+        else:
+            # report was not cached, so generate it
+            # get the attributes
+            columns, rows = self.content.columns, self.content.rows
+            justification = self.content.justification
+
+            # basic signals checks
+            has_signals = any((*rows, *columns, *justification))
+            uses_row_16 = True if set(rows) == {16} else False
+
+            # detect the justification signals (also for unit-adding mode)
+            has_0005 = '0005' in justification or {'N', 'J'}.issubset(columns)
+            has_0075 = '0075' in justification or {'N', 'K'}.issubset(columns)
+
+            # what do these signals mean?
+            is_pump_start = has_0075
+            is_pump_stop = has_0005 and not has_0075
+            is_pump_hold = has_0005 or has_0075
+            is_newline = has_0005 and has_0075
+            is_char = has_signals and not any(justification)
+
+            # time to put it all together
+            report = d.Report(has_signals, uses_row_16, has_0005, has_0075,
+                              is_pump_start, is_pump_stop, is_pump_hold,
+                              is_newline, is_char)
+
+            # cache the calculated report so it doesn't have to be generated
+            self._report = report
+            return report
 
     @property
     def row_pin(self):
         """Get the earliest row pin from the signals. This row will normally
         be cast on a Monotype composition caster."""
         # row 16 will not be cast
-        return str(min([*self.rows, 15]))
+        return str(min([*self.content.rows, 15]))
 
     @property
     def column_pin(self):
         """Get the earliest column from the signals. This column will normally
         be cast on a Monotype composition caster."""
         try:
-            first_signal = self.columns[0]
+            first_signal = self.content.columns[0]
         except IndexError:
             # this happens if not self.columns
             first_signal = 'O'
         # NI, NL, A...O (no column means O)
-        column_set = set(self.columns)
+        column_set = set(self.content.columns)
         return ('NI' if column_set.issuperset('NI')
                 else 'NL' if column_set.issuperset('NL') else first_signal)
 
-    def _parse_record(self, input_data):
-        """Parses the record and gets its row, column and justification codes.
-        First split the input data into two parts:
-        -the Monotype signals (unprocessed),
-        -any comments delimited by symbols from COMMENT_SYMBOLS list.
 
-        Looks for any comment symbols defined here - **, *, ##, #, // etc.
-        splits the line at it and saves the comment to return it later on.
-        If it's an inline comment (placed after Monotype code combination),
-        this combination will be returned for casting.
+def parse_record(input_data):
+    """Parses the record and gets its row, column and justification codes.
+    First split the input data into two parts:
+    -the Monotype signals (unprocessed),
+    -any comments delimited by symbols from COMMENT_SYMBOLS list.
 
-        signal_o15  - include additional "O15" signal if O or 15 is desired
-        default_o15 - lack of row or column means O15, e.g. in ribbon punching
-                      (explicit_o15 decides whether it's visible in output)"""
-        def split_on_delimiter(sequence):
-            """Iterate over known comment delimiter symbols to find
-            whether a record has a comment; split on that delimiter
-            and normalize the signals"""
-            source = ''.join(str(x) for x in sequence)
-            for symbol in c.COMMENT_SYMBOLS:
-                if symbol in input_data:
-                    # Split on the first encountered symbol
-                    raw_signals, comment = source.split(symbol, 1)
-                    break
-            else:
-                # no comment symbol encountered, so we only have signals
-                raw_signals, comment = source, ''
+    Looks for any comment symbols defined here - **, *, ##, #, // etc.
+    splits the line at it and saves the comment to return it later on.
+    If it's an inline comment (placed after Monotype code combination),
+    this combination will be returned for casting."""
+    def split_on_delimiter(sequence):
+        """Iterate over known comment delimiter symbols to find
+        whether a record has a comment; split on that delimiter
+        and normalize the signals"""
+        source = ''.join(str(x) for x in sequence)
+        for symbol in d.COMMENT_SYMBOLS:
+            if symbol in source:
+                # Split on the first encountered symbol
+                raw_signals, comment = source.split(symbol, 1)
+                break
+        else:
+            # no comment symbol encountered, so we only have signals
+            raw_signals, comment = source, ''
 
-            return raw_signals.upper().strip(), comment.strip()
+        return raw_signals.upper().strip(), comment.strip()
 
-        def find_and_delete(value):
-            """Detect and dispatch known signals in source string"""
-            nonlocal sigs
-            string = str(value)
-            if string in sigs:
-                sigs = sigs.replace(string, '')
-                return True
-            else:
-                return False
+    def find_and_delete(value):
+        """Detect and dispatch known signals in source string"""
+        nonlocal signals
+        string = str(value)
+        if string in signals:
+            signals = signals.replace(string, '')
+            return True
+        else:
+            return False
 
-        # we know comment right away
-        sigs, self.comment = split_on_delimiter(input_data)
-        self.use_s_needle = 'S' in sigs
-        self.columns = [x for x in c.COLUMNS_15 if find_and_delete(x)]
-        self.justification = [x for x in ('0075', '0005')
-                              if find_and_delete(x)]
-        rows = [x for x in range(16, 0, -1) if find_and_delete(x)]
-        self.rows = [x for x in reversed(rows)]
+    # we know signals and comment right away
+    raw_signals, comment = split_on_delimiter(input_data)
+    signals = raw_signals
+
+    # read the signals to know what's inside
+    justification = tuple(x for x in ('0075', '0005') if find_and_delete(x))
+    parsed_rows = [x for x in range(16, 0, -1) if find_and_delete(x)]
+    rows = tuple(x for x in reversed(parsed_rows))
+    columns = tuple(x for x in d.COLUMNS_15 if find_and_delete(x))
+
+    # return the data
+    return d.Content(original_entry=input_data,
+                     raw_signals=raw_signals, comment=comment,
+                     use_s_needle='S' in signals,
+                     columns=columns, rows=rows, justification=justification)
 
 
-def parse_layout_size(canonical_layout):
-    """Get a size of a layout JSON-encoded or not"""
-    # The smallest layout is 15x15, later on it was extended to 15x17
-    # (+2 columns: NI, NL), ultimately to 16x17 (+1 row).
-    # Monophoto and Monomatic layouts could be even bigger, but these machines
-    # were not common and won't be supported in our software.
-    size = namedtuple('Size', ('rows', 'columns'))
-    rows, columns = 15, 15
-    try:
-        layout = json.loads(canonical_layout)
-    except (TypeError, json.JSONDecodeError):
-        layout = canonical_layout
-    # Layout stores records for each matrix: [(char, styles, pos, units)...]
-    # Iterate in reverse order, because for 16-row diecases it's quicker
-    # to determine the size.
-    for record in reversed(layout):
-        (_, _, position_string, _) = record
-        # low-level parse the position string to determine the highest row/col
-        position = get_coordinates(position_string)
-        assert '%s%s' % (position.column, position.row) == position_string
-        if position.row == 16:
-            # finish here as the only 16-row diecases were 16x17
-            # no need to iterate further
-            return size(16, 17)
-        if position.column in ('NI', 'NL'):
-            # update the columns number (iterate further because
-            # we still can find 16th row)
-            columns = 17
-    return size(rows, columns)
+def parse_ribbon(ribbon):
+    """Get the metadata and contents out of a sequence of lines"""
+    def get_value(line, symbol):
+        """Helper function - strips whitespace and symbols"""
+        # Split the line on an assignment symbol, get the second part,
+        # strip any whitespace or multipled symbols
+        return line.split(symbol, 1)[-1].strip(symbol).strip()
+
+    # What to look for
+    keywords = ['diecase', 'description', 'desc', 'diecase_id', 'customer',
+                'wedge', 'stopbar']
+    targets = ['diecase_id', 'description', 'description', 'diecase_id',
+               'customer', 'wedge_name', 'wedge_name']
+    parameters = dict(zip(keywords, targets))
+    # Metadata (anything found), contents (the rest)
+    metadata = {}
+    contents = []
+    # Look for parameters line per line, get parameter value
+    # If parameters exhausted, append the line to contents
+    for line in ribbon:
+        for keyword, target in parameters.items():
+            if line.startswith(keyword):
+                for sym in d.ASSIGNMENT_SYMBOLS:
+                    if sym in line:
+                        # Data found
+                        metadata[target] = get_value(line, sym)
+                        break
+                break
+        else:
+            contents.append(line)
+    # We need to add contents too
+    metadata['contents'] = contents
+    return metadata
 
 
 def stop_comes_first(contents):
@@ -266,7 +306,8 @@ def stop_comes_first(contents):
     Otherwise, False."""
     for line in contents:
         # code parameters checker
-        code = ParsedRecord(line).code
+        parsed_record = ParsedRecord(line)
+        code = parsed_record.code
         if code.is_pump_stop:
             return True
         elif code.is_pump_start:
@@ -275,36 +316,57 @@ def stop_comes_first(contents):
             continue
 
 
-def get_column(signals, default='O'):
-    """Gets the lowest column number from the signals list."""
-    signals_string = ''.join(str(l).upper() for l in signals)
-    for column in c.COLUMNS_17:
-        # iterate from left (NI, NL) to right (O)
-        if set(column).issubset(signals_string):
-            return column
-    return default
-
-
-def get_row(source, default=15):
-    """Gets the lowest row number from the signal list. Returns int."""
-    sigs = ''.join(str(x) for x in source)
-    rows = []
-    for number in range(16, 0, -1):
-        str_number = str(number)
-        if str_number in sigs:
-            # remove the number from signals to prevent adding its digits
-            sigs = sigs.replace(str_number, '')
-            rows.append(number)
-    # try to get the earliest row if rows are not empty; otherwise - default
-    try:
-        return min(rows)
-    except ValueError:
-        return default
-
-
 def get_coordinates(signals):
-    """Get the column and row from signals"""
-    coordinates = namedtuple('position', ('column', 'row'))
-    column = get_column(signals, default=None)
-    row = get_row(signals, default=None)
-    return coordinates(column, row)
+    """Get the column and row from record"""
+    def row_generator():
+        """Generate matching rows, removing them from input sequence"""
+        # first is None as the sequence generated will be reversed
+        # and None is to be used as a last resort if no row is found
+        yield None
+        nonlocal sigs
+        for number in range(16, 0, -1):
+            string = str(number)
+            if string in sigs:
+                sigs = sigs.replace(string, '')
+                yield number
+
+    def column_generator():
+        """Generate column numbers"""
+        nonlocal sigs
+        for column in d.COLUMNS_17:
+            if column in sigs:
+                sigs = sigs.replace(column, '')
+                yield column
+        yield None
+
+    # needs to work with strings and iterables
+    try:
+        sigs = ''.join(signals).upper()
+    except TypeError:
+        # in case not every iterable element is a string => convert
+        sigs = ''.join(str(l) for l in signals).upper()
+
+    # get a first possible row (caveat: recognize double-digit numbers)
+    all_rows = [x for x in row_generator()]
+    rows = (x for x in reversed(all_rows))
+
+    # get the first possible column -> NI, NL, A...O
+    columns = column_generator()
+    column, row = next(columns), next(rows)
+
+    return d.Coordinates(column, row)
+
+
+def get_key(source):
+    """Get the Key namedtuple of a key. First look it up in special keys."""
+    # normalize to lowercase and strip all whitespace ('Esc' -> 'esc')
+    # replace spaces and dashes to underscores ('ctrl-C -> ctrl_c)
+    if source is None:
+        # can be used to generate numbers on the fly
+        return d.Key(getchar=None, name=None)
+    else:
+        key = str(source)
+        normalized_key = key.lower().strip()
+        normalized_key.replace('-', '_')
+        normalized_key.replace(' ', '_')
+        return d.KEYS.get(normalized_key) or d.Key(getchar=key, name=key)

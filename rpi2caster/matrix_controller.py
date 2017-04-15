@@ -1,23 +1,19 @@
-#!/usr/bin/env python3
+# coding: utf-8
 """Diecase manipulation functions"""
 
 import csv
-from contextlib import suppress
 from collections import OrderedDict
-from itertools import zip_longest
+from contextlib import suppress
+from copy import copy
+from functools import partial
+from string import ascii_lowercase, ascii_uppercase, digits
 from sqlalchemy.orm import exc as orm_exc
-from . import exceptions as e
-from . import constants as c
-from . import wedge_unit_values as wu
-from . import unit_arrangements as ua
-from .styles import Roman, Bold, Italic, SmallCaps, Inferior, Superior
-from .models import Database, Diecase, Matrix, Wedge
-from .ui import UIFactory, Abort
-from .letter_frequencies import CharFreqs
-from .defaults import USER_DATA_DIR
+from . import basic_models as bm, basic_controllers as bc, definitions as d
+from .config import USER_DATA_DIR, CFG
+from .models import DB, Diecase
+from .ui import UI, Abort, Finish, option
 
-UI = UIFactory()
-DB = Database()
+PREFS_CFG = CFG.preferences
 
 
 def import_csv(diecase, filename=''):
@@ -29,7 +25,8 @@ def import_csv(diecase, filename=''):
                                  delimiter=';', quotechar='"')
             text = '\n'.join(''.join(str(field).ljust(15) for field in rec)
                              for rec in records)
-            UI.display('File preview: displaying first %s rows:\n' % num)
+            UI.display('File preview: displaying first {} rows:\n'
+                       .format(num))
             UI.display(text)
 
     # Load the layout from file
@@ -41,12 +38,10 @@ def import_csv(diecase, filename=''):
             layout_gen = (record for record in csv_reader)
         if UI.confirm('Is the 1st row a table header? ', default=True):
             next(layout_gen)
-        if not UI.confirm('Proceed?', default=True):
-            raise Abort
+        if not UI.confirm('Proceed?', default=True, abort_answer=False):
+            return
         # parse the layout
         diecase.load_layout(rec for rec in layout_gen)
-    except Abort:
-        UI.display('Aborted.')
     except (TypeError, ValueError):
         UI.pause('Incorrect layout. Check your file.')
 
@@ -55,7 +50,7 @@ def export_csv(diecase, filename=''):
     """Exports the matrix case layout to file."""
     name = diecase.diecase_id or 'NewDiecase'
     # Save the exported diecase layout in the default directory
-    file_name = filename or '%s/%s.csv' % (USER_DATA_DIR, name)
+    file_name = filename or '{}/{}.csv'.format(USER_DATA_DIR, name)
     with suppress(Abort):
         output_file = UI.export_file(file_name)
         with output_file:
@@ -64,12 +59,12 @@ def export_csv(diecase, filename=''):
             csv_writer.writerow(['Char', 'Styles', 'Position', 'Units'])
             # store mats with no position info as well
             csv_writer.writerows(diecase.layout.raw)
-        UI.pause('File %s successfully saved.' % filename)
+        UI.pause('File {} successfully saved.'.format(filename))
 
 
 def clear_layout(diecase):
     """Generates a new layout for the diecase"""
-    if UI.confirm('Are you sure?'):
+    if UI.confirm('Are you sure?', default=False, abort_answer=False):
         diecase.layout.reset()
         diecase.store_layout()
 
@@ -77,36 +72,61 @@ def clear_layout(diecase):
 def test_characters(diecase, input_iter='', styles=None):
     """Enter the string and parse the diecase to see if any of the
     specified characters are missing."""
+    def find_missing_mats(style):
+        """Look up characters of a given style in the diecase layout"""
+        missing = []
+        for char in test_char_set:
+            try:
+                diecase.layout.select_one(char=char, style=style)
+            except bm.MatrixNotFound:
+                missing.append(char)
+        return missing
+
     styles = styles or diecase.styles
     input_collection = input_iter or UI.enter('Text to check?')
-    test_char_set = set(input_collection)
-    # Return True unless any characters are missing
-    retval = True
+    test_char_set = sorted(set(input_collection))
+
+    # which characters we don't have, grouped by style
+    checks = {style: find_missing_mats(style) for style in styles}
+    missing_by_style = {style: missing
+                        for style, missing in checks.items() if missing}
+
+    # if we have all needed characters, all missing char lists are empty
+    # the diecase is complete, so return True
+    if not missing_by_style:
+        UI.display('All characters are present.')
+        return True
+
+    # info for user
+    info = 'Missing matrices for {}: {}'
+
+    # sort the missing mats by style, then by char
     for style in styles:
-        chars_found = {mat.char for mat in diecase for char in test_char_set
-                       if char == mat.char and
-                       (mat.is_space or style in mat.styles)}
-        missing = sorted(test_char_set.difference(chars_found))
-        if missing:
-            UI.display('Missing mats for %s: %s'
-                       % (style.name, ', '.join(missing)))
-            retval = False
-        else:
-            UI.display('All characters for %s are present.' % style.name)
-    return retval
+        missing_chars = missing_by_style.get(style)
+        if not missing_chars:
+            continue
+        missing_chars_string = ', '.join(sorted(missing_chars))
+        UI.display(info.format(style.name, missing_chars_string))
+
+    # the diecase is incomplete
+    return False
 
 
 def test_lang_completeness(diecase):
     """Choose a language and test whether the diecase contains all
     characters, and if not, list them"""
-    char_backend = CharFreqs()
-    UI.display('Building character set...')
-    uppercase = [str(char).upper() for char in char_backend]
-    lowercase = [str(char).lower() for char in char_backend]
+    # choose a language and get its letter frequencies
+    char_freqs = bc.get_letter_frequencies()
+    UI.display('Building character set...\n')
+
+    uppercase = [str(char).upper() for char in char_freqs]
+    lowercase = [str(char).lower() for char in char_freqs]
     all_chars = sorted(set(uppercase + lowercase))
-    UI.display('\nCharacters: %s\n' % ''.join(all_chars))
-    styles = diecase.styles
-    styles.choose()
+    UI.display('Characters:\n{}\n'.format(''.join(all_chars)))
+
+    # choose styles (by default: all those supported by diecase)
+    # for completeness checking
+    styles = bc.choose_styles(diecase.styles)
     test_characters(diecase, all_chars, styles)
     UI.pause()
 
@@ -115,33 +135,104 @@ def change_parameters(diecase):
     """Change parameters: diecase ID, typeface"""
     prompt = 'Diecase ID? '
     diecase_id = UI.enter(prompt, default=diecase.diecase_id)
+
     prompt = 'Typeface? (e.g. series, size, name) '
     typeface = UI.enter(prompt, default=diecase.typeface)
+
     changed = diecase_id != diecase.diecase_id or typeface != diecase.typeface
-    if changed and UI.confirm('Apply changes?'):
+    if changed and UI.confirm('Apply changes?', abort_answer=False):
         diecase.typeface = typeface
         diecase.diecase_id = diecase_id
 
 
+def ua_by_style(styles='*', current_mapping=None):
+    """Ask for styles and assign them a unit arrangement.
+    Return a list of tuples: [(style1, ua1), (style2, ua2)...]
+    for each style in styles_string (if called without arguments,
+    let user choose the styles manually)"""
+    # ensure that the mapping is ordered by style
+    styles_collection = bm.Styles(styles)
+    mapping = OrderedDict()
+    ua_numbers = ', '.join(x for x in sorted(ua.UA))
+    UI.display('Known unit arrangements:\n{}'.format(ua_numbers))
+
+    for style in styles_collection:
+        prompt = 'UA number for {}?'.format(style.name)
+        try:
+            current = current_mapping[style]
+            # preset the UA for this style
+            mapping[style] = current
+            ua_number = UI.enter(prompt, default=current, datatype=int)
+        except (KeyError, TypeError):
+            # no pre-existing mapping
+            ua_number = UI.enter(prompt, default='', datatype=str)
+
+        if ua_number:
+            mapping[style] = ua_number
+
+    return mapping
+
+
+def display_unit_values(mapping=None):
+    """Print a list on the screen with unit values for each character.
+    Use a {style1: ua1, style2: ua2} OrderedDict mapping.
+    If mapping is not provided, user will choose style manually."""
+    mapping = mapping or ua_by_style()
+    # ordered dict of unit values by style, then by char:
+    # {roman: {'a': 9, 'b': 9...}, bold: {'a': 10, 'b': 10...}...}
+    source = ua.char_unit_values(mapping)
+
+    characters = [*ascii_lowercase, *ascii_uppercase, *digits, *d.LIGATURES]
+    # Unit values by styles and chars
+    # character     roman    bold     italic
+    fields = ('Character', *(style.name for style in source))
+    header = ''.join(name.ljust(15) for name in fields)
+    # Display the data for characters
+    UI.display('Unit values for characters:\n')
+    UI.display(header)
+    UI.display('-' * len(header))
+    for char in characters:
+        # get the unit values for each style (or empty string if undefined)
+        values = (style_ua.get(char, '') for style_ua in source.values())
+        # format to 15-character wide columns and display
+        fields = (char.ljust(15), *(str(units).ljust(15) for units in values))
+        UI.display(''.join(fields))
+
+    UI.display('\n\nCharacters by unit value:\n')
+    # By unit values, then character
+    for units in range(4, 25):
+        strings = []
+        for style, style_ua in source.items():
+            chars = [c for c in characters if style_ua.get(c, 0) == units]
+            if not chars:
+                continue
+            strings.append('{} : {}'.format(style.name, ', '.join(chars)))
+        if not strings:
+            continue
+        UI.display('\n\nCharacters {} units wide:'.format(units))
+        UI.display('\n'.join(strings))
+
+
 def assign_unit_arrangements(diecase):
     """Sets the unit arrangements for diecase's styles"""
-    unit_arrangements = ua.ua_by_style(diecase.styles,
-                                       diecase.unit_arrangements)
-    if UI.confirm('Display character unit values?', False):
-        ua.display_unit_values(diecase.unit_arrangements)
+    unit_arrangements = ua_by_style(diecase.styles, diecase.unit_arrangements)
+    if UI.confirm('Display character unit values?', default=True):
+        display_unit_values(diecase.unit_arrangements)
         UI.pause()
     prompt = 'Apply changes?'
-    if unit_arrangements != diecase.unit_arrangements and UI.confirm(prompt):
+    arrangements_changed = unit_arrangements != diecase.unit_arrangements
+    if arrangements_changed and UI.confirm(prompt, abort_answer=False):
         diecase.unit_arrangements = unit_arrangements
 
 
 def assign_wedge(diecase):
     """Assigns a wedge (from database or newly-defined) to the diecase"""
-    diecase.wedge = choose_wedge(diecase.wedge.name)
+    diecase.wedge = bc.choose_wedge(diecase.wedge)
 
 
 def save_to_db(diecase):
     """Stores the matrix case definition/layout in database"""
+    diecase.store_layout()
     DB.session.add(diecase)
     DB.session.commit()
     UI.pause('Data saved successfully.')
@@ -149,53 +240,54 @@ def save_to_db(diecase):
 
 def delete_from_db(diecase):
     """Deletes a diecase from database"""
-    ans = UI.confirm('Are you sure?', default=False)
+    ans = UI.confirm('Are you sure?', default=False, abort_answer=False)
     if ans:
         DB.session.delete(diecase)
         DB.session.commit()
-        UI.display('Matrix case deleted successfully.')
-        return True
+        UI.pause('Matrix case deleted successfully.')
 
 
 def get_all_diecases():
     """Lists all matrix cases we have."""
-    diecases = OrderedDict(enumerate(DB.query(Diecase).all(), start=1))
-    return diecases
+    try:
+        database_entries = DB.query(Diecase).order_by(Diecase.diecase_id).all()
+        enumerated_diecases = enumerate(database_entries, start=1)
+        return OrderedDict(enumerated_diecases)
+    except orm_exc.NoResultFound:
+        return {}
 
 
 def list_diecases(data=get_all_diecases()):
     """Display all diecases in a dictionary, plus an empty new one"""
-    UI.display('\nAvailable diecases:\n\n' +
-               'No.'.ljust(4) +
-               'Diecase ID'.ljust(25) +
-               'Wedge name'.ljust(12) +
-               'Typeface')
-    for index, diecase in data.items():
-        row = ''.join([str(index).ljust(4),
-                       diecase.diecase_id.ljust(25),
-                       diecase.wedge.name.ljust(12),
-                       diecase.typeface])
-        UI.display(row)
+    UI.display('\nAvailable diecases:\n')
+    UI.display_header('|{:<5}  {:<25} {:<12} {:<50}|'
+                      .format('Index', 'Diecase ID', 'Wedge', 'Typeface'),
+                      trailing_newline=0)
+    # show the rest of the table
+    template = ('|{index:>5}  {d.diecase_id:<25} '
+                '{d.wedge.name:<12} {d.typeface:<50}|')
+    entries = (template.format(d=diecase, index=index)
+               for index, diecase in data.items())
+    UI.display(*entries, sep='\n')
+    return data
 
 
 def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
     """Select diecases from database and let the user choose one of them.
     If no diecases are found, return None and let the calling logic
     determine what fallback to use."""
-    prompt = 'Number? (0: %s, leave blank to exit)' % fallback_description
-    while True:
-        try:
-            data = get_all_diecases()
-            if not data:
-                return fallback()
-            else:
-                UI.display('Choose a matrix case:', end='\n\n')
-                list_diecases(data)
-                choice = UI.enter(prompt, exception=Abort, datatype=int)
-                data[0] = None
-                return data[choice] or fallback()
-        except KeyError:
-            UI.pause('Diecase number is incorrect!')
+    prompt = 'Your choice? (0 = {})'.format(fallback_description)
+    data = get_all_diecases()
+    # end right away
+    if not data:
+        return fallback()
+    UI.display('Choose a matrix case:', end='\n\n')
+    list_diecases(data)
+    # empty option for fallback
+    qty = len(data)
+    # let the user choose the diecase
+    choice = UI.enter(prompt, default=0, datatype=int, minimum=0, maximum=qty)
+    return data.get(choice) or fallback()
 
 
 def get_diecase(diecase_id=None, fallback=choose_diecase):
@@ -204,164 +296,11 @@ def get_diecase(diecase_id=None, fallback=choose_diecase):
         return DB.query(Diecase).filter(Diecase.diecase_id == diecase_id).one()
     except orm_exc.NoResultFound:
         # choose diecase manually if not found
-        UI.display('Diecase %s not found in database!' % diecase_id)
+        UI.display('Diecase {} not found in database!'.format(diecase_id))
         return fallback()
 
 
-def get_wedge(wedge_name):
-    """Get a Wedge object for a specified wedge name"""
-    return Wedge(wedge_name)
-
-
-def choose_wedge(wedge_name='S5-12E'):
-    """Choose a wedge manually"""
-    def enter_name():
-        """Enter the wedge's name"""
-        # Ask for wedge name and set width as it is written on the wedge
-        al_it = iter(wu.ALIASES)
-        # Group by three
-        grouper = zip_longest(al_it, al_it, al_it, fillvalue='')
-        old_wedges = '\n'.join('\t'.join(z) for z in grouper)
-        prompt = ('\nSome old-style wedge designations:\n\n%s'
-                  '\n\nIf you have one of those, '
-                  'enter the corresponding new-style number (like S5-xx.yE).'
-                  '\n\nWedge designation?' % old_wedges)
-        return UI.enter(prompt, default=wedge_name)
-
-    def enter_parameters():
-        """Parse the wedge's name and return a list:
-        [series, set_width, is_brit_pica, units]"""
-        # For countries that use comma as decimal delimiter, convert to point:
-        w_name = wedge_name.replace(',', '.').upper().strip()
-        # Check if this is an European wedge
-        # (these were based on pica = .1667" )
-        is_brit_pica = w_name.endswith('E')
-        # Away with the initial S, final E and any spaces before and after
-        # Make it work with space or dash as delimiter
-        wedge = w_name.strip('SE ').replace('-', ' ').split(' ')
-        try:
-            (series, set_width) = wedge
-        except ValueError:
-            series = wedge[0]
-            set_width = None
-        # Now get the set width - ensure that it is float divisible by 0.25
-        # no smaller than 5 (narrowest type), no wider than 20 (large comp)
-        while True:
-            try:
-                set_width = float(set_width)
-                if not set_width % 0.25 and 5 <= set_width <= 20:
-                    break
-                else:
-                    raise ValueError
-            except (TypeError, ValueError):
-                prompt = ('Enter the set width as a decimal fraction '
-                          'divisible by 0.25 - e.g. 12.25: ')
-                set_width = UI.enter(prompt, datatype=float)
-        # We have the wedge name, so we can look the wedge up in known wedges
-        # (no need to enter the unit values manually)
-        units = wu.UNITS.get(series, None)
-        while not units:
-            # Enter manually if not found:
-            prompt = ('Enter the wedge unit values for rows 1...15 '
-                      'or 1...16, separated by commas.\n')
-            # Now we need to be sure that all whitespace is stripped,
-            # and the value written to database is a list of integers
-            try:
-                units = [int(i.strip())
-                         for i in UI.enter(prompt).split(',')]
-                # Display warning if the number of steps is not
-                # 15 or 16 (15 is most common, 16 was used for HMN and KMN).
-                if not 15 <= len(units) <= 16:
-                    UI.display('Wedge must have 15 or 16 steps - enter again.')
-                    units = None
-            except ValueError:
-                UI.display('Incorrect value - enter the values again.')
-                units = None
-        # Now we have the data...
-        return {'series': series, 'set_width': set_width,
-                'is_brit_pica': is_brit_pica, 'units': units}
-
-    wedge_name = enter_name()
-    try:
-        get_wedge(wedge_name)
-    except ValueError:
-        data = enter_parameters()
-        wedge = Wedge()
-        wedge.update(data)
-        return wedge
-
-
-class MatrixMixin(object):
-    """Matrix editing operations"""
-    def edit_matrix(self, matrix):
-        """Edits the matrix data"""
-        styles = matrix.styles
-        char = (c.SPACE_NAMES.get(matrix.char) or
-                'char: "%s"' % matrix.char if matrix.char
-                else 'character unknown')
-        styles = 'styles: %s ' % styles.names if not styles.use_all else ''
-        UI.display('\n' + '*' * 80 + '\n')
-        UI.display('%s %s %s, units: %s'
-                   % (matrix.pos, styles, char, matrix.units))
-        self.edit_mat_char(matrix)
-        self.choose_styles(matrix)
-        self.specify_units(matrix)
-        return matrix
-
-    @staticmethod
-    def edit_mat_char(matrix):
-        """Edit the matrix character"""
-        prompt = ('Char? (" ": low / "_": high space, '
-                  'blank = keep, ctrl-C to exit)?')
-        matrix.char = UI.enter(prompt,
-                               blank_ok=not matrix.char, default=matrix.char)
-
-    @staticmethod
-    def edit_code(matrix):
-        """Edit the matrix code"""
-        # display char only if matrix is not space and has specified char
-        char = matrix.char
-        if char and c.SPACE_NAMES.get(char) is None:
-            ch_str = '"%s"' % char
-            # for matrices with all/unspecified styles don't display these
-            style_str = (matrix.styles.names if not matrix.styles.use_all
-                         else '')
-        else:
-            ch_str = c.SPACE_NAMES.get(char) or ''
-            style_str = ''
-        f_str = ' for ' if ch_str or style_str else ''
-        # display style string only if char is there
-        prompt_list = ['Enter the matrix position', f_str, style_str, ch_str]
-        matrix.pos = UI.enter(''.join(prompt_list), default=matrix.pos)
-
-    @staticmethod
-    def specify_units(matrix):
-        """Give a user-defined unit value for the matrix;
-        mostly used for matrices placed in a different row than the
-        unit arrangement indicates; this will make the program set the
-        justification wedges and cast the character with the S-needle"""
-        desc = '"%s" at ' % matrix.char if matrix.char else ''
-        ua_units = matrix.get_units_from_arrangement()
-        row_units = matrix.get_row_units()
-        if ua_units:
-            UI.display('%s%s unit values: %s by UA, %s by row'
-                       % (desc, matrix.pos, ua_units, row_units))
-            prompt = 'New unit value? (0 = UA units, blank = current)'
-        else:
-            UI.display('%s%s row unit value: %s' % (desc, matrix.pos,
-                                                    row_units))
-            prompt = 'New unit value? (0 = row units, blank = current)'
-        matrix.units = UI.enter(prompt, default=matrix.units, datatype=float)
-
-    @staticmethod
-    def choose_styles(matrix):
-        """Choose styles for the matrix"""
-        styles = matrix.styles
-        styles.choose()
-        matrix.styles = styles
-
-
-class DiecaseMixin(MatrixMixin):
+class DiecaseMixin:
     """Mixin for diecase-related operations"""
     @property
     def wedge(self):
@@ -374,14 +313,17 @@ class DiecaseMixin(MatrixMixin):
         self.__dict__['_wedge'] = wedge
 
     @wedge.setter
-    def wedge_name(self, wedge_name):
+    def wedge_name(self, w_name):
         """Set the wedge with a given name"""
         try:
-            self.wedge = (get_wedge(wedge_name) if wedge_name
-                          else self.diecase.wedge)
+            self.wedge = bm.Wedge(w_name) if w_name else self.diecase.wedge
         except ValueError:
             # parsing failed
-            self.wedge = choose_wedge(wedge_name)
+            self.wedge = bc.choose_wedge(w_name)
+
+    def choose_wedge(self):
+        """Chooses a new wedge"""
+        self.wedge = bc.choose_wedge(self.wedge)
 
     @property
     def diecase(self):
@@ -402,167 +344,207 @@ class DiecaseMixin(MatrixMixin):
     @diecase.setter
     def diecase_id(self, diecase_id):
         """Set a diecase with a given diecase ID, or a current/default one"""
-        with suppress(Abort):
-            self.diecase = get_diecase(diecase_id, fallback=self.diecase)
+        self.diecase = get_diecase(diecase_id, fallback=self.diecase)
+
+    def choose_diecase(self):
+        """Chooses a diecase from database"""
+        self.diecase = choose_diecase(fallback=self.diecase,
+                                      fallback_description='keep current')
 
     @property
     def charset(self):
         """Get a {style: {char: Matrix object}} charset from the diecase"""
         return self.diecase.layout.charset
 
+    def get_space(self, units=5, low=True, temporary=False):
+        """Get a most suitable space for a given number of units"""
+        mat = self.diecase.layout.get_space(units=units, low=low)
+        return copy(mat) if temporary else mat
+
     @property
     def space(self):
         """Get a space from diecase; most typically G2, 6-units wide"""
-        return self.get_space(units=6, is_low_space=True)
+        return self.get_space(units=6, low=True)
 
     @property
     def half_quad(self):
         """Get a 9-unit quad (half-square) from diecase"""
-        return self.get_space(units=9, is_low_space=True)
+        return self.get_space(units=9, low=True)
 
     @property
     def quad(self):
         """Get a full em quad"""
-        return self.get_space(units=18, is_low_space=True)
+        return self.get_space(units=18, low=True)
 
-    def choose_diecase(self):
-        """Chooses a diecase from database"""
+    def edit_matrix(self, matrix,
+                    edit_char=True, edit_position=True,
+                    edit_styles=True, edit_units=True):
+        """Edits the matrix data.
+
+        matrix : a Matrix class object to edit,
+
+        edit_char : whether or not to edit the character,
+        edit_position : whether or not to edit the matrix coordinates,
+        edit_styles : whether or not to change the styles for the matrix,
+        edit_units : whether or not to change the matrix unit value
+        """
+        def _get_char():
+            """Get a character or space information"""
+            # either a space description or mat character
+            char = d.SPACE_NAMES.get(matrix.char, matrix.char)
+            return char or 'undefined'
+
+        def _edit_char():
+            """Edit the matrix character"""
+            if not edit_char:
+                return
+            prompt = 'Char? (" ": low / "_": high space, blank = keep)'
+            matrix.char = UI.enter(prompt, default=matrix.char)
+
+        def _edit_position():
+            """Edit the matrix coordinates"""
+            if not edit_position:
+                return
+            matrix.pos = UI.enter('Enter the matrix position',
+                                  default=matrix.pos)
+
+        def _edit_styles():
+            """Change the matrix styles"""
+            # skip this for spaces
+            if not edit_styles or matrix.isspace():
+                return
+            matrix.styles = bc.choose_styles(matrix.styles)
+
+        def _edit_units():
+            """Change the matrix unit width value"""
+            # skip this for spaces
+            if not _edit_units:
+                return
+
+            # get unit width values
+            row_units = matrix.get_row_units()
+            ua_units = matrix.get_units_from_arrangement()
+            curr_units = matrix.units
+
+            # build a prompt with units info
+            curr_chunk = ('' if not curr_units
+                          else 'current: {}'.format(curr_units))
+            row_chunk = ('' if not row_units
+                         else 'row units: {}'.format(row_units))
+            ua_chunk = ('' if not ua_units
+                        else 'UA units: {}'.format(ua_units))
+            chunks = [x for x in (curr_chunk, row_chunk, ua_chunk) if x]
+            if chunks:
+                prompt = 'Enter unit width ({})'.format(', '.join(chunks))
+            else:
+                prompt = 'Enter unit width'
+            matrix.units = UI.enter(prompt, default=curr_units, datatype=int,
+                                    minimum=4, maximum=25)
+
+        def _edit_space_width():
+            """Edits the space width"""
+            width = bc.enter_measure('1em', what='space width',
+                                     set_width=self.wedge.set_width)
+            matrix.units = width.units
+
         with suppress(Abort):
-            self.diecase = choose_diecase(fallback=self.diecase,
-                                          fallback_description='keep current')
+            # keep displaying this menu until aborted
+            while True:
+                # generate menu options dynamically
+                options = [option(key='c', value=_edit_char, seq=1,
+                                  lazy=_get_char, cond=edit_char,
+                                  text='change character (current: {})'),
+                           option(key='p', value=_edit_position, seq=2,
+                                  lazy=matrix.pos, cond=edit_position,
+                                  text='change position (current: {})'),
+                           option(key='s', value=_edit_styles, seq=3,
+                                  lazy=matrix.styles.names,
+                                  cond=edit_styles and not matrix.isspace(),
+                                  text='assign styles (current: {})'),
+                           option(key='u', value=_edit_units, seq=4,
+                                  lazy=matrix.units,
+                                  cond=edit_units and not matrix.isspace(),
+                                  text='change width (current: {} units)'),
+                           option(key='w', value=_edit_space_width, seq=4,
+                                  lazy=matrix.units,
+                                  cond=edit_units and matrix.isspace(),
+                                  text='change width (current: {} units)')]
+                valid_options = [opt for opt in options if opt.condition]
+                if not valid_options:
+                    # nothing to do
+                    break
+                elif len(valid_options) == 1:
+                    # only one thing - no need for the menu
+                    choice = valid_options[0].value
+                else:
+                    # display the menu for user to choose
+                    choice = UI.simple_menu('Edit the matrix for {} at {}:'
+                                            .format(_get_char(), matrix.pos),
+                                            options, default_key='Esc')
+                # execute the subroutine
+                choice()
+        return matrix
 
-    def choose_wedge(self):
-        """Chooses a wedge from registered ones"""
-        self.wedge = choose_wedge()
+    def find_matrix(self, char='', styles='*', position='', units=None,
+                    choose=True, temporary=False):
+        """Search the diecase layout and get a matching mat.
 
-    def find_matrix(self, char=None, styles=None, position=None, units=None,
-                    manual_choice=True):
-        """Search the diecase layout and get a matching mat"""
+        char, styles, position, units: search criteria,
+        choose: manual choice menu or new mat definition,
+        temporary: if True, copies the matrix (if it is edited temporarily)."""
         def define_new_mat():
             """Create a new Matrix object"""
-            mat = Matrix(diecase=self.diecase, styles=styles, char=char,
-                         units=units, position=position)
-            self.edit_code(mat)
-            return mat
+            mat = bm.Matrix(diecase=self.diecase, styles=styles_collection,
+                            char=char, units=units, pos=position)
+            return self.edit_matrix(mat)
 
         def choose_from_menu():
             """Display a menu to choose mats"""
             menu_data = {i: mat for i, mat in enumerate(mats, start=1)}
-            menu_data[0] = None
-            # build header depending on char and styles
-            ch_string = '%s ' % char
-            st_string = ('' if styles.use_all or not ch_string
-                         else '%s ' % styles.names)
-            title = ['Multiple matrices', ' for ' if ch_string else '',
-                     st_string, ch_string, 'found. Please choose a matrix:\n']
-            UI.display(''.join(title))
-            header = ''.join(['Index'.ljust(7), 'Char'.ljust(7),
-                              'Code'.ljust(7), 'Styles'.ljust(50)])
-            UI.display(header)
-            UI.display('-' * len(header))
+            # no matches? make a new one!
+            if not menu_data:
+                return None
+
+            # build title depending on char and styles
+            st_string = ('' if styles_collection.use_all or not char
+                         else '{}'.format(styles_collection.names))
+            title = ['Multiple matrices', 'for' if char else '',
+                     st_string, char, 'found. Please choose a matrix:\n']
+            UI.display(' '.join(s for s in title if s))
+
+            # table header
+            row = '{:<7}{:<7}{:<7}{:<50}'
+            UI.display_header(row.format('Index', 'Char', 'Code', 'Styles'))
+
+            # show available matrices
             for i, mat in menu_data.items():
-                UI.display(''.join([str(i).ljust(7),
-                                    mat.char.ljust(7),
-                                    mat.pos.ljust(7),
-                                    mat.styles.names.ljust(50)]))
+                UI.display(row.format(i, mat.char, mat.pos, mat.styles.names))
             UI.display()
-            prompt = 'Choose matrix (0 or blank to enter manually)'
-            choice = None
-            # make sure we get a number corresponding to a diecase
-            while choice not in menu_data:
-                choice = UI.enter(prompt, blank_ok=True, datatype=int)
-            mat = menu_data[choice]
+
+            # let user choose
+            choice = UI.enter('Choose matrix (0 or blank to enter manually)',
+                              default=0, minimum=0, maximum=len(menu_data))
             # if mat is None, define a new one
-            return mat or define_new_mat()
+            return menu_data.get(choice)
 
-        mats = self.diecase.layout.select_many(char, styles, position, units)
-        if manual_choice:
-            if not mats:
-                return define_new_mat()
-            elif len(mats) == 1:
-                # skip manual choice and select the only matching mat
-                return mats[0]
-            else:
-                return choose_from_menu()
+        styles_collection = bm.Styles(styles)
+        mats = self.diecase.layout.select_many(char, styles_collection,
+                                               position, units)
+        if len(mats) == 1:
+            # only one match: return it
+            retval = mats[0]
+        elif choose:
+            # manual mat choice
+            retval = choose_from_menu() or define_new_mat()
         elif mats:
-            # choose the first or only mat found
-            return mats[0]
+            # automatic choice, multiple matches found: get first available
+            retval = mats[0]
         else:
-            # no mats found in automatic choice? raise an exception
-            raise e.MatrixNotFound
+            raise bm.MatrixNotFound
 
-    def get_space(self, units=5, is_low_space=True):
-        """Get a most suitable space for a given number of units"""
-        return self.diecase.layout.get_space(units=units, low=is_low_space)
-
-    def get_supporting_space(self, units):
-        """Support for overhanging characters with type body narrower than
-        the character; used for adding many units"""
-        return self.diecase.layout.get_space(units=units, low=False)
-
-    def specify_space_width(self, matrix, width=None):
-        """Specify the space's width"""
-        # TODO: use Measure as an engine?
-        def parse_value(raw_string):
-            """Parse the entered value with units"""
-            # By default, use wedge set units
-            factor = 1
-            string = raw_string.strip()
-            for symbol in symbols:
-                # End after first match
-                if string.endswith(symbol):
-                    string = string.replace(symbol, '')
-                    factor = meas.get(symbol, 1)
-                    break
-            # Filter the string
-            string.replace(',', '.')
-            num_string = ''.join(x for x in string if x.isdigit() or x is '.')
-            # Convert the value with known unit to units
-            units = float(num_string) * factor
-            return round(units, 2)
-
-        try:
-            # Point to unit conversion factor
-            ptu = 1 / self.wedge.unit_point_width
-        except AttributeError:
-            # Assume set width = 12; 18 units is 12 points, 1 point = 1.33 unit
-            # This applies both to pt for .1667 and pp for .166 pica wedges
-            ptu = 1.33
-        help_text = ('\n\nAvailable units:\n'
-                     '    dd - European Didot point,\n'
-                     '    cc - cicero (=12dd, .1776"),\n'
-                     '    ff - Fournier point,\n'
-                     '    cf - Fournier cicero (=12ff, .1628"),\n'
-                     '    pp - TeX / US printer\'s pica point,\n'
-                     '    Pp - TeX / US printer\'s pica (=12pp, .1660"),\n'
-                     '    pt - DTP / PostScript point = 1/72",\n'
-                     '    pc - DTP / PostScript pica (=12pt, .1667"),\n'
-                     '    u - unit of wedge\'s set\n'
-                     '    en - 9 units of wedge\'s set\n'
-                     '    em - 18 units of wedge\'s set\n\n')
-
-        meas = {'pc': 12.0 * ptu, 'pt': 1.0 * ptu,
-                'Pp': 12 * 0.166 / 0.1667 * ptu, 'pp': 0.166 / 0.1667 * ptu,
-                'cc': 12 * 0.1776 / 0.1667 * ptu, 'dd': 0.1776 / 0.1667 * ptu,
-                'cf': 12 * 0.1628 / 0.1667 * ptu, 'ff': 0.1628 / 0.1667 * ptu,
-                'u': 1, 'en': 9, 'em': 18}
-        symbols = ['pc', 'pt', 'Pp', 'pp', 'cc', 'dd', 'cf', 'ff',
-                   'en', 'em', 'u']
-        prompt = 'Enter the space width value and unit (or "?" for help)'
-        while True:
-            if not width:
-                raw_string = UI.enter(prompt, default='1en')
-            else:
-                raw_string = str(width)
-            if '?' in raw_string:
-                # Display help message and start again
-                UI.display(help_text)
-            try:
-                matrix.units = parse_value(raw_string)
-                return
-            except (TypeError, ValueError):
-                UI.display('Incorrect value - enter again...')
-                raw_string = None
+        # decide whether a new mat should be returned or copied
+        # (e.g. to prevent from modification)
+        return copy(retval) if temporary else retval
 
     def display_diecase_layout(self, diecase=None, pause_after_exit=True):
         """Display the diecase layout, unit values, styles.
@@ -573,120 +555,93 @@ class DiecaseMixin(MatrixMixin):
                            Otherwise continue the program execution
                            (e.g. in diecase edit menus).
         """
+        def build_template():
+            """Each layout column depends on its content.
+            Calculate the widths."""
+            # 3 characters to start is reasonable enough
+            columns = layout.size.column_numbers
+            widths = OrderedDict((name, 3) for name in columns)
+
+            # get the maximum width of characters in every column
+            # if it's larger than header field width, update the column width
+            for column, initial_width in widths.items():
+                widths_gen = (len(mat) for mat in layout.select_column(column))
+                widths[column] = max(initial_width, *widths_gen)
+
+            # column widths are now determined... make a field template
+            fields = (' {{{col}:^{width}}} '.format(col=col, width=width)
+                      for col, width in widths.items())
+            template = '| {{row:>3}} |{fields}| {{units:>5}} |'
+            return template.format(fields=''.join(fields))
+
+        def build_row(row_number):
+            """Build a layout table row.
+            A row takes exactly two actual lines (top and bottom),
+            top line displays row number, characters and row unit value,
+            bottom line displays unit values if different from row units."""
+            row = layout.select_row(row_number)
+            units = diecase.wedge.units[row_number]
+            # initialize the row value dictionaries
+            empty = dict(row='', units='')
+            top = dict(row=row_number, units=units)
+            bottom = dict(row='', units='')
+            # fill all mat character fields
+            for mat in row:
+                # empty row (separator)
+                empty[mat.column] = ''
+                # character row
+                top[mat.column] = mat.char
+                # show matrix unit width if it differs from row unit width
+                bottom[mat.column] = '' if mat.units == units else mat.units
+
+            # format and concatenate two table rows
+            empty_str = template.format(**empty)
+            top_str = template.format(**top)
+            bottom_str = template.format(**bottom)
+            return '{}\n{}\n{}'.format(empty_str, top_str, bottom_str)
+
+        def build_legend():
+            """Get the information about styles in diecase."""
+            return layout.styles.names
+
         diecase = diecase or self.diecase
-
-
-    def _display_diecase_layout(self, diecase=None, pause_after_exit=True):
-        """Shows a layout for a given diecase ID, unit values for its
-        assigned wedge, or the typical S5 if not specified."""
-        # TODO: reimplement using layout iterators and style formatting
-        def get_char(matrix):
-            """New style formatting for diecase layouts"""
-            style_modifiers = {Roman: dict(fg=None),
-                               Bold: dict(bold=True),
-                               Italic: dict(fg='cyan'),
-                               SmallCaps: dict(underline=True),
-                               Superior: dict(fg='blue'),
-                               Inferior: dict(fg='magenta')}
-            spaces_symbols = {'_': UI.FormattedText('▣', fg='red'),
-                              ' ': UI.FormattedText('□', fg='red'),
-                              '': UI.FormattedText(' ')}
-            style_options = {'fg': None}
-            for style in matrix.styles:
-                style_options.update(style_modifiers.get(style))
-            return (spaces_symbols.get(matrix.char) or
-                    UI.FormattedText(matrix.char, **style_options))
-
-        def get_width(column):
-            """Get the column width"""
-            return column_widths.get(column, 4)
-
-        def get_mat_unit_value(mat):
-            """Get the unit value string for a character, if the width
-            overrides the wedge default"""
-            show_units = (mat.units != wedge_row_units and
-                          mat.char and not mat.is_space)
-            if show_units:
-                return str(mat.units)
-            else:
-                return ''
-
-        diecase = diecase or self.diecase
-        col_numbers = c.COLUMNS_15
-        row_numbers = [x for x in range(1, 16)]
-        # Set the initial column width value to 4
-        column_widths = {}
-        # Now loop over the matrices and adjust the displayed table
-        for mat in diecase:
-            if '16' in mat.pos:
-                col_numbers = c.COLUMNS_17
-                row_numbers = [x for x in range(1, 17)]
-                break
-            elif mat.column in ('NI', 'NL'):
-                col_numbers = c.COLUMNS_17
-            # Update column width if displayed character turns out too long
-            if len(get_char(mat)) + 2 > column_widths.get(mat.column, 4):
-                column_widths[mat.column] = len(get_char(mat)) + 2
-        # Generate a header with column numbers
-        # Widths are variable and depend on text field width
-        fields = [col.center(get_width(col)) for col in col_numbers]
-        header = ' Row %s Units ' % ''.join(fields)
-        # "-----" line in the table
-        separator = '—' * len(header)
-        # Initialize the displayed layout
-        table = [header, separator]
-        # Process each row
-        for row in row_numbers:
-            items = []
-            units_row = []
-            wedge_row_units = diecase.wedge[row]
-            for col in col_numbers:
-                width = get_width(col)
-                for mat in diecase:
-                    if mat.pos == '%s%s' % (col, row):
-                        items.append(get_char(mat).center(width))
-                        units_row.append(get_mat_unit_value(mat).center(width))
-                        # No need to iterate further
-                        break
-            items = ['|', str(row).center(3), '|', ''.join(items),
-                     '|%s|' % str(wedge_row_units).center(5)]
-            units_row = ['|', ' ' * 3, '|',
-                         ''.join(units_row),
-                         '|', ' ' * 5, '|']
-            table.append(''.join(items))
-            table.append(''.join(units_row))
-            # table.append(empty_row)
-        # Add the header at the bottom
-        table.extend([separator, header])
-        # We can display it now
-        UI.display('\nDiecase ID: %s  -   assigned stopbar/wedge: %s\n'
-                   % (diecase, diecase.wedge))
-        for row in table:
-            print(row)
-        # Explanation of symbols
-        UI.display('\nExplanation:', '□ = low space, ▣ = high space',
-                   '*a = bold, /a = italic, ·a = small caps',
-                   '_a = subscript (inferior), ^a = superscript (superior)',
-                   '# - matrix assigned to more than two styles', sep='\n')
+        layout = diecase.layout
+        # table row template
+        template = build_template()
+        # header row template
+        header_dict = dict(units='Units', row='Row')
+        header_dict.update({col: col for col in layout.size.column_numbers})
+        header = template.format(**header_dict)
+        # a line of dases to separate the rows
+        separator_line = '-' * len(header)
+        # proper layout
+        contents = (build_row(num) for num in layout.size.row_numbers)
+        # info about styles
+        legend = build_legend()
+        # put the thing together
+        table = (header, separator_line, *contents, separator_line, legend)
+        # finally display it
+        UI.display('Diecase: {d.diecase_id} ({d.typeface}) '
+                   '- wedge: {d.wedge.name}'.format(d=diecase))
+        UI.display('\n'.join(table))
         if pause_after_exit:
             UI.pause()
 
     def edit_diecase_layout(self, diecase=None):
         """Edits a matrix case layout, row by row, matrix by matrix.
         Allows to enter a position to be edited. """
-        def swap(command):
+        def swap(answer):
             """Swap two matrices based on command"""
-            # Process the command string (uppercase)
-            command = command.replace('SWAP', '').strip()
-            code1, code2 = command.split(',', 1)
-            code1, code2 = code1.strip(), code2.strip()
-            # Look for matrices
-            matches1 = [mat for mat in diecase.matrices
-                        if mat.pos == code1]
-            matches2 = [mat for mat in diecase.matrices
-                        if mat.pos == code2]
-            if matches1 and matches2:
-                mat1, mat2 = matches1[0], matches2[0]
+            command = answer.upper().strip()
+            if command.startswith('SWAP'):
+                # Process the command string (uppercase)
+                command = command.replace('SWAP', '').strip()
+                code1, code2 = command.split(',', 1)
+                code1, code2 = code1.strip(), code2.strip()
+                # Look for matrices
+                mat1 = layout.select_one(position=code1)
+                mat2 = layout.select_one(position=code2)
+                # Swap their coordinates
                 mat1.pos, mat2.pos = mat2.pos, mat1.pos
 
         def edit(mat):
@@ -695,80 +650,76 @@ class DiecaseMixin(MatrixMixin):
             self.display_diecase_layout(diecase, pause_after_exit=False)
             self.edit_matrix(mat)
 
-        def all_rows_mode():
+        def all_rows():
             """Row-by-row editing - all cells in row 1, then 2 etc."""
-            for mat in diecase:
+            for mat in layout.by_rows():
                 edit(mat)
 
-        def all_columns_mode():
+        def all_columns():
             """Column-by-column editing - all cells in column NI, NL, A...O"""
-            # Rearrange the layout so that it's read column by column
-            iter_mats = (mat for col in c.COLUMNS_17
-                         for mat in diecase if mat.column == col)
-            for mat in iter_mats:
+            for mat in layout.by_columns():
                 edit(mat)
 
-        def single_row_mode(row):
+        def single_row(row):
             """Edits matrices found in a single row"""
-            iter_mats = (mat for mat in diecase if mat.row == row)
-            for mat in iter_mats:
+            for mat in layout.get_row(row):
                 edit(mat)
 
-        def single_column_mode(column):
+        def single_column(column):
             """Edits matrices found in a single column"""
-            iter_mats = (mat for mat in diecase if mat.column == column)
-            for mat in iter_mats:
+            for mat in layout.get_column(column):
                 edit(mat)
 
         # Map unit values to rows
         # If the layout is empty, we need to initialize it
         diecase = diecase or self.diecase
-        can_save = diecase.typeface and diecase.diecase_id
+        layout = diecase.layout
         prompt = ('Enter row number to edit all mats in a row,\n'
                   'column number to edit all mats in a column,\n'
                   'matrix coordinates to edit a single matrix,\n'
                   'or choose edit mode: AR - all matrices row by row, '
                   'AC - all matrices column by column.'
-                  '\nYou can swap two mats by entering: "swap pos1, pos2".'
-                  '%s'
-                  '\nYour choice (or leave blank to exit) : '
-                  % (can_save and '\nS to save diecase to database.' or ''))
+                  '\nS - save the layout after editing.'
+                  '\nYou can swap two mats by entering: "swap pos1, pos2".')
+        # define functions to execute after choosing the answer
+        routines = dict(AR=all_rows, AC=all_columns, S=diecase.store_layout)
+        # add options for column editing
+        routines.update({x: partial(single_column, x)
+                         for x in ('NI', 'NL', *'ABCDEFGHIJKLMNO')})
+        # add options for row editing
+        routines.update({str(x): partial(single_row, x) for x in range(1, 17)})
+
         while True:
             UI.display('\nCurrent diecase layout:\n')
             self.display_diecase_layout(diecase, pause_after_exit=False)
             UI.display()
-            with suppress(IndexError, KeyboardInterrupt,
-                          TypeError, AttributeError):
-                ans = input(prompt).upper()
-                if ans == 'S' and can_save:
-                    diecase.save_to_db()
-                elif ans == 'AR':
-                    all_rows_mode()
-                elif ans == 'AC':
-                    all_columns_mode()
-                elif ans in c.COLUMNS_17:
-                    single_column_mode(ans)
-                elif ans in [str(x) for x in range(1, 17)]:
-                    single_row_mode(int(ans))
-                elif ans.startswith('SWAP'):
-                    swap(ans)
-                elif ans:
-                    with suppress(IndexError, TypeError, AttributeError):
-                        mats = [mat for mat in diecase
-                                if mat.pos == ans.upper()]
-                        edit(mats[0])
+            # ask what to do
+            answer = UI.enter(prompt, default=Abort, datatype=str).upper()
+            routine = routines.get(answer)
+            # try to perform the chosen action
+            with suppress(bm.MatrixNotFound):
+                if routine:
+                    routine()
+                elif answer.startswith('SWAP'):
+                    # swap two mats
+                    swap(answer)
                 else:
-                    return diecase.matrices
+                    # user entered matrix coordinates
+                    mat = layout.select_one(position=answer)
+                    edit(mat)
 
     def diecase_manipulation(self, diecase=None):
         """A menu with all operations on a diecase"""
         diecase = diecase or self.diecase
         while True:
             UI.clear()
-            UI.display_parameters({'Diecase data': diecase.parameters,
-                                   'Wedge data': diecase.wedge.parameters})
-            options = {'Q': UI.finish,
-                       'C': UI.abort,
+            UI.display_parameters(diecase.parameters, diecase.wedge.parameters)
+            options = [option(key='q', value=Finish, text='Finish', seq=99),
+                       option(key='Esc', value=Abort,
+                              text='Another diecase', seq=90),
+                       option(key='p', )]
+            options = {'Q': Finish,
+                       'C': Abort,
                        'P': change_parameters,
                        'A': test_lang_completeness,
                        'W': assign_wedge,
@@ -806,4 +757,14 @@ class DiecaseMixin(MatrixMixin):
                             '[Q] to quit.\n')
             messages.append('Your choice: ')
             message = ''.join(messages)
-            UI.simple_menu(message, options)(diecase)
+            UI.simple_menu(message, options, allow_abort=True)(diecase)
+
+
+class MatrixEditor(DiecaseMixin):
+    """Entry point for editing matrices and matrix cases."""
+    def __init__(self, diecase_id=None):
+        with suppress(Abort, Finish):
+            while True:
+                diecase = get_diecase(diecase_id)
+                with suppress(Abort):
+                    self.diecase_manipulation(diecase)

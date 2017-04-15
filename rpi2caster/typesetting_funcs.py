@@ -21,19 +21,19 @@ def double_justification(wedge_positions=(3, 8),
 def galley_trip(pos_0005=8, comment='Line to the galley'):
     """Put the line to the galley"""
     attach = (' // ' + comment) if comment else ''
-    return ['NKJS 0075 0005 %s%s' % (pos_0005, attach)]
+    return ['NKJS 0075 0005 {}{}'.format(pos_0005, attach)]
 
 
 def pump_start(pos_0075=3, comment='Starting the pump'):
     """Start the pump and set 0075 wedge"""
     attach = (' // ' + comment) if comment else ''
-    return ['NKS 0075 %s%s' % (pos_0075, attach)]
+    return ['NKS 0075 {}{}'.format(pos_0075, attach)]
 
 
 def pump_stop(pos_0005=8, comment='Stopping the pump'):
     """Stop the pump"""
     attach = (' // ' + comment) if comment else ''
-    return ['NJS 0005 %s%s' % (pos_0005, attach)]
+    return ['NJS 0005 {}{}'.format(pos_0005, attach)]
 
 
 def end_casting():

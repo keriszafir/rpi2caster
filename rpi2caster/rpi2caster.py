@@ -3,17 +3,8 @@
 from os import system
 from sys import argv
 import argparse
-from . import exceptions as e
-from .ui import UIFactory
-from .global_config import Config
-from .models import Database
-from .misc import PubSub
-
-# greedily instantiate the singleton backends
-UI = UIFactory()
-CFG = Config()
-MQ = PubSub()
-DB = Database()
+from .ui import UI, Abort, Finish, option
+from .misc import MQ
 
 
 def casting_job(args):
@@ -28,8 +19,8 @@ def casting_job(args):
     session.wedge_name = args.wedge_name
     session.manual_mode = args.manual_mode
     session.line_length = args.measure
-    session.caster.mode.simulation = args.simulation or None
-    session.caster.mode.punching = args.punching
+    session.caster.simulation = args.simulation or None
+    session.caster.punching = args.punching
     # Method dispatcher
     # Skip menu if casting directly, typesetting or testing
     if args.input_text:
@@ -68,7 +59,7 @@ def update(args):
                            UI.confirm(dev_prompt, default=False))
         pre = '--pre' if use_dev_version else ''
         print('You may be asked for the admin password...')
-        system('sudo pip3 install %s --upgrade rpi2caster' % pre)
+        system('sudo pip3 install {} --upgrade rpi2caster'.format(pre))
 
 
 def inventory(args):
@@ -77,13 +68,9 @@ def inventory(args):
     if args.list_diecases:
         # Just show what we have
         matrix_controller.list_diecases()
-    elif args.diecase_id:
-        # Work on a specific diecase
-        diecase = matrix_controller.get_diecase(args.diecase_id)
-        matrix_controller.diecase_manipulation(diecase)
     else:
-        # Choose diecase and work on it
-        matrix_controller.diecase_operations()
+        # edit diecase (or choose, if failed)
+        matrix_controller.MatrixEditor(args.diecase_id)
 
 
 def meow(_):
@@ -93,6 +80,12 @@ def meow(_):
         easteregg.show()
     except (OSError, ImportError, FileNotFoundError):
         print('There are no Easter Eggs in this program.')
+
+
+def show_version(_):
+    "Show the rpi2caster version"
+    from . import __version__
+    print('rpi2caster v{}'.format(__version__))
 
 
 def main_menu(args):
@@ -105,46 +98,49 @@ def main_menu(args):
         """Switch between simulation and casting/punching modes"""
         args.simulation = not args.simulation
 
-    def exit_program(*_):
-        """Breaks out of menu"""
-        nonlocal finished
-        finished = True
-
     header = ('rpi2caster - computer aided type casting for Monotype '
               'composition / type & rule casters.'
               '\n\nMain menu:\n')
-    finished = False
-    while not finished:
-        options = [(exit_program, 'Exit',
-                    'Exits the rpi2caster suite'),
-                   (casting_job, {True: 'Punch ribbon...',
-                                  False: 'Cast type...'}[args.punching],
-                    {True: 'Punch a ribbon with a keyboard\'s paper tower',
-                     False: ('Cast composition, sorts or spaces; '
-                             'test the machine')}[args.punching]),
-                   (typesetting_job, 'Typesetting...',
-                    'Compose text for casting'),
-                   (inventory, 'Diecase manipulation...',
-                    'Add, display, edit or remove matrix case definitions'),
-                   (update, 'Update the program',
-                    'Check whether new version is available and update'),
-                   (toggle_punching, 'Switch to %s mode'
-                    % {True: 'casting',
-                       False: 'ribbon punching'}[args.punching],
-                    ('The casting program has different functionality '
-                     'in casting and punching modes.')),
-                   (toggle_simulation, 'Switch to %s mode'
-                    % {True: 'casting or ribbon punching',
-                       False: 'simulation'}[args.simulation],
-                    {True: 'Use a real machine',
-                     False: 'Use a mockup for testing'}[args.simulation])]
-        try:
-            job = UI.menu(options, header=header, footer='')
-            job(args)
-        except (e.ReturnToMenu, e.MenuLevelUp):
-            pass
-        except (KeyboardInterrupt, EOFError):
-            finished = True
+    options = [option(key='c', value=casting_job, seq=20,
+                      cond=lambda: not args.punching,
+                      text='Casting...',
+                      desc=('Cast composition, sorts, typecases or spaces; '
+                            'test the machine')),
+               option(key='c', value=toggle_punching, seq=70,
+                      cond=lambda: args.punching,
+                      text='Switch to casting mode',
+                      desc='Switch from punching to casting'),
+
+               option(key='d', value=inventory, seq=30,
+                      text='Diecase manipulation...',
+                      desc='Manage the matrix case collection'),
+
+               option(key='p', value=casting_job, seq=20,
+                      cond=lambda: args.punching,
+                      text='Punching...',
+                      desc='Punch a ribbon with a keyboard\'s perforator'),
+               option(key='p', value=toggle_punching, seq=70,
+                      cond=lambda: not args.punching,
+                      text='Switch to perforation mode',
+                      desc='Switch from casting to ribbon punching'),
+
+               option(key='s', value=toggle_simulation, seq=80,
+                      cond=lambda: not args.simulation,
+                      text='Switch to simulation mode',
+                      desc='Test casting without the caster or interface'),
+               option(key='s', value=toggle_simulation, seq=80,
+                      cond=lambda: args.simulation,
+                      text='Switch to machine control mode',
+                      desc='Use a real Monotype caster or perforator'),
+
+               option(key='t', value=typesetting_job, seq=10,
+                      text='Typesetting...',
+                      desc='Compose text for casting'),
+
+               option(key='u', value=update,
+                      text='Update the program', seq=90)]
+
+    UI.dynamic_menu(options, header, allow_abort=True, func_args=(args,))
 
 
 def main():
@@ -240,6 +236,10 @@ def main():
                                       aliases=['miauw', 'miau', 'miaou', 'mio',
                                                'miaow', 'mew', 'mjav', 'miao'])
         meow_parser.set_defaults(job=meow)
+        # Version parser
+        version_parser = cmds.add_parser('version', aliases=['v', 'ver'],
+                                         help='Show the software version')
+        version_parser.set_defaults(job=show_version)
 
     def build_inv_parser():
         """Inventory management parser"""
@@ -260,8 +260,8 @@ def main():
                 'menu, where you can choose what to do (casting, inventory '
                 'management, typesetting), toggle simulation or '
                 'perforation modes.')
-        epi = ('Enter "%s [command] -h" for detailed help about its options. '
-               'Typesetting is not ready yet.' % argv[0])
+        epi = ('Enter "{} [command] -h" for detailed help about its options. '
+               'Typesetting is not ready yet.'.format(argv[0]))
         # Initialize the main arguments parser
         parser = argparse.ArgumentParser(description=desc, epilog=epi)
         # Debug mode
@@ -301,14 +301,11 @@ def main():
     except AttributeError:
         # User provided wrong command line arguments. Display help and quit.
         main_parser.print_help()
+        return
     # Run the routine
     try:
         job(args)
-    except (KeyboardInterrupt, EOFError):
-        print('\nInterrupted by user.')
-    except (e.ReturnToMenu, e.MenuLevelUp):
-        pass
-    finally:
+    except (Abort, Finish):
         print('Goodbye!')
 
 

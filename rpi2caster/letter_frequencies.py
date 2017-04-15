@@ -4,12 +4,6 @@
 Data obtained from https://en.wikipedia.org/wiki/Letter_frequency
 All data is letter occurences relative to all letters in a sample of text.
 """
-from math import ceil
-from itertools import chain, zip_longest
-from .ui import UIFactory, Abort
-
-UI = UIFactory()
-
 FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'f': 2.027, 'v': 2.415, 'n': 8.542, 'å': 1.338, 'g': 2.862,
                 'x': 0.159, 'o': 4.482, 'k': 3.14, 's': 6.59, 'b': 1.535,
@@ -113,79 +107,3 @@ FREQS = {'sv': {'ä': 1.797, 'r': 8.431, 'u': 1.919, 'd': 4.702, 'l': 5.275,
                 'k': 3.314, 'á': 1.799},
          '#': {'1': 10, '2': 10, '3': 10, '4': 10, '5': 10, '6': 10,
                '7': 10, '8': 10, '9': 10, '0': 10}}
-
-
-class CharFreqs(object):
-    """Read and calculate char frequencies, translate that to casting order"""
-    frequencies = FREQS
-    langs = {'en': 'English', 'nl': 'Dutch', 'pl': 'Polish', 'de': 'German',
-             'eo': 'Esperanto', 'tr': 'Turkish', 'it': 'Italian',
-             'cz': 'Czech', 'fr': 'French', 'es': 'Spanish',
-             'pt': 'Portugese', 'da': 'Danish', 'fi': 'Finnish',
-             'sv': 'Swedish', '#': 'numbers'}
-
-    def __init__(self, lang=None):
-        self.lang = CharFreqs.langs.get(lang) or choose_language()
-        self.scale = 1.0
-        self.case_ratio = 1
-
-    def __getitem__(self, item):
-        return self.freqs.get(item, 0)
-
-    def __repr__(self):
-        return self.lang
-
-    def __str__(self):
-        return CharFreqs.langs.get(self.lang, '')
-
-    def __iter__(self):
-        return (char for char in self.freqs)
-
-    @property
-    def freqs(self):
-        """Get a dictionary of character frequencies"""
-        return (CharFreqs.frequencies.get(self.lang) or
-                CharFreqs.frequencies.get('en'))
-
-    @property
-    def type_bill(self):
-        """Returns an iterator object of tuples: (char, qty)
-        for each character."""
-        def quantity(char, upper=False):
-            """Calculate character quantity based on frequency"""
-            ratio = self.case_ratio if upper else 1
-            normalized_qty = self.freqs.get(char, 0) / self.freqs.get('a', 1)
-            return max(ceil(normalized_qty * self.scale * ratio), 10)
-
-        # Start with lowercase
-        lower_bill = ((char, quantity(char)) for char in sorted(self.freqs))
-        upper_bill = ((char.upper(), quantity(char, upper=True))
-                      for char in sorted(self.freqs) if char.isalpha())
-        return chain(lower_bill, upper_bill)
-
-    def define_scale(self):
-        """Define scale of production"""
-        prompt = ('How much lowercase "a" characters do you want to cast?\n'
-                  'The quantities of other characters will be calculated\n'
-                  'based on the letter frequency of the language.\n'
-                  'Minimum of 10 characters each will be cast.')
-        self.scale = UI.enter(prompt, default=100, datatype=int)
-
-    def define_case_ratio(self):
-        """Define uppercase to lowercase ratio"""
-        prompt = ('Uppercase to lowercase ratio in %?')
-        self.case_ratio = UI.enter(prompt, default=20, datatype=float) / 100.0
-
-
-def choose_language():
-    """Display available languages and let user choose one.
-    Returns a string with language code (e.g. en, nl, de)."""
-    lang_it = ('%s - %s' % (lang, CharFreqs.langs[lang])
-               for lang in sorted(CharFreqs.langs))
-    # Group by three
-    grouper = zip_longest(lang_it, lang_it, lang_it, fillvalue='')
-    descriptions = '\n'.join('\t'.join(z) for z in grouper)
-    UI.display('Choose language:\n\n%s\n' % descriptions)
-    prompt = 'Language code (e.g. "en") or leave blank to go back to menu'
-    lang_code = UI.enter(prompt, exception=Abort)
-    return lang_code
