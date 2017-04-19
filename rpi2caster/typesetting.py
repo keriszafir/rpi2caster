@@ -7,28 +7,28 @@ from .config import CFG
 from .matrix_controller import DiecaseMixin
 from .database_models import Ribbon
 from .parsing import token_parser
-from . import typesetting_functions as tsf
-from .ui import UI, Abort, option
+from . import typesetting_funcs as tsf
+from .ui import UI, Abort, option as opt
 
 PREFS_CFG = CFG.preferences
 
 
 class RibbonMixin:
     """Mixin for ribbon-related operations"""
+    _ribbon = Ribbon()
+
     @property
     def ribbon(self):
         """Ribbon for the casting session"""
-        ribbon = self.__dict__.get('_ribbon')
-        if not ribbon:
+        if not self._ribbon:
             # instantiate a new one and cache it
-            ribbon = Ribbon()
-            self.__dict__['_ribbon'] = ribbon
-        return ribbon
+            self._ribbon = Ribbon()
+        return self._ribbon
 
     @ribbon.setter
     def ribbon(self, ribbon):
         """Ribbon setter"""
-        self.__dict__['_ribbon'] = ribbon or Ribbon()
+        self._ribbon = ribbon or Ribbon()
 
     @ribbon.setter
     def ribbon_file(self, ribbon_file):
@@ -68,21 +68,22 @@ class RibbonMixin:
 
 class SourceMixin(object):
     """Mixin for source text"""
+    _source = ''
+
     @property
     def source(self):
         """Source text for typesetting"""
-        return self.__dict__.get('_source') or ''
+        return self._source
 
     @source.setter
     def source(self, text):
         """Source setter"""
-        self.__dict__['_source'] = text
+        self._source = text or ''
 
     @source.setter
     def input_text(self, text):
         """Set a string of text as the typesetting source"""
-        if text:
-            self.source = text
+        self.source = text
 
     @source.setter
     def text_file(self, text_file):
@@ -99,6 +100,9 @@ class SourceMixin(object):
 
 class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     """Mixin for setting diecase, wedge and measure"""
+    _measure, _default_alignment = None, 'left'
+    manual_mode = False
+
     @property
     def measure(self):
         """Typesetting measure i.e. line length"""
@@ -121,36 +125,28 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
         self.measure = measure
 
     @property
-    def manual_mode(self):
-        """Decides whether to use an automatic or manual typesetting engine."""
-        # On by default
-        return self.__dict__.get('_manual_mode') or False
-
-    @manual_mode.setter
-    def manual_mode(self, manual_mode):
-        """Manual mode setter"""
-        self.__dict__['_manual_mode'] = True if manual_mode else False
-
-    @property
     def default_alignment(self):
         """Default alignment:
         Determines how paragraphs ending with a double newline ("\n\n")
         and the end of the source text will be aligned.
         Valid options: "left", "right", "center", "both".
         """
-        return self.__dict__.get('_default_alignment') or 'left'
+        return self._default_alignment
 
     @default_alignment.setter
     def default_alignment(self, alignment):
         """Default alignment setter"""
-        options = {'cr': 'left', 'cc': 'center', 'cl': 'right', 'cf': 'both',
-                   'left': 'left', 'center': 'center', 'right': 'right',
-                   'flat': 'both', 'both': 'both', 'f': 'both',
-                   'l': 'left', 'c': 'center', 'r': 'right', 'b': 'both'}
+        options = {'cr': d.ALIGNMENTS.left, 'cc': d.ALIGNMENTS.center,
+                   'cl': d.ALIGNMENTS.right, 'cf': d.ALIGNMENTS.both,
+                   'left': d.ALIGNMENTS.left, 'center': d.ALIGNMENTS.center,
+                   'right': d.ALIGNMENTS.right, 'flat': d.ALIGNMENTS.both,
+                   'both': d.ALIGNMENTS.both, 'f': d.ALIGNMENTS.both,
+                   'l': d.ALIGNMENTS.left, 'c': d.ALIGNMENTS.center,
+                   'r': d.ALIGNMENTS.right, 'b': d.ALIGNMENTS.both}
         string = alignment.strip().replace('^', '').lower()
         value = options.get(string)
         if value:
-            self.__dict__['_default_alignment'] = value
+            self._default_alignment = value
 
     def change_measure(self):
         """Change a line length"""
@@ -159,14 +155,13 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
 
     def change_alignment(self):
         """Changes the default text alignment"""
-        message = 'Choose default alignment for paragraphs:'
-        options = [option(key='l', value='l', text='flush left', seq=1),
-                   option(key='c', value='c', text='center', seq=2),
-                   option(key='r', value='r', text='flush right', seq=3),
-                   option(key='b', value='b', text='justify', seq=4)]
-        self.default_alignment = UI.simple_menu(message, options,
-                                                default_key='b',
-                                                allow_abort=True)
+        msg = 'Choose default alignment for paragraphs:'
+        opts = [opt(key='l', value=d.ALIGNMENTS.left, text='left', seq=1),
+                opt(key='c', value=d.ALIGNMENTS.center, text='center', seq=2),
+                opt(key='r', value=d.ALIGNMENTS.right, text='right', seq=3),
+                opt(key='b', value=d.ALIGNMENTS.both, text='justify', seq=4)]
+        align = UI.simple_menu(msg, opts, default_key='b', allow_abort=True)
+        self.default_alignment = align
 
     def toggle_manual_mode(self):
         """Changes the manual/automatic typesetting mode"""
@@ -231,7 +226,7 @@ class Typesetting(TypesettingContext):
         """Parse a text into paragraphs with justification modes."""
         # Get a dict of alignment codes
         # Add a default alignment for double line break i.e. new paragraph
-        alignments = d.ALIGNMENTS.copy()
+        alignments = d.ALIGN_COMMANDS.copy()
         alignments['\n\n'] = self.default_alignment
         # Make a generator function and loop over it
         paragraph_generator = token_parser(self.source, alignments,
@@ -251,7 +246,7 @@ class Typesetting(TypesettingContext):
                 finished = True
             try:
                 # Justification token detected - end paragrapgh
-                justification = d.ALIGNMENTS[token]
+                justification = d.ALIGN_commandS[token]
                 current_text = ''.join(tokens)
                 # Reset the tokens on line currently worked on
                 tokens = []

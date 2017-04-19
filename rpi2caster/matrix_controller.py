@@ -10,6 +10,7 @@ from string import ascii_lowercase, ascii_uppercase, digits
 from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import USER_DATA_DIR, CFG
+from .data import UNIT_ARRANGEMENTS as UA
 from .database_models import DB, Diecase
 from .ui import UI, Abort, Finish, option
 
@@ -153,7 +154,7 @@ def ua_by_style(styles='*', current_mapping=None):
     # ensure that the mapping is ordered by style
     styles_collection = bm.Styles(styles)
     mapping = OrderedDict()
-    ua_numbers = ', '.join(x for x in sorted(ua.UA))
+    ua_numbers = ', '.join(x for x in sorted(UA))
     UI.display('Known unit arrangements:\n{}'.format(ua_numbers))
 
     for style in styles_collection:
@@ -292,31 +293,36 @@ def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
 
 def get_diecase(diecase_id=None, fallback=choose_diecase):
     """Get a diecase with given parameters"""
-    try:
-        return DB.query(Diecase).filter(Diecase.diecase_id == diecase_id).one()
-    except orm_exc.NoResultFound:
-        # choose diecase manually if not found
+    if diecase_id:
+        with suppress(orm_exc.NoResultFound):
+            query = DB.query(Diecase).filter(Diecase.diecase_id == diecase_id)
+            return query.one()
         UI.display('Diecase {} not found in database!'.format(diecase_id))
-        return fallback()
+    return fallback()
 
 
 class DiecaseMixin:
     """Mixin for diecase-related operations"""
+    _wedge, _diecase = None, Diecase()
+
     @property
     def wedge(self):
         """Get the temporary wedge, or the diecase's assigned wedge"""
-        return self.__dict__.get('_wedge') or self.diecase.wedge
+        selected, fallback = self._wedge, self.diecase.wedge
+        return selected if selected else fallback if fallback else bm.Wedge()
 
     @wedge.setter
     def wedge(self, wedge):
         """Set the temporary wedge"""
-        self.__dict__['_wedge'] = wedge
+        self._wedge = wedge
 
     @wedge.setter
     def wedge_name(self, w_name):
         """Set the wedge with a given name"""
+        if not w_name:
+            return
         try:
-            self.wedge = bm.Wedge(w_name) if w_name else self.diecase.wedge
+            self.wedge = bm.Wedge(w_name)
         except ValueError:
             # parsing failed
             self.wedge = bc.choose_wedge(w_name)
@@ -324,22 +330,23 @@ class DiecaseMixin:
     def choose_wedge(self):
         """Chooses a new wedge"""
         self.wedge = bc.choose_wedge(self.wedge)
+        return self.wedge
 
     @property
     def diecase(self):
         """Get a diecase or empty diecase, lazily instantiating a new one
         if none was chosen before"""
-        diecase = self.__dict__.get('_diecase')
+        diecase = self._diecase
         if not diecase:
             # instantiate a new one and cache it
             diecase = Diecase()
-            self.__dict__['_diecase'] = diecase
+            self._diecase = diecase
         return diecase
 
     @diecase.setter
     def diecase(self, diecase):
         """Set a diecase; keep the wedge"""
-        self.__dict__['_diecase'] = diecase
+        self._diecase = diecase
 
     @diecase.setter
     def diecase_id(self, diecase_id):
@@ -350,6 +357,7 @@ class DiecaseMixin:
         """Chooses a diecase from database"""
         self.diecase = choose_diecase(fallback=self.diecase,
                                       fallback_description='keep current')
+        return self.diecase
 
     @property
     def charset(self):
@@ -758,6 +766,12 @@ class DiecaseMixin:
             messages.append('Your choice: ')
             message = ''.join(messages)
             UI.simple_menu(message, options, allow_abort=True)(diecase)
+
+
+class MatrixEngine(DiecaseMixin):
+    """Allows to look up characters in diecases"""
+    def __init__(self, diecase_id=None):
+        self.diecase = get_diecase(diecase_id)
 
 
 class MatrixEditor(DiecaseMixin):

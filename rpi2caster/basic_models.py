@@ -9,9 +9,8 @@ from functools import singledispatch
 from itertools import chain, product
 import json
 from math import ceil
-from . import definitions as d, parsing as p
-from .letter_frequencies import FREQS
-from .wedge_units import UNITS
+from . import definitions as d
+from .data import LETTER_FREQUENCIES, WEDGE_DEFINITIONS
 
 
 class Matrix:
@@ -71,9 +70,8 @@ class Matrix:
         """Gets the specific or default number of units"""
         # If units are assigned to the matrix, return the value
         # Otherwise, wedge default
-        units = (self._units or
-                 self.get_units_from_arrangement() or self.get_row_units())
-        return units
+        return (self._units or self.get_units_from_arrangement() or
+                self.get_row_units())
 
     @units.setter
     def units(self, units):
@@ -89,15 +87,46 @@ class Matrix:
     @property
     def pos(self):
         """Gets the matrix code"""
-        if self.column and self.row:
-            return '{mat.column}{mat.row}'.format(mat=self)
-        else:
-            return ''
+        return ('{m.column}{m.row}'.format(m=self) if self.column and self.row
+                else '')
 
     @pos.setter
-    def pos(self, code_string):
+    def pos(self, codes):
         """Sets the coordinates for the matrix"""
-        self.column, self.row = p.get_coordinates(code_string)
+        def row_generator():
+            """Generate matching rows, removing them from input sequence"""
+            # first is None as the sequence generated will be reversed
+            # and None is to be used as a last resort if no row is found
+            yield None
+            nonlocal sigs
+            for number in range(16, 0, -1):
+                string = str(number)
+                if string in sigs:
+                    sigs = sigs.replace(string, '')
+                    yield number
+
+        def column_generator():
+            """Generate column numbers"""
+            nonlocal sigs
+            for column in d.COLUMNS_17:
+                if column in sigs:
+                    sigs = sigs.replace(column, '')
+                    yield column
+            yield None
+
+        # needs to work with strings and iterables
+        try:
+            sigs = ''.join(codes).upper()
+        except TypeError:
+            # in case not every iterable element is a string => convert
+            sigs = ''.join(str(l) for l in codes).upper()
+
+        # get a first possible row (caveat: recognize double-digit numbers)
+        all_rows = [x for x in row_generator()]
+        rows = (x for x in reversed(all_rows))
+        # get the first possible column -> NI, NL, A...O
+        columns = column_generator()
+        self.column, self.row = next(columns), next(rows)
 
     @property
     def styles(self):
@@ -111,10 +140,7 @@ class Matrix:
     @styles.setter
     def styles(self, styles):
         """Sets the matrix's style string"""
-        try:
-            self._styles = styles.string
-        except AttributeError:
-            self._styles = Styles(styles).string
+        self._styles = Styles(styles).string
 
     def islowspace(self):
         """Checks whether this is a low space: char is present"""
@@ -140,12 +166,11 @@ class Matrix:
         """Check if it's a low or high space"""
         return self.islowspace() or self.ishighspace()
 
-    def get_row_units(self):
+    def get_row_units(self, wedge=None):
         """Gets a number of units for characters in the diecase row"""
-        # Try wedges in order:
-        # diecase's temporary wedge, diecase's default wedge, standard S5-12E
+        used_wedge = wedge or self.diecase.wedge
         try:
-            return self.diecase.wedge.units[self.row]
+            return used_wedge.units[self.row]
         except (AttributeError, TypeError, IndexError):
             return 0
 
@@ -174,15 +199,18 @@ class Matrix:
                 return arrangement[self.char]
         return 0
 
-    def wedge_positions(self, unit_correction=0, alt_wedge=None):
+    def wedge_positions(self, unit_correction=0, wedge=None):
         """Calculate the 0075 and 0005 wedge positions for this matrix
         based on the current wedge used"""
-        wedge = alt_wedge or self.diecase.wedge
+        other_wedge = wedge or self.diecase.wedge
+        # we need to have the other wedge's units
+        # convert unit width to other wedge's value
+        conv = wedge.units_to_units(self.units, other_wedge=self.diecase.wedge)
         # Units of alternative wedge's set to add or subtract
-        diff = self.units + unit_correction - self.get_row_units()
+        diff = conv + unit_correction - self.get_row_units(wedge=other_wedge)
         # The following calculations are done in 0005 wedge steps
         # 1 step = 1/2000"
-        steps_0005 = int(diff * wedge.unit_inch_width * 2000) + 53
+        steps_0005 = int(other_wedge.units_to_inches(diff) * 2000) + 53
         # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
         # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
         # Add or take away a number of inches; diff is in units of wedge's set
@@ -198,12 +226,12 @@ class Matrix:
             steps_0005 -= 15
             steps_0075 += 1
         # Got the wedge positions, return them
-        return (steps_0075, steps_0005)
+        return d.WedgePositions(steps_0075, steps_0005)
 
     def get_record(self, pos=True):
         """Returns a record suitable for JSON-dumping and storing in DB."""
-        return (self.char, self.styles.string,
-                self.pos if pos else '', self.units)
+        return d.MatrixRecord(self.char, self.styles.string,
+                              self.pos if pos else '', self.units)
 
 
 class Styles:
@@ -211,14 +239,6 @@ class Styles:
     styles: any iterable containing styles to parse,
             valid options: r, b, i, s, l, u; (add. sizes: 1, 2, 3, 4, 5)
             a or * denotes all styles.
-
-    Style definition is a namedtuple StyleDefinition with following fields:
-        name - style name string (e.g. roman, bold, italic)
-        short - short single-letter style name for storing in layouts, e.g. 'r'
-        ansi - an ANSI escape code for formatting the style in terminal UI
-        alternatives - all alternative names
-        codes - low-level i.e. non-HTML codes used in typesetting
-                for switching to that style.
     """
     definitions = d.STYLES
     __slots__ = ('_styles', 'default')
@@ -251,6 +271,9 @@ class Styles:
             return Styles(other.string + self.string)
         except AttributeError:
             return Styles(self.string)
+
+    def __contains__(self, what):
+        return what in self._styles or what in self.string
 
     @property
     def string(self):
@@ -352,9 +375,6 @@ class DiecaseLayout:
         except (TypeError, json.JSONDecodeError):
             self.raw = layout
 
-    def __call__(self):
-        return self
-
     def __repr__(self):
         return ('<DiecaseLayout ({} rows, {} columns)>'
                 .format(self.size.rows, self.size.columns))
@@ -425,9 +445,10 @@ class DiecaseLayout:
         size = LayoutSize(15, 15)
         try:
             # Get matrices from supplied layout's canonical form
-            mats = [Matrix(char=char, styles=styles, pos=pos,
-                           units=units, diecase=self.diecase)
-                    for (char, styles, pos, units) in raw_layout]
+            raw_records = (d.MatrixRecord(*record) for record in raw_layout)
+            mats = [Matrix(char=rec.char, styles=rec.styles, pos=rec.pos,
+                           units=rec.units, diecase=self.diecase)
+                    for rec in raw_records]
             # parse the source layout to get its size,
             # reversing the order increases the chance of finding row 16 faster
             for matrix in reversed(mats):
@@ -642,9 +663,6 @@ class LayoutSize:
                 else 'NI, NL' if self.columns == 17 else 'small')
         return '{} rows, {} columns - {}'.format(self.rows, self.columns, name)
 
-    def __call__(self):
-        return self
-
     @property
     def row_numbers(self):
         """A tuple of row numbers"""
@@ -774,6 +792,9 @@ class Wedge:
     def name(self, wedge_name):
         """Parse the wedge name to get series, set width, unit values
         and whether the wedge is British pica."""
+        if not wedge_name:
+            # use default S5
+            return
         try:
             # For countries that use comma as decimal delimiter,
             # convert to point:
@@ -790,7 +811,7 @@ class Wedge:
                                 if x.isnumeric() or x is '.')
             set_width = float(set_w_str) // 0.25 * 0.25
             # try to get the unit values, otherwise S5
-            units = UNITS.get(series, d.S5)
+            units = WEDGE_DEFINITIONS.get(series, d.S5)
             # update the attributes
             self.series, self.set_width = series, set_width
             self.is_brit_pica, self.units = is_brit_pica, units
@@ -826,26 +847,22 @@ class Wedge:
         """Sets the wedge unit values"""
         self._units = units
 
-    @property
-    def points(self):
-        """Gets the point values for the wedge's rows"""
-        return [round(self.unit_point_width * units, 2)
-                for units in self.units]
+    def units_to_inches(self, units=1):
+        """Convert units to inches, based on wedge's set width and pica def"""
+        return round(units * self.set_width * self.pica / 216, 2)
 
-    @property
-    def unit_point_width(self):
-        """Gets the factor for converting points to units and vice versa"""
-        return self.set_width * self.pica / 3
-
-    @property
-    def unit_inch_width(self):
-        """Get inch value of a wedge's set unit; 1 inch = 72 points"""
-        return self.unit_point_width / 72
-
-    @property
-    def em_inch_width(self):
+    def ems_to_inches(self, ems=1):
         """Get inch width of an em, i.e. 18 units"""
-        return self.unit_inch_width * 18
+        return round(ems * self.units_to_inches(18), 2)
+
+    def units_to_units(self, units=1, set_width=None, other_wedge=None):
+        """Calculate other wedge's set units to own set units"""
+        if other_wedge == self or set_width == self.set_width:
+            return units
+        elif set_width:
+            return round(units * self.set_width / set_width, 2)
+        elif other_wedge:
+            return round(units * self.set_width / other_wedge.set_width, 2)
 
     @property
     def adjustment_limits(self):
@@ -881,10 +898,7 @@ class CharFreqs:
     def __init__(self, lang=None):
         language = str(lang).strip()
         self.lang = language
-        self.freqs = FREQS[language.lower()]
-
-    def __getitem__(self, item):
-        return self.freqs.get(item, 0)
+        self.freqs = LETTER_FREQUENCIES[language.lower()]
 
     def __repr__(self):
         return '<CharFreqs for {}>'.format(d.LANGS[self.lang])

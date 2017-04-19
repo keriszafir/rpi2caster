@@ -98,8 +98,8 @@ def get_type(value):
         return None
 
     # iterate until a match is found
-    for datatype in TYPES:
-        if isinstance(value, datatype):
+    for datatype, handler in TYPES.items():
+        if handler.instancecheck(value):
             return datatype
 
     return str

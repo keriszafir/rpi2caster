@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Functions and classes for parsing strings/iterables for usable data."""
 from contextlib import suppress
-from .casting_models import Record
 from . import definitions as d
 
 
@@ -38,66 +37,6 @@ def parse_ribbon(ribbon):
     # We need to add contents too
     metadata['contents'] = contents
     return metadata
-
-
-def stop_comes_first(contents):
-    """Detects ribbon direction so that we can use the ribbons generated
-    with different software and still cast them in correct order.
-    This function loops over the ribbon to test if the stop sequence
-    (NJ or 0005) comes before the newline sequence (NKJ or 0075+0005).
-    If so, returns True (the ribbon needs to be rewound for casting).
-    Otherwise, False."""
-    for line in contents:
-        # code parameters checker
-        parsed_record = Record(line)
-        code = parsed_record.code
-        if code.is_pump_stop:
-            return True
-        elif code.is_pump_start:
-            return False
-        else:
-            continue
-
-
-def get_coordinates(signals):
-    """Get the column and row from record"""
-    def row_generator():
-        """Generate matching rows, removing them from input sequence"""
-        # first is None as the sequence generated will be reversed
-        # and None is to be used as a last resort if no row is found
-        yield None
-        nonlocal sigs
-        for number in range(16, 0, -1):
-            string = str(number)
-            if string in sigs:
-                sigs = sigs.replace(string, '')
-                yield number
-
-    def column_generator():
-        """Generate column numbers"""
-        nonlocal sigs
-        for column in d.COLUMNS_17:
-            if column in sigs:
-                sigs = sigs.replace(column, '')
-                yield column
-        yield None
-
-    # needs to work with strings and iterables
-    try:
-        sigs = ''.join(signals).upper()
-    except TypeError:
-        # in case not every iterable element is a string => convert
-        sigs = ''.join(str(l) for l in signals).upper()
-
-    # get a first possible row (caveat: recognize double-digit numbers)
-    all_rows = [x for x in row_generator()]
-    rows = (x for x in reversed(all_rows))
-
-    # get the first possible column -> NI, NL, A...O
-    columns = column_generator()
-    column, row = next(columns), next(rows)
-
-    return d.Coordinates(column, row)
 
 
 def get_key(source):

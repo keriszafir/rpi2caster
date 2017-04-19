@@ -17,28 +17,24 @@ USER_DB_URL = 'sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR)
 GLOBAL_CFG_PATHS = ['/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
 
 # Default values for options
-DEFAULTS = dict(default_measure='25cc',
-                measurement_unit='cc',
-                choose_backend=False,
+DEFAULTS = dict(default_measure='25cc', measurement_unit='cc',
                 database_url=USER_DB_URL,
-                sensor='simulation',
-                output='simulation',
-                emergency_stop_gpio=22,
-                sensor_gpio=17,
-                bounce_time=25,
-                signals_arrangement=d.SIGNALS,
-                mcp0=0x20, mcp1=0x21,
-                pin_base=65,
-                i2c_bus=1)
+                choose_backend=False,
+                punching=False, simulation=False, signals=d.SIGNALS,
+                sensor='simulation', output='simulation',
+                emergency_stop_gpio=22, sensor_gpio=17, bounce_time=25,
+                pin_base=65, i2c_bus=1, mcp0=0x20, mcp1=0x21)
 
 # Option aliases - alternate names for options in files
-ALIASES = {'signals_arrangement': ('signals', 'arrangement'),
-           'choose_backend': ('backend_select', 'choose_mode', 'mode_select'),
-           'default_measure': ('line_length', 'default_line_length'),
-           'measurement_unit': ('typesetting_unit', 'unit', 'pica'),
-           'sensor_gpio': ('photocell_gpio', 'light_switch_gpio'),
-           'emergency_stop_gpio': ('stop_gpio', 'stop_button_gpio'),
-           'database_url': ('db_url', 'database_uri', 'db_uri')}
+ALIASES = dict(signals=('signals_arrangement', 'arrangement'),
+               choose_backend=('backend_select', 'choose_mode', 'mode_select'),
+               default_measure=('line_length', 'default_line_length'),
+               measurement_unit=('typesetting_unit', 'unit', 'pica'),
+               sensor_gpio=('photocell_gpio', 'light_switch_gpio'),
+               emergency_stop_gpio=('stop_gpio', 'stop_button_gpio'),
+               database_url=('db_url', 'database_uri', 'db_uri'),
+               simulation=('simulation_mode', 'mock'),
+               punching=('perforation', 'punch'))
 
 
 class Config(cp.ConfigParser):
@@ -77,6 +73,13 @@ class Config(cp.ConfigParser):
         return dt.convert_and_validate(value, default_value,
                                        minimum=minimum, maximum=maximum)
 
+    def get_many(self, **kwargs):
+        """Get multiple options by keyword arguments:
+            (key1=option1, key2=option2...) -> {key1: option_value_1,
+                                                key2: option_value_2...}
+        """
+        return {key: self.get_option(option) for key, option in kwargs.items()}
+
     def set_option(self, option_name, value, section_name=None):
         """Set an option to a given value"""
         section, option = section_name.lower(), option_name.lower()
@@ -103,23 +106,21 @@ class Config(cp.ConfigParser):
     @property
     def interface(self):
         """Return the interface configuration"""
-        data = dict(sensor=self.get_option('sensor'),
-                    output=self.get_option('output'),
-                    choose_backend=self.get_option('choose_backend'),
-                    sensor_gpio=self.get_option('sensor_gpio'),
-                    emergency_stop_gpio=self.get_option('emergency_stop_gpio'),
-                    signals_arrangement=self.get_option('signals_arrangement'),
-                    mcp0=self.get_option('mcp0'), mcp1=self.get_option('mcp1'),
-                    pin_base=self.get_option('pin_base'),
-                    i2c_bus=self.get_option('i2c_bus'),
-                    bounce_time=self.get_option('bounce_time'))
+        data = self.get_many(sensor='sensor', output='output',
+                             choose_backend='choose_backend',
+                             simulation='simulation', punching='punching',
+                             sensor_gpio='sensor_gpio',
+                             emergency_stop_gpio='emergency_stop_gpio',
+                             signals_arrangement='signals',
+                             mcp0='mcp0', mcp1='mcp1', pin_base='pin_base',
+                             i2c_bus='i2c_bus', bounce_time='bounce_time')
         return d.Interface(**data)
 
     @property
     def preferences(self):
         """Return the typesetting preferences configuration"""
-        data = dict(default_measure='25cc',
-                    measurement_unit='cc')
+        data = self.get_many(default_measure='default_measure',
+                             measurement_unit='measurement_unit')
         return d.Preferences(**data)
 
 
@@ -138,7 +139,6 @@ def matching_options_generator(parser, option_name):
     # option was defined nowhere => use a default one
     # or raise NoOptionError if it fails
     yield DEFAULTS.get(option_name)
-    raise GeneratorExit
 
 
 # make a single instance for importing

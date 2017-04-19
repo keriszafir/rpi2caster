@@ -105,12 +105,14 @@ def build_entry(option, trailing_newline=1):
 
 class Abort(Exception):
     """Exception - abort the current action"""
-    pass
+    def __str__(self):
+        return ''
 
 
 class Finish(Exception):
     """Exception - finish the current exit to menu etc."""
-    pass
+    def __str__(self):
+        return ''
 
 
 class ClickUI(object):
@@ -413,10 +415,18 @@ class ClickUI(object):
                 self.display_header('{}'.format(value), trailing_newline=0)
 
     def pause(self, msg1='', msg2='Press any key to continue...',
-              min_verbosity=0):
+              min_verbosity=0, abort_ok=True):
         """Waits until user presses a key"""
         if self.verbosity >= min_verbosity:
-            click.pause('{}\n{}\n'.format(msg1, msg2))
+            abort_key_names = ', '.join(key.name for key in DEFAULT_ABORT_KEYS)
+            abort_key_chars = [key.getchar for key in DEFAULT_ABORT_KEYS]
+            suffix = msg2
+            if abort_ok:
+                suffix = '{}\n[{}: abort]'.format(msg2, abort_key_names)
+            click.echo('{}\n{}\n'.format(msg1, suffix))
+            char = click.getchar()
+            if abort_ok and char in abort_key_chars:
+                raise Abort
 
     @staticmethod
     def edit(text=''):
@@ -499,8 +509,8 @@ class ClickUI(object):
             # prefill takes a default and if it evaluates to False
             def prefill_callback():
                 """A insert_text function wrapper"""
-                prefill_value = datatypes.get_string(default, retval_datatype)
-                return readline.insert_text(prefill_value)
+                pf_value = datatypes.get_string(default, default_value_type)
+                return readline.insert_text(pf_value)
 
             # get value from user
             readline.set_startup_hook(prefill_callback)

@@ -29,7 +29,7 @@ def casting_job(args):
     elif args.direct:
         session.cast_composition()
     elif args.testing:
-        session.diagnostics_submenu()
+        session.machine.diagnostics()
     else:
         session.main_menu()
 
@@ -76,7 +76,7 @@ def inventory(args):
 def meow(_):
     "Easter egg"
     try:
-        from . import easteregg
+        from .resources import easteregg
         easteregg.show()
     except (OSError, ImportError, FileNotFoundError):
         print('There are no Easter Eggs in this program.')

@@ -7,11 +7,11 @@ import json
 import sqlalchemy as sa
 from sqlalchemy import orm
 from sqlalchemy.ext.declarative import declarative_base
-from .basic_models import Styles, DiecaseLayout, UnitArrangement, Wedge
+from . import basic_models as bm
 from .config import CFG
+from .data import UNIT_ARRANGEMENTS as UA
 from .misc import MQ, weakref_singleton
 from . import parsing as p
-from .unit_arrangements import UA
 # make sqlalchemy use declarative base
 BASE = declarative_base()
 
@@ -25,7 +25,7 @@ class Diecase(BASE):
                             nullable=False, default='S5-12E')
     _ua_mappings = sa.Column('unit_arrangements', sa.Text)
     _layout_json = sa.Column('layout', sa.Text, nullable=False)
-    _unit_arrangements = {}
+    _wedge, _layout, _unit_arrangements = None, None, {}
 
     def __iter__(self):
         return iter(self.matrices)
@@ -66,69 +66,70 @@ class Diecase(BASE):
     @property
     def unit_arrangements(self):
         """Return a mapping of UnitArrangement objects to styles."""
+        def get_ua(ua_id, ua_style):
+            """Look up an arrangement for given UA ID and style string"""
+            with suppress(KeyError):
+                return bm.UnitArrangement(UA[ua_id][ua_style])
+            raise bm.UnitArrangementNotFound
+
         if not self._unit_arrangements:
-            # source: a style string mapped to pair (ua_id, ua_style)
-            # NOTE: ua_style can be different from style string!
-            # {'r': ['123', 'r'], 'i': ['123', 'i']...}
-            raw_mapping = json.loads(self._ua_mappings or "{}")
-            # style definitions to be referenced later
-            styledefs = {s.short: s for s in Styles.definitions}
-            mapping = {}
-            for style_string, (ua_id, ua_style) in raw_mapping.items():
-                raw_ua = UA.get(ua_id).get(ua_style)
-                if not raw_ua:
-                    continue
-                mapping[styledefs.get(style_string)] = UnitArrangement(raw_ua)
-            # cache the mapping
-            self._unit_arrangements = mapping
+            # mappings: canonical dict: {'r': ('121', 'r'), 'b': ('150', 'r')}
+            mappings = json.loads(self._ua_mappings)
+            # found / returned: with styles by definition:
+            # {STYLES.roman: UnitArrangement({'a': 8, 'b': 8...}),
+            #  STYLES.bold: UnitArrangement({...})...}
+            found = {style: get_ua(ua_id, ua_style)
+                     for style in bm.Styles(mappings.keys())
+                     for style_short, (ua_id, ua_style) in mappings.items()
+                     if style.short == style_short}
+            self._unit_arrangements = found
         return self._unit_arrangements
 
     @unit_arrangements.setter
     def unit_arrangements(self, unit_arrangements):
         """Set a dict of unit arrangements for styles in the diecase"""
-        raw = {style.short: (ua_id, ua_style)
-               for style, (ua_id, ua_style) in unit_arrangements.items()}
-        self._ua_mappings = json.dumps(raw)
+        self._ua_mappings = json.dumps(unit_arrangements)
 
     @property
     def wedge(self):
         """Get a wedge based on wedge name stored in database"""
-        cached_wedge = self.__dict__.get('_wedge')
+        cached_wedge = self._wedge
         if cached_wedge:
             return cached_wedge
         else:
             # instantiate and store in cache until changed
-            wedge = Wedge(self._wedge_name)
-            self.__dict__['_wedge'] = wedge
+            wedge = bm.Wedge(self._wedge_name)
+            self._wedge = wedge
             return wedge
 
     @wedge.setter
     def wedge(self, wedge):
         """Set a different wedge"""
         with suppress(AttributeError, TypeError):
-            self.__dict__['_wedge'] = wedge
+            self._wedge = wedge
             self._wedge_name = wedge.name
 
     @property
     def layout(self):
         """Diecase layout model based on _layout_json.
         If needed, lazily initialize the empty layout."""
-        layout = self.__dict__.get('_layout')
+        layout = self._layout
         if not layout:
-            layout = DiecaseLayout(self._layout_json, self)
-            self.__dict__['_layout'] = layout
+            layout = bm.DiecaseLayout(self._layout_json, self)
+            self._layout = layout
         return layout
 
     @layout.setter
     def layout(self, layout_object):
         """Set the diecase layout object"""
-        self.__dict__['_layout'] = layout_object
+        self._layout = layout_object
 
     @orm.reconstructor
     def load_layout(self, layout=None):
         """Build a DiecaseLayout() and store it on init"""
         new_layout = layout or self._layout_json
-        self.layout = DiecaseLayout(layout=new_layout, diecase=self)
+        self.layout = bm.DiecaseLayout(layout=new_layout, diecase=self)
+        self.wedge = bm.Wedge()
 
     def store_layout(self):
         """Save the layout canonical form to ORM"""

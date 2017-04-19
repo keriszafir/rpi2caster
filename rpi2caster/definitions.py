@@ -4,8 +4,15 @@
 from collections import namedtuple
 
 # define some namedtuple objects so that returning data is easier
-# namedtuple for matrix coordinates
+# namedtuple for matrix coordinates and 0075/0005 wedge positions
 Coordinates = namedtuple('Coordinates', 'column row')
+MatrixRecord = namedtuple('MatrixRecord', 'char styles pos units')
+WedgePositions = namedtuple('WedgePositions', 'pos_0075 pos_0005')
+
+# Row 16 addressing modes
+Addressing = namedtuple('Row16_addressing', 'off hmn kmn unitshift')
+ROW16_ADDRESSING = Addressing('off', 'HMN', 'KMN', 'unit shift')
+
 # some parameter namedtuples for records
 Settings = namedtuple('Settings',
                       'row_16_mode explicit_o15 add_missing_o15')
@@ -19,22 +26,19 @@ Report = namedtuple('Report',
 # menu item namedtuple
 MenuItem = namedtuple('MenuItem',
                       'key value condition lazy text description seq')
-# Standard keyboard combinations
-Key = namedtuple('Key', 'getchar name')
-# template for style definitions
-Style = namedtuple('Style', 'name alternatives short codes ansi')
-SD = namedtuple('StyleDefinitions',
-                ('roman bold italic smallcaps inferior superior '
-                 'size1 size2 size3 size4 size5'))
 
 # Configuration namedtuple definitions
 Preferences = namedtuple('Preferences', 'default_measure measurement_unit')
 Interface = namedtuple('Interface',
-                       ('sensor output choose_backend sensor_gpio '
-                        'emergency_stop_gpio signals_arrangement '
+                       ('sensor output choose_backend simulation punching '
+                        'sensor_gpio emergency_stop_gpio signals_arrangement '
                         'mcp0 mcp1 pin_base i2c_bus bounce_time'))
 
 # Style definitions
+Style = namedtuple('Style', 'name alternatives short codes ansi')
+SD = namedtuple('StyleDefinitions',
+                ('roman bold italic smallcaps inferior superior '
+                 'size1 size2 size3 size4 size5'))
 STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='regular, antiqua',
                         codes=('^rr', '^RR', '^00'), ansi=0),
@@ -60,19 +64,26 @@ STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='', codes=('^s4')),
             size5=Style(name='size 5', short='5', ansi=0,
                         alternatives='', codes=('^s5')))
-
-# Constants for control codes
-STYLE_COMMANDS = {'^00': 'r', '^rr': 'r', '^01': 'i', '^ii': 'i',
-                  '^02': 'b', '^bb': 'b', '^03': 's', '^ss': 's',
-                  '^04': 'l', '^ll': 'l', '^05': 'u', '^uu': 'u'}
-ALIGNMENTS = {'^CR': 'left', '^CC': 'center', '^CL': 'right', '^CF': 'both'}
-
+# Text alignments
+Alignments = namedtuple('Alignments', ('left', 'center', 'right', 'both'))
+ALIGNMENTS = Alignments('left', 'center', 'right', 'both')
+# Control codes for typesetting
+ALIGN_COMMANDS = {'^CR': ALIGNMENTS.left, '^CC': ALIGNMENTS.center,
+                  '^CL': ALIGNMENTS.right, '^CF': ALIGNMENTS.both}
+STYLE_COMMANDS = {'^00': SD.roman, '^rr': SD.roman, '^01': SD.italic,
+                  '^ii': SD.italic, '^02': SD.bold, '^bb': SD.bold,
+                  '^03': SD.smallcaps, '^ss': SD.smallcaps,
+                  '^04': SD.inferior, '^ll': SD.inferior,
+                  '^05': SD.superior, '^uu': SD.superior,
+                  '^s1': SD.size1, '^s2': SD.size2, '^s3': SD.size3,
+                  '^s4': SD.size4, '^s5': SD.size5}
 # Default space positions
 DEFAULT_LOW_SPACE_POSITIONS = (('G', 1), ('G', 2), ('G', 5), ('O', 15))
 DEFAULT_HIGH_SPACE_POSITIONS = (('O', 16))
 # Names for low and high spaces, depending on their width
 SPACE_NAMES = {'   ': 'low em quad', '  ': 'low en quad', ' ': 'low space',
                '___': 'high em quad', '__': 'high en quad', '_': 'high space'}
+SPACE_SYMBOLS = {' ': chr(0x1f790), '_': chr(0x1f795)}
 
 # Measurement units for line length
 TYPOGRAPHIC_UNITS = dict(pc=12.0, pt=1.0, Pp=12*0.166/0.1667, pp=0.166/0.1667,
@@ -81,8 +92,24 @@ TYPOGRAPHIC_UNITS = dict(pc=12.0, pt=1.0, Pp=12*0.166/0.1667, pp=0.166/0.1667,
                          cm=0.3937*72, mm=0.03937*72)
 TYPOGRAPHIC_UNITS['in'] = TYPOGRAPHIC_UNITS['"'] = 72.0
 
-# S5 wedge unit values
+
+# S5 wedge unit values; wedge name aliases
 S5 = [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18]
+WEDGE_ALIASES = ('10E: UK S527', '10L: UK S536', '11Q: UK S574',
+                 '14E: UK S1406', '1A: UK S207', '1B: UK S209',
+                 '1C: UK S210', '1O: UK S221', '1R: UK S223',
+                 '1Q: UK S224', '2A: UK S233', '2Z: UK S261',
+                 '3O: UK S275', '3Q: UK S277', '3Y: UK S286',
+                 '4A: UK S295', '4G: UK S300', '5P: UK S327',
+                 '5V: UK S371', '7J: UK S422', '7Z: UK S449',
+                 '8A: UK S450', '8U: UK S409', 'TW: S535 typewriter',
+                 'AK: EU S5', 'BO: EU S221', 'CZ: EU S336',
+                 'A: UK S5', 'D: UK S46', 'E: UK S92',
+                 'F: UK S94', 'G: UK S93', 'J: UK S101',
+                 'K: UK S87', 'L: UK S96', 'M: UK S45',
+                 'N: UK S88', 'O: UK S111', 'Q: UK S50',
+                 'S: UK S197', 'V: UK S202', 'W: UK S205', 'X: UK S47')
+
 
 # Accented letters will use the same unit arrangement value as their
 # non-accented counterparts.
@@ -102,6 +129,8 @@ LANGS = {'en': 'English', 'nl': 'Dutch', 'pl': 'Polish', 'de': 'German',
          'cz': 'Czech', 'fr': 'French', 'es': 'Spanish', 'pt': 'Portugese',
          'da': 'Danish', 'fi': 'Finnish', 'sv': 'Swedish', '#': 'numbers'}
 
+# Control key definitions
+Key = namedtuple('Key', 'getchar name')
 KEYS = dict(
     # main keys
     esc=Key('\x1b', 'Esc'), enter=Key('\r', 'Enter'), space=Key(' ', 'Space'),
@@ -128,9 +157,6 @@ DEFAULT_ABORT_KEYS = [KEYS[key] for key in ('esc', 'ctrl_c', 'ctrl_z', 'f10')]
 # parsing delimiters
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
-
-# Row 16 addressing modes
-OFF, HMN, KMN, UNIT_SHIFT = 0, 1, 2, 3
 
 # Column numbers in 15x17 diecase
 COLUMNS_15 = [*'ABCDEFGHIJKLMNO']

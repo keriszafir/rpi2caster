@@ -10,9 +10,9 @@ from . import basic_models as bm, definitions as d
 from .config import CFG
 from .database_models import DB, Ribbon
 from .ui import UI, Abort
-from .wedge_units import UNITS, ALIASES as wedge_name_aliases
+from .data import WEDGE_DEFINITIONS
 
-PREFS_CFG = CFG.Preferences
+PREFS_CFG = CFG.preferences
 
 
 # Letter frequency controller routines
@@ -35,11 +35,10 @@ def define_case_ratio(freqs):
 def get_letter_frequencies():
     """Display available languages and let user choose one.
     Returns a string with language code (e.g. en, nl, de)."""
-    lang_it = ('{} - {}'.format(lang, bm.CharFreqs.langs[lang])
-               for lang in sorted(bm.CharFreqs.langs))
+    langs = ('{} - {}'.format(c, lang) for c, lang in sorted(d.LANGS.items()))
 
     # Group by three
-    grouper = zip_longest(lang_it, lang_it, lang_it, fillvalue='')
+    grouper = zip_longest(langs, langs, langs, fillvalue='')
     descriptions = '\n'.join('\t'.join(z) for z in grouper)
 
     UI.display('Choose language:\n\n{}\n'.format(descriptions))
@@ -135,7 +134,7 @@ def choose_wedge(wedge_name=None):
     def enter_name():
         """Enter the wedge's name"""
         # Ask for wedge name and set width as it is written on the wedge
-        aliases = iter(wedge_name_aliases)
+        aliases = iter(d.WEDGE_ALIASES)
         # Group by three
         grouper = zip_longest(aliases, aliases, aliases, fillvalue='')
         old_wedges = '\n'.join('\t'.join(z) for z in grouper)
@@ -178,7 +177,7 @@ def choose_wedge(wedge_name=None):
                              condition=divisible_by_quarter)
         # We have the wedge name, so we can look the wedge up in known wedges
         # (no need to enter the unit values manually)
-        current_units = UNITS.get(series, d.S5)
+        current_units = WEDGE_DEFINITIONS.get(series, d.S5)
         prompt = ('Enter the wedge unit values for rows 1...15 '
                   'or 1...16, separated by commas.\n')
         units = UI.enter(prompt, default=current_units, minimum=15, maximum=16)
@@ -200,7 +199,7 @@ def choose_wedge(wedge_name=None):
 
 def temp_wedge(routine):
     """Decorator for typesetting and casting routines.
-    Assign a temporary alternative wedge for casting/calibration"""
+    Assign a temporary alternative wedge for casting"""
     @wraps(routine)
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
@@ -274,4 +273,3 @@ def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
         return DB.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id).one()
     except orm_exc.NoResultFound:
         return fallback()
-

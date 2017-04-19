@@ -50,9 +50,19 @@ class Record:
         return self.content.original_entry
 
     @property
+    def signals(self):
+        """Get pure signals with no correction for row 16."""
+        return self.get_signals(adjust=False)
+
+    @property
     def adjusted_signals(self):
         """Return a list of signals adjusted to HMN/KMN/unit-shift addressing
         modes."""
+        return self.get_signals(adjust=True)
+
+    def get_signals(self, adjust=False):
+        """Return a list of signals with possible correction based on
+        desired row 16 addressing mode."""
         def do_not_convert():
             """No mode conversion needed"""
 
@@ -104,13 +114,17 @@ class Record:
         column_set = set(self.content.columns)
         column_set.discard('O')
 
-        # check if this combination is row 16 and not earlier
-        is_row_16 = set(self.content.rows) == {16}
+        if adjust:
+            # check if this combination is row 16 and not earlier
+            is_row_16 = set(self.content.rows) == {16}
 
-        # choose and apply signals conversion
-        functions = {d.OFF: do_not_convert, d.UNIT_SHIFT: unit_shift,
-                     d.HMN: hmn, d.KMN: kmn}
-        functions.get(self.settings.row_16_mode, do_not_convert)()
+            # choose and apply signals conversion
+            functions = {d.ROW16_ADDRESSING.off: do_not_convert,
+                         d.ROW16_ADDRESSING.hmn: hmn,
+                         d.ROW16_ADDRESSING.kmn: kmn,
+                         d.ROW16_ADDRESSING.unitshift: unit_shift}
+            modify = functions.get(self.settings.row_16_mode, do_not_convert)
+            modify()
 
         # compose the output signal list
         justification = [x for x in self.content.justification]
@@ -120,26 +134,6 @@ class Record:
         o15 = ['O15'] * (self.settings.explicit_o15 and any(use_o15))
 
         # got result
-        return justification + columns + es_needle + rows + o15
-
-    @property
-    def signals(self):
-        """Return a list of all signals"""
-        # Add O15 if it was desired (explicit O or 15, lack of rows/columns)
-        # only if signal_o15 flag was enabled.
-        use_o15 = ('O' in self.content.columns, 15 in self.content.rows,
-                   not self.content.columns and self.settings.add_missing_o15,
-                   not self.content.rows and self.settings.add_missing_o15)
-        column_set = set(self.content.columns)
-        column_set.discard('O')
-
-        # build the output list
-        justification = [x for x in self.content.justification]
-        columns = [x for x in d.COLUMNS_15 if x in column_set]
-        es_needle = ['S'] * self.content.use_s_needle
-        rows = [str(x) for x in self.content.rows if x < 15]
-        o15 = ['O15'] * (self.settings.explicit_o15 and any(use_o15))
-
         return justification + columns + es_needle + rows + o15
 
     @property
@@ -165,7 +159,7 @@ class Record:
 
             # basic signals checks
             has_signals = any((*rows, *columns, *justification))
-            uses_row_16 = True if set(rows) == {16} else False
+            uses_row_16 = set(rows) == {16}
 
             # detect the justification signals (also for unit-adding mode)
             has_0005 = '0005' in justification or {'N', 'J'}.issubset(columns)
@@ -273,19 +267,33 @@ class Stats:
     def __init__(self, machine):
         self.machine = machine
 
-    @property
-    def runs(self):
-        """Gets the runs (repetitions) number"""
-        return self._session['runs']
+    def update(self, **kwargs):
+        """Update parameters"""
+        parameters = dict(ribbon=self.update_session_stats,
+                          queue=self.update_run_stats,
+                          record=self.update_record_stats,
+                          session_line_skip=self.set_session_lines_skipped,
+                          run_line_skip=self.set_run_lines_skipped,
+                          runs=self.add_runs, casting_success=self.end_run)
+        for argument, value in kwargs.items():
+            routine = parameters.get(argument)
+            if not routine:
+                continue
+            return routine(value)
 
-    @runs.setter
-    def runs(self, runs=1):
-        """Sets the runs (repetitions) number"""
-        # Update whenever we change runs number via one_more_run
+    def add_runs(self, delta):
+        """Change a number of runs in casting session"""
+        old_value = self._session['runs']
+        runs = old_value + delta
         self._session['runs'] = runs
         self._session['codes'] = runs * self._ribbon['codes']
         self._session['chars'] = runs * self._ribbon['chars']
         self._session['lines'] = runs * self._ribbon['lines']
+
+    @property
+    def runs(self):
+        """Gets the runs (repetitions) number"""
+        return self._session['runs']
 
     def get_ribbon_lines(self):
         """Gets number of lines per ribbon"""
@@ -309,8 +317,6 @@ class Stats:
     @property
     def ribbon_parameters(self):
         """Gets ribbon parameters"""
-        if self.machine.diagnostics:
-            return {}
         parameters = OrderedDict({'': 'Ribbon parameters'})
         parameters['Combinations in ribbon'] = self._ribbon['codes']
         parameters['Characters incl. spaces'] = self._ribbon['chars']
@@ -321,7 +327,7 @@ class Stats:
     def session_parameters(self):
         """Displays the ribbon data"""
         # display this only for multi-run sessions
-        if self.machine.diagnostics or self._session['runs'] < 2:
+        if self._session['runs'] < 2:
             return {}
         parameters = OrderedDict({'': 'Casting session parameters'})
         parameters['Casting runs'] = self._session['runs']
@@ -341,28 +347,24 @@ class Stats:
         data['Raw signals from ribbon'] = record.raw_signals
         data['Parsed signals'] = record.signals_string
         data['Sending signals'] = record.adjusted_signals_string
-        # for casting and punching:
-        if not self.machine.diagnostics:
-            if record.code.is_newline:
-                data['Starting a new line'] = self._run['current_line']
-            if runs_number > 1:
-                data['Code / run'] = self.build_data(self._run, 'code')
-                data['Char / run'] = self.build_data(self._run, 'char')
-                data['Line / run'] = self.build_data(self._run, 'line')
-                data['Run / job'] = self.build_data(self._session, 'run')
-                data['Failed runs'] = self._session['failed_runs']
-            data['Code / job'] = self.build_data(self._session, 'code')
-            data['Char / job'] = self.build_data(self._session, 'char')
-            data['Line / job'] = self.build_data(self._session, 'line')
-        # casting-only stats
-        if self.machine.casting:
-            data['Wedge 0075 now at'] = self._current['0075'] or '15'
-            data['Wedge 0005 now at'] = self._current['0005'] or '15'
-            data['Pump is'] = 'ON' if self._current['pump_working'] else 'OFF'
+        if record.code.is_newline:
+            data['Starting a new line'] = self._run['current_line']
+        if runs_number > 1:
+            data['Code / run'] = self.build_data(self._run, 'code')
+            data['Char / run'] = self.build_data(self._run, 'char')
+            data['Line / run'] = self.build_data(self._run, 'line')
+            data['Run / job'] = self.build_data(self._session, 'run')
+            data['Failed runs'] = self._session['failed_runs']
+        data['Code / job'] = self.build_data(self._session, 'code')
+        data['Char / job'] = self.build_data(self._session, 'char')
+        data['Line / job'] = self.build_data(self._session, 'line')
+        data['Wedge 0075 now at'] = self._current['0075'] or '15'
+        data['Wedge 0005 now at'] = self._current['0005'] or '15'
+        data['Pump is'] = 'ON' if self._current['pump_working'] else 'OFF'
 
         return data
 
-    def process_ribbon(self, ribbon):
+    def update_session_stats(self, ribbon):
         """Parses the ribbon, counts combinations, lines and characters"""
         # first, reset counters
         self._session, self._ribbon = defaultdict(int), defaultdict(int)
@@ -373,8 +375,8 @@ class Stats:
         records_gen = (Record(string) for string in ribbon)
         records = [record for record in records_gen if record.code.has_signals]
         # Check if row 16 addressing is needed
-        use_row_16 = any((record.code.uses_row_16 for record in records))
-        self.machine.use_row_16 = use_row_16
+        row_16_needed = any((record.code.uses_row_16 for record in records))
+        self.machine.check_row_16(row_16_needed)
         # number of codes is just a number of valid combinations
         num_codes = len(records)
         # ribbon starts and ends with newline, so lines = newline codes - 1
@@ -386,7 +388,7 @@ class Stats:
                             lines=max(0, num_lines))
         self._session.update(current_run=1)
 
-    def process_queue(self, queue):
+    def update_run_stats(self, queue):
         """Parses the ribbon, counts combinations, lines and characters"""
         # get all signals and filter those that are valid
         records = (Record(string) for string in queue)
@@ -404,7 +406,7 @@ class Stats:
                          current_line=0, current_code=0, current_char=0,
                          lines=num_lines, codes=num_codes, chars=num_chars)
 
-    def process_record(self, record):
+    def update_record_stats(self, record):
         """Updates the stats based on parsed signals."""
         # Update previous stats and current record
         self._previous, self._current['record'] = self._current.copy(), record
@@ -421,28 +423,26 @@ class Stats:
         # advance or set the character counters
         self._run['current_char'] += 1 * record.code.is_char
         self._session['current_char'] += 1 * record.code.is_char
-        # Check the pump working/non-working status in the casting mode
-        if self.machine.casting:
-            self._update_wedge_positions()
-            self._check_pump()
+        self._update_wedge_positions()
+        self._check_pump()
 
-    def get_remaining_runs(self):
+    def get_runs_left(self):
         """Gets the runs left number"""
         diff = self._session['runs'] - self._session['runs_done']
         return max(0, diff)
 
-    def end_run(self):
+    def end_run(self, success=True):
         """Updates the info about the runs"""
-        self._session['runs_done'] += 1
-        self._session['current_run'] += 1
-
-    def reset_last_run_stats(self):
-        """Subtracts the current run stats from all runs stats;
-        this is called before repeating a failed casting run."""
-        self._session['failed_runs'] += 1
-        for par in ('current_line', 'current_code', 'current_char',
-                    'lines', 'codes', 'chars'):
-            self._session[par] -= self._run[par]
+        if success:
+            # update the counters
+            self._session['runs_done'] += 1
+            self._session['current_run'] += 1
+        else:
+            # reset last run stats - don't update the counters
+            self._session['failed_runs'] += 1
+            for par in ('current_line', 'current_code', 'current_char',
+                        'lines', 'codes', 'chars'):
+                self._session[par] -= self._run[par]
 
     def get_lines_done(self):
         """Gets the current run line number"""
@@ -460,8 +460,6 @@ class Stats:
         # Was it running until now? Get it from the caster
         pump_on = (was_working or was_started) and not is_stopped or is_started
         self._current['pump_working'] = pump_on
-        # Feed it back to the caster object
-        self.machine.pump_working = pump_on
 
     def _update_wedge_positions(self):
         """Gets current positions of 0005 and 0075 wedges"""
