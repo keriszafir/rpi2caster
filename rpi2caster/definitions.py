@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Constant and basic data structure definitions"""
+"""Constants and basic data structure definitions"""
 
 from collections import namedtuple
 
@@ -42,7 +42,7 @@ SD = namedtuple('StyleDefinitions',
 STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='regular, antiqua',
                         codes=('^rr', '^RR', '^00'), ansi=0),
-            italic=Style(name='italic', short='i', alternatives=0,
+            italic=Style(name='italic', short='i', alternatives='',
                          codes=('^ii', '^II', '^01'), ansi=3),
             bold=Style(name='bold', short='b', alternatives='',
                        codes=('^bb', '^BB', '^03'), ansi=1),
@@ -64,19 +64,43 @@ STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='', codes=('^s4')),
             size5=Style(name='size 5', short='5', ansi=0,
                         alternatives='', codes=('^s5')))
+
+# Unit arrangement variants
+Variant = namedtuple('UAStyle', 'name short alternatives')
+VD = namedtuple('VariantDefinition',
+                'regular italic smallcaps accented '
+                'size1 size2 size3 size4 size5 '
+                'a_regular a_italic a_smallcaps b_regular')
+VARIANTS = VD(regular=Variant('regular', 'r', 'roman or bold'),
+              italic=Variant('italic', 'i', ''),
+              smallcaps=Variant('small caps', 's', ''),
+              accented=Variant('accents', 'a', 'Gaelic'),
+              size1=Variant('size 1', 's1', 'titling'),
+              size2=Variant('size 2', 's2', 'titling'),
+              size3=Variant('size 3', 's3', 'titling'),
+              size4=Variant('size 4', 's4', 'titling'),
+              size5=Variant('size 5', 's5', 'titling'),
+              a_regular=Variant('regular A', 'ar', 'special variant'),
+              a_italic=Variant('italic A', 'ai', 'special variant'),
+              a_smallcaps=Variant('small caps A', 'as', 'special variant'),
+              b_regular=Variant('regular B', 'br', 'special variant'))
+
 # Text alignments
 Alignments = namedtuple('Alignments', ('left', 'center', 'right', 'both'))
 ALIGNMENTS = Alignments('left', 'center', 'right', 'both')
 # Control codes for typesetting
 ALIGN_COMMANDS = {'^CR': ALIGNMENTS.left, '^CC': ALIGNMENTS.center,
                   '^CL': ALIGNMENTS.right, '^CF': ALIGNMENTS.both}
-STYLE_COMMANDS = {'^00': SD.roman, '^rr': SD.roman, '^01': SD.italic,
-                  '^ii': SD.italic, '^02': SD.bold, '^bb': SD.bold,
-                  '^03': SD.smallcaps, '^ss': SD.smallcaps,
-                  '^04': SD.inferior, '^ll': SD.inferior,
-                  '^05': SD.superior, '^uu': SD.superior,
-                  '^s1': SD.size1, '^s2': SD.size2, '^s3': SD.size3,
-                  '^s4': SD.size4, '^s5': SD.size5}
+STYLE_COMMANDS = {'^00': STYLES.roman, '^rr': STYLES.roman,
+                  '^01': STYLES.italic, '^ii': STYLES.italic,
+                  '^02': STYLES.bold, '^bb': STYLES.bold,
+                  '^03': STYLES.smallcaps, '^ss': STYLES.smallcaps,
+                  '^04': STYLES.inferior, '^ll': STYLES.inferior,
+                  '^05': STYLES.superior, '^uu': STYLES.superior,
+                  '^s1': STYLES.size1, '^s2': STYLES.size2,
+                  '^s3': STYLES.size3, '^s4': STYLES.size4,
+                  '^s5': STYLES.size5}
+
 # Default space positions
 DEFAULT_LOW_SPACE_POSITIONS = (('G', 1), ('G', 2), ('G', 5), ('O', 15))
 DEFAULT_HIGH_SPACE_POSITIONS = (('O', 16))
@@ -85,7 +109,7 @@ SPACE_NAMES = {'   ': 'low em quad', '  ': 'low en quad', ' ': 'low space',
                '___': 'high em quad', '__': 'high en quad', '_': 'high space'}
 SPACE_SYMBOLS = {' ': chr(0x1f790), '_': chr(0x1f795)}
 
-# Measurement units for line length
+# Measurement units for line length, character/space width etc.
 TYPOGRAPHIC_UNITS = dict(pc=12.0, pt=1.0, Pp=12*0.166/0.1667, pp=0.166/0.1667,
                          cc=12*0.1776/0.1667, dd=0.1776/0.1667,
                          cf=12*0.1628/0.1667, ff=0.1628/0.1667,

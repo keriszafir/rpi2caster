@@ -110,7 +110,7 @@ def temp_measure(routine):
 
 def choose_styles(styles='*', default=d.STYLES.roman, multiple=True):
     """Manual style choice"""
-    styles_string = str(styles)
+    styles_string = str(styles) if styles else ''
     if multiple:
         header = 'Choose one or more text styles.'
         all_styles = ',\na or * - all styles.\n'

@@ -34,6 +34,20 @@ def weakref_singleton(cls):
     return getinstance
 
 
+class TempValue:
+    """Temporary value context manager"""
+    def __init__(self, obj, attr, value):
+        self.obj, self.attr, self.temp_value = obj, attr, value
+
+    def __enter__(self):
+        self.old_value = getattr(self.obj, self.attr)
+        setattr(self.obj, self.attr, self.temp_value)
+        return self
+
+    def __exit__(self, *_):
+        setattr(self.obj, self.attr, self.old_value)
+
+
 class PubSub:
     """Publish/subscribe engine for object updates"""
     def __init__(self):

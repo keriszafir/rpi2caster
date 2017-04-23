@@ -146,84 +146,160 @@ def change_parameters(diecase):
         diecase.diecase_id = diecase_id
 
 
-def ua_by_style(styles='*', current_mapping=None):
-    """Ask for styles and assign them a unit arrangement.
-    Return a list of tuples: [(style1, ua1), (style2, ua2)...]
-    for each style in styles_string (if called without arguments,
-    let user choose the styles manually)"""
-    # ensure that the mapping is ordered by style
-    styles_collection = bm.Styles(styles)
-    mapping = OrderedDict()
-    ua_numbers = ', '.join(x for x in sorted(UA))
-    UI.display('Known unit arrangements:\n{}'.format(ua_numbers))
-
-    for style in styles_collection:
-        prompt = 'UA number for {}?'.format(style.name)
-        try:
-            current = current_mapping[style]
-            # preset the UA for this style
-            mapping[style] = current
-            ua_number = UI.enter(prompt, default=current, datatype=int)
-        except (KeyError, TypeError):
-            # no pre-existing mapping
-            ua_number = UI.enter(prompt, default='', datatype=str)
-
-        if ua_number:
-            mapping[style] = ua_number
-
-    return mapping
-
-
-def display_unit_values(mapping=None):
-    """Print a list on the screen with unit values for each character.
-    Use a {style1: ua1, style2: ua2} OrderedDict mapping.
-    If mapping is not provided, user will choose style manually."""
-    mapping = mapping or ua_by_style()
-    # ordered dict of unit values by style, then by char:
-    # {roman: {'a': 9, 'b': 9...}, bold: {'a': 10, 'b': 10...}...}
-    source = ua.char_unit_values(mapping)
-
-    characters = [*ascii_lowercase, *ascii_uppercase, *digits, *d.LIGATURES]
-    # Unit values by styles and chars
-    # character     roman    bold     italic
-    fields = ('Character', *(style.name for style in source))
-    header = ''.join(name.ljust(15) for name in fields)
-    # Display the data for characters
-    UI.display('Unit values for characters:\n')
-    UI.display(header)
-    UI.display('-' * len(header))
-    for char in characters:
-        # get the unit values for each style (or empty string if undefined)
-        values = (style_ua.get(char, '') for style_ua in source.values())
-        # format to 15-character wide columns and display
-        fields = (char.ljust(15), *(str(units).ljust(15) for units in values))
-        UI.display(''.join(fields))
-
-    UI.display('\n\nCharacters by unit value:\n')
-    # By unit values, then character
-    for units in range(4, 25):
-        strings = []
-        for style, style_ua in source.items():
-            chars = [c for c in characters if style_ua.get(c, 0) == units]
-            if not chars:
-                continue
-            strings.append('{} : {}'.format(style.name, ', '.join(chars)))
-        if not strings:
-            continue
-        UI.display('\n\nCharacters {} units wide:'.format(units))
-        UI.display('\n'.join(strings))
-
-
-def assign_unit_arrangements(diecase):
-    """Sets the unit arrangements for diecase's styles"""
-    unit_arrangements = ua_by_style(diecase.styles, diecase.unit_arrangements)
-    if UI.confirm('Display character unit values?', default=True):
-        display_unit_values(diecase.unit_arrangements)
+def display_all_arrangements(diecase):
+    """Show all unit arrangements assigned to this diecase"""
+    for unit_arrangement in diecase.unit_arrangements.values():
+        display_unit_values(unit_arrangement)
         UI.pause()
-    prompt = 'Apply changes?'
-    arrangements_changed = unit_arrangements != diecase.unit_arrangements
-    if arrangements_changed and UI.confirm(prompt, abort_answer=False):
-        diecase.unit_arrangements = unit_arrangements
+
+
+def display_unit_values(unit_arrangement):
+    """Show an unit arrangement by char and by units"""
+    def display_by_units():
+        """display chars grouped by unit value"""
+        UI.display('Ordered by unit value:')
+        for unit_value, chars in sorted(unit_arrangement.by_units.items()):
+            char_string = ', '.join(sorted(chars))
+            UI.display('\t{}:\t{}'.format(unit_value, char_string))
+        UI.display()
+
+    def display_letters():
+        """display unit values for all letters and ligatures"""
+        # define templates for lower+uppercase, lowercase only, uppercase only
+        template = '\t{:<4}: {:>3} units, \t\t{:<4}: {:>3} units'
+        lc_template = '\t{:<4}: {:>3} units'
+        uc_template = '\t\t\t{:<4}: {:>3} units'
+
+        UI.display('Ordered by character:')
+        for lowercase in [*ascii_lowercase, *d.LIGATURES]:
+            uppercase = lowercase.upper()
+            with suppress(bm.UnitValueNotFound):
+                # display both lower and upper
+                lower_units = unit_arrangement[lowercase]
+                upper_units = unit_arrangement[uppercase]
+                UI.display(template.format(lowercase, lower_units,
+                                           uppercase, upper_units))
+                continue
+            with suppress(bm.UnitValueNotFound):
+                # display lowercase only
+                lower_units = unit_arrangement[lowercase]
+                UI.display(lc_template.format(lowercase, lower_units))
+                continue
+            with suppress(bm.UnitValueNotFound):
+                # display uppercase only
+                lower_units = unit_arrangement[uppercase]
+                UI.display(uc_template.format(uppercase, upper_units))
+                continue
+        UI.display()
+
+    def display_numbers():
+        """display 0...9 unit values"""
+        grouped = {units: [n for n in digits if unit_arrangement[n] == units]
+                   for units in range(5, 22)}
+        numbers = [(', '.join(chars), units)
+                   for units, chars in grouped.items() if chars]
+        if numbers:
+            chunks = ('{}: {} units'.format(c, u) for c, u in numbers)
+            row = 'Digits: {}'.format(', '.join(chunks))
+            UI.display(row)
+
+    def display_others():
+        """display other characters - not letters"""
+        done = [*ascii_lowercase, *ascii_uppercase, *digits, *d.LIGATURES]
+        other_chars = {u: [c for c in sorted(chars) if c not in done]
+                       for u, chars in unit_arrangement.by_units.items()}
+        others = [(', '.join(chars), units)
+                  for units, chars in sorted(other_chars.items()) if chars]
+        if others:
+            chunks = ('{}: {} units'.format(c, u) for c, u in others)
+            row = 'Other: {}'.format(', '.join(chunks))
+            UI.display(row)
+
+    header = ('Unit arrangement for {ua.style.name}: '
+              '#{ua.number} {ua.variant.name}')
+    UI.display_header(header.format(ua=unit_arrangement))
+    display_by_units()
+    display_letters()
+    display_numbers()
+    display_others()
+
+
+def edit_unit_arrangements(diecase):
+    """Sets the unit arrangements for diecase's styles"""
+    def assign_ua(style):
+        """Assign an unit arrangement and variant to a style"""
+        prompt = 'UA number and style for {}?'.format(style.name)
+        current_ua = diecase.unit_arrangements.get(style)
+        cur_num = current_ua.number if current_ua else ''
+        cur_variant = current_ua.variant.short if current_ua else ''
+        # ask user for info
+        choice = UI.enter(prompt, default='{} {}'.format(cur_num, cur_variant),
+                          type_prompt='space-separated UA number and variant')
+        number, *variant_letters = choice.strip().split(' ')
+        # try to get a proper variant
+        variant_short = ''.join(variant_letters).lower()
+        variant = variants.get(variant_short)
+        if variant_short and not variant:
+            ex_prompt = 'Invalid variant: {}'.format(variant_short)
+            raise bm.UnitArrangementNotFound(ex_prompt)
+        # {variant: arrangement_dict}
+        ua_definitions = UA.get(number.strip())
+        if not ua_definitions:
+            # no UA or no specified variant in the UA
+            ex_prompt = 'No definition found for UA #{}'.format(number)
+            raise bm.UnitArrangementNotFound(ex_prompt)
+        if len(ua_definitions) == 1 and not variant:
+            # get the first and only variant, if it was not specified
+            variant = variants.get([*ua_definitions][0])
+        if not variant:
+            # which variants are in the arrangements? choose
+            found = [variants.get(vshort) for vshort in ua_definitions]
+            opts = [option(key=v.short, value=v, text=v.name) for v in found]
+            variant = UI.simple_menu('Choose the UA variant', opts)
+        if not ua_definitions.get(variant.short):
+            # UA is not defined for desired variant
+            ex_prompt = ('Unit arrangement {} does not have the variant: {}'
+                         .format(number, variant.name))
+            raise bm.UnitArrangementNotFound(ex_prompt)
+        # assign and ask if user wants to see the unit values
+        new_assignment[style.short] = (number, variant.short)
+        if UI.confirm('Display unit values?'):
+            # make an UA object and display it
+            arrangement = bm.UnitArrangement(ua_definitions[variant.short],
+                                             number, variant, style)
+            display_unit_values(arrangement)
+        return
+
+    def confirm_edit():
+        """Check if UA assignments changed and ask for confirmation"""
+        old_assignment = {ua.style.short: (ua.number, ua.variant.short)
+                          for ua in arrangements}
+        changed = new_assignment != old_assignment
+        return changed and UI.confirm('Confirm changes?', default=False)
+
+    # sort the arrangements, get the variant definitions
+    variants = {v.short: v for v in d.VARIANTS}
+    arrangements = sorted(diecase.unit_arrangements.values(),
+                          key=lambda a: (a.style.name, a.number))
+    new_assignment = {}
+    UI.display_header('Current unit arrangement assignment:')
+    UI.display('\n'.join('{}'.format(ua) for ua in arrangements))
+    # now, on to editing... first choose the font styles
+    UI.display('Which styles do you want to edit?')
+    style_set = bc.choose_styles([ua.style for ua in arrangements])
+    # edit UA assignment for each style
+    for style in style_set:
+        while True:
+            try:
+                assign_ua(style)
+                break
+            except bm.UnitArrangementNotFound as exc:
+                UI.display('{}'.format(exc))
+                if not UI.confirm('Cannot assign UA to style. Try again?'):
+                    break
+
+    if confirm_edit():
+        diecase.unit_arrangements = new_assignment
 
 
 def assign_wedge(diecase):
@@ -719,53 +795,38 @@ class DiecaseMixin:
     def diecase_manipulation(self, diecase=None):
         """A menu with all operations on a diecase"""
         diecase = diecase or self.diecase
-        while True:
-            UI.clear()
-            UI.display_parameters(diecase.parameters, diecase.wedge.parameters)
-            options = [option(key='q', value=Finish, text='Finish', seq=99),
-                       option(key='Esc', value=Abort,
-                              text='Another diecase', seq=90),
-                       option(key='p', )]
-            options = {'Q': Finish,
-                       'C': Abort,
-                       'P': change_parameters,
-                       'A': test_lang_completeness,
-                       'W': assign_wedge,
-                       'E': self.edit_diecase_layout,
-                       'N': clear_layout,
-                       'U': assign_unit_arrangements,
-                       'V': self.display_diecase_layout,
-                       'I': import_csv,
-                       'X': export_csv}
-            messages = ['Matrix case manipulation:\n\n'
-                        '[V]iew layout,\n'
-                        '[E]dit layout,\n'
-                        '[I]mport layout from CSV file,\n'
-                        'e[X]port layout to CSV file,\n'
-                        'change [P]arameters (diecase ID, typeface),\n'
-                        'change [W]edge,\n'
-                        'choose [U]nit arrangements,\n'
-                        'check if [A]ll characters for chosen language '
-                        'are in diecase,\n'
-                        '[N]ew layout from scratch\n']
-            # Save to database needs a complete set of metadata
-            required = {'Typeface': diecase.typeface,
-                        'Diecase ID': diecase.diecase_id}
-            missing = [item for item in required if not required[item]]
-            messages.extend(['Cannot save diecase with missing %s\n'
-                             % item.lower() for item in missing])
-            if not missing:
-                options['S'] = save_to_db
-                messages.append('[S]ave diecase to database,\n')
-            # Check if it's in the database
-            options['D'] = delete_from_db
-            messages.append('[D]elete diecase from database,\n')
-            # Options constructed
-            messages.append('[C] to choose/create another diecase,\n'
-                            '[Q] to quit.\n')
-            messages.append('Your choice: ')
-            message = ''.join(messages)
-            UI.simple_menu(message, options, allow_abort=True)(diecase)
+        header = 'Editing diecase {}'.format(diecase.diecase_id)
+        options = [option(key='f', value=Finish, text='Exit', seq=99),
+                   option(key='d', value=self.display_diecase_layout,
+                          text='Display diecase layout', seq=1),
+                   option(key='e', value=self.edit_diecase_layout,
+                          text='Edit diecase layout', seq=2),
+                   option(key='u', value=display_all_arrangements,
+                          text='Display unit arrangements', seq=4),
+                   option(key='a', value=edit_unit_arrangements,
+                          text='Assign unit arrangements', seq=5),
+                   option(key='w', value=assign_wedge,
+                          text='Assign wedge (current: {})', seq=7,
+                          lazy=lambda: diecase.wedge),
+                   option(key='p', value=change_parameters, seq=11,
+                          text='Change diecase ID and typeface'),
+                   option(key='l', value=test_lang_completeness, seq=15,
+                          text='Test completeness for a chosen language'),
+                   option(key='t', value=test_characters,
+                          text='Test completeness for any text', seq=16),
+                   option(key='n', value=clear_layout,
+                          text='Clear the diecase layout', seq=90),
+                   option(key='ins', value=save_to_db,
+                          text='Save diecase to database',
+                          cond=lambda: (diecase.diecase_id and
+                                        diecase.typeface), seq=91),
+                   option(key='del', value=delete_from_db, seq=92,
+                          text='Delete diecase from database'),
+                   option(key='i', value=import_csv, seq=30,
+                          text='Import layout from CSV file'),
+                   option(key='x', value=export_csv, seq=31,
+                          text='Export layout to CSV file')]
+        UI.dynamic_menu(options, header=header, func_args=[diecase])
 
 
 class MatrixEngine(DiecaseMixin):

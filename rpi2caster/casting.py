@@ -253,7 +253,7 @@ class Casting(TypesettingContext):
             else:
                 scale = UI.enter('Scale for {}?'.format(style.name),
                                  default=100, minimum=1) / 100.0
-            for char, chars_qty in freqs.type_bill:
+            for char, chars_qty in freqs.get_type_bill():
                 qty = int(scale * chars_qty)
                 UI.display('{}: {}'.format(char, chars_qty))
                 matrix = self.find_matrix(char, style, choose=True)

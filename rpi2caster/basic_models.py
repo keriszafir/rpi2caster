@@ -228,7 +228,7 @@ class Matrix:
         # Got the wedge positions, return them
         return d.WedgePositions(steps_0075, steps_0005)
 
-    def get_record(self, pos=True):
+    def get_mat_record(self, pos=True):
         """Returns a record suitable for JSON-dumping and storing in DB."""
         return d.MatrixRecord(self.char, self.styles.string,
                               self.pos if pos else '', self.units)
@@ -434,8 +434,8 @@ class DiecaseLayout:
     @property
     def raw(self):
         """Raw layout i.e. list of tuples with matrix parameters"""
-        in_diecase = [mat.get_record() for mat in self.all_mats]
-        outside = [mat.get_record(pos=False) for mat in self.outside_mats]
+        in_diecase = [mat.get_mat_record() for mat in self.all_mats]
+        outside = [mat.get_mat_record(pos=False) for mat in self.outside_mats]
         return in_diecase + outside
 
     @raw.setter
@@ -593,14 +593,28 @@ class UnitArrangement:
     {unit_value1: [char1, char2...]...} for getting all chars of given units,
     {char1: unit_value1, char2: unit_value2...} for char unit value lookups.
     """
-    __slots__ = ('by_units', 'by_char')
+    __slots__ = ('by_units', 'by_char', 'number', 'variant', 'style')
 
-    def __init__(self, arrangement):
+    def __init__(self, arrangement, number=None, variant=None, style=None):
+        def get_char_list(units):
+            """make a list of characters with given units"""
+            return [c for c, u in by_char.items() if u == units]
+
         if not arrangement:
             raise UnitArrangementNotFound
-        transformed = {char: units for units, char_list in arrangement.items()
-                       for char in char_list}
-        self.by_units, self.by_char = arrangement, transformed
+        by_char = {c: int(u) for c, u in arrangement.items() if c and u}
+        by_units = {units: get_char_list(units) for units in range(4, 22)}
+        filtered = {units: chars for units, chars in by_units.items() if chars}
+        # store the result
+        self.by_char, self.by_units = by_char, filtered
+        self.number, self.variant, self.style = number, variant, style
+
+    def __str__(self):
+        template = '{ua.font_style.name}: {ua.number} {ua.ua_style.name}'
+        return template.format(ua=self)
+
+    def __repr__(self):
+        return '<UnitArrangement {}>'.format(self)
 
     def __getitem__(self, item):
         """Get a unit arrangement for a given style"""
@@ -909,8 +923,7 @@ class CharFreqs:
     def __iter__(self):
         return (char for char in sorted(self.freqs))
 
-    @property
-    def type_bill(self):
+    def get_type_bill(self):
         """Returns an iterator object of tuples: (char, qty)
         for each character."""
         def quantity(char, upper=False):
@@ -924,6 +937,10 @@ class CharFreqs:
         upper_bill = ((char.upper(), quantity(char, upper=True))
                       for char in sorted(self.freqs) if char.isalpha())
         return chain(lower_bill, upper_bill)
+
+    def set_scales(self, scale=1.0, case_ratio=1.0):
+        """Set the scale factor and uppercase-to-lowercase ratio"""
+        self.scale, self.case_ratio = scale, case_ratio
 
 
 class MatrixNotFound(Exception):

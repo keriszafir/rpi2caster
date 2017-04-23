@@ -446,7 +446,7 @@ class ClickUI(object):
               default=None, datatype=None,
               minimum=None, maximum=None,
               condition=lambda x: True,
-              allow_abort=True):
+              allow_abort=True, type_prompt=None):
         """Enter data based on function arguments.
 
         prompt :    set the custom prompt to show to the user,
@@ -481,6 +481,8 @@ class ClickUI(object):
 
         allow_abort : if ctrl-C or ctrl-Z is pressed, the function will
                       raise Abort to be handled elsewhere.
+
+        type_prompt : info for user about what to enter; if None, use default
         """
         def build_requirements_message():
             """Make a prompt about required datatype and limits."""
@@ -488,7 +490,8 @@ class ClickUI(object):
 
             # what type should the input be?
             type_name = retval_type_handler.type_name
-            type_str = 'Type: {}'.format(type_name) if type_name else ''
+            type_str = (type_prompt if type_prompt is not None
+                        else 'Type: {}'.format(type_name) if type_name else '')
 
             # what limits are imposed?
             validated_parameter = retval_type_handler.validated_parameter
