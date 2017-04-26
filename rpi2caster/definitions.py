@@ -66,7 +66,7 @@ STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='', codes=('^s5')))
 
 # Unit arrangement variants
-Variant = namedtuple('UAStyle', 'name short alternatives')
+Variant = namedtuple('UAVariant', 'name short alternatives')
 VD = namedtuple('VariantDefinition',
                 'regular italic smallcaps accented '
                 'size1 size2 size3 size4 size5 '

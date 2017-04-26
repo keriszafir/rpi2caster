@@ -115,11 +115,8 @@ class Matrix:
             yield None
 
         # needs to work with strings and iterables
-        try:
-            sigs = ''.join(codes).upper()
-        except TypeError:
-            # in case not every iterable element is a string => convert
-            sigs = ''.join(str(l) for l in codes).upper()
+        codes = codes or ''
+        sigs = ''.join(str(l) for l in codes).upper()
 
         # get a first possible row (caveat: recognize double-digit numbers)
         all_rows = [x for x in row_generator()]
@@ -144,7 +141,7 @@ class Matrix:
 
     def islowspace(self):
         """Checks whether this is a low space: char is present"""
-        return self.char.isspace()
+        return self.char and self.char.isspace()
 
     def set_lowspace(self, value):
         """Update self.char with " " for low spaces"""
@@ -154,7 +151,7 @@ class Matrix:
     def ishighspace(self):
         """Checks whether this is a high space: "_" is present"""
         # Any number of _ is present, no other characters
-        return ('_' in self.char and not
+        return (self.char and '_' in self.char and not
                 [x for x in self.char.strip() if x is not '_'])
 
     def set_highspace(self, value):
@@ -202,13 +199,15 @@ class Matrix:
     def wedge_positions(self, unit_correction=0, wedge=None):
         """Calculate the 0075 and 0005 wedge positions for this matrix
         based on the current wedge used"""
+        own_wedge = self.diecase.wedge
         other_wedge = wedge or self.diecase.wedge
         # we need to have the other wedge's units
         # convert unit width to other wedge's value
-        conv = wedge.units_to_units(self.units, other_wedge=self.diecase.wedge)
+        conv = own_wedge.units_to_units(self.units, other_wedge=other_wedge)
         # Units of alternative wedge's set to add or subtract
         diff = conv + unit_correction - self.get_row_units(wedge=other_wedge)
         # The following calculations are done in 0005 wedge steps
+        # (calculate for the other wedge)
         # 1 step = 1/2000"
         steps_0005 = int(other_wedge.units_to_inches(diff) * 2000) + 53
         # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
@@ -275,6 +274,15 @@ class Styles:
     def __contains__(self, what):
         return what in self._styles or what in self.string
 
+    def __eq__(self, other):
+        try:
+            # two styles collections having common elements compare equal
+            # should work with strings and Styles objects as well
+            return (set(self).intersection(other) or
+                    set(str(self)).intersection(str(other)))
+        except (TypeError, ValueError, AttributeError):
+            return False
+
     @property
     def string(self):
         """Return the string of all style short names"""
@@ -297,7 +305,7 @@ class Styles:
     @property
     def use_all(self):
         """Check if the collection has every style"""
-        return set(self.string) == set('rbislu')
+        return set(self) == set(Styles.definitions)
 
     @property
     def is_single(self):
@@ -758,7 +766,7 @@ class Measure:
     @property
     def units(self):
         """Calculates the line length in wedge's units"""
-        return round(self.ems / 18, 2)
+        return round(self.ems * 18, 2)
 
 
 class Wedge:
@@ -870,10 +878,8 @@ class Wedge:
         return round(ems * self.units_to_inches(18), 2)
 
     def units_to_units(self, units=1, set_width=None, other_wedge=None):
-        """Calculate other wedge's set units to own set units"""
-        if other_wedge == self or set_width == self.set_width:
-            return units
-        elif set_width:
+        """Calculate own set units to other wedge's set units"""
+        if set_width:
             return round(units * self.set_width / set_width, 2)
         elif other_wedge:
             return round(units * self.set_width / other_wedge.set_width, 2)

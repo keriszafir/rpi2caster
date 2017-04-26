@@ -483,14 +483,14 @@ class DiecaseMixin:
             if not edit_char:
                 return
             prompt = 'Char? (" ": low / "_": high space, blank = keep)'
-            matrix.char = UI.enter(prompt, default=matrix.char)
+            matrix.char = UI.enter(prompt, default=matrix.char or '')
 
         def _edit_position():
             """Edit the matrix coordinates"""
             if not edit_position:
                 return
             matrix.pos = UI.enter('Enter the matrix position',
-                                  default=matrix.pos)
+                                  default=matrix.pos or '')
 
         def _edit_styles():
             """Change the matrix styles"""
@@ -527,7 +527,8 @@ class DiecaseMixin:
 
         def _edit_space_width():
             """Edits the space width"""
-            width = bc.set_measure('1em', what='space width',
+            units = '{}u'.format(matrix.units)
+            width = bc.set_measure(units, unit='u', what='space width',
                                    set_width=self.wedge.set_width)
             matrix.units = width.units
 
@@ -543,16 +544,19 @@ class DiecaseMixin:
                                   text='change position (current: {})'),
                            option(key='s', value=_edit_styles, seq=3,
                                   lazy=matrix.styles.names,
-                                  cond=edit_styles and not matrix.isspace(),
+                                  cond=(edit_styles and matrix.char and not
+                                        matrix.isspace()),
                                   text='assign styles (current: {})'),
-                           option(key='u', value=_edit_units, seq=4,
+                           option(key='w', value=_edit_units, seq=4,
                                   lazy=matrix.units,
                                   cond=edit_units and not matrix.isspace(),
                                   text='change width (current: {} units)'),
                            option(key='w', value=_edit_space_width, seq=4,
                                   lazy=matrix.units,
                                   cond=edit_units and matrix.isspace(),
-                                  text='change width (current: {} units)')]
+                                  text='change width (current: {} units)'),
+                           option(key='Esc', value=Abort, seq=90,
+                                  text='finish')]
                 valid_options = [opt for opt in options if opt.condition]
                 if not valid_options:
                     # nothing to do
@@ -564,12 +568,13 @@ class DiecaseMixin:
                     # display the menu for user to choose
                     choice = UI.simple_menu('Edit the matrix for {} at {}:'
                                             .format(_get_char(), matrix.pos),
-                                            options, default_key='Esc')
+                                            options, default_key='Esc',
+                                            allow_abort=False)
                 # execute the subroutine
                 choice()
         return matrix
 
-    def find_matrix(self, char='', styles='*', position='', units=None,
+    def find_matrix(self, char=None, styles=None, position=None, units=None,
                     choose=True, temporary=False):
         """Search the diecase layout and get a matching mat.
 
@@ -584,7 +589,8 @@ class DiecaseMixin:
 
         def choose_from_menu():
             """Display a menu to choose mats"""
-            menu_data = {i: mat for i, mat in enumerate(mats, start=1)}
+            matrices = sorted(mats, key=lambda mat: (mat.char, mat.pos))
+            menu_data = {i: mat for i, mat in enumerate(matrices, start=1)}
             # no matches? make a new one!
             if not menu_data:
                 return None
@@ -612,8 +618,8 @@ class DiecaseMixin:
             return menu_data.get(choice)
 
         styles_collection = bm.Styles(styles)
-        mats = self.diecase.layout.select_many(char, styles_collection,
-                                               position, units)
+        select = self.diecase.layout.select_many
+        mats = select(char, styles_collection, position, units)
         if len(mats) == 1:
             # only one match: return it
             retval = mats[0]

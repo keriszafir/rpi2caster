@@ -54,6 +54,7 @@ def get_letter_frequencies():
 # Measure controller routines
 
 def set_measure(input_value=PREFS_CFG.default_measure,
+                unit=PREFS_CFG.measurement_unit,
                 what='measure', set_width=12.0):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).
@@ -71,11 +72,9 @@ def set_measure(input_value=PREFS_CFG.default_measure,
             '    ", in - inch;   mm - millimeter;   cm - centimeter\n\n')
 
     prompt = 'Enter the {} value and unit (or "?" for help)'.format(what)
-    unit = PREFS_CFG.measurement_unit
-    default_measure = bm.Measure(input_value, unit, set_width)
     while True:
         # If 0, use default
-        raw_string = UI.enter(prompt, default='{}'.format(default_measure))
+        raw_string = UI.enter(prompt, default='{}'.format(input_value))
         if '?' in raw_string:
             # Display help message and start again
             UI.display(info.format(set_width))
@@ -98,7 +97,8 @@ def temp_measure(routine):
             # Change measure before, restore after
             old_measure = self.measure
             set_width = self.wedge.set_width
-            self.measure = set_measure(old_measure, description, set_width)
+            self.measure = set_measure(old_measure, what=description,
+                                       set_width=set_width)
             retval = routine(self, *args, **kwargs)
             self.measure = old_measure
             return retval
@@ -120,8 +120,9 @@ def choose_styles(styles='*', default=d.STYLES.roman, multiple=True):
         header = 'Choose a style.'
         all_styles = '.\n'
     prompt = ('{} Available options:\n'
-              'r - roman, b - bold, i - italic, s - small caps,\n'
-              'l - lower index (inferior), u - upper index (superior){}'
+              'r - roman/regular, b - bold, i - italic, s - small caps,\n'
+              'l - lower index (inferior), u - upper index (superior),\n'
+              's1...s5 - size 1...size 5 (titling){}'
               'Your choice?'.format(header, all_styles))
     result = UI.enter(prompt, default=styles_string, datatype=str)
     if not multiple:

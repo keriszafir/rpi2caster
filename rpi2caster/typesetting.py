@@ -150,7 +150,8 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
 
     def change_measure(self):
         """Change a line length"""
-        measure = bc.set_measure(self.measure, 'line length / galley width')
+        old_meas = self.measure
+        measure = bc.set_measure(old_meas, what='line length / galley width')
         self.measure = measure
 
     def change_alignment(self):
