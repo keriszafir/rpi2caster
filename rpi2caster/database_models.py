@@ -27,7 +27,7 @@ class Diecase(BASE):
                             nullable=False, default='S5-12E')
     _ua_mappings = sa.Column('unit_arrangements', sa.Text)
     _layout_json = sa.Column('layout', sa.Text, nullable=False)
-    _wedge, _layout, _unit_arrangements = None, None, {}
+    _wedge, _layout = None, None
 
     def __iter__(self):
         return iter(self.matrices)
@@ -126,7 +126,7 @@ class Diecase(BASE):
         If needed, lazily initialize the empty layout."""
         layout = self._layout
         if not layout:
-            layout = bm.DiecaseLayout(self._layout_json, self)
+            layout = bm.DiecaseLayout(self._layout_json, diecase=self)
             self._layout = layout
         return layout
 
@@ -135,12 +135,10 @@ class Diecase(BASE):
         """Set the diecase layout object"""
         self._layout = layout_object
 
-    @orm.reconstructor
     def load_layout(self, layout=None):
         """Build a DiecaseLayout() and store it on init"""
         new_layout = layout or self._layout_json
         self.layout = bm.DiecaseLayout(layout=new_layout, diecase=self)
-        self.wedge = bm.Wedge()
 
     def store_layout(self):
         """Save the layout canonical form to ORM"""

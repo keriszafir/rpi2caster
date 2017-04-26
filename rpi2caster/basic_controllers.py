@@ -67,20 +67,21 @@ def set_measure(input_value=PREFS_CFG.default_measure,
             '    Pp - TeX / US printer\'s pica (=12pp, .1660"),\n'
             '    pt - DTP / PostScript point = 1/72",\n'
             '    pc - DTP / PostScript pica (=12pt, .1667"),\n'
-            '    em - 18 units, en - 9 units, u - 1 unit wedge\'s set,\n'
+            '    em - 18 units, en - 9 units, u - 1 unit {} set,\n'
             '    ", in - inch;   mm - millimeter;   cm - centimeter\n\n')
 
     prompt = 'Enter the {} value and unit (or "?" for help)'.format(what)
-    default_measure = bm.Measure(input_value, PREFS_CFG.measurement_unit)
+    unit = PREFS_CFG.measurement_unit
+    default_measure = bm.Measure(input_value, unit, set_width)
     while True:
         # If 0, use default
         raw_string = UI.enter(prompt, default='{}'.format(default_measure))
         if '?' in raw_string:
             # Display help message and start again
-            UI.display(info)
+            UI.display(info.format(set_width))
+            continue
         try:
-            return bm.Measure(raw_string, PREFS_CFG.measurement_unit,
-                              set_width=set_width)
+            return bm.Measure(raw_string, unit, set_width)
         except (TypeError, ValueError):
             UI.display('Incorrect value - enter again...')
 
@@ -96,7 +97,8 @@ def temp_measure(routine):
         if UI.confirm(prompt, default=False):
             # Change measure before, restore after
             old_measure = self.measure
-            self.measure = set_measure(old_measure, description)
+            set_width = self.wedge.set_width
+            self.measure = set_measure(old_measure, description, set_width)
             retval = routine(self, *args, **kwargs)
             self.measure = old_measure
             return retval

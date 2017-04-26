@@ -714,7 +714,7 @@ class Measure:
     see TYPOGRAPHIC_UNITS)."""
     __slots__ = ('unit', 'points', 'set_width')
 
-    def __init__(self, input_value, default_unit='pt', set_width=12.0):
+    def __init__(self, input_value, unit='pt', set_width=12.0):
         if not input_value:
             raise ValueError('Cannot parse measure: {}'.format(input_value))
         raw = str(input_value).strip()
@@ -724,7 +724,7 @@ class Measure:
         units.update(em=round(set_width, 2), en=round(set_width / 2, 2),
                      u=round(set_width / 18, 2))
         # Get the unit suffix (end on first match), otherwise keep default
-        self.unit = default_unit
+        self.unit = unit
         for symbol in sorted(units, reverse=True):
             if string.endswith(symbol):
                 string = string.replace(symbol, '')
@@ -742,7 +742,7 @@ class Measure:
     @property
     def value(self):
         """Get value in units defined on init"""
-        return self.value()
+        return self.get_value()
 
     def get_value(self, unit=None):
         """Get a value expressed in specified or default units"""

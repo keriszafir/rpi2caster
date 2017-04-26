@@ -297,9 +297,7 @@ class Casting(TypesettingContext):
         # 1 quad before and after the line
         quad_padding = 1
         quad = self.get_space(units=18)
-        # Leave some slack to adjust the line
-        length = (self.measure.ems(self.wedge.set_width) -
-                  2 * quad_padding * quad.ems)
+        length = self.measure.ems - 2 * quad_padding * quad.ems
         # Build a sequence of matrices for casting
         # If n is 0, we fill the line to the brim
         queues = ([mat] * n if n else [mat] * int((length // mat.ems) - 1)
@@ -472,12 +470,12 @@ class Casting(TypesettingContext):
                           text='Cast fonts',
                           desc='Cast a typecase based on a selected language'),
 
-                   option(key='F5', value=self._display_details, seq=80,
+                   option(key='F5', value=self._display_details, seq=85,
                           cond=lambda: not machine.punching,
                           text='Show details...',
                           desc='Display ribbon, diecase and wedge info'),
-                   option(key='F5', value=self._display_details, seq=80,
-                          cond=lambda: not machine.punching,
+                   option(key='F5', value=self._display_details, seq=85,
+                          cond=lambda: machine.punching,
                           text='Show details...',
                           desc='Display ribbon and interface details'),
 

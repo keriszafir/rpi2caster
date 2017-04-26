@@ -206,7 +206,7 @@ def display_unit_values(unit_arrangement):
     def display_others():
         """display other characters - not letters"""
         done = [*ascii_lowercase, *ascii_uppercase, *digits, *d.LIGATURES]
-        other_chars = {u: [c for c in sorted(chars) if c not in done]
+        other_chars = {u: [c for c in sorted(set(chars).difference(done))]
                        for u, chars in unit_arrangement.by_units.items()}
         others = [(', '.join(chars), units)
                   for units, chars in sorted(other_chars.items()) if chars]
