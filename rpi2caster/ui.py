@@ -415,17 +415,17 @@ class ClickUI(object):
                 self.display_header('{}'.format(value), trailing_newline=0)
 
     def pause(self, msg1='', msg2='Press any key to continue...',
-              min_verbosity=0, abort_ok=True):
+              min_verbosity=0, allow_abort=True):
         """Waits until user presses a key"""
         if self.verbosity >= min_verbosity:
             abort_key_names = ', '.join(key.name for key in DEFAULT_ABORT_KEYS)
             abort_key_chars = [key.getchar for key in DEFAULT_ABORT_KEYS]
             suffix = msg2
-            if abort_ok:
+            if allow_abort:
                 suffix = '{}\n[{}: abort]'.format(msg2, abort_key_names)
             click.echo('{}\n{}\n'.format(msg1, suffix))
             char = click.getchar()
-            if abort_ok and char in abort_key_chars:
+            if allow_abort and char in abort_key_chars:
                 raise Abort
 
     @staticmethod

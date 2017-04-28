@@ -37,6 +37,12 @@ class Matrix:
     def __str__(self):
         return '{mat.code}   //   {mat.comment}'.format(mat=self)
 
+    def __call__(self, units):
+        """Returns a copy of self with a corrected width"""
+        new_mat = copy(self)
+        new_mat.units += units
+        return new_mat
+
     @property
     def code(self):
         """Code present in ribbon"""
@@ -58,12 +64,6 @@ class Matrix:
                   else 'high space {mat.ems:.2f} ems' if self.ishighspace()
                   else '{mat.char} {mat.styles.names}')
         return retval.format(mat=self)
-
-    def __call__(self, units):
-        """Returns a copy of self with a corrected width"""
-        new_mat = copy(self)
-        new_mat.units += units
-        return new_mat
 
     @property
     def units(self):
@@ -569,12 +569,13 @@ class DiecaseLayout:
             return search_results[0]
         raise MatrixNotFound
 
-    def get_space(self, units=6, low=True):
+    def get_space(self, units=0, low=True, temporary=False):
         """Find a suitable space in the diecase layout"""
         high = not low
         space = self.select_one(units=units, islowspace=low, ishighspace=high)
+        # units: use row's default if not specified
         space.units = units
-        return space
+        return copy(space) if temporary else space
 
     def select_row(self, row_number):
         """Get all matrices from a given row"""
@@ -603,7 +604,7 @@ class UnitArrangement:
     """
     __slots__ = ('by_units', 'by_char', 'number', 'variant', 'style')
 
-    def __init__(self, arrangement, number=None, variant=None, style=None):
+    def __init__(self, arrangement, number=0, variant=None, style=None):
         def get_char_list(units):
             """make a list of characters with given units"""
             return [c for c, u in by_char.items() if u == units]

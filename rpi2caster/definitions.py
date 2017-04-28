@@ -37,7 +37,7 @@ Interface = namedtuple('Interface',
 # Style definitions
 Style = namedtuple('Style', 'name alternatives short codes ansi')
 SD = namedtuple('StyleDefinitions',
-                ('roman bold italic smallcaps inferior superior '
+                ('roman bold italic smallcaps inferior superior fraktur '
                  'size1 size2 size3 size4 size5'))
 STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='regular, antiqua',
@@ -54,6 +54,9 @@ STYLES = SD(roman=Style(name='roman', short='r',
             superior=Style(name='superior', short='u',
                            alternatives='upper index, superscript',
                            codes=('^uu', '^UU', '^04'), ansi=35),
+            fraktur=Style(name='Fraktur', short='f',
+                          alternatives='Schwabacher, German',
+                          codes=('^ff', '^FF', '^06'), ansi=36),
             size1=Style(name='size 1', short='1', ansi=0,
                         alternatives='', codes=('^s1')),
             size2=Style(name='size 2', short='2', ansi=0,

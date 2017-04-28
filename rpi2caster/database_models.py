@@ -98,7 +98,6 @@ class Diecase(BASE):
     @unit_arrangements.setter
     def unit_arrangements(self, unit_arrangements):
         """Set a dict of unit arrangements for styles in the diecase"""
-        self.get_unit_arrangements.cache_clear()
         self._ua_mappings = json.dumps(unit_arrangements)
 
     @property

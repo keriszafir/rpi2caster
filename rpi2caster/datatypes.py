@@ -472,7 +472,7 @@ TYPES[bool] = Handler(from_str=str_to_bool, to_str=str,
 
 TYPES[Exception] = Handler(from_str=itself, to_str=lambda _: '',
                            validated_parameter=len,
-                           type_name='text',
+                           type_name='',
                            # is an exception object or Exception subclass
                            instancecheck=lambda i:
                            isinstance(i, Exception) or
@@ -490,7 +490,7 @@ TYPES[IntList] = Handler(from_str=IntList,
 TYPES[FloatList] = Handler(from_str=FloatList,
                            to_str=lambda v: ', '.join(str(i) for i in v),
                            validated_parameter=len,
-                           type_name='comma-separated real numbers',
+                           type_name='comma-separated decimal numbers',
                            # is a list and all items are floats or integers
                            instancecheck=lambda i:
                            isinstance(i, list) and
@@ -499,7 +499,7 @@ TYPES[FloatList] = Handler(from_str=FloatList,
 TYPES[StrList] = Handler(from_str=StrList,
                          to_str=lambda v: ', '.join(str(i) for i in v),
                          validated_parameter=len,
-                         type_name='comma-separated strings',
+                         type_name='comma-separated text',
                          # is a non-zero-length tuple of strings
                          instancecheck=lambda i:
                          isinstance(i, list) and ' '.join(i))
@@ -516,7 +516,7 @@ TYPES[IntTuple] = Handler(from_str=IntTuple,
 TYPES[FloatTuple] = Handler(from_str=FloatTuple,
                             to_str=lambda v: ', '.join(str(i) for i in v),
                             validated_parameter=len,
-                            type_name='comma-separated real numbers',
+                            type_name='comma-separated decimal numbers',
                             # is a tuple and all items are integers or floats
                             instancecheck=lambda i:
                             isinstance(i, tuple) and
@@ -525,7 +525,7 @@ TYPES[FloatTuple] = Handler(from_str=FloatTuple,
 TYPES[StrTuple] = Handler(from_str=StrTuple,
                           to_str=lambda v: ', '.join(str(i) for i in v),
                           validated_parameter=len,
-                          type_name='comma-separated strings',
+                          type_name='comma-separated text',
                           # is a non-zero-length tuple of strings
                           instancecheck=lambda i:
                           isinstance(i, tuple) and ' '.join(i))
@@ -540,22 +540,22 @@ TYPES[int] = Handler(from_str=str_to_int,
 TYPES[float] = Handler(from_str=str_to_float,
                        to_str=lambda x: str(float(x)),
                        validated_parameter=itself,
-                       type_name='a real number e.g. 5.5',
+                       type_name='decimal number e.g. 5.5',
                        instancecheck=lambda i: isinstance(i, float))
 
 TYPES[str] = Handler(from_str=str, to_str=str,
                      validated_parameter=len,
-                     type_name='text',
+                     type_name='',
                      instancecheck=lambda i: isinstance(i, str))
 
 TYPES[tuple] = Handler(from_str=StrTuple,
                        to_str=lambda v: ', '.join(str(i) for i in v),
                        validated_parameter=len,
-                       type_name='comma-separated strings',
+                       type_name='comma-separated text',
                        instancecheck=lambda i: isinstance(i, tuple))
 
 TYPES[list] = Handler(from_str=StrList,
                       to_str=lambda v: ', '.join(str(i) for i in v),
                       validated_parameter=len,
-                      type_name='comma-separated strings',
+                      type_name='comma-separated text',
                       instancecheck=lambda i: isinstance(i, list))

@@ -280,12 +280,12 @@ class GalleyBuilder(object):
     """Builds a galley from input sequence"""
     def __init__(self, context, source):
         self.source = (x for x in source)
-        self.diecase = context.diecase
         self.units = context.measure.units
         # Cooldown: whether to separate sorts with spaces
         self.cooldown_spaces = False
         # Fill line: will add quads/spaces nutil length is met
         self.fill_line = True
+        self.space, self.quad = context.space, context.quad
         self.quad_padding = 1
 
     def make_ribbon(self):
@@ -347,7 +347,6 @@ class GalleyBuilder(object):
                     # Exit and loop further
                     return
             # Finish the line
-            var_sp = self.diecase.get_space(units=6)
             wedges = current_wedges
             current_wedges = None
             if self.fill_line:
@@ -359,21 +358,21 @@ class GalleyBuilder(object):
                     # Fine fill with fixed spaces
                     queue.append(space['code'] + ' fine filling line')
                     units_left -= space['units']
-                if units_left >= var_sp.get_min_units():
+                if units_left >= self.space.get_min_units():
                     # Put an adjustable space if possible to keep lines equal
                     if wedges:
                         queue.extend(tsf.single_justification(wedges))
-                    var_sp.units = units_left
-                    queue.append(str(var_sp))
-                    wedges = var_sp.wedge_positions()
+                    self.space.units = units_left
+                    queue.append(str(self.space))
+                    wedges = self.space.wedge_positions()
             # Always cast as many quads as needed, then put the line out
             queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
             queue.extend(tsf.double_justification(wedges or (3, 8)))
             units_left = 0
 
         # Store the code and wedge positions to speed up the process
-        space = decode_mat(self.diecase.layout.get_space(units=6))
-        quad = decode_mat(self.diecase.layout.get_space(units=18))
+        space = decode_mat(self.space)
+        quad = decode_mat(self.quad)
         working_mat = None
         current_wedges = None
         queue, units_left = tsf.end_casting(), 0

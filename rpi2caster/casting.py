@@ -265,15 +265,28 @@ class Casting(TypesettingContext):
         """Spaces casting routine, based on the position in diecase.
         Ask user about the space width and measurement unit.
         """
+        def choose():
+            """little menu to choose whether the space is high or low"""
+            options = (option(key='h', value=False, text='high space', seq=1),
+                       option(key='l', value=True, text='low space', seq=2),
+                       option(key='Enter', value=Abort, seq=3,
+                              text='finish and start casting', cond=order),
+                       option(key='Esc', value=Finish, seq=4,
+                              text='abort and go back to menu'))
+            header = 'Next space?'
+            return UI.simple_menu(header, options, allow_abort=False,
+                                  default_key='esc')
+
         order = []
         while True:
-            matrix = self.get_space(temporary=True)
-            self.edit_matrix(matrix, edit_char=False, edit_styles=False)
-            prompt = 'How many lines?'
-            lines = UI.enter(prompt, default=1, minimum=0)
-            order.extend([(matrix, 0)] * lines)
-            prompt = 'More spaces? Otherwise, start casting'
-            if not UI.confirm(prompt, default=True):
+            try:
+                get_space = self.diecase.layout.get_space
+                matrix = get_space(low=choose())
+                self.edit_matrix(matrix, edit_char=False, edit_styles=False)
+                prompt = 'How many lines?'
+                lines = UI.enter(prompt, default=1, minimum=0)
+                order.extend([(matrix, 0)] * lines)
+            except Abort:
                 break
         self.cast_galley(order)
 
@@ -294,10 +307,9 @@ class Casting(TypesettingContext):
         """
         if not order:
             raise Abort
-        # 1 quad before and after the line
+        # 1 quad before and after the line (quad is 1 em by definition)
         quad_padding = 1
-        quad = self.get_space(units=18)
-        length = self.measure.ems - 2 * quad_padding * quad.ems
+        length = self.measure.ems - 2 * quad_padding
         # Build a sequence of matrices for casting
         # If n is 0, we fill the line to the brim
         queues = ([mat] * n if n else [mat] * int((length // mat.ems) - 1)
@@ -321,8 +333,8 @@ class Casting(TypesettingContext):
         return self.ribbon.contents
 
     @cast_this
-    @bc.temp_measure
     @bc.temp_wedge
+    @bc.temp_measure
     def quick_typesetting(self, text=None):
         """Allows us to use caster for casting single lines.
         This means that the user enters a text to be cast,

@@ -91,20 +91,14 @@ def temp_measure(routine):
     @wraps(routine)
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
-        prompt = 'Current measure is {}, change it?'.format(self.measure)
-        description = 'line length / galley width'
-        if UI.confirm(prompt, default=False):
-            # Change measure before, restore after
-            old_measure = self.measure
-            set_width = self.wedge.set_width
-            self.measure = set_measure(old_measure, what=description,
-                                       set_width=set_width)
-            retval = routine(self, *args, **kwargs)
-            self.measure = old_measure
-            return retval
-        else:
-            # Just do it
-            return routine(self, *args, **kwargs)
+        description = 'galley width (line length)'
+        # Change measure before, restore after
+        old_measure = self.measure
+        self.measure = set_measure(old_measure, what=description,
+                                   set_width=self.wedge.set_width)
+        retval = routine(self, *args, **kwargs)
+        self.measure = old_measure
+        return retval
     return wrapper
 
 

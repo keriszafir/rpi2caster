@@ -10,7 +10,7 @@ from string import ascii_lowercase, ascii_uppercase, digits
 from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import USER_DATA_DIR, CFG
-from .data import UNIT_ARRANGEMENTS as UA
+from .data import TYPEFACES, UNIT_ARRANGEMENTS as UA
 from .database_models import DB, Diecase
 from .ui import UI, Abort, Finish, option
 
@@ -70,22 +70,40 @@ def clear_layout(diecase):
         diecase.store_layout()
 
 
-def test_characters(diecase, input_iter='', styles=None):
-    """Enter the string and parse the diecase to see if any of the
-    specified characters are missing."""
+def test_completeness(diecase):
+    """Tests completeness for a chosen language or text."""
+    def get_lang_chars(lang):
+        """Get an ordered set of characters in a language"""
+        characters = bm.CharFreqs(lang)
+        lowercase = (char for char in characters)
+        uppercase = (char.upper() for char in characters)
+        return lambda: (*uppercase, *lowercase)
+
+    def enter_text():
+        """Get an ordered set of all characters found in a text"""
+        text = UI.edit()
+        return sorted(set(char for char in text if not char.isspace()))
+
     def find_missing_mats(style):
         """Look up characters of a given style in the diecase layout"""
         missing = []
-        for char in test_char_set:
+        for char in sorted_charset:
             try:
-                diecase.layout.select_one(char=char, style=style)
+                diecase.layout.select_one(char=char, styles=style.short)
             except bm.MatrixNotFound:
                 missing.append(char)
         return missing
 
-    styles = styles or diecase.styles
-    input_collection = input_iter or UI.enter('Text to check?')
-    test_char_set = sorted(set(input_collection))
+    styles = bc.choose_styles(diecase.styles)
+    lang_options = [option(value=get_lang_chars(lang),
+                           text='{} - {}'.format(lang, lang_name))
+                    for lang, lang_name in sorted(d.LANGS.items())]
+    options = [*lang_options,
+               option(key='Esc', value=Abort, seq=99, text='Exit'),
+               option(key='e', value=enter_text, seq=98, text='Enter text')]
+    charset = UI.simple_menu('Choose language or enter text',
+                             options, default_key='e', allow_abort=False)()
+    sorted_charset = sorted(set(charset))
 
     # which characters we don't have, grouped by style
     checks = {style: find_missing_mats(style) for style in styles}
@@ -95,7 +113,7 @@ def test_characters(diecase, input_iter='', styles=None):
     # if we have all needed characters, all missing char lists are empty
     # the diecase is complete, so return True
     if not missing_by_style:
-        UI.display('All characters are present.')
+        UI.pause('All characters are present.', allow_abort=False)
         return True
 
     # info for user
@@ -110,26 +128,8 @@ def test_characters(diecase, input_iter='', styles=None):
         UI.display(info.format(style.name, missing_chars_string))
 
     # the diecase is incomplete
+    UI.pause(allow_abort=False)
     return False
-
-
-def test_lang_completeness(diecase):
-    """Choose a language and test whether the diecase contains all
-    characters, and if not, list them"""
-    # choose a language and get its letter frequencies
-    char_freqs = bc.get_letter_frequencies()
-    UI.display('Building character set...\n')
-
-    uppercase = [str(char).upper() for char in char_freqs]
-    lowercase = [str(char).lower() for char in char_freqs]
-    all_chars = sorted(set(uppercase + lowercase))
-    UI.display('Characters:\n{}\n'.format(''.join(all_chars)))
-
-    # choose styles (by default: all those supported by diecase)
-    # for completeness checking
-    styles = bc.choose_styles(diecase.styles)
-    test_characters(diecase, all_chars, styles)
-    UI.pause()
 
 
 def change_parameters(diecase):
@@ -228,45 +228,29 @@ def edit_unit_arrangements(diecase):
     """Sets the unit arrangements for diecase's styles"""
     def assign_ua(style):
         """Assign an unit arrangement and variant to a style"""
-        prompt = 'UA number and style for {}?'.format(style.name)
-        current_ua = diecase.unit_arrangements.get(style)
-        cur_num = current_ua.number if current_ua else ''
-        cur_variant = current_ua.variant.short if current_ua else ''
+        prompt = 'UA number for {}?'.format(style.name)
+        current = diecase.unit_arrangements.get(style)
         # ask user for info
-        choice = UI.enter(prompt, default='{} {}'.format(cur_num, cur_variant),
-                          type_prompt='space-separated UA number and variant')
-        number, *variant_letters = choice.strip().split(' ')
-        # try to get a proper variant
-        variant_short = ''.join(variant_letters).lower()
-        variant = variants.get(variant_short)
-        if variant_short and not variant:
-            ex_prompt = 'Invalid variant: {}'.format(variant_short)
-            raise bm.UnitArrangementNotFound(ex_prompt)
-        # {variant: arrangement_dict}
-        ua_definitions = UA.get(number.strip())
+        ua_number = UI.enter(prompt, default=current.number if current else 0)
+        ua_definitions = UA.get(ua_number)
         if not ua_definitions:
             # no UA or no specified variant in the UA
-            ex_prompt = 'No definition found for UA #{}'.format(number)
+            ex_prompt = 'No definition found for UA #{}'.format(ua_number)
             raise bm.UnitArrangementNotFound(ex_prompt)
-        if len(ua_definitions) == 1 and not variant:
+        if len(ua_definitions) == 1:
             # get the first and only variant, if it was not specified
-            variant = variants.get([*ua_definitions][0])
-        if not variant:
+            variant = variants.get(ua_definitions[0])
+        else:
             # which variants are in the arrangements? choose
             found = [variants.get(vshort) for vshort in ua_definitions]
             opts = [option(key=v.short, value=v, text=v.name) for v in found]
             variant = UI.simple_menu('Choose the UA variant', opts)
-        if not ua_definitions.get(variant.short):
-            # UA is not defined for desired variant
-            ex_prompt = ('Unit arrangement {} does not have the variant: {}'
-                         .format(number, variant.name))
-            raise bm.UnitArrangementNotFound(ex_prompt)
         # assign and ask if user wants to see the unit values
-        new_assignment[style.short] = (number, variant.short)
+        new_assignment[style.short] = (ua_number, variant.short)
         if UI.confirm('Display unit values?'):
             # make an UA object and display it
             arrangement = bm.UnitArrangement(ua_definitions[variant.short],
-                                             number, variant, style)
+                                             ua_number, variant, style)
             display_unit_values(arrangement)
         return
 
@@ -312,7 +296,7 @@ def save_to_db(diecase):
     diecase.store_layout()
     DB.session.add(diecase)
     DB.session.commit()
-    UI.pause('Data saved successfully.')
+    UI.pause('Data saved successfully.', allow_abort=False)
 
 
 def delete_from_db(diecase):
@@ -347,6 +331,21 @@ def list_diecases(data=get_all_diecases()):
                for index, diecase in data.items())
     UI.display(*entries, sep='\n')
     return data
+
+
+def list_typefaces(*_):
+    """Show all available typefaces"""
+    template = '{num:>6}\t{name:<30}\t{styles}'
+    UI.display_header('List of known typefaces by series number:')
+    UI.display('Series\t{:<30}\tStyles'.format('Name'))
+    for number, record in sorted(TYPEFACES.items()):
+        name = record.get('typeface')
+        if not name:
+            continue
+        styles = bm.Styles(record.get('styles', 'r')).names
+        entry = template.format(num=number, name=name, styles=styles)
+        UI.display(entry)
+    UI.pause(allow_abort=False)
 
 
 def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
@@ -440,25 +439,20 @@ class DiecaseMixin:
         """Get a {style: {char: Matrix object}} charset from the diecase"""
         return self.diecase.layout.charset
 
-    def get_space(self, units=5, low=True, temporary=False):
-        """Get a most suitable space for a given number of units"""
-        mat = self.diecase.layout.get_space(units=units, low=low)
-        return copy(mat) if temporary else mat
-
     @property
     def space(self):
         """Get a space from diecase; most typically G2, 6-units wide"""
-        return self.get_space(units=6, low=True)
+        return self.diecase.layout.get_space(units=6, low=True)
 
     @property
     def half_quad(self):
         """Get a 9-unit quad (half-square) from diecase"""
-        return self.get_space(units=9, low=True)
+        return self.diecase.layout.get_space(units=9, low=True)
 
     @property
     def quad(self):
         """Get a full em quad"""
-        return self.get_space(units=18, low=True)
+        return self.diecase.layout.get_space(units=18, low=True)
 
     def edit_matrix(self, matrix,
                     edit_char=True, edit_position=True,
@@ -491,6 +485,9 @@ class DiecaseMixin:
                 return
             matrix.pos = UI.enter('Enter the matrix position',
                                   default=matrix.pos or '')
+            # reset the unit width
+            if not matrix.char or matrix.isspace():
+                matrix.units = 0
 
         def _edit_styles():
             """Change the matrix styles"""
@@ -555,8 +552,8 @@ class DiecaseMixin:
                                   lazy=matrix.units,
                                   cond=edit_units and matrix.isspace(),
                                   text='change width (current: {} units)'),
-                           option(key='Esc', value=Abort, seq=90,
-                                  text='finish')]
+                           option(key='Enter', value=Abort, seq=90,
+                                  text='finish editing')]
                 valid_options = [opt for opt in options if opt.condition]
                 if not valid_options:
                     # nothing to do
@@ -568,7 +565,7 @@ class DiecaseMixin:
                     # display the menu for user to choose
                     choice = UI.simple_menu('Edit the matrix for {} at {}:'
                                             .format(_get_char(), matrix.pos),
-                                            options, default_key='Esc',
+                                            options, default_key='Enter',
                                             allow_abort=False)
                 # execute the subroutine
                 choice()
@@ -801,9 +798,8 @@ class DiecaseMixin:
     def diecase_manipulation(self, diecase=None):
         """A menu with all operations on a diecase"""
         diecase = diecase or self.diecase
-        header = 'Editing diecase {}'.format(diecase.diecase_id)
-        options = [option(key='f', value=Finish, text='Exit', seq=99),
-                   option(key='d', value=self.display_diecase_layout,
+        header = 'Diecase manipulation menu'
+        options = [option(key='d', value=self.display_diecase_layout,
                           text='Display diecase layout', seq=1),
                    option(key='e', value=self.edit_diecase_layout,
                           text='Edit diecase layout', seq=2),
@@ -816,23 +812,27 @@ class DiecaseMixin:
                           lazy=lambda: diecase.wedge),
                    option(key='p', value=change_parameters, seq=11,
                           text='Change diecase ID and typeface'),
-                   option(key='l', value=test_lang_completeness, seq=15,
-                          text='Test completeness for a chosen language'),
-                   option(key='t', value=test_characters,
-                          text='Test completeness for any text', seq=16),
+                   option(key='t', value=test_completeness, seq=15,
+                          text='Test text/language completeness of a diecase'),
+                   option(key='i', value=import_csv, seq=30,
+                          text='Import layout from CSV file'),
+                   option(key='x', value=export_csv, seq=31,
+                          text='Export layout to CSV file'),
                    option(key='n', value=clear_layout,
                           text='Clear the diecase layout', seq=90),
                    option(key='ins', value=save_to_db,
                           text='Save diecase to database',
                           cond=lambda: (diecase.diecase_id and
                                         diecase.typeface), seq=91),
-                   option(key='del', value=delete_from_db, seq=92,
+                   option(key='delete', value=delete_from_db, seq=92,
                           text='Delete diecase from database'),
-                   option(key='i', value=import_csv, seq=30,
-                          text='Import layout from CSV file'),
-                   option(key='x', value=export_csv, seq=31,
-                          text='Export layout to CSV file')]
-        UI.dynamic_menu(options, header=header, func_args=[diecase])
+                   option(key='F2', value=list_typefaces, seq=95,
+                          text='List typefaces'),
+                   option(key='Esc', value=Abort, seq=98, text='Back'),
+                   option(key='f10', value=Finish, seq=99,
+                          text='Exit the diecase manipulation utility')]
+        UI.dynamic_menu(options, header=header, func_args=[diecase],
+                        allow_abort=False)
 
 
 class MatrixEngine(DiecaseMixin):
@@ -849,3 +849,4 @@ class MatrixEditor(DiecaseMixin):
                 diecase = get_diecase(diecase_id)
                 with suppress(Abort):
                     self.diecase_manipulation(diecase)
+                diecase_id = None
