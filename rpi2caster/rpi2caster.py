@@ -29,7 +29,7 @@ def casting_job(args):
     elif args.direct:
         session.cast_composition()
     elif args.testing:
-        session.machine.diagnostics()
+        session.caster.diagnostics()
     else:
         session.main_menu()
 

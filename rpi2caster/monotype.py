@@ -79,7 +79,7 @@ class MonotypeCaster(object):
             return sensor, output
 
         self.simulation, self.punching = simulation, punching
-        UI.pause('Initializing caster...', min_verbosity=3)
+        UI.pause('Initializing caster...', min_verbosity=3, allow_abort=True)
         sim = 'Simulate casting instead of real casting?'
         sim2 = 'Cannot initialize a hardware interface. Simulate instead?'
         self.simulation = (self.simulation or INTERFACE_CFG.simulation or
@@ -206,7 +206,7 @@ class MonotypeCaster(object):
             """Advance between combinations is controlled by keypress"""
             self.output.valves_off()
             self.output.valves_on(signals)
-            UI.pause('Next combination?')
+            UI.pause('Next combination?', allow_abort=True)
 
         def by_timer(signals):
             """Advance is dictated by timer"""
@@ -238,19 +238,21 @@ class MonotypeCaster(object):
                     if duration:
                         time.sleep(duration)
                     else:
-                        UI.pause('Next?')
+                        UI.pause('Next?', allow_abort=True)
                 UI.confirm('Repeat?', abort_answer=False)
 
     def diagnostics(self):
         """Settings and alignment menu for servicing the caster"""
         def test_front_pinblock(*_):
             """Sends signals 1...14, one by one"""
-            UI.pause('Testing the front pinblock - signals 1...14.')
+            info = 'Testing the front pinblock - signals 1...14.'
+            UI.pause(info, allow_abort=True)
             self.test([str(n) for n in range(1, 15)])
 
         def test_rear_pinblock(*_):
             """Sends NI, NL, A...N"""
-            UI.pause('This will test the rear pinblock - NI, NL, A...N. ')
+            info = 'This will test the rear pinblock - NI, NL, A...N. '
+            UI.pause(info, allow_abort=True)
             self.test(['NI', 'NL', *'ABCDEFGHIJKLMN'])
 
         def test_all(*_):
@@ -258,16 +260,16 @@ class MonotypeCaster(object):
             Monotype order:
             NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
             """
-            UI.pause('This will test all the air lines in the same order '
-                     'as the holes on the paper tower: \n{}\n'
-                     'MAKE SURE THE PUMP IS DISENGAGED.'
-                     .format(' '.join(SIGNALS)))
+            info = ('This will test all the air lines in the same order '
+                    'as the holes on the paper tower: \n{}\n'
+                    'MAKE SURE THE PUMP IS DISENGAGED.')
+            UI.pause(info.format(' '.join(SIGNALS)), allow_abort=True)
             self.test(SIGNALS)
 
         def test_justification(*_):
             """Tests the 0075-S-0005"""
-            UI.pause('This will test the justification pinblock: '
-                     '0075, S, 0005.')
+            info = 'This will test the justification pinblock: 0075, S, 0005.'
+            UI.pause(info, allow_abort=True)
             self.test(['0075', 'S', '0005'])
 
         def test_any_code(*_):
@@ -284,7 +286,8 @@ class MonotypeCaster(object):
 
         def blow_all(*_):
             """Blow all signals for a short time; add NI, NL also"""
-            UI.pause('Blowing air through all air pins on both pinblocks...')
+            info = 'Blowing air through all air pins on both pinblocks...'
+            UI.pause(info, allow_abort=True)
             queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
                      'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14',
                      '0075 S', '0005 O15']
@@ -335,18 +338,17 @@ class MonotypeCaster(object):
         def calibrate_mould_and_diecase(*_):
             """Casts the "en dash" characters for calibrating the character X-Y
             relative to type body."""
-            def single_just(pos_0075, pos_0005):
-                """Return signals to set the wedge positions"""
-                return [Record('NJS 0005 {}'.format(pos_0005)),
-                        Record('NKS 0075 {}'.format(pos_0075))]
-
-            def get_codes(char):
+            def get_codes(mat):
                 """Gets two mats for a given char and adjusts its parameters"""
-                mat = mat_engine.find_matrix(char, choose=True, temporary=True)
-                positions = mat.wedge_positions(wedge=wedge)
+                positions = mat_engine.get_wedge_positions(mat)
                 pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005
-                record = Record(mat.code)
-                return single_just(pos_0075, pos_0005) + [record, record]
+                # use single justification to adjust character width
+                use_s_needle = (pos_0075, pos_0005) != (3, 8)
+                ribbon_record = mat.get_ribbon_record(s_needle=use_s_needle)
+                char_record = Record(ribbon_record)
+                return [Record('NJS 0005 {}'.format(pos_0005)),
+                        Record('NKS 0075 {}'.format(pos_0075)),
+                        char_record, char_record]
 
             UI.display('Mould blade opening and X-Y character calibration:\n'
                        'Cast G5, adjust the sort width to the value shown.\n'
@@ -356,19 +358,23 @@ class MonotypeCaster(object):
                        'Repeat if needed.\n')
             UI.confirm('Proceed?', default=True, abort_answer=False)
 
+            # this method needs to know the diecase and wedge
             mat_engine = MatrixEngine()
             wedge = mat_engine.choose_wedge()
-            # wedge and diecase are there
+            # use half-quad, quad, "n" and en-dash
+            mats = [mat_engine.find_space(units=9),
+                    mat_engine.find_space(units=18),
+                    mat_engine.find_matrix(char='n'),
+                    mat_engine.find_matrix(char='--')]
+            # operator needs to know how wide (in inches) the sorts should be
             template = '{u} units (1{n}) is {i}" wide'
-            half_quad_width = wedge.ems_to_inches(0.5)
-            quad_width = wedge.ems_to_inches(1)
-            UI.display(template.format(u=9, n='en', i=half_quad_width))
+            quad_width = self.wedge.set_width / 12 * wedge.pica
+            UI.display(template.format(u=9, n='en', i=0.5 * quad_width))
             UI.display(template.format(u=18, n='em', i=quad_width))
-            # Enqueue two en-quads, "n" characters and en-dashes
+            # build a casting queue and cast it repeatedly
             line_out, pump_stop = Record('NKJS 0005 0075'), Record('NJS 0005')
-            mats = (code for ch in ('  ', 'n', '--') for code in get_codes(ch))
-            sequence = [*mats, line_out, pump_stop]
-            # Cast it
+            codes = (get_codes(mat) for mat in mats)
+            sequence = [*codes, line_out, pump_stop]
             self.cast_many(sequence)
 
         def test_row_16(*_):
@@ -385,7 +391,8 @@ class MonotypeCaster(object):
                    for col in ('NI', 'NL', *'ABCDEFGHIJKLMNO')]
             # test with actual casting or not?
             if UI.confirm('Use the pump? Y = cast the row, N = test codes.'):
-                self.cast_many([pump_start, *row, line_out, pump_stop])
+                sequence = [pump_start, *row, line_out, pump_stop]
+                self.cast_many(sequence)
             else:
                 self.test(row)
 
@@ -483,13 +490,15 @@ class SensorBase(object):
                 prompt = 'Machine is not running. Y to try again or N to exit?'
                 UI.confirm(prompt, default=True, abort_answer=False)
 
-    def wait_for(self, new_state, **_):
+    def wait_for(self, new_state, timeout=None):
         """Waits for a keypress to emulate machine cycle, unless user
         switches to auto mode, where all combinations are processed in batch"""
         def switch_to_auto():
             """Switch to automatic mode"""
             self.manual_mode = False
 
+        # do nothing
+        timeout = timeout
         prompt = 'The sensor is going {}'
         UI.display(prompt.format('ON' if new_state else 'OFF'),
                    min_verbosity=3)
@@ -560,9 +569,9 @@ class OutputBase(object):
         return parameters
 
     @staticmethod
-    def valves_on(signals_list):
+    def valves_on(signals):
         """Turns on multiple valves"""
-        for sig in signals_list:
+        for sig in signals:
             UI.display(sig + ' on', min_verbosity=2)
 
     @staticmethod
@@ -595,7 +604,7 @@ class SysfsSensor(SensorBase):
         parameters['Value file path'] = self.value_file
         return parameters
 
-    def wait_for(self, new_state, timeout=None, **_):
+    def wait_for(self, new_state, timeout=None):
         """
         Waits until the sensor is in the desired state.
         new_state = True or False.
@@ -699,7 +708,7 @@ class RPiGPIOSensor(SensorBase):
         parameters['GPIO number'] = self.gpio
         return parameters
 
-    def wait_for(self, new_state, timeout=None, **_):
+    def wait_for(self, new_state, timeout=None):
         """Use interrupt handlers in RPi.GPIO for triggering the change"""
         _timeout = timeout or self.timeout
 
@@ -736,7 +745,7 @@ class WiringPiOutput(OutputBase):
         for pin in self.mapping.values():
             wiringpi.pinMode(pin, 1)
 
-    def valves_on(self, signals=()):
+    def valves_on(self, signals):
         """Looks a signal up in arrangement and turns it on"""
         for sig in signals:
             pin_number = self.mapping.get(sig)
@@ -764,7 +773,7 @@ class SMBusOutput(OutputBase):
         self.port.write_byte_data(self.mcp1_address, OLATA, byte2)
         self.port.write_byte_data(self.mcp1_address, OLATB, byte3)
 
-    def valves_on(self, signals=()):
+    def valves_on(self, signals):
         """Get the signals, transform them to numeric value and send
         the bytes to i2c devices"""
         if signals:
@@ -825,7 +834,7 @@ class ParallelOutput(SMBusOutput):
             self.working = True
         return self
 
-    def _send(self, *data):
+    def _send(self, byte0, byte1, byte2, byte3):
         """Send the codes through the data port"""
         def send_byte(single_byte):
             """Send a single byte of data"""
@@ -848,7 +857,7 @@ class ParallelOutput(SMBusOutput):
             self.port.setDataStrobe(True)
             self._wait_until_not_busy()
 
-        for byte in data:
+        for byte in (byte0, byte1, byte2, byte3):
             send_byte(byte)
 
     def _wait_until_not_busy(self):
@@ -870,9 +879,9 @@ class ParallelSensor(SensorBase):
         """Reset the interface if needed and go on"""
         UI.confirm('Turn on the machine...', default=True, abort_answer=False)
 
-    def wait_for(self, *args, **kw):
+    def wait_for(self, new_state, timeout=None):
         """Do nothing"""
-        pass
+        new_state, timeout = new_state, timeout
 
 
 class MachineStopped(Exception):

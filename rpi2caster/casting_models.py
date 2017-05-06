@@ -76,6 +76,7 @@ class Record:
             # {ABCDEFGIJKL} -> add HM -> HM{ABCDEFGIJKL}
             additional = {'NI': 'H', 'NL': 'H',
                           'H': 'N', 'M': 'H', 'N': 'M', 'O': 'HMN'}
+            is_row_16 = set(self.content.rows) == {16}
             if is_row_16:
                 extra_signals = additional.get(self.column_pin, 'HM')
                 column_set.update(extra_signals)
@@ -90,6 +91,7 @@ class Record:
             # {ABCDEFGHIJL} -> add KM -> KM{ABCDEFGHIJL}
             additional = {'NI': 'K', 'NL': 'K',
                           'K': 'N', 'M': 'K', 'N': 'M', 'O': 'KMN'}
+            is_row_16 = set(self.content.rows) == {16}
             if is_row_16:
                 extra_signals = additional.get(self.column_pin, 'KM')
                 column_set.update(extra_signals)
@@ -103,9 +105,16 @@ class Record:
                 # this pin is activated by EF combination instead
                 column_set.discard('D')
                 column_set.update('EF')
+            is_row_16 = set(self.content.rows) == {16}
             if is_row_16:
                 # use unit shift if, and only if, the only row signal is 16
                 column_set.update('D')
+
+        # register these functions
+        functions = {d.ROW16_ADDRESSING.off: do_not_convert,
+                     d.ROW16_ADDRESSING.hmn: hmn,
+                     d.ROW16_ADDRESSING.kmn: kmn,
+                     d.ROW16_ADDRESSING.unitshift: unit_shift}
 
         # determine if explicit O15 would be used
         use_o15 = ('O' in self.content.columns, 15 in self.content.rows,
@@ -115,14 +124,7 @@ class Record:
         column_set.discard('O')
 
         if adjust:
-            # check if this combination is row 16 and not earlier
-            is_row_16 = set(self.content.rows) == {16}
-
             # choose and apply signals conversion
-            functions = {d.ROW16_ADDRESSING.off: do_not_convert,
-                         d.ROW16_ADDRESSING.hmn: hmn,
-                         d.ROW16_ADDRESSING.kmn: kmn,
-                         d.ROW16_ADDRESSING.unitshift: unit_shift}
             modify = functions.get(self.settings.row_16_mode, do_not_convert)
             modify()
 
@@ -458,8 +460,8 @@ class Stats:
             is_started = self._current['record'].code.is_pump_start
             is_stopped = self._current['record'].code.is_pump_stop
         # Was it running until now? Get it from the caster
-        pump_on = (was_working or was_started) and not is_stopped or is_started
-        self._current['pump_working'] = pump_on
+        is_working = (was_working or was_started) and not is_stopped
+        self._current['pump_working'] = is_started or is_working
 
     def _update_wedge_positions(self):
         """Gets current positions of 0005 and 0075 wedges"""

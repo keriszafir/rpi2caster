@@ -2,15 +2,14 @@
 """Basic controller routines - elementary setters/getters.
 Depend on models. Used by higher-order controllers."""
 
-from collections import OrderedDict
+from contextlib import suppress
 from functools import wraps
 from itertools import zip_longest
-from sqlalchemy.orm import exc as orm_exc
+from string import ascii_lowercase, ascii_uppercase, digits
 from . import basic_models as bm, definitions as d
 from .config import CFG
-from .database_models import DB, Ribbon
-from .ui import UI, Abort
-from .data import WEDGE_DEFINITIONS
+from .ui import UI, Abort, Finish, option
+from .data import TYPEFACES, WEDGE_DEFINITIONS
 
 PREFS_CFG = CFG.preferences
 
@@ -18,18 +17,14 @@ PREFS_CFG = CFG.preferences
 # Letter frequency controller routines
 
 def define_scale(freqs):
-    """Define scale of production"""
+    """Define scale of production and upper.lowercase ratio"""
     prompt = ('How much lowercase "a" characters do you want to cast?\n'
               'The quantities of other characters will be calculated\n'
               'based on the letter frequency of the language.\n'
               'Minimum of 10 characters each will be cast.')
     freqs.scale = UI.enter(prompt, default=100, datatype=int)
-
-
-def define_case_ratio(freqs):
-    """Define uppercase to lowercase ratio"""
-    prm = 'Uppercase to lowercase ratio in %?'
-    freqs.case_ratio = UI.enter(prm, default=20.0, datatype=float) / 100.0
+    prompt = 'Uppercase to lowercase ratio in %?'
+    freqs.case_ratio = UI.enter(prompt, default=20.0, datatype=float) / 100.0
 
 
 def get_letter_frequencies():
@@ -49,6 +44,133 @@ def get_letter_frequencies():
             return bm.CharFreqs(lang)
         except KeyError:
             UI.display('Language {} not found. Choose again.'.format(lang))
+
+
+# Matrix control routines
+
+def edit_matrix(matrix,
+                edit_char=True, edit_position=True,
+                edit_styles=True, edit_units=True):
+    """Edits the matrix data.
+
+    matrix : a Matrix class object to edit,
+
+    edit_char : whether or not to edit the character,
+    edit_position : whether or not to edit the matrix coordinates,
+    edit_styles : whether or not to change the styles for the matrix,
+    edit_units : whether or not to change the matrix unit value
+    """
+    def _get_char():
+        """Get a character or space information"""
+        # either a space description or mat character
+        char = d.SPACE_NAMES.get(matrix.char, matrix.char)
+        return char or 'undefined'
+
+    def _edit_char():
+        """Edit the matrix character"""
+        if not edit_char:
+            return
+        prompt = 'Char? (" ": low / "_": high space, blank = keep)'
+        matrix.char = UI.enter(prompt, default=matrix.char or '')
+
+    def _edit_position():
+        """Edit the matrix coordinates"""
+        if not edit_position:
+            return
+        matrix.pos = UI.enter('Enter the matrix position',
+                              default=matrix.pos or '')
+        # reset the unit width
+        if not matrix.char or matrix.isspace():
+            matrix.units = 0
+
+    def _edit_styles():
+        """Change the matrix styles"""
+        # skip this for spaces
+        if not edit_styles or matrix.isspace():
+            return
+        matrix.styles = choose_styles(matrix.styles)
+
+    def _edit_units():
+        """Change the matrix unit width value"""
+        # skip this for spaces
+        if not _edit_units:
+            return
+
+        # get unit width values
+        row_units = matrix.get_units_from_row()
+        ua_units = matrix.get_units_from_arrangement()
+        curr_units = matrix.units
+
+        # build a prompt with units info
+        curr_chunk = ('' if not curr_units
+                      else 'current: {}'.format(curr_units))
+        row_chunk = ('' if not row_units
+                     else 'row units: {}'.format(row_units))
+        ua_chunk = ('' if not ua_units
+                    else 'UA units: {}'.format(ua_units))
+        chunks = [x for x in (curr_chunk, row_chunk, ua_chunk) if x]
+        if chunks:
+            prompt = 'Enter unit width ({})'.format(', '.join(chunks))
+        else:
+            prompt = 'Enter unit width'
+        matrix.units = UI.enter(prompt, default=curr_units, datatype=int,
+                                minimum=4, maximum=25)
+
+    with suppress(Abort):
+        # keep displaying this menu until aborted
+        while True:
+            # generate menu options dynamically
+            options = [option(key='c', value=_edit_char, seq=1,
+                              lazy=_get_char, cond=edit_char,
+                              text='change character (current: {})'),
+                       option(key='p', value=_edit_position, seq=2,
+                              lazy=matrix.pos, cond=edit_position,
+                              text='change position (current: {})'),
+                       option(key='s', value=_edit_styles, seq=3,
+                              lazy=matrix.styles.names,
+                              cond=(edit_styles and matrix.char and not
+                                    matrix.isspace()),
+                              text='assign styles (current: {})'),
+                       option(key='w', value=_edit_units, seq=4,
+                              lazy=matrix.units,
+                              cond=edit_units and not matrix.isspace(),
+                              text='change width (current: {} units)'),
+                       option(key='Enter', value=Abort, seq=90,
+                              text='done editing'),
+                       option(key='Esc', value=Finish, seq=99,
+                              text='finish')]
+            valid_options = [opt for opt in options if opt.condition]
+            if not valid_options:
+                # nothing to do
+                break
+            elif len(valid_options) == 1:
+                # only one thing - no need for the menu
+                choice = valid_options[0].value
+            else:
+                # display the menu for user to choose
+                choice = UI.simple_menu('Edit the matrix for {} at {}:'
+                                        .format(_get_char(), matrix.pos),
+                                        options, allow_abort=False)
+            # execute the subroutine
+            choice()
+    return matrix
+
+
+# Typeface controller routines
+
+def list_typefaces(*_):
+    """Show all available typefaces"""
+    template = '{num:>6}\t{name:<30}\t{styles}'
+    UI.display_header('List of known typefaces by series number:')
+    UI.display('Series\t{:<30}\tStyles'.format('Name'))
+    for number, record in sorted(TYPEFACES.items()):
+        name = record.get('typeface')
+        if not name:
+            continue
+        styles = bm.Styles(record.get('styles', 'r')).names
+        entry = template.format(num=number, name=name, styles=styles)
+        UI.display(entry)
+    UI.pause()
 
 
 # Measure controller routines
@@ -124,6 +246,79 @@ def choose_styles(styles='*', default=d.STYLES.roman, multiple=True):
     return bm.Styles(result, default)
 
 
+# Unit arrangement controller routines
+
+def display_ua(unit_arrangement):
+    """Show an unit arrangement by char and by units"""
+    def display_by_units():
+        """display chars grouped by unit value"""
+        UI.display('Ordered by unit value:')
+        for unit_value, chars in sorted(unit_arrangement.by_units.items()):
+            char_string = ', '.join(sorted(chars))
+            UI.display('\t{}:\t{}'.format(unit_value, char_string))
+        UI.display()
+
+    def display_letters():
+        """display unit values for all letters and ligatures"""
+        # define templates for lower+uppercase, lowercase only, uppercase only
+        template = '\t{:<4}: {:>3} units, \t\t{:<4}: {:>3} units'
+        lc_template = '\t{:<4}: {:>3} units'
+        uc_template = '\t\t\t{:<4}: {:>3} units'
+
+        UI.display('Ordered by character:')
+        for lowercase in [*ascii_lowercase, *d.LIGATURES]:
+            uppercase = lowercase.upper()
+            with suppress(bm.UnitValueNotFound):
+                # display both lower and upper
+                lower_units = unit_arrangement[lowercase]
+                upper_units = unit_arrangement[uppercase]
+                UI.display(template.format(lowercase, lower_units,
+                                           uppercase, upper_units))
+                continue
+            with suppress(bm.UnitValueNotFound):
+                # display lowercase only
+                lower_units = unit_arrangement[lowercase]
+                UI.display(lc_template.format(lowercase, lower_units))
+                continue
+            with suppress(bm.UnitValueNotFound):
+                # display uppercase only
+                lower_units = unit_arrangement[uppercase]
+                UI.display(uc_template.format(uppercase, upper_units))
+                continue
+        UI.display()
+
+    def display_numbers():
+        """display 0...9 unit values"""
+        grouped = {units: [n for n in digits if unit_arrangement[n] == units]
+                   for units in range(5, 22)}
+        numbers = [(', '.join(chars), units)
+                   for units, chars in grouped.items() if chars]
+        if numbers:
+            chunks = ('{}: {} units'.format(c, u) for c, u in numbers)
+            row = 'Digits: {}'.format(', '.join(chunks))
+            UI.display(row)
+
+    def display_others():
+        """display other characters - not letters"""
+        done = [*ascii_lowercase, *ascii_uppercase, *digits, *d.LIGATURES]
+        other_chars = {u: [c for c in sorted(set(chars).difference(done))]
+                       for u, chars in unit_arrangement.by_units.items()}
+        others = [(', '.join(chars), units)
+                  for units, chars in sorted(other_chars.items()) if chars]
+        if others:
+            chunks = ('{}: {} units'.format(c, u) for c, u in others)
+            row = 'Other: {}'.format(', '.join(chunks))
+            UI.display(row)
+
+    header = ('Unit arrangement for {ua.style.name}: '
+              '#{ua.number} {ua.variant.name}')
+    UI.display_header(header.format(ua=unit_arrangement))
+    display_by_units()
+    display_letters()
+    display_numbers()
+    display_others()
+
+
 # Wedge controller routines
 
 def choose_wedge(wedge_name=None):
@@ -185,13 +380,10 @@ def choose_wedge(wedge_name=None):
     default_wedge = str(wedge_name) if wedge_name else 'S5-12E'
     w_name = enter_name()
     try:
-        return bm.Wedge(w_name)
-
+        return bm.Wedge(wedge_name=w_name)
     except ValueError:
         data = enter_parameters(w_name)
-        wedge = bm.Wedge()
-        wedge.load(data)
-        return wedge
+        return bm.Wedge(wedge_data=data)
 
 
 def temp_wedge(routine):
@@ -209,64 +401,3 @@ def temp_wedge(routine):
         self.wedge = old_wedge
         return retval
     return wrapper
-
-
-# Ribbon control routines
-
-def get_all_ribbons():
-    """Lists all ribbons we have."""
-    ribbons = OrderedDict(enumerate(DB.query(Ribbon).all(), start=1))
-    return ribbons
-
-
-def list_ribbons(data=get_all_ribbons()):
-    """Display all ribbons in a dictionary, plus an empty new one"""
-    UI.display('\nAvailable ribbons:\n\n' +
-               'No.'.ljust(4) +
-               'Ribbon ID'.ljust(20) +
-               'Diecase ID'.ljust(20) +
-               'Wedge name'.ljust(12) +
-               'Customer'.ljust(20) +
-               'Description')
-    for index, ribbon in data.items():
-        row = ''.join([str(index).ljust(4),
-                       ribbon.ribbon_id.ljust(20),
-                       ribbon.diecase_id.ljust(20),
-                       ribbon.wedge.name.ljust(12),
-                       ribbon.customer.ljust(20),
-                       ribbon.description])
-        UI.display(row)
-
-
-def ribbon_from_file():
-    """Choose the ribbon from file"""
-    ribbon = Ribbon()
-    ribbon_file = UI.import_file()
-    ribbon.import_from_file(ribbon_file)
-    return ribbon
-
-
-def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
-    """Select ribbons from database and let the user choose one of them"""
-    prm = 'Number? (0: {}, leave blank to exit)'.format(fallback_description)
-    while True:
-        try:
-            data = get_all_ribbons()
-            if not data:
-                return fallback()
-            else:
-                UI.display('Choose a ribbon:', end='\n\n')
-                list_ribbons(data)
-                choice = UI.enter(prm, default=Abort, datatype=int)
-                data[0] = None
-                return data[choice] or fallback()
-        except KeyError:
-            UI.pause('Ribbon number is incorrect!')
-
-
-def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
-    """Get a ribbon with given ribbon_id"""
-    try:
-        return DB.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id).one()
-    except orm_exc.NoResultFound:
-        return fallback()

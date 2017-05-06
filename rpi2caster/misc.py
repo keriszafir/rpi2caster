@@ -37,7 +37,8 @@ def weakref_singleton(cls):
 class TempValue:
     """Temporary value context manager"""
     def __init__(self, obj, attr, value):
-        self.obj, self.attr, self.temp_value = obj, attr, value
+        self.obj, self.attr = obj, attr
+        self.temp_value, self.old_value = value, None
 
     def __enter__(self):
         self.old_value = getattr(self.obj, self.attr)

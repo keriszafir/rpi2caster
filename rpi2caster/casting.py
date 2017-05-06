@@ -218,112 +218,156 @@ class Casting(TypesettingContext):
                                   .format(lines_ok), default=True):
                         stats.update(run_line_skip=lines_ok)
 
+    @cast_this
     @bc.temp_wedge
-    def cast_sorts(self):
-        """Sorts casting routine, based on the position in diecase.
-        Ask user about the diecase row & column, as well as number of sorts.
-        """
-        order = []
-        while True:
-            char = UI.enter('Character to look for?',
-                            default=False) if self.diecase else ''
-            mat = self.find_matrix(char, temporary=True)
-            # change its parameters
-            matrix = self.edit_matrix(mat, edit_char=False, edit_styles=False)
-            qty = UI.enter('How many sorts?', default=10, minimum=0)
-            order.append((matrix, qty))
-            prompt = 'More sorts? Otherwise, start casting'
-            if not UI.confirm(prompt, default=True):
-                break
-        # Now let's calculate and cast it...
-        self.cast_galley(order)
-
-    @bc.temp_wedge
-    def cast_typecases(self):
-        """Casting typecases according to supplied font scheme."""
-        freqs = bc.get_letter_frequencies()
-        bc.define_case_ratio(freqs)
-        bc.define_scale(freqs)
-        style_mgr = bc.choose_styles(self.diecase.styles)
-        order = []
-        for style in style_mgr:
-            UI.display_header(style.name.capitalize())
-            if style_mgr.is_single or style_mgr.is_default:
-                scale = 1.0
-            else:
-                scale = UI.enter('Scale for {}?'.format(style.name),
-                                 default=100, minimum=1) / 100.0
-            for char, chars_qty in freqs.get_type_bill():
-                qty = int(scale * chars_qty)
-                UI.display('{}: {}'.format(char, chars_qty))
-                matrix = self.find_matrix(char, style, choose=True)
-                order.append((matrix, qty))
-        self.cast_galley(order)
-
-    @bc.temp_wedge
-    def cast_spaces(self):
-        """Spaces casting routine, based on the position in diecase.
-        Ask user about the space width and measurement unit.
-        """
-        def choose():
-            """little menu to choose whether the space is high or low"""
+    @bc.temp_measure
+    def cast_material(self):
+        """Cast typesetting material: typecases, specified sorts, spaces"""
+        def spaces_generator():
+            """generates a sequence of spaces"""
+            msg = 'Next space?'
             options = (option(key='h', value=False, text='high space', seq=1),
                        option(key='l', value=True, text='low space', seq=2),
-                       option(key='Enter', value=Abort, seq=3,
-                              text='finish and start casting', cond=order),
-                       option(key='Esc', value=Finish, seq=4,
+                       option(key='Enter', value=StopIteration, seq=3,
+                              text='done defining spaces'))
+            while True:
+                hi_or_low = UI.simple_menu(msg, options, allow_abort=False)
+                width = bc.set_measure(input_value='9u', unit='u',
+                                       what='space width',
+                                       set_width=self.wedge.set_width)
+                units = width.units
+                matrix = self.find_space(low=hi_or_low, units=units)
+                UI.display('By default cast a line filled with spaces.')
+                qty = UI.enter('How many spaces?', int(galley_units / units))
+                yield matrix, units, qty
+
+        def typecases_generator():
+            """generates a sequence of items for characters in a language"""
+            lookup_table = self.diecase.layout.lookup_table
+            # which styles interest us
+            styles = bc.choose_styles(self.diecase.styles)
+            # what to cast?
+            freqs = bc.get_letter_frequencies()
+            bc.define_scale(freqs)
+            # a not-so-endless stream of mats...
+            for style in styles:
+                UI.display_header(style.name.capitalize())
+                prompt = 'Scale for {}?'.format(style.name)
+                scale = (1.0 if styles.is_single or styles.is_default
+                         else UI.enter(prompt, default=100, minimum=1) / 100.0)
+                for char, chars_qty in freqs.get_type_bill():
+                    scaled_qty = int(scale * chars_qty)
+                    UI.display('{}: {}'.format(char, scaled_qty))
+                    try:
+                        matrix = lookup_table[(char, style)]
+                        units = self.get_units(matrix)
+                        yield matrix, units, scaled_qty
+                    except KeyError:
+                        msg = 'Cannot cast {} {} - no matrix found; omitting.'
+                        UI.pause(msg)
+                        continue
+
+        def sorts_generator():
+            """define sorts (character, width) manually
+            or semi-automatically (look them up in the layout)"""
+            while True:
+                if self.diecase:
+                    char = UI.enter('Character to look for?', default='')
+                    matrix = self.find_matrix(char=char)
+                else:
+                    position = UI.enter('Coordinates?')
+                    matrix = bm.Matrix(pos=position, diecase=self.diecase)
+                # got mat, now enter width...
+                char_width = self.get_units(matrix)
+                units = bc.set_measure(char_width, 'u', what='character width',
+                                       set_width=self.wedge.set_width).units
+                qty = UI.enter('How many sorts?', default=10, minimum=0)
+                # ready to deliver
+                yield matrix, units, qty
+                # next step?
+                if not UI.confirm('More?'):
+                    raise StopIteration
+
+        def choose_source():
+            """choose a character generator"""
+            options = (option(key='s', value=spaces_generator,
+                              text='spaces', seq=1),
+                       option(key='f', value=typecases_generator,
+                              text='fonts (typecases)', seq=2),
+                       option(key='t', value=sorts_generator,
+                              text='type (sorts)', seq=3),
+                       option(key='Enter', value=Abort, seq=10,
+                              text='finish and start casting', cond=queue),
+                       option(key='Esc', value=Finish, seq=11,
                               text='abort and go back to menu'))
-            header = 'Next space?'
+            header = 'What to cast?'
             return UI.simple_menu(header, options, allow_abort=False,
                                   default_key='esc')
 
-        order = []
+        def make_ribbon(queue):
+            """Take items from queue and adds them as long as there is
+            space left in the galley. When space runs out, end a line.
+
+            queue: [(code, quantity, units, pos_0075, pos_0005)]"""
+            def fill_line():
+                """fill the line with quads, then spaces"""
+                nonlocal units_left
+                while units_left >= quad_width:
+                    ribbon.append(quad)
+                    units_left -= quad_width
+                while units_left >= space.units:
+                    ribbon.append(space)
+                    units_left -= space.units
+                ribbon.append(quad)
+
+            # nothing to do? end right away
+            if not queue:
+                return []
+            # initialize the ribbon
+            ribbon = [tsf.pump_stop(comment='Finished'),
+                      tsf.galley_trip(comment='Putting the last line out')]
+            units_left = galley_units
+            # keep adding these characters
+            for matrix, units, quantity in queue:
+                # calculate wedge positions for the item
+                var_wedges = self.get_wedge_positions(matrix, units)
+                use_s_needle = var_wedges != (3, 8)
+                code = matrix.get_ribbon_record(s_needle=use_s_needle)
+                # add it as many times as needed
+                for _ in range(quantity):
+                    if units_left < units:
+                        fill_line()
+                        # new line and quad
+                        ribbon.append(tsf.double_justification(var_wedges))
+                        ribbon.append(quad)
+                        # reset the line width
+                        units_left = galley_units
+                    ribbon.append(code)
+                    units_left -= units
+                # finished added the order; set wedges now
+                ribbon.append(tsf.single_justification(var_wedges))
+            fill_line()
+            ribbon.append(quad)
+            ribbon.append(tsf.galley_trip())
+            return ribbon
+
+        # em-quad and space for filling the line
+        quad, quad_width = self.quad.get_ribbon_record(), self.quad.units
+        space = self.find_space(units=5)
+        # how wide is the galley? (with an em-quad before and after)
+        galley_units = self.measure.units - 2 * quad_width
+        queue = []
         while True:
             try:
-                get_space = self.diecase.layout.get_space
-                matrix = get_space(low=choose())
-                self.edit_matrix(matrix, edit_char=False, edit_styles=False)
-                prompt = 'How many lines?'
-                lines = UI.enter(prompt, default=1, minimum=0)
-                order.extend([(matrix, 0)] * lines)
+                source_routine = choose_source()
+                generator = source_routine()
+                for item in generator:
+                    queue.append(item)
             except Abort:
                 break
-        self.cast_galley(order)
 
-    @cast_this
-    @bc.temp_measure
-    def cast_galley(self, order=()):
-        """Cast a series of type, filling lines of given width to the brim.
-
-        Each character is specified by a tuple: (matrix, qty)
-            where matrix is a Matrix object,
-            qty is quantity (0 for a filled line,
-                             >0 for a given number of chars).
-
-        If there is too many chars for a single line - will cast more lines.
-        Last line will be quadded out.
-        Characters other than low spaces will be separated by double G2 spaces
-        to prevent matrices from overheating.
-        """
-        if not order:
-            raise Abort
-        # 1 quad before and after the line (quad is 1 em by definition)
-        quad_padding = 1
-        length = self.measure.ems - 2 * quad_padding
-        # Build a sequence of matrices for casting
-        # If n is 0, we fill the line to the brim
-        queues = ([mat] * n if n else [mat] * int((length // mat.ems) - 1)
-                  for (mat, n) in order)
-        matrix_stream = (mat for batch in queues for mat in batch)
-        # Initialize the galley-constructor
-        builder = GalleyBuilder(self, matrix_stream)
-        builder.quad_padding = quad_padding
-        builder.cooldown_spaces = True
-        UI.display('Generating a sequence...')
-        queue = builder.build_galley()
-        UI.display('Each line will have two em-quads at the start '
-                   'and at the end, to support the type.')
-        return queue
+        ribbon = make_ribbon(queue)
+        return ribbon
 
     @cast_this
     def cast_composition(self):
@@ -460,27 +504,10 @@ class Casting(TypesettingContext):
                           text='Quick typesetting',
                           desc='Compose and cast a line of text'),
 
-                   option(key='s', value=self.cast_sorts, seq=60,
-                          cond=lambda: (not machine.punching and
-                                        bool(self.diecase)),
-                          text='Cast sorts for given characters',
-                          desc='Cast from matrix based on a character'),
-                   option(key='s', value=self.cast_sorts, seq=60,
-                          cond=lambda: (not machine.punching and not
-                                        bool(self.diecase)),
-                          text='Cast sorts from matrix coordinates',
-                          desc='Cast from matrix at given position'),
-
-                   option(key='space', value=self.cast_spaces, seq=60,
+                   option(key='h', value=self.cast_material, seq=60,
                           cond=lambda: not machine.punching,
-                          text='Cast spaces',
-                          desc='Cast spaces / quads of a specified width'),
-
-                   option(key='f', value=self.cast_typecases, seq=60,
-                          cond=lambda: (not machine.punching and
-                                        bool(self.diecase)),
-                          text='Cast fonts',
-                          desc='Cast a typecase based on a selected language'),
+                          text='Cast handsetting material',
+                          desc='Cast sorts, spaces and typecases'),
 
                    option(key='F5', value=self._display_details, seq=85,
                           cond=lambda: not machine.punching,

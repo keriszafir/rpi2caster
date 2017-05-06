@@ -12,20 +12,13 @@ def get_data(name):
     return loads(rs(SOURCE, '{}.json'.format(name)).decode())
 
 
-def get_int_dict(name):
-    """Get the resource from a JSON-encoded file
-    and convert the keys to integers"""
-    raw_data = loads(rs(SOURCE, '{}.json'.format(name)).decode())
-    return {int(key): value for key, value in raw_data.items()}
-
-
 # Unit arrangement dictionary: {UA_ID: {style1: {char1: unit_value1...}...}...}
-UNIT_ARRANGEMENTS = get_int_dict('unit_arrangements')
+UNIT_ARRANGEMENTS = get_data('unit_arrangements')
 # Letter frequencies dictionary: {LANG: {char1: freq1...}...}
 LETTER_FREQUENCIES = get_data('char_freqs')
 # Wedge definitions: {WEDGE_SERIES: [row1_units, row2_units...]...}
 WEDGE_DEFINITIONS = get_data('wedge_units')
 # Typefaces by series - their names, styles
-TYPEFACES = get_int_dict('typefaces')
+TYPEFACES = get_data('typefaces')
 # Help and documentation
 HELP = get_data('help')

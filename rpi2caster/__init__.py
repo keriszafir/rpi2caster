@@ -4,12 +4,12 @@
 for Monotype composition casting machines."""
 
 from . import basic_models, basic_controllers, casting, casting_models, config
-from . import datatypes, definitions, matrix_controller, misc, database_models
+from . import datatypes, definitions, matrix_controller, misc, main_models
 from . import monotype, parsing, rpi2caster, typesetting, typesetting_funcs, ui
 from . import data
 
 __all__ = [basic_models, basic_controllers, casting, casting_models, config,
-           datatypes, definitions, matrix_controller, misc, database_models,
+           datatypes, definitions, main_models, matrix_controller, misc,
            monotype, parsing, rpi2caster, typesetting, typesetting_funcs, ui,
            data]
 

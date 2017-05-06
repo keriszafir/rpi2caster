@@ -4,10 +4,13 @@
 from collections import namedtuple
 
 # define some namedtuple objects so that returning data is easier
-# namedtuple for matrix coordinates and 0075/0005 wedge positions
 Coordinates = namedtuple('Coordinates', 'column row')
 MatrixRecord = namedtuple('MatrixRecord', 'char styles pos units')
 WedgePositions = namedtuple('WedgePositions', 'pos_0075 pos_0005')
+WedgeLimits = namedtuple('WedgeLimits', 'shrink stretch')
+
+# typeface metadata definition
+Typeface = namedtuple('Typeface', 'raw ids uas styles text')
 
 # Row 16 addressing modes
 Addressing = namedtuple('Row16_addressing', 'off hmn kmn unitshift')

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """datatypes - custom data types and type handling functions for rpi2caster"""
-from abc import ABCMeta
 from collections import Iterable, namedtuple, OrderedDict
 from contextlib import suppress
 
@@ -12,6 +11,18 @@ FALSE_ALIASES = ['false', 'off', 'no', '0', 'f', 'n']
 # after classes are defined, update it
 TYPES = OrderedDict()
 LIMITED_PARAMETERS = {len: 'length'}
+
+# Type handling routines for common datatypes
+# from_str: function converting a string to a value of this datatype,
+# to_str: function transforming this datatype to string,
+# validated_parameter : function(value) -> param. checked against limits
+# type_name : string displayed in prompts, validation messages etc.,
+# instancecheck: function used by the ValueListMetaclass
+#       for checking the value type
+#       isinstance(value, type) -> True if instancecheck returns True
+Handler = namedtuple('TypeHandler',
+                     ('from_str to_str validated_parameter '
+                      'type_name instancecheck'))
 
 
 def str_to_float(value):
@@ -99,8 +110,9 @@ def get_type(value):
 
     # iterate until a match is found
     for datatype, handler in TYPES.items():
-        if handler.instancecheck(value):
-            return datatype
+        with suppress(TypeError):
+            if handler.instancecheck(value):
+                return datatype
 
     return str
 
@@ -306,165 +318,64 @@ def validate(value, validated_parameter=None,
     return value
 
 
-def iterator_of_values(input_value='', item_type=str):
-    """Build an iterator of values of desired item type.
-    Raise TypeError if conversion of value fails.
-    """
-    # get items based on type - string, any iterable, everything else
-    if isinstance(input_value, str):
-        items = (x.strip() for x in input_value.split(','))
-    elif isinstance(input_value, Iterable):
-        items = iter(input_value)
-    else:
-        items = (input_value, )
-
-    # convert each of the items to item_type and return them as an iterator
-    # any exceptions will be raised during the process
-    converted_items = (convert(x, item_type) for x in items)
-    return converted_items
+def make_handler(outer_type, inner_type):
+    """Make a handler for container type for specified inner types"""
+    container = Container(outer_type, inner_type)
+    type_names = {int: 'integer numbers', float: 'decimal numbers'}
+    name = type_names.get(inner_type, 'values')
+    return Handler(from_str=container,
+                   to_str=lambda v: ', '.join(str(i) for i in v),
+                   validated_parameter=len,
+                   instancecheck=container.instancecheck,
+                   type_name='comma-separated {}'.format(name))
 
 
-class ValueListMetaclass(ABCMeta, type):
-    """Metaclass for checking the instances of classes"""
-    def __instancecheck__(cls, instance):
-        """Catch the custom class behavior"""
+class Container:
+    """A container (tuple, list) of specified inner types"""
+    def __init__(self, outer_type, inner_type):
+        self.outer_type = outer_type
+        self.inner_type = inner_type
+
+    def __call__(self, source):
+        items = self.parse(source)
+        return self.convert(items)
+
+    @staticmethod
+    def parse(source):
+        """check and dispatch on inner value type"""
+        if isinstance(source, str):
+            items = (x.strip() for x in source.split(','))
+        elif isinstance(source, Iterable):
+            items = iter(source)
+        else:
+            # single item -> make a tuple
+            items = (source, )
+
+        return items
+
+    def convert(self, items):
+        """convert the values to a desired type"""
+        collection = (convert(x, self.inner_type) for x in items)
+        return self.outer_type(collection)
+
+    def instancecheck(self, value):
+        """check if we have the instance of this container"""
+        checks = {int: lambda x: all(isinstance(v, int) for v in x),
+                  float: lambda x: all(isinstance(v, (int, float)) for v in x),
+                  str: ' '.join}
         try:
-            # check for classes defined here; defer checking other classes
-            # to the type metaclass
-            return TYPES[cls].instancecheck(instance)
-        except KeyError:
-            # not defined here => defer to type metaclass
-            return type.__instancecheck__(cls, instance)
-        except TypeError:
-            # failed instancecheck e.g. tried to join an iterable of numbers
+            check_inner = checks.get(self.inner_type)
+            return isinstance(value, self.outer_type) and check_inner(value)
+        except (TypeError, ValueError):
             return False
 
 
-class StrList(list, metaclass=ValueListMetaclass):
-    """A list built from a value, an iterable or a string
-    with comma-separated values of given type.
-
-    input_value : if string - will be parsed and split on commas,
-                  the parts will be stripped of whitespace and converted
-                  to the desired item type;
-
-                  if iterable (list, tuple, set, generator, range) -
-                  a list of source's items converted to desired item type,
-
-                  if int, float etc. non-iterable type - a single-item list
-
-    item_type : type to convert the item to. Default: str.
-
-    If type conversion fails for any of the values found in input,
-    raises TypeError.
-    """
-    def __init__(self, input_value='', item_type=str):
-        super().__init__(iterator_of_values(input_value, item_type))
-
-    def __str__(self):
-        return ', '.join('{}'.format(x) for x in self)
-
-    def __repr__(self):
-        items = ', '.join('"{}"'.format(x) for x in self)
-        return '<StringList [{}]>'.format(items)
-
-
-class StrTuple(tuple, metaclass=ValueListMetaclass):
-    """A tuple built from a value, an iterable or a string
-    with comma-separated values of given type.
-
-    input_value : if string - will be parsed and split on commas,
-                  the parts will be stripped of whitespace and converted
-                  to the desired item type;
-
-                  if iterable (list, tuple, set, generator, range) -
-                  a list of source's items converted to desired item type,
-
-                  if int, float etc. non-iterable type - a single-item list
-
-    item_type : type to convert the item to. Default: str.
-
-    If type conversion fails for any of the values found in input,
-    raises TypeError.
-    """
-    def __new__(cls, input_value='', item_type=str):
-        return tuple.__new__(cls, iterator_of_values(input_value, item_type))
-
-    def __str__(self):
-        return ', '.join('{}'.format(x) for x in self)
-
-    def __repr__(self):
-        items = ', '.join('"{}"'.format(x) for x in self)
-        return '<StringTuple ({})>'.format(items)
-
-
-class IntList(StrList):
-    """A list of integers.
-    Raises a TypeError if any of the list items is not an integer."""
-    def __init__(self, iterable):
-        super().__init__(iterable, int)
-
-    def __str__(self):
-        return ', '.join('{}'.format(x) for x in self)
-
-    def __repr__(self):
-        return '<IntList [{}]>'.format(str(self))
-
-
-class FloatList(StrList):
-    """A list of floating-point numbers.
-    Raises a TypeError if any of the list items is not a float."""
-    def __init__(self, iterable):
-        super().__init__(iterable, float)
-
-    def __str__(self):
-        return ', '.join('{}'.format(x) for x in self)
-
-    def __repr__(self):
-        return '<FloatList [{}]>'.format(str(self))
-
-
-class IntTuple(StrTuple):
-    """A tuple of integers."""
-    def __new__(cls, iterable, *_):
-        return StrTuple.__new__(cls, iterable, item_type=int)
-
-    def __str__(self):
-        return ', '.join('{}'.format(x) for x in self)
-
-    def __repr__(self):
-        return '<IntTuple ({})>'.format(str(self))
-
-
-class FloatTuple(StrTuple):
-    """A tuple of integers."""
-    def __new__(cls, iterable, *_):
-        return StrTuple.__new__(cls, iterable, item_type=float)
-
-    def __str__(self):
-        return ', '.join('{}'.format(x) for x in self)
-
-    def __repr__(self):
-        return '<FloatTuple ({})>'.format(str(self))
-
-
-# Type handling routines for common datatypes
-# from_str: function converting a string to a value of this datatype,
-# to_str: function transforming this datatype to string,
-# validated_parameter : function(value) -> param. checked against limits
-# type_name : string displayed in prompts, validation messages etc.,
-# instancecheck: function used by the ValueListMetaclass
-#       for checking the value type
-#       isinstance(value, type) -> True if instancecheck returns True
-Handler = namedtuple('TypeHandler',
-                     ('from_str to_str validated_parameter '
-                      'type_name instancecheck'))
 # itself function is defined => create a limit name for it
 LIMITED_PARAMETERS[itself] = 'value'
 # define datatype handlers
 # and add them in the sequence from most to least specific
 # (type checking is iterative and we don't want generic types like list
-# to overshadow specific ones like IntList)
+# to overshadow specific ones like list of integers)
 TYPES[bool] = Handler(from_str=str_to_bool, to_str=str,
                       validated_parameter=None,
                       type_name='y/n, yes/no, on/off,  1/0, true/false, t/f',
@@ -478,59 +389,6 @@ TYPES[Exception] = Handler(from_str=itself, to_str=lambda _: '',
                            isinstance(i, Exception) or
                            isinstance(i, type) and issubclass(i, Exception))
 
-TYPES[IntList] = Handler(from_str=IntList,
-                         to_str=lambda v: ', '.join(str(i) for i in v),
-                         validated_parameter=len,
-                         type_name='comma-separated integer numbers',
-                         # is a list and all items are integers
-                         instancecheck=lambda i:
-                         isinstance(i, list) and
-                         all(isinstance(x, int) for x in i))
-
-TYPES[FloatList] = Handler(from_str=FloatList,
-                           to_str=lambda v: ', '.join(str(i) for i in v),
-                           validated_parameter=len,
-                           type_name='comma-separated decimal numbers',
-                           # is a list and all items are floats or integers
-                           instancecheck=lambda i:
-                           isinstance(i, list) and
-                           all(isinstance(x, (int, float)) for x in i))
-
-TYPES[StrList] = Handler(from_str=StrList,
-                         to_str=lambda v: ', '.join(str(i) for i in v),
-                         validated_parameter=len,
-                         type_name='comma-separated text',
-                         # is a non-zero-length tuple of strings
-                         instancecheck=lambda i:
-                         isinstance(i, list) and ' '.join(i))
-
-TYPES[IntTuple] = Handler(from_str=IntTuple,
-                          to_str=lambda v: ', '.join(str(i) for i in v),
-                          validated_parameter=len,
-                          type_name='comma-separated integer numbers',
-                          # is a tuple and all items are integers
-                          instancecheck=lambda i:
-                          isinstance(i, tuple) and
-                          all(isinstance(x, int) for x in i))
-
-TYPES[FloatTuple] = Handler(from_str=FloatTuple,
-                            to_str=lambda v: ', '.join(str(i) for i in v),
-                            validated_parameter=len,
-                            type_name='comma-separated decimal numbers',
-                            # is a tuple and all items are integers or floats
-                            instancecheck=lambda i:
-                            isinstance(i, tuple) and
-                            all(isinstance(x, (int, float)) for x in i))
-
-TYPES[StrTuple] = Handler(from_str=StrTuple,
-                          to_str=lambda v: ', '.join(str(i) for i in v),
-                          validated_parameter=len,
-                          type_name='comma-separated text',
-                          # is a non-zero-length tuple of strings
-                          instancecheck=lambda i:
-                          isinstance(i, tuple) and ' '.join(i))
-
-# enable converting hexstrings to ints: 0xDEADBEEF -> 3735928559
 TYPES[int] = Handler(from_str=str_to_int,
                      to_str=str,
                      validated_parameter=itself,
@@ -548,14 +406,9 @@ TYPES[str] = Handler(from_str=str, to_str=str,
                      type_name='',
                      instancecheck=lambda i: isinstance(i, str))
 
-TYPES[tuple] = Handler(from_str=StrTuple,
-                       to_str=lambda v: ', '.join(str(i) for i in v),
-                       validated_parameter=len,
-                       type_name='comma-separated text',
-                       instancecheck=lambda i: isinstance(i, tuple))
-
-TYPES[list] = Handler(from_str=StrList,
-                      to_str=lambda v: ', '.join(str(i) for i in v),
-                      validated_parameter=len,
-                      type_name='comma-separated text',
-                      instancecheck=lambda i: isinstance(i, list))
+# add handlers for container types
+for outer in (list, tuple, set):
+    for inner in (int, float, str):
+        TYPES[(outer, inner)] = make_handler(outer, inner)
+    # add a generic list/tuple/set not specifying inner type
+    TYPES[outer] = make_handler(outer, str)

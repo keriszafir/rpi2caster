@@ -1,16 +1,73 @@
 # -*- coding: utf-8 -*-
 """Typesetter program"""
 
+from collections import OrderedDict
 from contextlib import suppress
+from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import CFG
+from .main_models import DB, Ribbon
 from .matrix_controller import DiecaseMixin
-from .database_models import Ribbon
 from .parsing import token_parser
 from . import typesetting_funcs as tsf
 from .ui import UI, Abort, option as opt
 
 PREFS_CFG = CFG.preferences
+
+
+# Ribbon control routines
+
+def get_all_ribbons():
+    """Lists all ribbons we have."""
+    rows = DB.session.query(Ribbon).all()
+    ribbons = OrderedDict(enumerate(rows, start=1))
+    return ribbons
+
+
+def list_ribbons(data=get_all_ribbons()):
+    """Display all ribbons in a dictionary, plus an empty new one"""
+    UI.display('\nAvailable ribbons:\n')
+    template = ('|{no:<5}  {ribbon_id:<20} {diecase_id:<20} '
+                '{wedge:<12} {customer:<20} {desc:<50}|')
+    fields = dict(no='No.', ribbon_id='Ribbon ID', diecase_id='Diecase ID',
+                  wedge='Wedge name', customer='Customer', desc='Description')
+    UI.display_header(template.format(**fields))
+    for index, ribbon in data.items():
+        values = dict(no=index, desc=ribbon.description,
+                      ribbon_id=ribbon.ribbon_id, diecase_id=ribbon.diecase_id,
+                      wedge=ribbon.wedge.name, customer=ribbon.customer)
+        UI.display(template.format(**values))
+
+
+def ribbon_from_file():
+    """Choose the ribbon from file"""
+    ribbon = Ribbon()
+    ribbon_file = UI.import_file()
+    ribbon.import_from_file(ribbon_file)
+    return ribbon
+
+
+def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
+    """Select ribbons from database and let the user choose one of them"""
+    prompt = 'Your choice? (0 = {})'.format(fallback_description)
+    data = get_all_ribbons()
+    if not data:
+        return fallback()
+    UI.display('Choose a ribbon:', end='\n\n')
+    list_ribbons(data)
+    qty = len(data)
+    # let the user choose the ribbon
+    choice = UI.enter(prompt, default=0, datatype=int, minimum=0, maximum=qty)
+    return data.get(choice) or fallback()
+
+
+def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
+    """Get a ribbon with given ribbon_id"""
+    try:
+        rows = DB.session.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id)
+        return rows.one()
+    except orm_exc.NoResultFound:
+        return fallback()
 
 
 class RibbonMixin:
@@ -42,28 +99,18 @@ class RibbonMixin:
     def ribbon_id(self, ribbon_id):
         """Use a ribbon with a given ID, or an empty one"""
         with suppress(Abort):
-            self.ribbon = bc.get_ribbon(ribbon_id, fallback=self.ribbon)
+            self.ribbon = get_ribbon(ribbon_id, fallback=self.ribbon)
 
     def choose_ribbon(self):
         """Chooses a ribbon from database or file"""
         with suppress(Abort):
-            ribbon = bc.choose_ribbon(fallback=bc.ribbon_from_file,
-                                      fallback_description='import from file')
+            ribbon = choose_ribbon(fallback=ribbon_from_file,
+                                   fallback_description='import from file')
             self.ribbon = ribbon
 
     def display_ribbon_contents(self):
         """Displays the ribbon's contents, line after line"""
-        UI.display('Ribbon contents preview:\n')
-        contents_generator = (line for line in self.ribbon.contents if line)
-        try:
-            while True:
-                UI.display(contents_generator.__next__())
-        except StopIteration:
-            # End of generator
-            UI.pause('\nFinished')
-        except (EOFError, KeyboardInterrupt):
-            # Press ctrl-C to abort displaying long ribbons
-            UI.pause('\nAborted')
+        UI.paged_display(self.ribbon.contents, sep='\n')
 
 
 class SourceMixin(object):
@@ -107,9 +154,9 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     def measure(self):
         """Typesetting measure i.e. line length"""
         if not self._measure:
-            from_cfg = (PREFS_CFG.default_measure, PREFS_CFG.measurement_unit)
-            self._measure = bm.Measure(*from_cfg,
-                                       set_width=self.wedge.set_width)
+            # get measure configuration and return default one
+            m_cfg = (PREFS_CFG.default_measure, PREFS_CFG.measurement_unit)
+            self._measure = bm.Measure(*m_cfg, set_width=self.wedge.set_width)
         return self._measure
 
     @measure.setter
@@ -247,7 +294,7 @@ class Typesetting(TypesettingContext):
                 finished = True
             try:
                 # Justification token detected - end paragrapgh
-                justification = d.ALIGN_commandS[token]
+                justification = d.ALIGN_COMMANDS[token]
                 current_text = ''.join(tokens)
                 # Reset the tokens on line currently worked on
                 tokens = []
@@ -280,13 +327,12 @@ class GalleyBuilder(object):
     """Builds a galley from input sequence"""
     def __init__(self, context, source):
         self.source = (x for x in source)
-        self.units = context.measure.units
         # Cooldown: whether to separate sorts with spaces
         self.cooldown_spaces = False
         # Fill line: will add quads/spaces nutil length is met
         self.fill_line = True
-        self.space, self.quad = context.space, context.quad
         self.quad_padding = 1
+        self.context = context
 
     def make_ribbon(self):
         """Instantiates a Ribbon() object from whatever we've generated"""
@@ -299,7 +345,7 @@ class GalleyBuilder(object):
             to avoid recalculation"""
             parameters = {}
             if mat:
-                parameters['wedges'] = mat.wedge_positions()
+                parameters['wedges'] = self.context.get_wedge_positions(mat)
                 parameters['units'] = mat.units
                 parameters['code'] = str(mat)
                 parameters['lowspace'] = mat.islowspace()
@@ -308,7 +354,8 @@ class GalleyBuilder(object):
         def start_line():
             """Starts a new line"""
             nonlocal units_left, queue
-            units_left = self.units - 2 * self.quad_padding * quad['units']
+            galley_width = self.context.measure.units
+            units_left = galley_width - 2 * self.quad_padding * quad['units']
             quads = [quad['code'] + ' quad padding'] * self.quad_padding
             queue.extend(quads)
 
@@ -329,7 +376,7 @@ class GalleyBuilder(object):
                 # (not needed if wedge positions were 3, 8)
                 if current_wedges != new_wedges:
                     if current_wedges and current_wedges != (3, 8):
-                        queue.extend(tsf.single_justification(current_wedges))
+                        queue.extend(tsf.single_justification(*current_wedges))
                     current_wedges = new_wedges
                 # Add the mat
                 queue.append(working_mat['code'])
@@ -358,21 +405,21 @@ class GalleyBuilder(object):
                     # Fine fill with fixed spaces
                     queue.append(space['code'] + ' fine filling line')
                     units_left -= space['units']
-                if units_left >= self.space.get_min_units():
+                if units_left >= self.context.space.get_min_units():
                     # Put an adjustable space if possible to keep lines equal
                     if wedges:
-                        queue.extend(tsf.single_justification(wedges))
-                    self.space.units = units_left
-                    queue.append(str(self.space))
-                    wedges = self.space.wedge_positions()
+                        queue.extend(tsf.single_justification(*wedges))
+                    self.context.space.units = units_left
+                    queue.append(str(self.context.space))
+                    wedges = self.context.get_wedge_positions(space)
             # Always cast as many quads as needed, then put the line out
             queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
             queue.extend(tsf.double_justification(wedges or (3, 8)))
             units_left = 0
 
         # Store the code and wedge positions to speed up the process
-        space = decode_mat(self.space)
-        quad = decode_mat(self.quad)
+        space = decode_mat(self.context.space)
+        quad = decode_mat(self.context.quad)
         working_mat = None
         current_wedges = None
         queue, units_left = tsf.end_casting(), 0

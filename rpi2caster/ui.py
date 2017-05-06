@@ -58,14 +58,14 @@ def get_sorted_valid_options(options):
     and finally, options with unspecified keys will be assigned
     to numbers, then lowercase and uppercase letters.
     """
-    def sort_function(option):
+    def sort_function(opt):
         """Returns a tuple for sorting options"""
         # sort by sequence, then lowercase key name, then text and description
         # missing parameters will be placed at the bottom
-        return (option.seq,
-                option.key.name.lower() if option.key.name else 'zzz',
-                option.text if option.text else 'zzz',
-                option.description if option.description else 'zzz')
+        return (opt.seq,
+                opt.key.name.lower() if opt.key.name else 'zzz',
+                opt.text if opt.text else 'zzz',
+                opt.description if opt.description else 'zzz')
 
     # input data format: (MenuItem1, MenuItem2...)
     # first check if option condition is met
@@ -85,21 +85,21 @@ def get_sorted_valid_options(options):
     return sorted_ret
 
 
-def build_entry(option, trailing_newline=1):
+def build_entry(opt, trailing_newline=1):
     """Build a menu entry for an option"""
     # templates for menu entries
     long_entry = '\t{key:<10}:  {text}\n\t\t\t{desc}' + '\n' * trailing_newline
     short_entry = '\t{key:<10}:  {text}' + '\n' * trailing_newline
     # assess a lazy option parameter and insert it in text and dest
     # if {} are provided in string
-    key_name = option.key.name
-    lazy_value = assess(option.lazy)
-    text = option.text.format(lazy_value)
-    desc = option.description.format(lazy_value)
+    key_name = opt.key.name
+    lazy_value = assess(opt.lazy)
+    text = opt.text.format(lazy_value)
+    desc = opt.description.format(lazy_value)
     # use a proper template depending on available data
-    if option.description:
+    if opt.description:
         return long_entry.format(key=key_name, text=text, desc=desc)
-    elif option.text:
+    elif opt.text:
         return short_entry.format(key=key_name, text=text)
 
 
@@ -278,7 +278,7 @@ class ClickUI(object):
             else:
                 prompt = 'Your choice? [{}] :\n'.format(def_key.name)
             # generate menu entries for options
-            entries = (build_entry(option) for option in valid_options)
+            entries = (build_entry(o) for o in valid_options)
             # return the newly constructed menu list
             return [header_string, debug_string, *entries,
                     footer_string, abort_string, prompt]
@@ -355,8 +355,7 @@ class ClickUI(object):
         else:
             prompt = 'Your choice? [{}] :'.format(def_key.name)
         # display the menu
-        entries = (build_entry(option, trailing_newline=0)
-                   for option in valid_options)
+        entries = (build_entry(o, trailing_newline=0) for o in valid_options)
         click.echo('\n'.join(['', message, '', *entries, '', abort_s, prompt]))
         # Wait for user input
         while True:
@@ -371,6 +370,13 @@ class ClickUI(object):
     def clear():
         """Clears the screen by click.clear() which is OS independent."""
         click.clear()
+
+    @staticmethod
+    def paged_display(source, sep='\n'):
+        """Display paginated text so that the user can scroll through it;
+        works with any iterable"""
+        text = sep.join(str(x) for x in source)
+        click.echo_via_pager(text)
 
     def display(self, *args, sep=' ', end='\n', file=None, min_verbosity=0):
         """Displays info for the user:
@@ -415,7 +421,7 @@ class ClickUI(object):
                 self.display_header('{}'.format(value), trailing_newline=0)
 
     def pause(self, msg1='', msg2='Press any key to continue...',
-              min_verbosity=0, allow_abort=True):
+              min_verbosity=0, allow_abort=False):
         """Waits until user presses a key"""
         if self.verbosity >= min_verbosity:
             abort_key_names = ', '.join(key.name for key in DEFAULT_ABORT_KEYS)
@@ -543,12 +549,11 @@ class ClickUI(object):
             # get the value from wrapped function
             # raise exceptions (if default value was an exception)
             try:
-                entered_value = get_user_input('Enter value : ')
-                validated_value = conv_validate(entered_value)
-                if validated_value is None:
+                value = conv_validate(get_user_input('Enter value : '))
+                if value is None:
                     continue
                 else:
-                    return validated_value
+                    return value
 
             except (TypeError, ValueError) as error:
                 # show the message and loop again
@@ -627,8 +632,8 @@ class ClickUI(object):
         Returns True for yes and False for no.
 
         default : default answer if user presses return,
-        abort : if True or False, yes / no answer raises Abort;
-                if None, the outcome is returned for both answers.
+        abort_answer : if True or False, yes / no answer raises Abort;
+                       if None, the outcome is returned for both answers.
 
         force_answer : disallows aborting by ctrl-C, ctrl-Z or Esc
         """
