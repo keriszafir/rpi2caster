@@ -135,19 +135,15 @@ class Casting(TypesettingContext):
             """Things to do only once during the whole casting session"""
             prompt = 'Cast two lines of quads to heat up the mould?'
             if not UI.confirm(prompt, default=False):
-                return
-            row_16_mode = machine.row_16_mode
-            quad_mat = self.quad
-            quad_qty = int(self.measure.units // quad_mat.units)
+                return []
+            quad_qty = int(self.measure.units // self.quad.units)
             text = 'Casting 2 lines of {} quads for mould heatup'
-            galley_trip = Record('NKJS 0005 0075 // {}'.format(text))
-            quad = Record(str(quad_mat))
+            galley_trip = 'NKJS 0005 0075 // {}'.format(text)
+            quad = self.quad.get_ribbon_record()
             # casting queue
-            quadline = [galley_trip, *[quad] * quad_qty]
-            UI.display('You may have to disable the 16th row attachment'
-                       ' temporarily, if it is not needed to cast the quads.')
-            machine.cast_many(quadline, repetitions=2, ask=False)
-            machine.row_16_mode = row_16_mode
+            queue = [galley_trip, *[quad] * quad_qty] * 2
+            # make a generator object - it needs to be single-use only
+            return (x for x in queue)
 
         def cast_queue(queue):
             """Casts the sequence of codes in given sequence.
@@ -181,7 +177,7 @@ class Casting(TypesettingContext):
         set_lines_skipped()
         UI.display_parameters(stats.session_parameters)
         # Mould heatup to stabilize the temperature
-        preheat_if_needed()
+        extra_quads = preheat_if_needed()
         # Cast until there are no more runs left
         with machine:
             while stats.get_runs_left():
@@ -190,6 +186,7 @@ class Casting(TypesettingContext):
                 stats.update(queue=casting_queue)
                 # Cast the run and check if it was successful
                 try:
+                    cast_queue(extra_quads)
                     cast_queue(casting_queue)
                     stats.update(casting_success=True)
                     if not stats.get_runs_left():
@@ -238,7 +235,7 @@ class Casting(TypesettingContext):
             found = self.diecase.layout.spaces
             options = [option(value=sp, text=str(sp), seq=1) for sp in found]
             options.append(option(key='c', value=None, text='custom', seq=2))
-            options.append(option(key='Enter', value=Abort, seq=3,
+            options.append(option(key='Enter', value=StopIteration, seq=3,
                                   text='done defining spaces'))
             msg = 'Next space?'
             while True:
@@ -352,27 +349,29 @@ class Casting(TypesettingContext):
             def start_line():
                 """new line"""
                 nonlocal units_left
-                galley_units = self.measure.units - 2 * self.quad.units
-                units_left = galley_units
-                pos_0075, pos_0005 = wedges
-                if pos_0075 == pos_0005:
-                    return ['NKJS 0005 0075 {}'.format(pos_0005), quad]
+                units_left = self.measure.units - 2 * self.quad.units
+                coarse, fine = wedges
+                if coarse == fine:
+                    # single code is enough
+                    return [quad, 'NKJS 0005 0075 {}'.format(fine)]
                 else:
-                    return [quad, 'NKS 0075 {}'.format(pos_0075),
-                            'NKJS 0005 0075 {}'.format(pos_0005)]
+                    # double justification
+                    return [quad, 'NKS 0075 {}'.format(coarse),
+                            'NKJS 0005 0075 {}'.format(fine)]
 
             def changeover():
                 """use single-justification (0005+0075) to adjust wedges"""
                 # add a quad between different series
                 nonlocal units_left
                 units_left -= self.quad.units * 2
-                pos_0075, pos_0005 = wedges
-                if pos_0075 == pos_0005:
-                    return [quad, quad, 'NKS 0075 {}'.format(pos_0005)]
-                else:
-                    return [quad, quad,
-                            'NKS 0075 {}'.format(pos_0075),
-                            'NJS 0005 {}'.format(pos_0005)]
+                coarse, fine = wedges
+                quads = [quad, quad]
+                # single justification
+                sjust = ([] if (coarse, fine) == (3, 8)
+                         else ['NKS 0075 {}'.format(fine)] if fine == coarse
+                         else ['NKS 0075 {}'.format(coarse),
+                               'NJS 0005 {}'.format(fine)])
+                return quads + sjust
 
             def fill_line():
                 """fill the line with quads, then spaces"""
@@ -407,10 +406,10 @@ class Casting(TypesettingContext):
             # em-quad and space for filling the line
             quad = self.quad.get_ribbon_record()
             space = self.space.get_ribbon_record()
-
+            # initialize the units
+            units_left = self.measure.units - 2 * self.quad.units
             # get the first matrix
             # (if StopIteration is raised, no casting)
-            units_left = 0
             record, units, wedges, sorts_left, cooldown = new_mat()
             # first to set / last to cast last line out
             yield ['NJS 0005', 'NKJS 0005 0075', quad]
@@ -424,10 +423,11 @@ class Casting(TypesettingContext):
                 else:
                     # we're out of sorts... next character
                     try:
-                        record, units, wedges, sorts_left, cooldown = new_mat()
                         yield changeover()
+                        record, units, wedges, sorts_left, cooldown = new_mat()
                     except StopIteration:
                         # no more characters => fill the line and finish
+                        # those are the first characters to cast
                         yield fill_line()
                         yield start_line()
                         break
