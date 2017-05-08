@@ -1,7 +1,6 @@
 # coding: utf-8
 """Diecase manipulation functions and classes"""
 
-from copy import copy
 import csv
 from collections import OrderedDict
 from contextlib import suppress
@@ -434,11 +433,13 @@ def find_matrix(layout, choose=True, **kwargs):
     choose: manual choice menu or new mat definition."""
     def define_new_mat():
         """Create a new Matrix object"""
-        position = kwargs.get('position', '') or kwargs.get('pos', '')
-        units = kwargs.get('units', 0)
-        mat = bm.Matrix(diecase=layout.diecase, styles=styles, char=char,
-                        units=units, pos=position)
-        return bc.edit_matrix(mat)
+        position = (kwargs.get('position', '') or kwargs.get('pos', '') or
+                    UI.enter('Matrix coordinates?', default=''))
+        if not position:
+            raise bm.MatrixNotFound('No coordinates entered')
+        mat = bm.Matrix(char=char, styles=styles, pos=position,
+                        diecase=layout.diecase)
+        return mat
 
     def choose_from_menu():
         """Display a menu to choose mats"""
@@ -475,18 +476,15 @@ def find_matrix(layout, choose=True, **kwargs):
     mats = layout.select_many(**kwargs)
     if len(mats) == 1:
         # only one match: return it
-        retval = mats[0]
+        return mats[0]
     elif choose:
         # manual mat choice
-        retval = choose_from_menu() or define_new_mat()
+        return choose_from_menu() or define_new_mat()
     elif mats:
         # automatic choice, multiple matches found: get first available
-        retval = mats[0]
+        return mats[0]
     else:
-        raise bm.MatrixNotFound
-
-    # return a new mat to prevent overwriting a previous one
-    return copy(retval)
+        raise bm.MatrixNotFound('Automatic matrix lookup failed')
 
 
 class DiecaseMixin:
@@ -535,15 +533,22 @@ class DiecaseMixin:
         matrix - a Matrix object
         correction - units of self.wedge's set to add/subtract,
         units - arbitrary character width in units of self.wedge's set"""
-        def steps(wedge, ch_units=None, row=None):
+        def steps(wedge, unit_width=0):
             """get a width (in .0005" steps) of a character
             for a given number of units or diecase row"""
-            if not ch_units and not row:
-                return 0
-            unit_width = ch_units or wedge[row]
             inches = unit_width / 18 * wedge.set_width / 12 * wedge.pica
             # return a number of 0.0005" steps
             return int(2000 * inches)
+
+        def limits_exceeded():
+            """raise an error if width can't be adjusted with wedges"""
+            limits = self.wedge.adjustment_limits
+            minimum = row_units - limits.shrink
+            maximum = row_units + limits.stretch
+            message = ('{}: desired width of {} units exceeds '
+                       'adjustment limits (min: {} / max: {})')
+            error_message = message.format(matrix, units, minimum, maximum)
+            raise bm.TypesettingError(error_message)
 
         # first we need to know how many units self.wedge's set the char has
         char_units = units or self.get_units(matrix)
@@ -553,7 +558,8 @@ class DiecaseMixin:
         delta = steps(self.wedge, correction)
         # how wide would a character from the given row normally be?
         # (using self.wedge, not self.diecase.wedge!)
-        row_width = steps(self.wedge, row=matrix.row)
+        row_units = self.wedge[matrix.row]
+        row_width = steps(self.wedge, row_units)
         # calculate the difference and wedge positions
         # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
         # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
@@ -561,8 +567,7 @@ class DiecaseMixin:
         # Upper limit: 15/15 => 15*15=225 + 15 = 240;
         # lower limit:  1/ 1 => 1 * 15 + 1 = 16
         if pos_0005 < 16 or pos_0005 > 240:
-            exc_message = 'Character width ({}) exceeds adjustment limits'
-            raise bm.TypesettingError(exc_message.format(pos_0005))
+            limits_exceeded()
         # we're sure it can be adjusted now...
         pos_0075 = 0
         while pos_0005 > 15:
@@ -653,7 +658,7 @@ class DiecaseMixin:
             return spaces[0]
         except IndexError:
             low_or_high = 'low' if low else 'high'
-            exc_message = 'Cannot match a {} space {} units wide!'
+            exc_message = 'Cannot match a {} space {} units wide.'
             raise bm.MatrixNotFound(exc_message.format(low_or_high, units))
 
     def find_matrix(self, choose=True, **kwargs):

@@ -3,7 +3,6 @@
 
 from collections import OrderedDict
 from contextlib import suppress
-from copy import copy
 from itertools import chain
 import json
 
@@ -88,7 +87,7 @@ class Diecase(BASE):
 
         except (json.JSONDecodeError, TypeError, KeyError, AttributeError):
             # old typeface data (should be OK after reconfiguring)
-            styles, text = bm.Styles(), self._typeface
+            styles, text = bm.Styles('rbi'), self._typeface
             raw, ids, uas = {}, [], {}
 
         return d.Typeface(styles=styles, ids=ids, raw=raw, text=text, uas=uas)
@@ -224,6 +223,8 @@ class DiecaseLayout:
         used = self.used_mats.values() if diecase_chars else []
         unused = self.outside_mats if outside_chars else []
         for mat in chain(used, unused):
+            if not mat.char or mat.isspace():
+                continue
             for style in mat.styles:
                 charset.setdefault(style, {})[mat.char] = mat
         return charset
@@ -287,6 +288,11 @@ class DiecaseLayout:
     def json_encoded(self, layout_json):
         """Parse a JSON-encoded list to read a layout"""
         self.raw = json.loads(layout_json)
+
+    @property
+    def spaces(self):
+        """Get all available spaces"""
+        return [mat for mat in self.used_mats.values() if mat.isspace()]
 
     def purge(self):
         """Resets the layout to an empty one of the same size"""
@@ -359,20 +365,16 @@ class DiecaseLayout:
             difference = units - checked_space.units
             return abs(difference) if -2 < difference < 10 else -1
 
-        high = not low
-        # spaces in the diecase
-        spaces = self.select_many(islowspace=low, ishighspace=high)
-        # try to find a best match for the width
-        spaces = self.select_many(islowspace=low, ishighspace=high)
-        matches = sorted((s for s in spaces if mismatch(s) >= 0), key=mismatch)
+        spaces = [mat for mat in self.spaces if mismatch(mat) >= 0 and
+                  mat.islowspace() == low and mat.ishighspace() != low]
+        matches = sorted(spaces, key=mismatch)
         try:
-            space = copy(matches[0])
+            return matches[0]
         except IndexError:
             # can't match a space no matter how we try
             exc_message = 'Cannot find a {} space close enough to {} units.'
-            high_or_low = 'high' if high else 'low'
+            high_or_low = 'low' if low else 'high'
             raise bm.MatrixNotFound(exc_message.format(high_or_low, units))
-        return space
 
     def select_row(self, row_number):
         """Get all matrices from a given row"""

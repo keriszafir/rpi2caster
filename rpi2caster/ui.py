@@ -375,6 +375,8 @@ class ClickUI(object):
     def paged_display(source, sep='\n'):
         """Display paginated text so that the user can scroll through it;
         works with any iterable"""
+        if not source:
+            return
         text = sep.join(str(x) for x in source)
         click.echo_via_pager(text)
 

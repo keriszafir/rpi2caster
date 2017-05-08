@@ -8,6 +8,7 @@ Coordinates = namedtuple('Coordinates', 'column row')
 MatrixRecord = namedtuple('MatrixRecord', 'char styles pos units')
 WedgePositions = namedtuple('WedgePositions', 'pos_0075 pos_0005')
 WedgeLimits = namedtuple('WedgeLimits', 'shrink stretch')
+QueueItem = namedtuple('QueueItem', 'matrix units qty cooldown')
 
 # typeface metadata definition
 Typeface = namedtuple('Typeface', 'raw ids uas styles text')
@@ -109,7 +110,7 @@ STYLE_COMMANDS = {'^00': STYLES.roman, '^rr': STYLES.roman,
 
 # Default space positions
 DEFAULT_LOW_SPACE_POSITIONS = (('G', 1), ('G', 2), ('G', 5), ('O', 15))
-DEFAULT_HIGH_SPACE_POSITIONS = (('O', 16))
+DEFAULT_HIGH_SPACE_POSITIONS = (('O', 16),)
 # Names for low and high spaces, depending on their width
 SPACE_NAMES = {'   ': 'low em quad', '  ': 'low en quad', ' ': 'low space',
                '___': 'high em quad', '__': 'high en quad', '_': 'high space'}

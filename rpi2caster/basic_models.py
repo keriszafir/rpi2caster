@@ -37,7 +37,7 @@ class Matrix:
         elif self.islowspace():
             tmpl = 'low space at {m.pos}'
         else:
-            tmpl = '{m.char} ({m.styles.names}) at {m.pos}, {m.units}u wide'
+            tmpl = '{m.char} ({m.styles.names}) at {m.pos}'
         return tmpl.format(m=self)
 
     @property
@@ -464,7 +464,8 @@ class LayoutSize:
     @property
     def positions(self):
         """Gets all matrix positions for this layout"""
-        return (x for x in product(self.column_numbers, self.row_numbers))
+        by_row = product(self.row_numbers, self.column_numbers)
+        return [(col, row) for (row, col) in by_row]
 
     def clean_layout(self, diecase=None):
         """Generate an empty layout of a given size."""
@@ -715,6 +716,7 @@ class UnitArrangementNotFound(Exception):
 
 class UnitValueNotFound(Exception):
     """Cannot find an unit value in an arrangement for a given character."""
+
 
 class TypesettingError(Exception):
     """Various exceptions raised when typesetting"""

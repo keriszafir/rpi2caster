@@ -9,7 +9,6 @@ from .config import CFG
 from .main_models import DB, Ribbon
 from .matrix_controller import DiecaseMixin
 from .parsing import token_parser
-from . import typesetting_funcs as tsf
 from .ui import UI, Abort, option as opt
 
 PREFS_CFG = CFG.preferences
@@ -108,9 +107,9 @@ class RibbonMixin:
                                    fallback_description='import from file')
             self.ribbon = ribbon
 
-    def display_ribbon_contents(self):
+    def display_ribbon_contents(self, ribbon=None):
         """Displays the ribbon's contents, line after line"""
-        UI.paged_display(self.ribbon.contents, sep='\n')
+        UI.paged_display(ribbon or self.ribbon.contents, sep='\n')
 
 
 class SourceMixin(object):
@@ -321,111 +320,3 @@ class Paragraph(object):
     def display_text(self):
         """Prints the text"""
         UI.display(self.text)
-
-
-class GalleyBuilder(object):
-    """Builds a galley from input sequence"""
-    def __init__(self, context, source):
-        self.source = (x for x in source)
-        # Cooldown: whether to separate sorts with spaces
-        self.cooldown_spaces = False
-        # Fill line: will add quads/spaces nutil length is met
-        self.fill_line = True
-        self.quad_padding = 1
-        self.context = context
-
-    def make_ribbon(self):
-        """Instantiates a Ribbon() object from whatever we've generated"""
-        pass
-
-    def build_galley(self):
-        """Builds a line of characters from source"""
-        def decode_mat(mat):
-            """Gets the mat's parameters and stores them
-            to avoid recalculation"""
-            parameters = {}
-            if mat:
-                parameters['wedges'] = self.context.get_wedge_positions(mat)
-                parameters['units'] = mat.units
-                parameters['code'] = str(mat)
-                parameters['lowspace'] = mat.islowspace()
-            return parameters
-
-        def start_line():
-            """Starts a new line"""
-            nonlocal units_left, queue
-            galley_width = self.context.measure.units
-            units_left = galley_width - 2 * self.quad_padding * quad['units']
-            quads = [quad['code'] + ' quad padding'] * self.quad_padding
-            queue.extend(quads)
-
-        def build_line():
-            """Puts the matrix in the queue, changing the justification
-            wedges if needed, and adding a space for cooldown, if needed."""
-            # Declare variables in non-local scope to preserve them
-            # after the function exits
-            nonlocal queue, units_left, working_mat, current_wedges
-            # Take a mat from stash if there is any
-            working_mat = working_mat or decode_mat(next(self.source, None))
-            # Try to add another character to the line
-            # Empty mat = end of line, start filling
-            if units_left > working_mat.get('units', 1000):
-                # Store wedge positions
-                new_wedges = working_mat.get('wedges', (3, 8))
-                # Wedges change? Drop in some single justification
-                # (not needed if wedge positions were 3, 8)
-                if current_wedges != new_wedges:
-                    if current_wedges and current_wedges != (3, 8):
-                        queue.extend(tsf.single_justification(*current_wedges))
-                    current_wedges = new_wedges
-                # Add the mat
-                queue.append(working_mat['code'])
-                units_left -= working_mat['units']
-                # We need to know what comes next
-                working_mat = decode_mat(next(self.source, None))
-                if working_mat:
-                    next_units = space['units'] + working_mat['units']
-                    space_needed = (units_left > next_units and not
-                                    working_mat.get('lowspace', True))
-                    if self.cooldown_spaces and space_needed:
-                        # Add a space for matrix cooldown
-                        queue.append(space['code'] + ' for cooldown')
-                        units_left -= space['units']
-                    # Exit and loop further
-                    return
-            # Finish the line
-            wedges = current_wedges
-            current_wedges = None
-            if self.fill_line:
-                while units_left > quad['units']:
-                    # Coarse fill with quads
-                    queue.append(quad['code'] + ' coarse filling line')
-                    units_left -= quad['units']
-                while units_left > space['units'] * 2:
-                    # Fine fill with fixed spaces
-                    queue.append(space['code'] + ' fine filling line')
-                    units_left -= space['units']
-                if units_left >= self.context.space.get_min_units():
-                    # Put an adjustable space if possible to keep lines equal
-                    if wedges:
-                        queue.extend(tsf.single_justification(*wedges))
-                    self.context.space.units = units_left
-                    queue.append(str(self.context.space))
-                    wedges = self.context.get_wedge_positions(space)
-            # Always cast as many quads as needed, then put the line out
-            queue.extend([quad['code'] + ' quad padding'] * self.quad_padding)
-            queue.extend(tsf.double_justification(wedges or (3, 8)))
-            units_left = 0
-
-        # Store the code and wedge positions to speed up the process
-        space = decode_mat(self.context.space)
-        quad = decode_mat(self.context.quad)
-        working_mat = None
-        current_wedges = None
-        queue, units_left = tsf.end_casting(), 0
-        # Build the whole galley, line by line
-        while working_mat != {}:
-            start_line()
-            while units_left > 0:
-                build_line()
-        return queue
