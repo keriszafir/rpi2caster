@@ -547,8 +547,9 @@ class DiecaseMixin:
             maximum = row_units + limits.stretch
             message = ('{}: desired width of {} units exceeds '
                        'adjustment limits (min: {} / max: {})')
-            error_message = message.format(matrix, units, minimum, maximum)
-            raise bm.TypesettingError(error_message)
+            width = char_units + delta
+            error_msg = message.format(matrix, width, minimum, maximum)
+            raise bm.TypesettingError(error_msg)
 
         # first we need to know how many units self.wedge's set the char has
         char_units = units or self.get_units(matrix)
@@ -625,40 +626,13 @@ class DiecaseMixin:
     def find_space(self, units, low=True):
         """Find a matching space. If unit width is specified, try to
         look automatically, otherwise let user decide how wide it should be."""
-        def unit_mismatch(checked_space):
-            """Calculate the unit difference between space's width
-            and desired unit width"""
-            row_units = self.wedge[checked_space.row]
-            difference = units - row_units
-            # we can take away max ca. 2 units or add max ca. 10 units
-            # this is determined by wedge set and pica definition
-            limits = self.wedge.get_adjustment_limits(low_space=low)
-            if -limits.shrink < difference < limits.stretch:
-                return abs(difference)
-            else:
-                return -1
-
         if not units:
             width = bc.set_measure(input_value='9u', unit='u',
                                    what='space width',
                                    set_width=self.wedge.set_width)
             units = width.units
 
-        high = not low
-        # spaces in the diecase
-        select = self.diecase.layout.select_many
-        candidates = select(islowspace=low, ishighspace=high)
-        mismatches = [(unit_mismatch(sp), sp) for sp in candidates]
-        # reject all with mismatch outside adjustment limits
-        viable = [(m, sp) for (m, sp) in mismatches if m >= 0]
-        # order the mats by mismatch, least is preferred
-        spaces = [sp for (m, sp) in sorted(viable, key=lambda x: x[0])]
-        try:
-            return spaces[0]
-        except IndexError:
-            low_or_high = 'low' if low else 'high'
-            exc_message = 'Cannot match a {} space {} units wide.'
-            raise bm.MatrixNotFound(exc_message.format(low_or_high, units))
+        return self.diecase.layout.get_space(units, low)
 
     def find_matrix(self, choose=True, **kwargs):
         """Search the diecase layout and get a matching mat.
@@ -669,9 +643,9 @@ class DiecaseMixin:
         kwargs: char, styles, position, units: search criteria."""
         return find_matrix(self.diecase.layout, choose, **kwargs)
 
-    def display_diecase_layout(self):
+    def display_diecase_layout(self, layout=None):
         """Display the diecase layout, unit values, styles."""
-        display_layout(self.diecase.layout)
+        display_layout(layout or self.diecase.layout)
 
     def test_diecase_charset(self):
         """Test whether the diecase layout has all required characters,

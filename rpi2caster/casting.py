@@ -14,7 +14,8 @@ except ImportError:
 
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .casting_models import Stats, Record
-from . import monotype, typesetting_funcs as tsf
+from . import monotype
+from .matrix_controller import get_diecase
 from .typesetting import TypesettingContext
 from .ui import UI, Abort, Finish, option
 
@@ -561,48 +562,90 @@ class Casting(TypesettingContext):
         """Tests the whole diecase, casting from each matrix.
         Casts spaces between characters to be sure that the resulting
         type will be of equal width."""
-        layouts = (bm.LayoutSize(x, y)
-                   for x, y in [(15, 15), (15, 17), (16, 17)])
-        options = [option(key=n, value=layout, text=str(layout), seq=n)
-                   for n, layout in enumerate(layouts, start=1)]
-        layout_size = UI.simple_menu(message='Matrix case size:',
-                                     options=options,
-                                     default_key=2, allow_abort=True)
+        def get_codes(matrix, wedges):
+            """add codes with single justification if necessary"""
+            combinations = []
+            wedges_needed = wedges != (3, 8)
+            code = matrix.get_ribbon_record(s_needle=wedges_needed)
+            combinations.append(code)
+            if wedges_needed:
+                combinations.append('NKS 0075 {}'.format(wedges.pos_0075))
+                combinations.append('NJS 0005 {}'.format(wedges.pos_0005))
+            return combinations
+
+        def add_matrix(matrix):
+            """a matrix and a space"""
+            # keep track of spaces too narrow to cast
+            nonlocal leftover_units
+            mat_units = self.get_units(matrix)
+            space_units = 22 + leftover_units - mat_units
+            leftover_units = 0
+            try:
+                mat_wedges = self.get_wedge_positions(matrix, mat_units)
+            except bm.TypesettingError:
+                # adjust char width as far as possible,
+                # take away or add the rest to the space instead
+                limits = self.wedge.get_adjustment_limits()
+                row_units = self.wedge[matrix.row]
+                if mat_units < row_units - limits.shrink:
+                    # character too narrow for its row
+                    space_units -= (row_units - mat_units - limits.shrink)
+                    mat_units = row_units - limits.shrink
+                elif mat_units > row_units + limits.stretch:
+                    # character too wide for its row
+                    space_units += (mat_units - row_units - limits.stretch)
+                    mat_units = row_units + limits.stretch
+                mat_wedges = self.get_wedge_positions(matrix, mat_units)
+            # get these signals
+            mat_codes = get_codes(matrix, mat_wedges)
+            # omit spaces not wide enough
+            if space_units >= 3:
+                try:
+                    # high spaces are preferrred
+                    space = diecase.layout.get_space(space_units, low=False)
+                except bm.MatrixNotFound:
+                    # then we have to do with a low one...
+                    space = diecase.layout.get_space(space_units, low=True)
+                sp_wedges = self.get_wedge_positions(space, space_units)
+                space_codes = get_codes(space, sp_wedges)
+            else:
+                space_codes = []
+                leftover_units += space_units
+            # characters should be separated by at least one space
+            return space_codes + mat_codes
+
+        diecase = get_diecase()
+        if diecase:
+            self.display_diecase_layout(diecase.layout)
+        else:
+            # select size
+            sizes = [(15, 15), (15, 17), (16, 17)]
+            options = [option(key=n, value=size, text='{} x {}'.format(*size))
+                       for n, size in enumerate(sizes, start=1)]
+            selected_size = UI.simple_menu(message='Matrix case size:',
+                                           options=options,
+                                           default_key=2, allow_abort=True)
+            diecase.layout.resize(*selected_size)
+
         if not UI.confirm('Proceed?', default=True, abort_answer=False):
             return
-        # Sequence to cast starts with pump stop and galley trip
-        # (will be cast in reversed order)
-        queue = tsf.end_casting() + tsf.galley_trip()
-        for row in layout_size.row_numbers:
-            # Calculate the width for the GS1 space
-            wedge_positions = (3, 8)
-            queue.append('O15')
-            delta = 23 - self.wedge[row] - self.wedge[1]
-            if not delta:
-                num_gs1, gs1_unit_diff = 0, 0
-            elif -2 < delta < 10:
-                num_gs1, gs1_unit_diff = 1, delta
-            elif delta <= -2 or delta >= 10:
-                num_gs1, gs1_unit_diff = 2, delta/2
-            if gs1_unit_diff:
-                # We have difference in units of a set:
-                # translate to inches and make it 0.0005" steps, add 3/8
-                gs1_unit_diff *= self.wedge.units_to_inches(1)
-                steps_0005 = int(gs1_unit_diff * 2000) + 53
-                # Safety limits: upper = 15/15; lower = 1/1
-                steps_0005 = min(steps_0005, 240)
-                steps_0005 = max(steps_0005, 16)
-                steps_0075 = 0
-                while steps_0005 > 15:
-                    steps_0005 -= 15
-                    steps_0075 += 1
-                wedge_positions = (steps_0075, steps_0005)
-            for column in layout_size.column_numbers:
-                queue.append('{}{}'.format(column, row))
-                queue.extend(['GS1'] * num_gs1)
-            # Quad out, put the row to the galley, set justification
-            queue.append('O15')
-            queue.extend(tsf.double_j(wedge_positions))
+
+        queue = ['NJS 0005', 'NKJS 0075 0005']
+        quad = self.quad.get_ribbon_record()
+        pos_0075, pos_0005 = 3, 8
+        leftover_units = 0
+        # build the layout one by one
+        for number, row in enumerate(diecase.layout.by_rows(), start=1):
+            UI.display('Processing row {}'.format(number))
+            queue.append(quad)
+            for mat in row:
+                queue.extend(add_matrix(mat))
+            leftover_units = 0
+            # single justification for line start
+            queue.append(quad)
+            queue.append('NKS 0075 {}'.format(pos_0075))
+            queue.append('NKJS 0075 0005 {}'.format(pos_0005))
+
         return queue
 
     def main_menu(self):
