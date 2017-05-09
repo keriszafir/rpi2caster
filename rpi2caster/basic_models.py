@@ -156,16 +156,17 @@ class Matrix:
     def get_min_units(self):
         """Gets the minimum unit value for a given wedge, based on the
         matrix row and wedge unit value, for wedges at 1/1"""
-        shrink = self.diecase.wedge.adjustment_limits.shrink
-        return round(max(self.get_units_from_row() - shrink, 0), 2)
+        wedge = self.diecase.wedge
+        limits = wedge.get_adjustment_limits(low_space=self.islowspace())
+        # at least one unit
+        return round(max(self.get_units_from_row() - limits.shrink, 1), 2)
 
     def get_max_units(self):
         """Gets the minimum unit value for a given wedge, based on the
         matrix row and wedge unit value, for wedges at 1/1"""
-        stretch = self.diecase.wedge.adjustment_limits.stretch
-        full_width = self.get_units_from_row() + stretch
-        width_cap = 20
-        return full_width if self.islowspace() else min(full_width, width_cap)
+        wedge = self.diecase.wedge
+        limits = wedge.get_adjustment_limits(low_space=self.islowspace())
+        return round(self.get_units_from_row() + limits.stretch, 2)
 
     def get_units_from_arrangement(self):
         """Try getting the unit width value from diecase's unit arrangement,
@@ -649,8 +650,7 @@ class Wedge:
         """Convert units to inches, based on wedge's set width and pica def"""
         return round(units * self.set_width * self.pica / 216, 2)
 
-    @property
-    def adjustment_limits(self):
+    def get_adjustment_limits(self, low_space=False, cell_width=1):
         """Get the unit adjustment limits for this wedge.
         Without adjustment, the character has the same width as if the
         wedges were at 3/8.
@@ -660,11 +660,26 @@ class Wedge:
 
         upper limit is reached at 15/15,
         max stretch is 15/15 - 3/8 = 12/7 => 12 * 0.0075 + 7 * 0.0005 = 0.0935"
+
+        Constraints:
+            Single-cell matrices have max .18" width for safety.
+            Double-cell (large composition, wide characters) are .38"
+            Otherwise the mould opening would not be covered by the matrix,
+            leading to lead splashing over the diecase.
+
+            Low spaces don't have this constraint as the upper mould blade
+            prevents the lead from even reaching the diecase.
+
         Calculate this to wedge set units.
         Return positive integers.
         """
+        # upper limit based on parameters
+        stretch_inches = 0.0935
+        cap = 0.18 + (cell_width - 1) * 0.2
+        maximum = stretch_inches if low_space else min(stretch_inches, cap)
+        # calculate adjustment range in units
         shrink = int(18 * 12 * 0.0185 / self.pica / self.set_width)
-        stretch = int(18 * 12 * 0.0935 / self.pica / self.set_width)
+        stretch = int(18 * 12 * maximum / self.pica / self.set_width)
         return d.WedgeLimits(shrink, stretch)
 
 

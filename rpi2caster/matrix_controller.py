@@ -542,7 +542,7 @@ class DiecaseMixin:
 
         def limits_exceeded():
             """raise an error if width can't be adjusted with wedges"""
-            limits = self.wedge.adjustment_limits
+            limits = self.wedge.get_adjustment_limits(matrix.islowspace())
             minimum = row_units - limits.shrink
             maximum = row_units + limits.stretch
             message = ('{}: desired width of {} units exceeds '
@@ -563,17 +563,16 @@ class DiecaseMixin:
         # calculate the difference and wedge positions
         # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
         # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
-        pos_0005 = char_width + delta - row_width + 53
+        increments = char_width + delta - row_width + 53
         # Upper limit: 15/15 => 15*15=225 + 15 = 240;
         # lower limit:  1/ 1 => 1 * 15 + 1 = 16
-        if pos_0005 < 16 or pos_0005 > 240:
+        if increments < 16 or increments > 240:
             limits_exceeded()
-        # we're sure it can be adjusted now...
-        pos_0075 = 0
-        while pos_0005 > 15:
-            pos_0005 -= 15
-            pos_0075 += 1
-        # Got the wedge positions, return them
+        # calculate wedge positions from the increments
+        pos_0005, pos_0075 = increments % 15, increments // 15
+        if not pos_0005:
+            # wedge positions cannot be zero
+            pos_0005, pos_0075 = 15, pos_0075 - 1
         return d.WedgePositions(pos_0075, pos_0005)
 
     @property
@@ -633,7 +632,7 @@ class DiecaseMixin:
             difference = units - row_units
             # we can take away max ca. 2 units or add max ca. 10 units
             # this is determined by wedge set and pica definition
-            limits = self.wedge.adjustment_limits
+            limits = self.wedge.get_adjustment_limits(low_space=low)
             if -limits.shrink < difference < limits.stretch:
                 return abs(difference)
             else:

@@ -342,13 +342,14 @@ class MonotypeCaster(object):
                 """Gets two mats for a given char and adjusts its parameters"""
                 positions = mat_engine.get_wedge_positions(mat)
                 pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005
-                # use single justification to adjust character width
                 use_s_needle = (pos_0075, pos_0005) != (3, 8)
-                ribbon_record = mat.get_ribbon_record(s_needle=use_s_needle)
-                char_record = Record(ribbon_record)
-                return [Record('NJS 0005 {}'.format(pos_0005)),
-                        Record('NKS 0075 {}'.format(pos_0075)),
-                        char_record, char_record]
+                codes = mat.get_ribbon_record(s_needle=use_s_needle)
+                record = Record(codes)
+                sjust = [Record('NJS 0005 {}'.format(pos_0005)),
+                         Record('NKS 0075 {}'.format(pos_0075))]
+                # use single justification to adjust character width, if needed
+                return ([*sjust, record, record] if use_s_needle
+                        else [record, record])
 
             UI.display('Mould blade opening and X-Y character calibration:\n'
                        'Cast G5, adjust the sort width to the value shown.\n'
@@ -373,7 +374,7 @@ class MonotypeCaster(object):
             UI.display(template.format(u=18, n='em', i=quad_width))
             # build a casting queue and cast it repeatedly
             line_out, pump_stop = Record('NKJS 0005 0075'), Record('NJS 0005')
-            codes = (get_codes(mat) for mat in mats)
+            codes = (code for mat in mats for code in get_codes(mat))
             sequence = [*codes, line_out, pump_stop]
             self.cast_many(sequence)
 
