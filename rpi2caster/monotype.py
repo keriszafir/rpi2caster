@@ -155,16 +155,17 @@ class MonotypeCaster(object):
 
     def pump_off(self):
         """Ensure that the pump is turned off"""
-        UI.display('EMERGENCY STOP: Cleaning up and switching the pump off...')
-        UI.display('If the machine is stopped, turn it by hand once or twice.')
         record = Record('NJS0005')
         while self.pump_working:
+            UI.display('Stopping the pump: sending NJS 0005 twice')
             self.cast_one(record, timeout=60)
             self.cast_one(record, timeout=60)
             self.pump_working = False
 
     def cast_one(self, record, timeout=None):
         """Casting sequence: sensor on - valves on - sensor off - valves off"""
+        stop1 = 'EMERGENCY STOP: Cleaning up and switching the pump off...'
+        stop2 = 'If the machine is stopped, turn it by hand once or twice.'
         try:
             self.update_pump_state(record)
             self.output.valves_off()
@@ -173,11 +174,14 @@ class MonotypeCaster(object):
             self.sensor.wait_for(AIR_OFF, timeout=timeout)
             self.output.valves_off()
         except (KeyboardInterrupt, EOFError, MachineStopped):
+            UI.display(stop1, stop2)
             self.pump_off()
             raise MachineStopped
 
     def cast_many(self, sequence, ask=True, repetitions=1):
-        """Cast a series of multiple records."""
+        """Cast a series of multiple records.
+        This is a simplified routine for internal use;
+        normally use Casting.cast_ribbon which provides more info"""
         stop_prompt = 'Machine stopped: continue casting?'
         # do we need to cast from row 16 and choose an attachment?
         needed = any((record.code.uses_row_16 for record in sequence))
@@ -189,6 +193,7 @@ class MonotypeCaster(object):
             while repetitions > 0:
                 try:
                     for record in sequence:
+                        UI.display(record)
                         self.cast_one(record)
                     # ensure that the pump is not working
                     self.pump_off()
@@ -369,7 +374,7 @@ class MonotypeCaster(object):
                     mat_engine.find_matrix(char='--')]
             # operator needs to know how wide (in inches) the sorts should be
             template = '{u} units (1{n}) is {i}" wide'
-            quad_width = self.wedge.set_width / 12 * wedge.pica
+            quad_width = mat_engine.wedge.set_width / 12 * wedge.pica
             UI.display(template.format(u=9, n='en', i=0.5 * quad_width))
             UI.display(template.format(u=18, n='em', i=quad_width))
             # build a casting queue and cast it repeatedly

@@ -34,6 +34,15 @@ class Record:
         # generate when needed
         self._report = None
 
+    def __repr__(self):
+        data = self.signals_string, self.adjusted_signals_string, self.comment
+        return '<Record: {} -> {}, comment: {}>'.format(*data)
+
+    def __str__(self):
+        comment = ' [{}]'.format(self.comment) if self.comment else ''
+        data = self.signals_string, self.adjusted_signals_string, comment
+        return 'source signals: {}, sending: {}{}'.format(*data)
+
     @property
     def comment(self):
         """Getter for a comment string."""
