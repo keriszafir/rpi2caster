@@ -3,6 +3,7 @@
 
 from collections import defaultdict, OrderedDict
 from contextlib import suppress
+from functools import lru_cache
 from . import definitions as d
 
 
@@ -214,6 +215,7 @@ class Record:
                 else 'NL' if column_set.issuperset('NL') else first_signal)
 
     @staticmethod
+    @lru_cache(maxsize=256)
     def parse_record(input_data):
         """Parses the record and gets its row, column and justification codes.
         First split the input data into two parts:
