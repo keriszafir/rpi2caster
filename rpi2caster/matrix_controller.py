@@ -199,83 +199,89 @@ def get_diecase(diecase_id=None, fallback=choose_diecase):
 
 def display_layout(layout):
     """Display the diecase layout, unit values, styles."""
-    def build_template():
-        """Each layout column depends on its content.
-        Calculate the widths."""
+    def get_formatted_text(text, styles, length='^3'):
+        """format a text with formatting string in styles definitions"""
+        field = '{{:{}}}'.format(length) if length else '{}'
+        if text in d.SPACE_NAMES:
+            # got a space = display symbol instead
+            return field.format(d.SPACE_SYMBOLS.get(text[0]))
+        else:
+            collection = bm.Styles(styles)
+            ansi_codes = ';'.join(str(s.ansi) for s in collection if s.ansi)
+            template = '\x1b[{codes}m{text}\x1b[0m'
+            return template.format(codes=ansi_codes, text=field.format(text))
+
+    def get_column_widths():
+        """calculate column widths to adjust the content"""
         # 3 characters to start is reasonable enough
         columns = layout.size.column_numbers
-        widths = OrderedDict((name, 3) for name in columns)
+        column_widths = OrderedDict((name, 3) for name in columns)
 
         # get the maximum width of characters in every column
         # if it's larger than header field width, update the column width
-        for column, initial_width in widths.items():
+        for column, initial_width in column_widths.items():
             widths_gen = (len(mat) for mat in layout.select_column(column))
-            widths[column] = max(initial_width, *widths_gen)
-
-        # column widths are now determined... make a field template
-        fields = (' {{{col}:^{width}}} '.format(col=col, width=width)
-                  for col, width in widths.items())
-        template = '| {{row:>3}} |{fields}| {{units:>5}} |'
-        return template.format(fields=''.join(fields))
+            column_widths[column] = max(initial_width, *widths_gen)
+        return column_widths
 
     def build_row(row_number):
-        """Build a layout table row.
-        A row takes exactly two actual lines (top and bottom),
-        top line displays row number, characters and row unit value,
-        bottom line displays unit values if different from row units."""
+        """make a diecase layout table row - actually, 3 rows:
+            empty row - separator; main row - characters,
+            units row - unit values, if not matching the row units.
+        """
         row = layout.select_row(row_number)
-        units = diecase.wedge.units[row_number]
+        units = layout.diecase.wedge.units[row_number]
         # initialize the row value dictionaries
-        empty = dict(row='', units='')
-        top = dict(row=row_number, units=units)
-        bottom = dict(row='', units='')
+        empty_row = dict(row='', units='')
+        main_row = dict(row=row_number, units=units)
+        units_row = dict(row='', units='')
         # fill all mat character fields
         for mat in row:
-            # empty row (separator)
-            empty[mat.column] = ''
-            # character row
-            top[mat.column] = mat.char
-            # show matrix unit width if it differs from row unit width
-            bottom[mat.column] = '' if mat.units == units else mat.units
+            column = mat.position.column
+            empty_row[column] = ''
+            # display unit width if it differs from row width
+            m_units = '' if mat.units == units else mat.units
+            units_row[column] = m_units
+            # format character for display
+            fmt = '^{}'.format(widths.get(column, 3))
+            main_row[column] = get_formatted_text(mat.char, mat.styles, fmt)
 
         # format and concatenate two table rows
-        empty_str = template.format(**empty)
-        top_str = template.format(**top)
-        bottom_str = template.format(**bottom)
-        return '{}\n{}\n{}'.format(empty_str, top_str, bottom_str)
+        empty_str = template.format(**empty_row)
+        main_str = template.format(**main_row)
+        units_str = template.format(**units_row)
+        return '{}\n{}\n{}'.format(empty_str, main_str, units_str)
 
     def build_description():
-        """Build the diecase description"""
-        left = '{d.diecase_id} ({d.typeface.text})'.format(d=diecase)
-        right = diecase.wedge.name
+        """diecase description: ID, typeface, wedge name and set width"""
+        left = '{d.diecase_id} ({d.typeface.text})'.format(d=layout.diecase)
+        right = layout.diecase.wedge.name
         center = ' ' * (len(header) - len(left) - len(right) - 4)
         description = '| {}{}{} |'.format(left, center, right)
         line = '=' * len(description)
         return '\n'.join((line, description, line))
 
-    def build_legend():
-        """Get the information about styles in diecase."""
-        return layout.styles.names
-
-    diecase = layout.diecase
     # table row template
-    template = build_template()
+    widths = get_column_widths()
+    fields = ' '.join(' {{{col}:^{width}}} '.format(col=col, width=width)
+                      for col, width in widths.items())
+    template = '| {{row:>3}} |{fields}| {{units:>5}} |'.format(fields=fields)
     # header row template
-    header_dict = dict(units='Units', row='Row')
-    header_dict.update({col: col for col in layout.size.column_numbers})
-    header = template.format(**header_dict)
+    header = dict(units='Units', row='Row')
+    header.update({col: col for col in widths})
+    header = template.format(**header)
     # a line of dases to separate the rows
     separator_line = '-' * len(header)
     # proper layout
     contents = (build_row(num) for num in layout.size.row_numbers)
     # info about styles
-    legend = build_legend()
+    legend = ', '.join(get_formatted_text(s.name, s) for s in layout.styles)
     # table description
     desc = build_description()
     # put the thing together
     table = (desc, header, separator_line, *contents, separator_line, legend)
     # finally display it
-    UI.paged_display(table)
+    UI.display('\n'.join(table))
 
 
 def edit_layout(layout):
@@ -290,10 +296,10 @@ def edit_layout(layout):
             code1, code2 = command.split(',', 1)
             code1, code2 = code1.strip(), code2.strip()
             # Look for matrices
-            mat1 = layout.select_one(position=code1)
-            mat2 = layout.select_one(position=code2)
+            mat1 = layout.select_one(code=code1)
+            mat2 = layout.select_one(code=code2)
             # Swap their coordinates
-            mat1.pos, mat2.pos = mat2.pos, mat1.pos
+            mat1.code, mat2.code = mat2.code, mat1.code
 
     def edit(mat):
         """Edit a matrix"""
@@ -355,7 +361,7 @@ def edit_layout(layout):
                 swap(answer)
             else:
                 # user entered matrix coordinates
-                mat = layout.select_one(position=answer)
+                mat = layout.select_one(code=answer)
                 edit(mat)
 
 
@@ -437,13 +443,13 @@ def find_matrix(layout, choose=True, **kwargs):
                     UI.enter('Matrix coordinates?', default=''))
         if not position:
             raise bm.MatrixNotFound('No coordinates entered')
-        mat = bm.Matrix(char=char, styles=styles, pos=position,
+        mat = bm.Matrix(char=char, styles=styles, code=position,
                         diecase=layout.diecase)
         return mat
 
     def choose_from_menu():
         """Display a menu to choose mats"""
-        matrices = sorted(mats, key=lambda mat: (mat.char, mat.pos))
+        matrices = sorted(mats, key=lambda mat: (mat.char, mat.position))
         menu_data = {i: mat for i, mat in enumerate(matrices, start=1)}
         # no matches? make a new one!
         if not menu_data:
@@ -457,12 +463,12 @@ def find_matrix(layout, choose=True, **kwargs):
         UI.display(' '.join(s for s in title if s))
 
         # table header
-        row = '{:<7}{:<7}{:<7}{:<50}'
-        UI.display_header(row.format('Index', 'Char', 'Code', 'Styles'))
+        row = '{:<7}{}'
+        UI.display_header(row.format('Index', 'Matrix'))
 
         # show available matrices
         for i, mat in menu_data.items():
-            UI.display(row.format(i, mat.char, mat.pos, mat.styles.names))
+            UI.display(row.format(i, mat))
         UI.display()
 
         # let user choose
@@ -559,7 +565,7 @@ class DiecaseMixin:
         delta = steps(self.wedge, correction)
         # how wide would a character from the given row normally be?
         # (using self.wedge, not self.diecase.wedge!)
-        row_units = self.wedge[matrix.row]
+        row_units = matrix.get_units_from_row(wedge_used=self.wedge)
         row_width = steps(self.wedge, row_units)
         # calculate the difference and wedge positions
         # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
@@ -632,7 +638,7 @@ class DiecaseMixin:
                                    set_width=self.wedge.set_width)
             units = width.units
 
-        return self.diecase.layout.get_space(units, low)
+        return self.diecase.layout.get_space(units, low, wedge=self.wedge)
 
     def find_matrix(self, choose=True, **kwargs):
         """Search the diecase layout and get a matching mat.
@@ -646,6 +652,7 @@ class DiecaseMixin:
     def display_diecase_layout(self, layout=None):
         """Display the diecase layout, unit values, styles."""
         display_layout(layout or self.diecase.layout)
+        UI.pause()
 
     def test_diecase_charset(self):
         """Test whether the diecase layout has all required characters,
@@ -735,14 +742,3 @@ class MatrixEngine(DiecaseMixin):
     def __init__(self, diecase_id=None):
         self.diecase = get_diecase(diecase_id)
         self.wedge = self.diecase.wedge
-
-
-class MatrixEditor(DiecaseMixin):
-    """Entry point for editing matrices and matrix cases."""
-    def __init__(self, diecase_id=None):
-        with suppress(Abort, Finish):
-            while True:
-                self.diecase = get_diecase(diecase_id)
-                with suppress(Abort):
-                    self.diecase_manipulation()
-                diecase_id = None

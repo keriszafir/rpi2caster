@@ -73,12 +73,25 @@ def edit_matrix(matrix,
         prompt = 'Char? (" ": low / "_": high space, blank = keep)'
         matrix.char = UI.enter(prompt, default=matrix.char or '')
 
+    def _edit_dimensions():
+        """Edit the matrix size"""
+        current_size = matrix.size
+        options = [option(key='n', value=(1, 1), seq=1, text='1x1 - normal'),
+                   option(key='w', value=(2, 1), seq=2, text='2x1 - wide'),
+                   option(key='h', value=(1, 2), seq=3, text='1x2 - high'),
+                   option(key='l', value=(2, 2), seq=4, text='2x2 - large'),
+                   option(key='Enter', value=current_size, seq=5,
+                          text='keep current ({})'.format(current_size))]
+        new_size = UI.simple_menu('New matrix size?', options,
+                                  allow_abort=False)
+        matrix.size = d.MatrixSize(new_size)
+
     def _edit_position():
         """Edit the matrix coordinates"""
         if not edit_position:
             return
-        matrix.pos = UI.enter('Enter the matrix position',
-                              default=matrix.pos or '')
+        matrix.code = UI.enter('Enter the matrix position',
+                               default=matrix.code or '')
         # reset the unit width
         if not matrix.char or matrix.isspace():
             matrix.units = 0
@@ -113,8 +126,8 @@ def edit_matrix(matrix,
             prompt = 'Enter unit width ({})'.format(', '.join(chunks))
         else:
             prompt = 'Enter unit width'
-        matrix.units = UI.enter(prompt, default=curr_units, datatype=int,
-                                minimum=4, maximum=25)
+        new_units = UI.enter(prompt, default=curr_units, datatype=int)
+        matrix.units = new_units or ua_units or row_units
 
     with suppress(Abort):
         # keep displaying this menu until aborted
@@ -124,7 +137,7 @@ def edit_matrix(matrix,
                               lazy=_get_char, cond=edit_char,
                               text='change character (current: {})'),
                        option(key='p', value=_edit_position, seq=2,
-                              lazy=matrix.pos, cond=edit_position,
+                              lazy=matrix.code, cond=edit_position,
                               text='change position (current: {})'),
                        option(key='s', value=_edit_styles, seq=3,
                               lazy=matrix.styles.names,
@@ -135,6 +148,9 @@ def edit_matrix(matrix,
                               lazy=matrix.units,
                               cond=edit_units and not matrix.isspace(),
                               text='change width (current: {} units)'),
+                       option(key='d', value=_edit_dimensions, seq=5,
+                              text='change matrix size (current: {})',
+                              lazy='{}x{}'.format(*matrix.size)),
                        option(key='Enter', value=Abort, seq=90,
                               text='done editing'),
                        option(key='Esc', value=Finish, seq=99,
@@ -149,7 +165,7 @@ def edit_matrix(matrix,
             else:
                 # display the menu for user to choose
                 choice = UI.simple_menu('Edit the matrix for {} at {}:'
-                                        .format(_get_char(), matrix.pos),
+                                        .format(_get_char(), matrix.code),
                                         options, allow_abort=False)
             # execute the subroutine
             choice()

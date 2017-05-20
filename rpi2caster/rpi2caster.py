@@ -5,15 +5,15 @@ from sys import argv
 import argparse
 from .ui import UI, Abort, Finish, option
 from .misc import MQ
+from . import utilities
 
 
 def casting_job(args):
     """Casting on an actual caster or simulation"""
-    from . import casting
-    session = casting.Casting()
+    session = utilities.Casting()
     session.ribbon_file = args.ribbon_file
     session.text_file = args.text_file
-    session.input_text = args.input_text
+    session.source = args.input_text
     session.ribbon_id = args.ribbon_id
     session.diecase_id = args.diecase_id
     session.wedge_name = args.wedge_name
@@ -25,7 +25,7 @@ def casting_job(args):
     # Skip menu if casting directly, typesetting or testing
     if args.input_text:
         # TODO use object properties instead of arguments/parameters
-        session.quick_typesetting(args.input_text)
+        session.quick_typesetting()
     elif args.direct:
         session.cast_composition()
     elif args.testing:
@@ -36,8 +36,7 @@ def casting_job(args):
 
 def typesetting_job(args):
     """Text to ribbon translation and justification"""
-    from . import typesetting
-    session = typesetting.Typesetting()
+    session = utilities.Typesetting()
     session.text_file = args.text_file
     session.input_text = args.input_text
     session.ribbon_file = args.ribbon_file
@@ -70,7 +69,7 @@ def inventory(args):
         matrix_controller.list_diecases()
     else:
         # edit diecase (or choose, if failed)
-        matrix_controller.MatrixEditor(args.diecase_id)
+        utilities.InventoryManagement(args.diecase_id)
 
 
 def meow(_):

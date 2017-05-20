@@ -12,12 +12,14 @@ from . import data, definitions as d
 
 class Matrix:
     """A class for single matrices - all matrix data"""
-    __slots__ = ('char', '_units', 'row', 'column', '_styles', 'diecase')
+    __slots__ = ('char', '_units', 'row', 'column', '_styles', 'diecase',
+                 'position', 'size')
 
-    def __init__(self, char='', styles='*', pos='', units=0, diecase=None):
+    def __init__(self, char='', styles='*', code='', units=0, diecase=None):
         self.diecase = diecase
         self.char = char
-        self.row, self.column, self.pos = None, None, pos
+        self.size = d.MatrixSize(horizontal=1, vertical=1)
+        self.position, self.code = d.Coordinates(None, None), code
         self._units = units
         self._styles = Styles(styles).string
 
@@ -28,17 +30,18 @@ class Matrix:
         return True
 
     def __repr__(self):
-        return ('<Matrix: {m.pos} ({m.char} {styles}, {m.units} units wide)>'
+        return ('<Matrix: {m.position.column}{m.position.row} '
+                '({m.char} {styles}, {m.units} units wide)>'
                 .format(m=self, styles=self.styles.names))
 
     def __str__(self):
         if self.ishighspace():
-            tmpl = 'high space at {m.pos}'
+            tmpl = 'high space at {pos.column}{pos.row}'
         elif self.islowspace():
-            tmpl = 'low space at {m.pos}'
+            tmpl = 'low space at {pos.column}{pos.row}'
         else:
-            tmpl = '{m.char} ({m.styles.names}) at {m.pos}'
-        return tmpl.format(m=self)
+            tmpl = '{m.char} ({m.styles.names}) at {pos.column}{pos.row}'
+        return tmpl.format(m=self, pos=self.position)
 
     @property
     def comment(self):
@@ -68,13 +71,15 @@ class Matrix:
         return round(self.units / 18, 2)
 
     @property
-    def pos(self):
+    def code(self):
         """Gets the matrix code"""
-        return ('{m.column}{m.row}'.format(m=self) if self.column and self.row
-                else '')
+        try:
+            return '{pos.column}{pos.row}'.format(pos=self.position)
+        except AttributeError:
+            return ''
 
-    @pos.setter
-    def pos(self, codes):
+    @code.setter
+    def code(self, codes):
         """Sets the coordinates for the matrix"""
         def row_generator():
             """Generate matching rows, removing them from input sequence"""
@@ -106,7 +111,7 @@ class Matrix:
         rows = (x for x in reversed(all_rows))
         # get the first possible column -> NI, NL, A...O
         columns = column_generator()
-        self.column, self.row = next(columns), next(rows)
+        self.position = d.Coordinates(column=next(columns), row=next(rows))
 
     @property
     def styles(self):
@@ -146,10 +151,11 @@ class Matrix:
         """Check if it's a low or high space"""
         return self.islowspace() or self.ishighspace()
 
-    def get_units_from_row(self):
+    def get_units_from_row(self, wedge_used=None):
         """Gets a number of units for characters in the diecase row"""
+        wedge = wedge_used or self.diecase.wedge
         try:
-            return self.diecase.wedge.units[self.row]
+            return wedge.units[self.position.row]
         except (AttributeError, TypeError, IndexError):
             return 0
 
@@ -181,8 +187,8 @@ class Matrix:
 
     def get_layout_record(self, pos=True):
         """Returns a record suitable for JSON-dumping and storing in DB."""
-        return d.MatrixRecord(self.char, self.styles.string,
-                              self.pos if pos else '', self.units)
+        code = '{p.column}{p.row}'.format(p=self.position) if pos else ''
+        return d.MatrixRecord(self.char, self.styles.string, code, self.units)
 
     def get_ribbon_record(self, s_needle=False, comment=True):
         """Returns a signals record for adding to ribbon.
@@ -195,9 +201,38 @@ class Matrix:
         _comment = ('' if not comment
                     else self.comment if comment is True
                     else comment)
-        code = '{mat.column}{es}{mat.row}'.format(mat=self, es='S' * s_needle)
-        with_comment = '{:<20} // {}'
-        return with_comment.format(code, _comment) if _comment else code
+        code = ('{pos.column}{es}{pos.row}'
+                .format(pos=self.position, es='S' * s_needle))
+        commented = '{:<20} // {}'
+        return commented.format(code, _comment) if _comment else code
+
+
+class VariableSpace(Matrix):
+    """Simplified matrix-like object: variable space for justifying"""
+    __slots__ = ['matrix', '_units', 'position', 'diecase', 'char']
+
+    def __init__(self, diecase, units=0, low=True):
+        self.diecase = diecase
+        self.char = ' ' if low else '_'
+        self.units = units
+
+    def match(self):
+        """locate the best suitable space for the given number of units"""
+        matrix = self.diecase.layout.get_space(units=self.units,
+                                               low=self.islowspace())
+        self.position = matrix.position
+
+    @property
+    def units(self):
+        """get space's unit width"""
+        return self._units
+
+    @units.setter
+    def units(self, units):
+        """set units and find a most suitable space"""
+        with suppress(TypeError):
+            self._units = float(units)
+            self.match()
 
 
 class Styles:
@@ -466,7 +501,7 @@ class LayoutSize:
     def positions(self):
         """Gets all matrix positions for this layout"""
         by_row = product(self.row_numbers, self.column_numbers)
-        return [(col, row) for (row, col) in by_row]
+        return [d.Coordinates(column=col, row=row) for (row, col) in by_row]
 
     def clean_layout(self, diecase=None):
         """Generate an empty layout of a given size."""
@@ -475,7 +510,7 @@ class LayoutSize:
         # fill it with new empty matrices and define low/high spaces
         for position in new_layout:
             mat = Matrix(char='', styles='*', diecase=diecase)
-            mat.column, mat.row = position
+            mat.position = position
             # preset spaces
             mat.set_lowspace(position in d.DEFAULT_LOW_SPACE_POSITIONS)
             mat.set_highspace(position in d.DEFAULT_HIGH_SPACE_POSITIONS)

@@ -4,6 +4,7 @@ make a diecase proof, quickly compose and cast text.
 """
 
 from collections import deque
+from contextlib import suppress
 from functools import wraps
 
 # QR code generating backend
@@ -15,7 +16,7 @@ except ImportError:
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .casting_models import Stats, Record
 from . import monotype
-from .matrix_controller import get_diecase
+from .matrix_controller import get_diecase, DiecaseMixin
 from .typesetting import TypesettingContext
 from .ui import UI, Abort, Finish, option
 
@@ -243,7 +244,7 @@ class Casting(TypesettingContext):
                 # choose from menu or enter coordinates
                 space = (UI.simple_menu(msg, options, allow_abort=False) or
                          matrix_lookup(None))
-                units = self.wedge[space.row]
+                units = space.get_units_from_row(wedge_used=self.wedge)
                 # how wide should it be?
                 width = bc.set_measure(input_value=units, unit='u',
                                        what='space width',
@@ -539,7 +540,7 @@ class Casting(TypesettingContext):
     @cast_this
     @bc.temp_wedge
     @bc.temp_measure
-    def quick_typesetting(self, text=None):
+    def quick_typesetting(self):
         """Allows us to use caster for casting single lines.
         This means that the user enters a text to be cast,
         gives the line length, chooses alignment and diecase.
@@ -553,8 +554,11 @@ class Casting(TypesettingContext):
         # TODO: not implemented!
         if not self.diecase:
             raise Abort
-        self.source = text or ''
-        self.edit_text()
+        # use manual composition engine
+        self.manual_mode = True
+        text = self.edit_text()
+        ribbon = self.compose(text)
+        return ribbon
 
     @cast_this
     @bc.temp_wedge
@@ -586,7 +590,7 @@ class Casting(TypesettingContext):
                 # adjust char width as far as possible,
                 # take away or add the rest to the space instead
                 limits = self.wedge.get_adjustment_limits()
-                row_units = self.wedge[matrix.row]
+                row_units = matrix.get_units_from_row(wedge_used=self.wedge)
                 if mat_units < row_units - limits.shrink:
                     # character too narrow for its row
                     space_units -= (row_units - mat_units - limits.shrink)
@@ -601,11 +605,11 @@ class Casting(TypesettingContext):
             # omit spaces not wide enough
             if space_units >= 3:
                 try:
-                    # high spaces are preferrred
-                    space = diecase.layout.get_space(space_units, low=False)
+                    # high spaces are preferred
+                    space = self.find_space(space_units, low=False)
                 except bm.MatrixNotFound:
                     # then we have to do with a low one...
-                    space = diecase.layout.get_space(space_units, low=True)
+                    space = self.find_space(space_units, low=True)
                 sp_wedges = self.get_wedge_positions(space, space_units)
                 space_codes = get_codes(space, sp_wedges)
             else:
@@ -650,7 +654,6 @@ class Casting(TypesettingContext):
 
     def main_menu(self):
         """Main menu for the type casting utility."""
-
         machine = self.caster
         hdr = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                'for Monotype Composition or Type and Rule casters.\n\n'
@@ -729,10 +732,10 @@ class Casting(TypesettingContext):
                           text='Diagnostics menu...',
                           desc='Interface and machine diagnostic functions')]
 
+        exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
         UI.dynamic_menu(options, header, default_key='c',
                         abort_suffix='Press [{keys}] to exit.\n',
-                        catch_exceptions=(Finish, Abort,
-                                          KeyboardInterrupt, EOFError))
+                        catch_exceptions=exceptions)
 
     def display_details(self):
         """Collect ribbon, diecase and wedge data here"""
@@ -744,3 +747,81 @@ class Casting(TypesettingContext):
                 self.caster.parameters]
         UI.display_parameters(*data)
         UI.pause()
+
+
+class Typesetting(TypesettingContext):
+    """Typesetting session - choose and translate text with control codes
+    into a sequence of Monotype control codes, which can be sent to
+    the machine to cast composed and justified type.
+    """
+    def main_menu(self):
+        """Main menu for the typesetting utility."""
+        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+                  'for Monotype Composition or Type and Rule casters.\n\n'
+                  'Composition Menu:')
+        options = [option(key='e', value=self.edit_text, seq=1,
+                          text='Edit source text'),
+                   option(key='c', value=self.compose, seq=2,
+                          text='Compose the text',
+                          cond=(self.diecase and self.source and
+                                self.manual_mode),
+                          desc='User makes end-of-line decisions'),
+
+                   option(key='c', value=self.compose, seq=2,
+                          text='Compose the text',
+                          cond=(self.diecase and self.source and not
+                                self.manual_mode),
+                          desc='Automatic typesetting'),
+
+                   option(key='m', value=self.change_measure, seq=5,
+                          text='Change measure', lazy=self.measure,
+                          desc='Set new line length (current: {})'),
+
+                   option(key='d', value=self.choose_diecase, seq=30,
+                          text='Select diecase',
+                          desc='Select a matrix case from database'),
+
+                   option(key='w', value=self.choose_wedge, seq=35,
+                          text='Select alternative wedge', cond=self.diecase),
+
+                   option(key='a', value=self.change_alignment, seq=40,
+                          text='Change default alignment (current: {})',
+                          lazy=self.default_alignment),
+
+                   option(key='t', value=self.toggle_manual_mode,
+                          text='Switch to automatic typesetting mode',
+                          cond=self.manual_mode),
+
+                   option(key='t', value=self.toggle_manual_mode,
+                          text='Switch to manual typesetting mode',
+                          cond=not self.manual_mode),
+
+                   option(key='v', value=self.display_ribbon_contents, seq=80,
+                          cond=lambda: bool(self.ribbon),
+                          text='View codes',
+                          desc='Display all codes in the selected ribbon'),
+
+                   option(key='l', value=self.display_diecase_layout, seq=80,
+                          cond=self.diecase,
+                          text='Show diecase layout{}',
+                          desc='View the matrix case layout',
+                          lazy=lambda: ('( current diecase ID: {})'
+                                        .format(self.diecase.diecase_id))),
+                   option(key='F7', value=self.diecase_manipulation, seq=90,
+                          text='Matrix manipulation...')]
+
+        exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
+        UI.dynamic_menu(options, header, default_key='c',
+                        abort_suffix='Press [{keys}] to exit.\n',
+                        catch_exceptions=exceptions)
+
+
+class InventoryManagement(DiecaseMixin):
+    """Entry point for editing matrices and matrix cases."""
+    def __init__(self, diecase_id=None):
+        with suppress(Abort, Finish):
+            while True:
+                self.diecase = get_diecase(diecase_id)
+                with suppress(Abort):
+                    self.diecase_manipulation()
+                diecase_id = None

@@ -6,6 +6,7 @@ import os
 import select
 import time
 from collections import OrderedDict
+from functools import reduce
 
 # Driver library imports
 # RPi.GPIO I/O control library (PyPI: RPi.GPIO, Debian: python3-rpi.gpio)
@@ -783,7 +784,8 @@ class SMBusOutput(OutputBase):
         """Get the signals, transform them to numeric value and send
         the bytes to i2c devices"""
         if signals:
-            number = sum(self.mapping.get(signal, 0) for signal in signals)
+            assignment = (self.mapping.get(signal, 0) for signal in signals)
+            number = reduce(lambda x, y: x | y, assignment)
             # Split it to four bytes sent in sequence
             byte0 = (number >> 24) & 0xff
             byte1 = (number >> 16) & 0xff

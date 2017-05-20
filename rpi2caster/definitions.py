@@ -5,7 +5,8 @@ from collections import namedtuple
 
 # define some namedtuple objects so that returning data is easier
 Coordinates = namedtuple('Coordinates', 'column row')
-MatrixRecord = namedtuple('MatrixRecord', 'char styles pos units')
+MatrixSize = namedtuple('MatrixSize', 'horizontal vertical')
+MatrixRecord = namedtuple('MatrixRecord', 'char styles code units')
 WedgePositions = namedtuple('WedgePositions', 'pos_0075 pos_0005')
 WedgeLimits = namedtuple('WedgeLimits', 'shrink stretch')
 QueueItem = namedtuple('QueueItem', 'matrix units qty cooldown')
@@ -47,14 +48,15 @@ STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='regular, antiqua',
                         codes=('^rr', '^RR', '^00'), ansi=0),
             italic=Style(name='italic', short='i', alternatives='',
-                         codes=('^ii', '^II', '^01'), ansi=3),
+                         codes=('^ii', '^II', '^01'), ansi='3;31'),
             bold=Style(name='bold', short='b', alternatives='',
-                       codes=('^bb', '^BB', '^03'), ansi=1),
+                       codes=('^bb', '^BB', '^03'), ansi='1;33'),
             smallcaps=Style(name='small caps', short='s', alternatives='',
-                            codes=('^sc', '^ss', '^SC', '^SS', '^02'), ansi=4),
+                            codes=('^sc', '^ss', '^SC', '^SS', '^02'),
+                            ansi='4;32'),
             inferior=Style(name='inferior', short='l',
                            alternatives='lower index, subscript',
-                           codes=('^ll', '^LL', '^05'), ansi=33),
+                           codes=('^ll', '^LL', '^05'), ansi=34),
             superior=Style(name='superior', short='u',
                            alternatives='upper index, superscript',
                            codes=('^uu', '^UU', '^04'), ansi=35),

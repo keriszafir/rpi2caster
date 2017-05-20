@@ -127,11 +127,6 @@ class SourceMixin(object):
         self._source = text or ''
 
     @source.setter
-    def input_text(self, text):
-        """Set a string of text as the typesetting source"""
-        self.source = text
-
-    @source.setter
     def text_file(self, text_file):
         """Use a file object as a source of text"""
         # If a string or None is passed as an argument,
@@ -142,6 +137,7 @@ class SourceMixin(object):
     def edit_text(self):
         """Edits the input text"""
         self.source = UI.edit(self.source)
+        return self.source
 
 
 class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
@@ -214,61 +210,6 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
         """Changes the manual/automatic typesetting mode"""
         self.manual_mode = not self.manual_mode
 
-
-class Typesetting(TypesettingContext):
-    """Typesetting session - choose and translate text with control codes
-    into a sequence of Monotype control codes, which can be sent to
-    the machine to cast composed and justified type.
-    """
-    def main_menu(self):
-        """Main menu for the typesetting utility."""
-        def finish():
-            """Stop the loop"""
-            nonlocal finished
-            finished = True
-
-        def menu_options():
-            """Build a list of options, adding an option"""
-            # Options are described with tuples:
-            # (function, description, condition)
-            opts = [(finish, 'Exit', 'Exits the program', True),
-                    (self.edit_text, 'Edit the source text',
-                     'Enter or edit the text you want to translate', True),
-                    (self.compose, 'Typesetting', 'Translate the text',
-                     self.diecase and self.source),
-                    (self.choose_diecase, 'Select diecase',
-                     'Select a matrix case from database (current: %s)'
-                     % (self.diecase or 'not selected'), True),
-                    (self.choose_wedge, 'Select wedge',
-                     'Enter a wedge designation (current: %s)'
-                     % self.wedge, True),
-                    (self.change_measure, 'Change measure',
-                     'Set new line length (current: %s)' % self.measure, True),
-                    (self.change_alignment, 'Change default alignment',
-                     'Set a text alignment if no code is present (current: %s)'
-                     % self.default_alignment, True),
-                    (self.toggle_manual_mode, 'Change the typesetting mode',
-                     'Switch to automatic typesetting', self.manual_mode),
-                    (self.toggle_manual_mode, 'Change the typesetting mode',
-                     'Switch to manual typesetting', not self.manual_mode),
-                    (self.display_diecase_layout, 'Show diecase layout',
-                     'View the matrix case layout', True),
-                    (self.diecase_manipulation, 'Matrix manipulation',
-                     'Work on matrix cases', True)]
-            # Built a list of menu options conditionally
-            return [(func, desc, long_desc)
-                    for (func, desc, long_desc, condition) in opts
-                    if condition]
-
-        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-                  'for Monotype Composition or Type and Rule casters.\n\n'
-                  'Composition Menu:')
-        # Keep displaying the menu and go back here after any method ends
-        finished = False
-        while not finished:
-            with suppress(Abort, EOFError, KeyboardInterrupt):
-                UI.menu(menu_options(), header=header, footer='')()
-
     def get_paragraphs(self):
         """Parse a text into paragraphs with justification modes."""
         # Get a dict of alignment codes
@@ -303,11 +244,18 @@ class Typesetting(TypesettingContext):
                 tokens.append(token)
         return paragraphs
 
+    @property
     def compose(self):
-        """Main composition engine."""
-        paragraphs = self.get_paragraphs()
-        for paragraph in paragraphs:
-            paragraph.display_text()
+        """Bridge for automatic/manual typesetting.
+        Choice is made by manual_mode flag."""
+        return self._manual_compose if self.manual_mode else self._auto_compose
+
+    def _manual_compose(self, source=''):
+        """Manual composition, where the user makes end-of-line decisions"""
+        text = source or self.source
+
+    def _auto_compose(self, source=''):
+        """Automatic typesetting with hyphenation and justification"""
 
 
 class Paragraph(object):

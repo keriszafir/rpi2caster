@@ -3,15 +3,15 @@
 -- specialized typesetting and machine control software
 for Monotype composition casting machines."""
 
-from . import basic_models, basic_controllers, casting, casting_models, config
+from . import basic_models, basic_controllers, casting_models, config, data
 from . import datatypes, definitions, matrix_controller, misc, main_models
 from . import monotype, parsing, rpi2caster, typesetting, typesetting_funcs, ui
-from . import data
+from . import utilities
 
-__all__ = [basic_models, basic_controllers, casting, casting_models, config,
+__all__ = [basic_models, basic_controllers, casting_models, config, data,
            datatypes, definitions, main_models, matrix_controller, misc,
            monotype, parsing, rpi2caster, typesetting, typesetting_funcs, ui,
-           data]
+           utilities]
 
 
 __version__ = '0.7.dev1'

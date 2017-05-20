@@ -251,17 +251,17 @@ class DiecaseLayout:
         try:
             # Get matrices from supplied layout's canonical form
             raw_records = (d.MatrixRecord(*record) for record in raw_layout)
-            mats = [bm.Matrix(char=rec.char, styles=rec.styles, pos=rec.pos,
+            mats = [bm.Matrix(char=rec.char, styles=rec.styles, code=rec.code,
                               units=rec.units, diecase=self.diecase)
                     for rec in raw_records]
             # parse the source layout to get its size,
             # reversing the order increases the chance of finding row 16 faster
             for matrix in reversed(mats):
-                if matrix.row == 16:
+                if matrix.position.row == 16:
                     # finish here as the only 16-row diecases were 16x17
                     size.rows, size.columns = 16, 17
                     break
-                if matrix.column in ('NI', 'NL'):
+                if matrix.position.column in ('NI', 'NL'):
                     # update the columns number
                     # iterate further because we can still find 16th row
                     size.columns = 17
@@ -272,9 +272,9 @@ class DiecaseLayout:
         used_mats = size.clean_layout(diecase=self.diecase)
         # Fill it with matrices for existing positions
         for mat in mats[:]:
-            pos = mat.column, mat.row
-            if used_mats.get(pos):
-                used_mats[pos] = mat
+            position = mat.position
+            if used_mats.get(position):
+                used_mats[position] = mat
                 mats.remove(mat)
         # The remaining mats will be stored in outside layout
         self.used_mats, self.outside_mats = used_mats, mats
@@ -319,7 +319,7 @@ class DiecaseLayout:
         # pull the mats from outside layout to diecase automatically
         # if so, remove them from outside layout
         for mat in old_extras[:]:
-            position = (mat.column, mat.row)
+            position = mat.position
             if new_layout.get(position):
                 # there is something at this position
                 new_layout[position] = mat
@@ -328,17 +328,17 @@ class DiecaseLayout:
         self.used_mats = new_layout
         self.outside_mats = old_extras + new_extras
 
-    def select_many(self, char=None, styles=None, position=None, units=None,
+    def select_many(self, char=None, styles=None, code=None, units=None,
                     islowspace=None, ishighspace=None):
         """Get all matrices with matching parameters"""
         def match(matrix):
             """Test the matrix for conditions unless they evaluate to False"""
             # guard against returning True if no conditions are valid
             # end right away
-            wants = (char, styles, position, units, islowspace, ishighspace)
+            wants = (char, styles, code, units, islowspace, ishighspace)
             if not any(wants):
                 return False
-            finds = (matrix.char, matrix.styles, matrix.pos, matrix.units,
+            finds = (matrix.char, matrix.styles, matrix.code, matrix.units,
                      matrix.islowspace(), matrix.ishighspace())
             # check all that apply and break on first mismatch
             for wanted, found in zip(wants, finds):
@@ -357,13 +357,20 @@ class DiecaseLayout:
             return search_results[0]
         raise bm.MatrixNotFound
 
-    def get_space(self, units=0, low=True):
+    def get_space(self, units=0, low=True, wedge=None):
         """Find a suitable space in the diecase layout"""
         def mismatch(checked_space):
             """Calculate the unit difference between space's width
             and desired unit width"""
-            difference = units - checked_space.units
-            return abs(difference) if -2 < difference < 10 else -1
+            wdg = wedge or self.diecase.wedge
+            # how much adjustment would be needed? single or double mat?
+            difference = units - wdg[checked_space.position.row]
+            low = checked_space.islowspace()
+            cells = checked_space.size.horizontal
+            # calculate minimum and maximum
+            limits = wdg.get_adjustment_limits(low_space=low, cell_width=cells)
+            shrink, stretch = limits.shrink, limits.stretch
+            return abs(difference) if -shrink < difference < stretch else -1
 
         spaces = [mat for mat in self.spaces if mismatch(mat) >= 0 and
                   mat.islowspace() == low and mat.ishighspace() != low]
@@ -399,10 +406,12 @@ class Ribbon(BASE):
     """Ribbon objects - no matter whether files or database entries.
 
     A ribbon has the following attributes:
-    description, customer - strings
+    description, customer - strings,
     diecase_id (diecase is selected automatically on casting, so user can e.g.
-                view the layout or know which wedge to use)
-    contents - series of Monotype codes
+                view the layout or know which wedge to use),
+    source_text - original text the ribbon was set from; useful for
+                  re-composing for different parameters,
+    contents - series of Monotype codes.
 
     Methods:
     choose_ribbon - choose ribbon automatically or manually,
@@ -421,6 +430,7 @@ class Ribbon(BASE):
     diecase_id = sa.Column('diecase_id', sa.Text,
                            sa.schema.ForeignKey('matrix_cases.diecase_id'))
     wedge_name = sa.Column('wedge_name', sa.Text, default='', nullable=False)
+    source_text = sa.Column('source_text', sa.Text, default='', nullable=False)
     contents = sa.Column('contents', sa.Text, default='', nullable=False)
 
     def __iter__(self):
