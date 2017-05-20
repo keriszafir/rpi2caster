@@ -74,7 +74,7 @@ class MonotypeCaster(object):
                 return ParallelSensor, ParallelOutput
             if not sensor or not output:
                 # ask once again if it's not simulation mode
-                UI.confirm(sim2, abort=False)
+                UI.confirm(sim2, abort_answer=False)
                 self.simulation = True
                 return SimulationSensor, SimulationOutput
             return sensor, output
