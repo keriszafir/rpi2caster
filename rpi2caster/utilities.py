@@ -156,6 +156,7 @@ class Casting(TypesettingContext):
             # in punching and testing mode, signal O or 15 will be present
             # in the output combination as O15
             for item in queue:
+                UI.clear()
                 record = Record(item, row_16_mode=machine.row_16_mode)
                 # check if signal will be cast at all
                 if not record.code.has_signals:
@@ -171,6 +172,7 @@ class Casting(TypesettingContext):
         stats = Stats(machine)
         # Ribbon pre-processing and casting parameters setup
         queue = rewind_if_needed(ribbon)
+        UI.display('Processing ribbon, please wait...')
         stats.update(ribbon=ribbon)
         UI.display_parameters(stats.ribbon_parameters)
         stats.update(runs=UI.enter('How many times do you want to cast this?',
@@ -456,7 +458,7 @@ class Casting(TypesettingContext):
                 UI.display(str(exc))
                 what = 'Low' if low else 'High'
                 code = UI.enter('{} space coordinates?'.format(what), '')
-                space = bm.Matrix(pos=code, diecase=self.diecase)
+                space = bm.Matrix(code=code, diecase=self.diecase)
             wedges = self.get_wedge_positions(space, units)
             return space.get_ribbon_record(s_needle=wedges != (3, 8)), wedges
 

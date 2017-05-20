@@ -701,6 +701,7 @@ class RPiGPIOSensor(SensorBase):
     def __enter__(self):
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.gpio, GPIO.IN)
+        super().__enter__()
         return self
 
     def __exit__(self, *_):
@@ -807,6 +808,7 @@ class SMBusOutput(OutputBase):
         for address in self.mcp0_address, self.mcp1_address:
             for register in IODIRA, IODIRB, OLATA, OLATB:
                 self.port.write_byte_data(address, register, 0x00)
+        super().__enter__()
         return self
 
     def __exit__(self, *_):
