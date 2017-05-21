@@ -198,12 +198,16 @@ class Casting(TypesettingContext):
                     cast_queue(casting_queue)
                 stats.update(casting_success=True)
                 if not stats.get_runs_left():
-                    prm = 'Casting finished; add more runs - how many?'
+                    # make sure the machine will check
+                    # whether it's running next time
+                    machine.working = False
+                    # user might want to re-run this
+                    prm = 'Casting successfully finished. Any more runs?'
                     stats.update(runs=UI.enter(prm, default=0, minimum=0))
 
             except monotype.MachineStopped:
-                # aborted - ask if user wants to continue
                 stats.update(casting_success=False)
+                # aborted - ask if user wants to continue
                 runs_left = stats.get_runs_left()
                 if runs_left:
                     UI.confirm('{} runs left, continue?'.format(runs_left),
@@ -256,7 +260,7 @@ class Casting(TypesettingContext):
 
         def typecases():
             """generates a sequence of items for characters in a language"""
-            lookup_table = self.diecase.layout.lookup_table
+            lookup_table = self.diecase.layout.get_lookup_table()
             # which styles interest us
             styles = bc.choose_styles(self.diecase.styles)
             # what to cast?

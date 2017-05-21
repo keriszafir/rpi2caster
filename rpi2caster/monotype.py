@@ -54,7 +54,7 @@ SENSORS, OUTPUTS = {}, {}
 class MonotypeCaster(object):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
-    pump_working, simulation, punching = False, False, False
+    working, pump_working, simulation, punching = False, False, False, False
     sensor, output = None, None
     # caster modes
     row_16_mode = ROW16_ADDRESSING.off
@@ -89,8 +89,12 @@ class MonotypeCaster(object):
         self.sensor, self.output = sensor(), output()
 
     def __enter__(self):
-        self.sensor.__enter__()
+        # initialize hardware interface; check if machine is running
         self.output.__enter__()
+        self.sensor.__enter__()
+        if not self.working:
+            self.sensor.check_if_machine_is_working()
+            self.working = True
         return self
 
     def __exit__(self, *_):
@@ -177,6 +181,7 @@ class MonotypeCaster(object):
         except (KeyboardInterrupt, EOFError, MachineStopped):
             UI.display(stop1, stop2)
             self.pump_off()
+            self.working = False
             raise MachineStopped
 
     def cast_many(self, sequence, ask=True, repetitions=1):
@@ -205,6 +210,9 @@ class MonotypeCaster(object):
                     UI.confirm(stop_prompt, abort_answer=False)
                 if ask and not repetitions and UI.confirm('Repeat?'):
                     repetitions += 1
+        # reset the machine working flag
+        # so sensor.check_if_machine_is_working() will run again when needed
+        self.working = False
 
     def punch(self, signals_sequence):
         """Punching sequence: valves on - wait - valves off- wait"""
@@ -462,7 +470,6 @@ class SensorBase(object):
     def __enter__(self):
         UI.pause('Using a {} for machine feedback'.format(self.name),
                  min_verbosity=3)
-        self.check_if_machine_is_working()
         return self
 
     def __exit__(self, *_):
@@ -812,9 +819,8 @@ class SMBusOutput(OutputBase):
         return self
 
     def __exit__(self, *_):
-        self.valves_off()
+        super().__exit__()
         self.port = None
-        return True
 
 
 @weakref_singleton

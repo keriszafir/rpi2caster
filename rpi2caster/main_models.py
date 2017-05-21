@@ -216,8 +216,7 @@ class DiecaseLayout:
         return sum(mat.styles for mat in self.all_mats
                    if not mat.styles.use_all)
 
-    @property
-    def charset(self, diecase_chars=True, outside_chars=False):
+    def get_charset(self, diecase_chars=True, outside_chars=False):
         """Diecase character set"""
         charset = {}
         used = self.used_mats.values() if diecase_chars else []
@@ -229,10 +228,11 @@ class DiecaseLayout:
                 charset.setdefault(style, {})[mat.char] = mat
         return charset
 
-    @property
-    def lookup_table(self):
+    def get_lookup_table(self, diecase_chars=True, outside_chars=False):
         """Return a structure of {(mat char, style): mat}"""
-        return {(mat.char, style): mat for mat in self.used_mats.values()
+        used = self.used_mats.values() if diecase_chars else []
+        unused = self.outside_mats if outside_chars else []
+        return {(mat.char, style): mat for mat in chain(used, unused)
                 for style in mat.styles}
 
     @property

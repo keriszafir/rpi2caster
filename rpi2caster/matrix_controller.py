@@ -402,7 +402,7 @@ def test_layout_charset(layout):
                 missing.append(char)
         return missing
 
-    lookup_table = layout.lookup_table
+    lookup_table = layout.get_lookup_table()
     styles = bc.choose_styles(layout.styles)
     charset = make_charset()
     # which characters we don't have, grouped by style
@@ -612,7 +612,7 @@ class DiecaseMixin:
     @property
     def charset(self):
         """Get a {style: {char: Matrix object}} charset from the diecase"""
-        return self.diecase.layout.charset
+        return self.diecase.layout.get_charset()
 
     @property
     def space(self):
