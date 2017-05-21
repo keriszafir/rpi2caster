@@ -215,7 +215,7 @@ class Record:
                 else 'NL' if column_set.issuperset('NL') else first_signal)
 
     @staticmethod
-    @lru_cache(maxsize=256)
+    @lru_cache(maxsize=350)
     def parse_record(input_data):
         """Parses the record and gets its row, column and justification codes.
         First split the input data into two parts:
@@ -282,26 +282,47 @@ class Stats:
 
     def update(self, **kwargs):
         """Update parameters"""
+        def session_line_skip(lines):
+            """skip lines for every run in the session"""
+            self._session['lines_skipped'] = lines
+
+        def run_line_skip(lines):
+            """skip lines for a single run"""
+            self._run['lines_skipped'] = lines
+
+        def add_runs(delta):
+            """change a number of runs in casting session"""
+            old_value = self._session['runs']
+            runs = old_value + delta
+            self._session['runs'] = runs
+            self._session['codes'] = runs * self._ribbon['codes']
+            self._session['chars'] = runs * self._ribbon['chars']
+            self._session['lines'] = runs * self._ribbon['lines']
+
+        def end_run(success):
+            """Updates the info about the runs"""
+            if success:
+                # update the counters
+                self._session['runs_done'] += 1
+                self._session['current_run'] += 1
+            else:
+                # reset last run stats - don't update the counters
+                self._session['failed_runs'] += 1
+                for par in ('current_line', 'current_code', 'current_char'):
+                    self._session[par] -= self._run[par]
+
         parameters = dict(ribbon=self.update_session_stats,
                           queue=self.update_run_stats,
                           record=self.update_record_stats,
-                          session_line_skip=self.set_session_lines_skipped,
-                          run_line_skip=self.set_run_lines_skipped,
-                          runs=self.add_runs, casting_success=self.end_run)
+                          session_line_skip=session_line_skip,
+                          run_line_skip=run_line_skip,
+                          runs=add_runs,
+                          casting_success=end_run)
         for argument, value in kwargs.items():
             routine = parameters.get(argument)
             if not routine:
                 continue
             return routine(value)
-
-    def add_runs(self, delta):
-        """Change a number of runs in casting session"""
-        old_value = self._session['runs']
-        runs = old_value + delta
-        self._session['runs'] = runs
-        self._session['codes'] = runs * self._ribbon['codes']
-        self._session['chars'] = runs * self._ribbon['chars']
-        self._session['lines'] = runs * self._ribbon['lines']
 
     @property
     def runs(self):
@@ -316,16 +337,6 @@ class Stats:
         """Get a number of lines to skip - decide whether to use
         the run or ribbon skipped lines"""
         return self._run['lines_skipped'] or self._session['lines_skipped']
-
-    def set_session_lines_skipped(self, lines):
-        """Set the number of lines that will be skipped for every run
-        in the casting session, unless overridden by the run lines skipped"""
-        self._session['lines_skipped'] = lines
-
-    def set_run_lines_skipped(self, lines):
-        """Set the number of lines that will be skipped for the following run
-        (used mostly for continuing the interrupted casting job)"""
-        self._run['lines_skipped'] = lines
 
     @property
     def ribbon_parameters(self):
@@ -352,6 +363,22 @@ class Stats:
     @property
     def code_parameters(self):
         """Displays info about the current combination"""
+        def build_data(source, name):
+            """Builds data to display based on the given parameter"""
+            current_name = 'current_{}'.format(name)
+            current_value = source[current_name]
+            total_name = '{}s'.format(name)
+            total_value = source[total_name]
+            if not total_value:
+                return '{current}'.format(current=current_value)
+            done = max(0, current_value - 1)
+            remaining = total_value - current_value
+            percent = done / total_value * 100
+            desc = ('{current} of {total} [{percent:.2f}%], '
+                    '{done} done, {left} left')
+            return desc.format(current=current_value, total=total_value,
+                               percent=percent, done=done, left=remaining)
+
         record = self._current['record']
         runs_number = self._session['runs']
         # display comment as a header
@@ -363,14 +390,14 @@ class Stats:
         if record.code.is_newline:
             data['Starting a new line'] = self._run['current_line']
         if runs_number > 1:
-            data['Code / run'] = self.build_data(self._run, 'code')
-            data['Char / run'] = self.build_data(self._run, 'char')
-            data['Line / run'] = self.build_data(self._run, 'line')
-            data['Run / job'] = self.build_data(self._session, 'run')
+            data['Code / run'] = build_data(self._run, 'code')
+            data['Char / run'] = build_data(self._run, 'char')
+            data['Line / run'] = build_data(self._run, 'line')
+            data['Run / job'] = build_data(self._session, 'run')
             data['Failed runs'] = self._session['failed_runs']
-        data['Code / job'] = self.build_data(self._session, 'code')
-        data['Char / job'] = self.build_data(self._session, 'char')
-        data['Line / job'] = self.build_data(self._session, 'line')
+        data['Code / job'] = build_data(self._session, 'code')
+        data['Char / job'] = build_data(self._session, 'char')
+        data['Line / job'] = build_data(self._session, 'line')
         data['Wedge 0075 now at'] = self._current['0075'] or '15'
         data['Wedge 0005 now at'] = self._current['0005'] or '15'
         data['Pump is'] = 'ON' if self._current['pump_working'] else 'OFF'
@@ -399,7 +426,8 @@ class Stats:
         # Set ribbon and session counters
         self._ribbon.update(codes=num_codes, chars=num_chars,
                             lines=max(0, num_lines))
-        self._session.update(current_run=1)
+        self._session.update(lines_skipped=0, current_run=1,
+                             current_line=0, current_code=0, current_char=0)
 
     def update_run_stats(self, queue):
         """Parses the ribbon, counts combinations, lines and characters"""
@@ -444,19 +472,6 @@ class Stats:
         diff = self._session['runs'] - self._session['runs_done']
         return max(0, diff)
 
-    def end_run(self, success=True):
-        """Updates the info about the runs"""
-        if success:
-            # update the counters
-            self._session['runs_done'] += 1
-            self._session['current_run'] += 1
-        else:
-            # reset last run stats - don't update the counters
-            self._session['failed_runs'] += 1
-            for par in ('current_line', 'current_code', 'current_char',
-                        'lines', 'codes', 'chars'):
-                self._session[par] -= self._run[par]
-
     def get_lines_done(self):
         """Gets the current run line number"""
         return max(0, self._run['current_line'] - 1)
@@ -481,20 +496,3 @@ class Stats:
                 self._current['0005'] = self._current['record'].row_pin
             if self._current['record'].code.has_0075:
                 self._current['0075'] = self._current['record'].row_pin
-
-    @staticmethod
-    def build_data(source, name):
-        """Builds data to display based on the given parameter"""
-        current_name = 'current_{}'.format(name)
-        current_value = source[current_name]
-        total_name = '{}s'.format(name)
-        total_value = source[total_name]
-        if not total_value:
-            return '{current}'.format(current=current_value)
-        done = max(0, current_value - 1)
-        remaining = total_value - current_value
-        percent = done / total_value * 100
-        desc = ('{current} of {total} [{percent:.2f}%], '
-                '{done} done, {left} left')
-        return desc.format(current=current_value, total=total_value,
-                           percent=percent, done=done, left=remaining)

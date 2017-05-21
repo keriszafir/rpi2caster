@@ -102,36 +102,37 @@ class Casting(TypesettingContext):
             sequence.appendleft(code)
             return sequence
 
-        def set_lines_skipped():
+        def set_lines_skipped(run=True, session=True):
             """Set the number of lines skipped for run and session
             (in case of multi-session runs)."""
-            stats.update(session_line_skip=0, run_line_skip=0)
-
-            # allow skipping if ribbon is more than 2 lines long
+            # allow skipping only if ribbon is more than 2 lines long
             limit = max(0, stats.get_ribbon_lines() - 2)
-            if limit < 1:
+            if not limit:
                 return
             # how many can we skip?
-            UI.display('We can skip up to {} lines.'.format(limit))
+            if run or session:
+                UI.display('We can skip up to {} lines.'.format(limit))
 
-            # run lines skipping
-            # how many lines were successfully cast?
-            lines_ok = stats.get_lines_done()
-            if lines_ok:
-                UI.display('{} lines were cast in the last run.'
-                           .format(lines_ok))
-            # Ask user how many to skip (default: all successfully cast)
-            r_skip = UI.enter('How many lines to skip for THIS run?',
-                              default=lines_ok, minimum=0, maximum=limit)
+            if run:
+                # run lines skipping
+                # how many lines were successfully cast?
+                lines_ok = stats.get_lines_done()
+                if lines_ok:
+                    UI.display('{} lines were cast in the last run.'
+                               .format(lines_ok))
+                # Ask user how many to skip (default: all successfully cast)
+                r_skip = UI.enter('How many lines to skip for THIS run?',
+                                  default=lines_ok, minimum=0, maximum=limit)
+                stats.update(run_line_skip=r_skip)
 
-            # Skip lines effective for ALL runs
-            # session line skipping affects multi-run sessions only
-            # don't do it for single-run sessions
-            s_skip = 0
-            if stats.runs > 1:
-                s_skip = UI.enter('How many lines to skip for ALL runs?',
-                                  default=0, minimum=0, maximum=limit)
-            stats.update(session_line_skip=s_skip, run_line_skip=r_skip)
+            if session:
+                # Skip lines effective for ALL runs
+                # session line skipping affects multi-run sessions only
+                # don't do it for single-run sessions
+                if stats.runs > 1:
+                    s_skip = UI.enter('How many lines to skip for ALL runs?',
+                                      default=0, minimum=0, maximum=limit)
+                    stats.update(session_line_skip=s_skip)
 
         def preheat_if_needed():
             """Things to do only once during the whole casting session"""
@@ -172,51 +173,47 @@ class Casting(TypesettingContext):
         stats = Stats(machine)
         # Ribbon pre-processing and casting parameters setup
         queue = rewind_if_needed(ribbon)
-        UI.display('Processing ribbon, please wait...')
         stats.update(ribbon=ribbon)
         UI.display_parameters(stats.ribbon_parameters)
+        # set the number of casting runs
         stats.update(runs=UI.enter('How many times do you want to cast this?',
                                    default=1, minimum=0))
         # Initial line skipping
-        set_lines_skipped()
+        set_lines_skipped(run=True, session=True)
         UI.display_parameters(stats.session_parameters)
         # Mould heatup to stabilize the temperature
         extra_quads = preheat_if_needed()
         # Cast until there are no more runs left
-        with machine:
-            while stats.get_runs_left():
-                # Prepare the ribbon ad hoc
-                casting_queue = skip_lines(queue)
-                stats.update(queue=casting_queue)
-                # Cast the run and check if it was successful
-                try:
+        while stats.get_runs_left():
+            # Prepare the ribbon ad hoc
+            casting_queue = skip_lines(queue)
+            stats.update(queue=casting_queue)
+            # Cast the run and check if it was successful
+            try:
+                # use caster context i.e. check if machine is running first
+                with machine:
+                    # this part will be cast only once
                     cast_queue(extra_quads)
+                    # proper queue with characters
                     cast_queue(casting_queue)
-                    stats.update(casting_success=True)
-                    if not stats.get_runs_left():
-                        # last run finished - repeat? how many tumes?
-                        prm = 'Casting finished; add more runs - how many?'
-                        stats.update(runs=UI.enter(prm, default=0, minimum=0))
+                stats.update(casting_success=True)
+                if not stats.get_runs_left():
+                    prm = 'Casting finished; add more runs - how many?'
+                    stats.update(runs=UI.enter(prm, default=0, minimum=0))
 
-                except monotype.MachineStopped:
-                    # aborted - ask if user wants to continue
-                    stats.update(casting_success=False)
-                    runs_left = stats.get_runs_left()
-                    if runs_left:
-                        prm = ('{} runs remaining, continue casting?'
-                               .format(runs_left))
-                        UI.confirm(prm, default=True, abort_answer=False)
-
-                    # offer to cast it again, if so - skipping successful lines
-                    if not UI.confirm('Retry the last run?', default=True):
-                        continue
-                    stats.update(runs=1)
-                    lines_ok = stats.get_lines_done()
-                    if lines_ok < 2:
-                        continue
-                    if UI.confirm('Skip the {} lines successfully cast?'
-                                  .format(lines_ok), default=True):
-                        stats.update(run_line_skip=lines_ok)
+            except monotype.MachineStopped:
+                # aborted - ask if user wants to continue
+                stats.update(casting_success=False)
+                runs_left = stats.get_runs_left()
+                if runs_left:
+                    UI.confirm('{} runs left, continue?'.format(runs_left),
+                               default=True, abort_answer=False)
+                else:
+                    UI.confirm('Retry casting?', default=True,
+                               abort_answer=False)
+                # offer to skip lines for re-casting the failed run
+                skip_successful = stats.get_lines_done() >= 2
+                set_lines_skipped(run=skip_successful, session=False)
 
     @cast_this
     @bc.temp_wedge
