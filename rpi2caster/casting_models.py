@@ -272,13 +272,12 @@ class Record:
 
 class Stats:
     """Casting statistics gathering and displaying functions"""
-    _ribbon = defaultdict(int)
-    _run, _session = defaultdict(int), defaultdict(int)
-    _current = defaultdict(lambda: defaultdict(str))
-    _previous = defaultdict(lambda: defaultdict(str))
-
     def __init__(self, machine):
         self.machine = machine
+        self._ribbon = defaultdict(int)
+        self._run, self._session = defaultdict(int), defaultdict(int)
+        self._current = defaultdict(lambda: defaultdict(str))
+        self._previous = defaultdict(lambda: defaultdict(str))
 
     def update(self, **kwargs):
         """Update parameters"""
