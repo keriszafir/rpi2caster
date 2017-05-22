@@ -359,11 +359,11 @@ class Casting(TypesettingContext):
                 coarse, fine = wedges
                 if coarse == fine:
                     # single code is enough
-                    return [quad, 'NKJS 0005 0075 {}'.format(fine)]
+                    return [quad, 'NKJS 0005 0075 {}'.format(fine), quad]
                 else:
                     # double justification
                     return [quad, 'NKS 0075 {}'.format(coarse),
-                            'NKJS 0005 0075 {}'.format(fine)]
+                            'NKJS 0005 0075 {}'.format(fine), quad]
 
             def changeover():
                 """use single-justification (0005+0075) to adjust wedges"""
