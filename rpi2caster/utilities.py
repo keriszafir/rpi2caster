@@ -16,7 +16,7 @@ except ImportError:
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .casting_models import Stats, Record
 from . import monotype
-from .matrix_controller import get_diecase, DiecaseMixin
+from .matrix_controller import get_diecase, temp_diecase, DiecaseMixin
 from .typesetting import TypesettingContext
 from .ui import UI, Abort, Finish, option
 
@@ -220,6 +220,7 @@ class Casting(TypesettingContext):
                 set_lines_skipped(run=skip_successful, session=False)
 
     @cast_this
+    @temp_diecase
     @bc.temp_wedge
     @bc.temp_measure
     def cast_material(self):
@@ -447,6 +448,7 @@ class Casting(TypesettingContext):
         return ribbon
 
     @cast_this
+    @temp_diecase
     @bc.temp_wedge
     def cast_qr_code(self):
         """Set up and cast a QR code which can be printed and then scanned
@@ -541,6 +543,7 @@ class Casting(TypesettingContext):
         return self.ribbon.contents
 
     @cast_this
+    @temp_diecase
     @bc.temp_wedge
     @bc.temp_measure
     def quick_typesetting(self):
@@ -564,6 +567,7 @@ class Casting(TypesettingContext):
         return ribbon
 
     @cast_this
+    @temp_diecase
     @bc.temp_wedge
     def diecase_proof(self):
         """Tests the whole diecase, casting from each matrix.
@@ -621,9 +625,8 @@ class Casting(TypesettingContext):
             # characters should be separated by at least one space
             return space_codes + mat_codes
 
-        diecase = get_diecase()
-        if diecase:
-            self.display_diecase_layout(diecase.layout)
+        if self.diecase:
+            self.display_diecase_layout()
         else:
             # select size
             sizes = [(15, 15), (15, 17), (16, 17)]
@@ -632,7 +635,7 @@ class Casting(TypesettingContext):
             selected_size = UI.simple_menu(message='Matrix case size:',
                                            options=options,
                                            default_key=2, allow_abort=True)
-            diecase.layout.resize(*selected_size)
+            self.diecase.layout.resize(*selected_size)
 
         if not UI.confirm('Proceed?', default=True, abort_answer=False):
             return
@@ -642,7 +645,7 @@ class Casting(TypesettingContext):
         pos_0075, pos_0005 = 3, 8
         leftover_units = 0
         # build the layout one by one
-        for number, row in enumerate(diecase.layout.by_rows(), start=1):
+        for number, row in enumerate(self.diecase.layout.by_rows(), start=1):
             UI.display('Processing row {}'.format(number))
             queue.append(quad)
             for mat in row:
@@ -682,7 +685,6 @@ class Casting(TypesettingContext):
                           desc='Select a ribbon from database or file'),
 
                    option(key='d', value=self.choose_diecase, seq=30,
-                          cond=lambda: not machine.punching,
                           text='Select diecase',
                           desc='Select a matrix case from database'),
 
@@ -692,8 +694,7 @@ class Casting(TypesettingContext):
                           desc='Display all codes in the selected ribbon'),
 
                    option(key='l', value=self.display_diecase_layout, seq=80,
-                          cond=lambda: (not machine.punching and
-                                        bool(self.diecase)),
+                          cond=lambda: bool(self.diecase),
                           text='Show diecase layout{}',
                           desc='View the matrix case layout',
                           lazy=lambda: ('( current diecase ID: {})'
@@ -701,8 +702,6 @@ class Casting(TypesettingContext):
                                         if bool(self.diecase) else '')),
 
                    option(key='t', value=self.quick_typesetting, seq=20,
-                          cond=lambda: (not machine.punching and
-                                        bool(self.diecase)),
                           text='Quick typesetting',
                           desc='Compose and cast a line of text'),
 

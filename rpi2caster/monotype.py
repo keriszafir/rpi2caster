@@ -784,8 +784,8 @@ class SMBusOutput(OutputBase):
     def _send(self, byte0, byte1, byte2, byte3):
         """Write 4 bytes of data to all ports (A, B) on all devices (0, 1)"""
         self.port.write_byte_data(self.mcp0_address, OLATA, byte0)
-        self.port.write_byte_data(self.mcp0_address, OLATB, byte1)
-        self.port.write_byte_data(self.mcp1_address, OLATA, byte2)
+        self.port.write_byte_data(self.mcp1_address, OLATB, byte1)
+        self.port.write_byte_data(self.mcp0_address, OLATA, byte2)
         self.port.write_byte_data(self.mcp1_address, OLATB, byte3)
 
     def valves_on(self, signals):

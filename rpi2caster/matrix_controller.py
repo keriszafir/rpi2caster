@@ -4,7 +4,7 @@
 import csv
 from collections import OrderedDict
 from contextlib import suppress
-from functools import partial
+from functools import partial, wraps
 from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import USER_DATA_DIR, CFG
@@ -193,6 +193,26 @@ def get_diecase(diecase_id=None, fallback=choose_diecase):
             return rows.one()
         UI.display('Diecase {} not found in database!'.format(diecase_id))
     return fallback()
+
+
+def temp_diecase(routine):
+    """Use a temporary diecase"""
+    @wraps(routine)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        if not self.diecase:
+            # empty diecase? then let the user choose...
+            old_diecase, self.diecase = self.wedge, choose_diecase()
+            UI.display_parameters(self.diecase.parameters)
+            UI.display('\n\n')
+            retval = routine(self, *args, **kwargs)
+            # cleanup: restore the previous diecase
+            self.diecase = old_diecase
+        else:
+            # if diecase was chosen before, don't ask
+            retval = routine(self, *args, **kwargs)
+        return retval
+    return wrapper
 
 
 # Diecase layout controller routines
