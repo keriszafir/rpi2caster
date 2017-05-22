@@ -779,14 +779,14 @@ class SMBusOutput(OutputBase):
     name = 'SMBus output driver'
     # define a signal-to-bit mapping
     # NOTE: reverse the range if signals are backwards
-    signal_numbers = [2 ** x for x in range(31, -1, -1)]
+    signal_numbers = [2 ** x for x in range(32)]
 
     def _send(self, byte0, byte1, byte2, byte3):
         """Write 4 bytes of data to all ports (A, B) on all devices (0, 1)"""
-        self.port.write_byte_data(self.mcp0_address, OLATB, byte0)
-        self.port.write_byte_data(self.mcp1_address, OLATA, byte1)
-        self.port.write_byte_data(self.mcp1_address, OLATB, byte2)
         self.port.write_byte_data(self.mcp0_address, OLATA, byte3)
+        self.port.write_byte_data(self.mcp0_address, OLATB, byte2)
+        self.port.write_byte_data(self.mcp1_address, OLATA, byte1)
+        self.port.write_byte_data(self.mcp1_address, OLATB, byte0)
 
     def valves_on(self, signals):
         """Get the signals, transform them to numeric value and send
