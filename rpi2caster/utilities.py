@@ -257,7 +257,7 @@ class Casting(TypesettingContext):
                 UI.display('By default cast a line filled with spaces.')
                 galley_units = self.measure.units - 2 * self.quad.units
                 qty = UI.enter('How many spaces?', int(galley_units // width))
-                yield d.QueueItem(space, round(width, 2), qty, False)
+                yield d.QueueItem(space, round(width, 2), qty)
 
         def typecases():
             """generates a sequence of items for characters in a language"""
@@ -287,7 +287,7 @@ class Casting(TypesettingContext):
                     # at this point we have a matrix
                     mat_units = self.get_units(matrix)
                     units = round(mat_units, 2)
-                    yield d.QueueItem(matrix, units, qty, qty >= 10)
+                    yield d.QueueItem(matrix, units, qty)
 
         def sorts():
             """define sorts (character, width) manually
@@ -299,7 +299,7 @@ class Casting(TypesettingContext):
                                        set_width=self.wedge.set_width).units
                 qty = UI.enter('How many sorts?', default=10, minimum=0)
                 # ready to deliver
-                yield d.QueueItem(matrix, round(units, 2), qty, qty >= 10)
+                yield d.QueueItem(matrix, round(units, 2), qty)
 
         def choose_source():
             """choose a character generator"""
@@ -341,16 +341,25 @@ class Casting(TypesettingContext):
                 # if the generator yields None first, try again
                 queue_item = next(queue) or next(queue)
                 sorts_left = queue_item.qty
-                cooldown = queue_item.cooldown
                 matrix, units = queue_item.matrix, queue_item.units
                 # some info for the user
-                cd_message = 'with cooldown' if cooldown else ''
-                UI.display('{} × {} at {} units, {}'
-                           .format(sorts_left, matrix, units, cd_message))
+                UI.display('{} × {} at {} units'
+                           .format(sorts_left, matrix, units))
                 # get code and wedge positions for the item
                 positions = self.get_wedge_positions(matrix, units)
                 record = matrix.get_ribbon_record(s_needle=positions != (3, 8))
-                return record, units, positions, sorts_left, cooldown
+                return record, units, positions, sorts_left
+
+            def fill_line():
+                """fill the line with quads, then spaces"""
+                nonlocal units_left
+                # add quads (one extra - last quad in the row)
+                n_quads = 1 + int(units_left // self.quad.units)
+                units_left %= self.quad.units
+                # add spaces
+                n_spaces = int(units_left // self.space.units)
+                # spaces first, quads next
+                return [*[space] * n_spaces, *[quad] * n_quads]
 
             def start_line():
                 """new line"""
@@ -379,35 +388,15 @@ class Casting(TypesettingContext):
                                'NJS 0005 {}'.format(fine)])
                 return quads + sjust
 
-            def fill_line():
-                """fill the line with quads, then spaces"""
-                nonlocal units_left
-                # add quads (one extra - last quad in the row)
-                n_quads = 1 + int(units_left // self.quad.units)
-                units_left %= self.quad.units
-                # add spaces
-                n_spaces = int(units_left // self.space.units)
-                # spaces first, quads next
-                return [*[quad] * n_quads, *[space] * n_spaces]
-
             def add_code():
                 """add codes to a ribbon, updating the number in the process"""
                 nonlocal units_left, sorts_left
-                # how many can we add at a time?
-                space_units = self.space.units
-                step = ([space, record]
-                        if cooldown and units_left >= units + space_units
-                        else [record])
-                # how many units does the step need?
-                u_delta = (units + space_units
-                           if cooldown and units_left >= units + space_units
-                           else units)
                 # how many can we fit in the line? (until we've cast all)
-                number = int(min(units_left // u_delta, sorts_left))
+                number = int(min(units_left // units, sorts_left))
                 # update counters
                 sorts_left -= number
-                units_left -= number * u_delta
-                return step * number
+                units_left -= number * units
+                return [record] * number
 
             # em-quad and space for filling the line
             quad = self.quad.get_ribbon_record()
@@ -416,7 +405,7 @@ class Casting(TypesettingContext):
             units_left = self.measure.units - 2 * self.quad.units
             # get the first matrix
             # (if StopIteration is raised, no casting)
-            record, units, wedges, sorts_left, cooldown = new_mat()
+            record, units, wedges, sorts_left = new_mat()
             # first to set / last to cast last line out
             yield ['NJS 0005', 'NKJS 0005 0075', quad]
             # keep adding these characters
@@ -430,7 +419,7 @@ class Casting(TypesettingContext):
                     # we're out of sorts... next character
                     try:
                         yield changeover()
-                        record, units, wedges, sorts_left, cooldown = new_mat()
+                        record, units, wedges, sorts_left = new_mat()
                     except StopIteration:
                         # no more characters => fill the line and finish
                         # those are the first characters to cast

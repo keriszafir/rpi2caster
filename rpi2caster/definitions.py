@@ -9,7 +9,7 @@ MatrixSize = namedtuple('MatrixSize', 'horizontal vertical')
 MatrixRecord = namedtuple('MatrixRecord', 'char styles code units')
 WedgePositions = namedtuple('WedgePositions', 'pos_0075 pos_0005')
 WedgeLimits = namedtuple('WedgeLimits', 'shrink stretch')
-QueueItem = namedtuple('QueueItem', 'matrix units qty cooldown')
+QueueItem = namedtuple('QueueItem', 'matrix units qty')
 
 # typeface metadata definition
 Typeface = namedtuple('Typeface', 'raw ids uas styles text')
