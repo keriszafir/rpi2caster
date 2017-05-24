@@ -350,29 +350,38 @@ class Casting(TypesettingContext):
                 record = matrix.get_ribbon_record(s_needle=positions != (3, 8))
                 return record, units, positions, sorts_left
 
-            def fill_line():
+            def newline():
                 """fill the line with quads, then spaces"""
                 nonlocal units_left
+                # single justification for the characters
+                coarse, fine = wedges
+                char_justification = ['NKS 0075 {}'.format(coarse),
+                                      'NJS 0005 {}'.format(fine)]
+
                 # add quads (one extra - last quad in the row)
                 n_quads = 1 + int(units_left // self.quad.units)
                 units_left %= self.quad.units
                 # add spaces
                 n_spaces = int(units_left // self.space.units)
-                # spaces first, quads next
-                return [*[space] * n_spaces, *[quad] * n_quads]
-
-            def start_line():
-                """new line"""
-                nonlocal units_left
-                units_left = self.measure.units - 2 * self.quad.units
-                coarse, fine = wedges
+                units_left %= self.space.units
+                # variable space to adjust the width
+                mat = self.find_space(units=units_left)
+                var_space = mat.get_ribbon_record(s_needle=wedges != (3, 8))
+                coarse, fine = self.get_wedge_positions(mat, units_left)
+                # double justification sets the initial space width
                 if coarse == fine:
                     # single code is enough
-                    return [quad, 'NKJS 0005 0075 {}'.format(fine), quad]
+                    space_justification = ['NKJS 0005 0075 {}'.format(fine)]
                 else:
-                    # double justification
-                    return [quad, 'NKS 0075 {}'.format(coarse),
-                            'NKJS 0005 0075 {}'.format(fine), quad]
+                    space_justification = ['NKS 0075 {}'.format(coarse),
+                                           'NKJS 0005 0075 {}'.format(fine)]
+
+                units_left = self.measure.units - 2 * self.quad.units
+                # single justification (for type), fillup spaces & quads,
+                # double justification (for space), initial quad on new line
+                return [*char_justification,
+                        *[space] * n_spaces, var_space, *[quad] * n_quads,
+                        *space_justification, quad]
 
             def changeover():
                 """use single-justification (0005+0075) to adjust wedges"""
@@ -386,7 +395,7 @@ class Casting(TypesettingContext):
                          else ['NKS 0075 {}'.format(fine)] if fine == coarse
                          else ['NKS 0075 {}'.format(coarse),
                                'NJS 0005 {}'.format(fine)])
-                return quads + sjust
+                return [*quads, *sjust]
 
             def add_code():
                 """add codes to a ribbon, updating the number in the process"""
@@ -413,8 +422,7 @@ class Casting(TypesettingContext):
                 yield add_code()
                 if sorts_left:
                     # still more to go...
-                    yield fill_line()
-                    yield start_line()
+                    yield newline()
                 else:
                     # we're out of sorts... next character
                     try:
@@ -423,8 +431,7 @@ class Casting(TypesettingContext):
                     except StopIteration:
                         # no more characters => fill the line and finish
                         # those are the first characters to cast
-                        yield fill_line()
-                        yield start_line()
+                        yield newline()
                         break
                     except (bm.TypesettingError, bm.MatrixNotFound) as exc:
                         UI.display('{}, omitting'.format(exc))
