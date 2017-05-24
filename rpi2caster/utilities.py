@@ -361,10 +361,16 @@ class Casting(TypesettingContext):
                 # add quads (one extra - last quad in the row)
                 n_quads = 1 + int(units_left // self.quad.units)
                 units_left %= self.quad.units
-                # variable space to adjust the width
-                mat = self.find_space(units=units_left)
-                var_space = mat.get_ribbon_record(s_needle=wedges != (3, 8))
-                coarse, fine = self.get_wedge_positions(mat, units_left)
+                try:
+                    # variable space to adjust the width
+                    mat = self.find_space(units=units_left)
+                    coarse, fine = self.get_wedge_positions(mat, units_left)
+                    use_s_needle = (coarse, fine) != (3, 8)
+                    var_space = [mat.get_ribbon_record(s_needle=use_s_needle)]
+                except bm.MatrixNotFound:
+                    var_space = []
+                    # no space to justify = just 0075+0005+NKJ
+                    coarse, fine = '', ''
                 # double justification sets the initial space width
                 if coarse == fine:
                     # single code is enough
@@ -376,7 +382,7 @@ class Casting(TypesettingContext):
                 units_left = self.measure.units - 2 * self.quad.units
                 # single justification (for type), fillup spaces & quads,
                 # double justification (for space), initial quad on new line
-                return [*char_justification, var_space, *[quad] * n_quads,
+                return [*char_justification, *var_space, *[quad] * n_quads,
                         *space_justification, quad]
 
             def changeover():
