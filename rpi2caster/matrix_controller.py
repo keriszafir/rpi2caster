@@ -5,7 +5,6 @@ import csv
 from collections import OrderedDict
 from contextlib import suppress
 from functools import partial, wraps
-from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import USER_DATA_DIR, CFG
 from .data import TYPEFACES as TF, UNIT_ARRANGEMENTS as UA
@@ -149,7 +148,7 @@ def get_all_diecases():
         rows = query.order_by(Diecase.diecase_id).all()
         enumerated_diecases = enumerate(rows, start=1)
         return OrderedDict(enumerated_diecases)
-    except orm_exc.NoResultFound:
+    except Diecase.DoesNotExist:
         return {}
 
 
@@ -187,7 +186,7 @@ def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
 def get_diecase(diecase_id=None, fallback=choose_diecase):
     """Get a diecase with given parameters"""
     if diecase_id:
-        with suppress(orm_exc.NoResultFound):
+        with suppress(Diecase.DoesNotExist):
             query = DB.session.query(Diecase)
             rows = query.filter(Diecase.diecase_id == diecase_id)
             return rows.one()

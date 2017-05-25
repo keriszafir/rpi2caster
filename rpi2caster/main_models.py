@@ -8,6 +8,7 @@ import json
 
 import sqlalchemy as sa
 from sqlalchemy import orm
+from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.ext.declarative import declarative_base
 
 from . import basic_models as bm
@@ -17,6 +18,7 @@ from .misc import MQ, weakref_singleton
 from . import definitions as d, parsing as p
 # make sqlalchemy use declarative base
 BASE = declarative_base()
+BASE.DoesNotExist = NoResultFound
 
 
 class Diecase(BASE):

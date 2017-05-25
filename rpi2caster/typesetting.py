@@ -3,7 +3,6 @@
 
 from collections import OrderedDict
 from contextlib import suppress
-from sqlalchemy.orm import exc as orm_exc
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .config import CFG
 from .main_models import DB, Ribbon
@@ -65,7 +64,7 @@ def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
     try:
         rows = DB.session.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id)
         return rows.one()
-    except orm_exc.NoResultFound:
+    except Ribbon.DoesNotExist:
         return fallback()
 
 
