@@ -21,13 +21,6 @@
 
 from .rpi2caster import main
 
-MODULES = ['basic_models', 'basic_controllers', 'casting_models', 'config',
-           'data', 'datatypes', 'definitions', 'main_models',
-           'matrix_controller', 'misc', 'monotype', 'parsing', 'rpi2caster',
-           'typesetting', 'typesetting_funcs', 'ui', 'utilities']
-
-__all__ = MODULES
-
 __version__ = '0.7.dev1'
 
 __author__ = 'Krzysztof Słychań'
