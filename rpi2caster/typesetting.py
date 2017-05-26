@@ -15,9 +15,10 @@ PREFS_CFG = CFG.preferences
 
 # Ribbon control routines
 
+@DB
 def get_all_ribbons():
     """Lists all ribbons we have."""
-    rows = DB.session.query(Ribbon).all()
+    rows = Ribbon.select().order_by(Ribbon.ribbon_id)
     ribbons = OrderedDict(enumerate(rows, start=1))
     return ribbons
 
@@ -59,13 +60,14 @@ def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
     return data.get(choice) or fallback()
 
 
+@DB
 def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
     """Get a ribbon with given ribbon_id"""
-    try:
-        rows = DB.session.query(Ribbon).filter(Ribbon.ribbon_id == ribbon_id)
-        return rows.one()
-    except Ribbon.DoesNotExist:
-        return fallback()
+    if ribbon_id:
+        with suppress(Ribbon.DoesNotExist):
+            return Ribbon.get(Ribbon.ribbon_id == ribbon_id)
+        UI.display('Ribbon {} not found in database!'.format(ribbon_id))
+    return fallback()
 
 
 class RibbonMixin:

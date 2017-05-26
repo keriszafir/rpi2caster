@@ -141,11 +141,11 @@ def edit_typeface(diecase):
         diecase.diecase_id = diecase_id
 
 
+@DB
 def get_all_diecases():
     """Lists all matrix cases we have."""
     try:
-        query = DB.session.query(Diecase)
-        rows = query.order_by(Diecase.diecase_id).all()
+        rows = Diecase.select().order_by(Diecase.diecase_id)
         enumerated_diecases = enumerate(rows, start=1)
         return OrderedDict(enumerated_diecases)
     except Diecase.DoesNotExist:
@@ -183,13 +183,12 @@ def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
     return data.get(choice) or fallback()
 
 
+@DB
 def get_diecase(diecase_id=None, fallback=choose_diecase):
     """Get a diecase with given parameters"""
     if diecase_id:
         with suppress(Diecase.DoesNotExist):
-            query = DB.session.query(Diecase)
-            rows = query.filter(Diecase.diecase_id == diecase_id)
-            return rows.one()
+            return Diecase.get(Diecase.diecase_id == diecase_id)
         UI.display('Diecase {} not found in database!'.format(diecase_id))
     return fallback()
 
@@ -680,20 +679,20 @@ class DiecaseMixin:
 
     def diecase_manipulation(self):
         """A menu with all operations on a diecase"""
+        @DB
         def _save():
             """Stores the matrix case definition/layout in database"""
             self.diecase.store_layout()
-            DB.session.add(self.diecase)
-            DB.session.commit()
+            self.diecase.save()
             UI.pause('Data saved.')
 
+        @DB
         def _delete():
             """Deletes a diecase from database"""
             prompt = 'Are you sure?'
             ans = UI.confirm(prompt, default=False, abort_answer=False)
             if ans:
-                DB.session.delete(self.diecase)
-                DB.session.commit()
+                self.diecase.delete_instance()
                 UI.pause('Matrix case deleted.')
 
         def _edit_typeface():

@@ -3,32 +3,92 @@
 
 from collections import OrderedDict
 from contextlib import suppress
+from functools import wraps
 from itertools import chain
 import json
 
-import sqlalchemy as sa
-from sqlalchemy import orm
-from sqlalchemy.orm.exc import NoResultFound
-from sqlalchemy.ext.declarative import declarative_base
+import peewee as pw
+from playhouse import db_url
 
 from . import basic_models as bm
 from .config import CFG
 from .data import TYPEFACES as TF
-from .misc import MQ, weakref_singleton
+from .misc import MQ
 from . import definitions as d, parsing as p
-# make sqlalchemy use declarative base
-BASE = declarative_base()
-BASE.DoesNotExist = NoResultFound
 
 
-class Diecase(BASE):
+class Database(pw.Proxy):
+    """Database object sitting on top of Peewee"""
+    def __init__(self, url=''):
+        super().__init__()
+        database_url = url or CFG.get_option('database_url')
+        MQ.subscribe(self, 'database')
+        self.setup(database_url)
+
+    def __call__(self, routine):
+        @wraps(routine)
+        def wrapper(*args, **kwargs):
+            """decorator for routines needing database connection"""
+            with self:
+                retval = routine(*args, **kwargs)
+            return retval
+
+        return wrapper
+
+    def __enter__(self):
+        """context manager for routines needing database connection"""
+        with suppress(pw.OperationalError):
+            self.connect()
+        return self
+
+    def __exit__(self, *_):
+        with suppress(pw.OperationalError):
+            self.close()
+
+    def update(self, source=None):
+        """Update the connection parameters"""
+        with suppress(AttributeError):
+            url = source.get('url') or CFG.get_option('database_url')
+            self.setup(url)
+
+    def setup(self, url):
+        """New database session"""
+        base = db_url.connect(url)
+        self.initialize(base)
+
+    def new_database(self):
+        """Create the tables for models"""
+        self.create_tables([Diecase, Ribbon], safe=True)
+
+
+DB = Database()
+
+
+class BaseModel(pw.Model):
+    """Base class for all models"""
+    class Meta:
+        """Database metadata"""
+        database = DB
+
+        def db_table_func(self):
+            """get a table name for a model"""
+            try:
+                model_name = self.__name__
+            except AttributeError:
+                model_name = self.__class__.__name__
+            tables = dict(Diecase='matrix_cases', Ribbon='ribbons')
+            return tables.get(model_name) or '{}s'.format(model_name.lower())
+
+
+class Diecase(BaseModel):
     """Diecase: matrix case attributes and operations"""
-    __tablename__ = 'matrix_cases'
-    diecase_id = sa.Column('diecase_id', sa.Text, primary_key=True)
-    _typeface = sa.Column('typeface', sa.Text)
-    _wedge_name = sa.Column('wedge_name', sa.Text,
-                            nullable=False, default='S5-12E')
-    _layout_json = sa.Column('layout', sa.Text, nullable=False)
+    diecase_id = pw.TextField(db_column='diecase_id', primary_key=True)
+    _typeface = pw.TextField(db_column='typeface', null=True,
+                             help_text='JSON-encoded typeface metadata')
+    _wedge_name = pw.TextField(db_column='wedge_name', default='S5-12E',
+                               help_text='wedge series and set width')
+    _layout_json = pw.TextField(db_column='layout',
+                                help_text='JSON-encoded diecase layout')
     _wedge, _layout = None, None
 
     def __iter__(self):
@@ -404,7 +464,7 @@ class DiecaseLayout:
         return [self.select_column(col) for col in self.size.column_numbers]
 
 
-class Ribbon(BASE):
+class Ribbon(BaseModel):
     """Ribbon objects - no matter whether files or database entries.
 
     A ribbon has the following attributes:
@@ -424,16 +484,15 @@ class Ribbon(BASE):
     export_to_file - store the metadata and contents in text file
     store_in_db - store the metadata and contents in db
     set_[description, customer, diecase_id] - set parameters manually"""
-    __tablename__ = 'ribbons'
-    ribbon_id = sa.Column('ribbon_id', sa.Text, primary_key=True,
-                          default='New Ribbon')
-    description = sa.Column('description', sa.Text, default='')
-    customer = sa.Column('customer', sa.Text, default='')
-    diecase_id = sa.Column('diecase_id', sa.Text,
-                           sa.schema.ForeignKey('matrix_cases.diecase_id'))
-    wedge_name = sa.Column('wedge_name', sa.Text, default='', nullable=False)
-    source_text = sa.Column('source_text', sa.Text, default='', nullable=False)
-    contents = sa.Column('contents', sa.Text, default='', nullable=False)
+    ribbon_id = pw.TextField(db_column='ribbon_id', primary_key=True,
+                             default='New Ribbon',
+                             help_text='Unique ribbon name')
+    description = pw.TextField(db_column='description', default='')
+    customer = pw.TextField(db_column='customer', default='')
+    diecase = pw.ForeignKeyField(Diecase)
+    wedge_name = pw.TextField(db_column='wedge_name', default='')
+    source_text = pw.TextField(db_column='source_text', default='')
+    contents = pw.TextField(db_column='contents', default='')
 
     def __iter__(self):
         return iter(self.contents)
@@ -495,53 +554,3 @@ class Ribbon(BASE):
             ribbon_file.write('wedge: ' + self.wedge_name)
             for line in self.contents:
                 ribbon_file.write(line)
-
-
-@weakref_singleton
-class Database:
-    """Database object sitting on top of SQLAlchemy"""
-    Session = orm.sessionmaker()
-
-    def __init__(self, url='', echo=False):
-        self.session, self.engine = None, None
-        self.url = url or CFG.get_option('database_url')
-        self.echo = echo
-        MQ.subscribe(self, 'database')
-        self.make_session()
-
-    def get_diecase(self, diecase_id):
-        """Get one diecase with given id; otherwise return empty"""
-        try:
-            query = self.session.query(Diecase)
-            objs = query.filter(Diecase.diecase_id == diecase_id)
-            return objs.one()
-        except orm.exc.NoResultFound:
-            return Diecase(diecase_id=diecase_id)
-
-    def get_ribbon(self, ribbon_id):
-        """Get one diecase with given id; otherwise return empty"""
-        try:
-            query = self.session.query(Ribbon)
-            objs = query.filter(Ribbon.ribbon_id == ribbon_id)
-            return objs.one()
-        except orm.exc.NoResultFound:
-            return Ribbon(ribbon_id=ribbon_id)
-
-    def update(self, source=None):
-        """Update the connection parameters"""
-        if source:
-            self.url = source.get('url') or self.url
-            # turn the sqlalchemy echo (i.e. debug) mode on or off
-            self.echo = source.get('debug', self.echo)
-            self.make_session()
-
-    def make_session(self):
-        """Allows to create a new database session"""
-        self.engine = sa.create_engine(self.url, echo=self.echo)
-        self.Session.configure(bind=self.engine)
-        BASE.metadata.create_all(bind=self.engine)
-        self.session = self.Session()
-
-
-# make exactly one instance of database
-DB = Database()
