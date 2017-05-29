@@ -527,7 +527,8 @@ def make_smbus_output():
 def make_interface(sensor_name, output_name):
     """Return a HardwareBackend namedtuple with sensor and driver"""
     sensors = {'sysfs': make_sysfs_sensor,
-               'gpio': make_gpio_sensor}
+               'gpio': make_gpio_sensor,
+               'rpi_gpio': make_gpio_sensor}
     outputs = {'smbus': make_smbus_output,
                'wiringpi': make_wiringpi_output}
     try:
