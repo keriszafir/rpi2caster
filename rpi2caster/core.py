@@ -13,12 +13,12 @@ try:
 except ImportError:
     qrcode = None
 
+from rpi2caster import UI, Abort, Finish, option
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .casting_models import Stats, Record
 from . import monotype
 from .matrix_controller import get_diecase, temp_diecase, DiecaseMixin
 from .typesetting import TypesettingContext
-from .ui import UI, Abort, Finish, option
 
 
 def cast_this(ribbon_source):
@@ -29,8 +29,9 @@ def cast_this(ribbon_source):
         ribbon = ribbon_source(self, *args, **kwargs)
         if not ribbon:
             return
-        proc = self.punch_ribbon if self.caster.punching else self.cast_ribbon
-        return proc(ribbon)
+        process = (self.punch_ribbon if self.runtime_config.punching
+                   else self.cast_ribbon)
+        return process(ribbon)
     return wrapper
 
 
@@ -46,10 +47,15 @@ class Casting(TypesettingContext):
     -testing the interface,
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
-
-    def __init__(self):
+    def __init__(self, runtime_config):
         # Caster for this job
-        self.caster = monotype.MonotypeCaster()
+        self.runtime_config = runtime_config
+        self.machine = monotype.MonotypeCaster(runtime_config)
+        self.wedge_name = runtime_config.wedge_name
+        self.diecase_id = runtime_config.diecase_id
+        self.measure = runtime_config.measure
+        with suppress(FileNotFoundError, PermissionError, IOError):
+            self.ribbon_file = runtime_config.ribbon
 
     def punch_ribbon(self, ribbon):
         """Punch the ribbon from start to end"""
@@ -158,7 +164,7 @@ class Casting(TypesettingContext):
             # in the output combination as O15
             for item in queue:
                 UI.clear()
-                record = Record(item, row_16_mode=machine.row_16_mode)
+                record = Record(item, row_16_mode=self.machine.row_16_mode)
                 # check if signal will be cast at all
                 if not record.code.has_signals:
                     UI.display_header(record.comment)
@@ -166,11 +172,10 @@ class Casting(TypesettingContext):
                 # display some info and cast the signals
                 stats.update(record=record)
                 UI.display_parameters(stats.code_parameters)
-                machine.cast_one(record)
+                self.machine.cast_one(record)
 
-        # Helpful aliases
-        machine = self.caster
-        stats = Stats(machine)
+        # setup the statistics engine
+        stats = Stats(self.machine)
         # Ribbon pre-processing and casting parameters setup
         queue = rewind_if_needed(ribbon)
         stats.update(ribbon=ribbon)
@@ -191,7 +196,7 @@ class Casting(TypesettingContext):
             # Cast the run and check if it was successful
             try:
                 # use caster context i.e. check if machine is running first
-                with machine:
+                with self.machine:
                     # this part will be cast only once
                     cast_queue(extra_quads)
                     # proper queue with characters
@@ -200,7 +205,7 @@ class Casting(TypesettingContext):
                 if not stats.get_runs_left():
                     # make sure the machine will check
                     # whether it's running next time
-                    machine.working = False
+                    self.machine.working = False
                     # user might want to re-run this
                     prm = 'Casting successfully finished. Any more runs?'
                     stats.update(runs=UI.enter(prm, default=0, minimum=0))
@@ -657,23 +662,21 @@ class Casting(TypesettingContext):
 
     def main_menu(self):
         """Main menu for the type casting utility."""
-        machine = self.caster
+        punching = self.runtime_config.punching
         hdr = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                'for Monotype Composition or Type and Rule casters.\n\n'
                'This program reads a ribbon (from file or database) '
                'and casts the type on a composition caster.'
                '\n\n{} Menu:')
-        header = hdr.format('Punching' if machine.punching else 'Casting')
+        header = hdr.format('Punching' if punching else 'Casting')
 
         options = [option(key='c', value=self.cast_composition, seq=10,
-                          cond=lambda: (not machine.punching and
-                                        bool(self.ribbon)),
+                          cond=lambda: (not punching and bool(self.ribbon)),
                           text='Cast composition',
                           desc='Cast type from a selected ribbon'),
 
                    option(key='p', value=self.cast_composition, seq=10,
-                          cond=lambda: (machine.punching and
-                                        bool(self.ribbon)),
+                          cond=lambda: (punching and bool(self.ribbon)),
                           text='Punch ribbon',
                           desc='Punch a paper ribbon for casting'),
 
@@ -703,7 +706,7 @@ class Casting(TypesettingContext):
                           desc='Compose and cast a line of text'),
 
                    option(key='h', value=self.cast_material, seq=60,
-                          cond=lambda: not machine.punching,
+                          cond=lambda: not punching,
                           text='Cast handsetting material',
                           desc='Cast sorts, spaces and typecases'),
 
@@ -712,11 +715,11 @@ class Casting(TypesettingContext):
                           desc='Cast QR codes from high and low spaces'),
 
                    option(key='F5', value=self.display_details, seq=85,
-                          cond=lambda: not machine.punching,
+                          cond=lambda: not punching,
                           text='Show details...',
                           desc='Display ribbon, diecase and wedge info'),
                    option(key='F5', value=self.display_details, seq=85,
-                          cond=lambda: machine.punching,
+                          cond=lambda: punching,
                           text='Show details...',
                           desc='Display ribbon and interface details'),
 
@@ -727,7 +730,7 @@ class Casting(TypesettingContext):
                           text='Diecase proof',
                           desc='Cast every character from the diecase'),
 
-                   option(key='F8', value=self.caster.diagnostics, seq=95,
+                   option(key='F8', value=self.machine.diagnostics, seq=95,
                           text='Diagnostics menu...',
                           desc='Interface and machine diagnostic functions')]
 
@@ -738,12 +741,12 @@ class Casting(TypesettingContext):
 
     def display_details(self):
         """Collect ribbon, diecase and wedge data here"""
-        ribbon, casting = self.ribbon, not self.caster.punching
+        ribbon, casting = self.ribbon, not self.runtime_config.punching
         diecase, wedge = self.diecase, self.wedge
         data = [ribbon.parameters if ribbon else {},
                 diecase.parameters if diecase and casting else {},
                 wedge.parameters if wedge and casting else {},
-                self.caster.parameters]
+                self.machine.parameters]
         UI.display_parameters(*data)
         UI.pause()
 

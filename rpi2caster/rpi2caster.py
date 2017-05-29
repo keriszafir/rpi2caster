@@ -1,112 +1,322 @@
 # -*- coding: utf-8 -*-
-"""rpi2caster - top-level script for starting the components"""
+"""
+    rpi2caster is a CAT (computer-aided typesetting) software
+    for the Monotype composition caster (a hot-metal typesetting machine).
+
+    This project uses a control interface for 31/32 solenoid valves
+    and a machine cycle sensor. It can control a casting machine
+    or a pneumatic paper tape perforator from the Monotype keyboard.
+
+    The rpi2caster package consists of three main utilities:
+        * machine control,
+        * typesetting,
+        * inventory management.
+
+    Machine control utility also serves as a diagnostic program
+    for calibrating and testing the machine and control interface.
+
+    For usage info, run `rpi2caster --help`
+
+"""
+import configparser as cp
+from contextlib import suppress
+from functools import wraps
+import json
 from os import system
-from sys import argv
-import argparse
-from .ui import UI, Abort, Finish, option
-from .misc import MQ
-from . import utilities
+
+import click
+import peewee as pw
+from playhouse import db_url
+
+from . import datatypes as dt, definitions as d, drivers
+from .ui import ClickUI, Abort, Finish, option
+
+# global package-wide declarations
+__version__ = '0.7.dev1'
+__author__ = 'Krzysztof Słychań'
 
 
-def casting_job(args):
-    """Casting on an actual caster or simulation"""
-    session = utilities.Casting()
-    session.ribbon_file = args.ribbon_file
-    session.text_file = args.text_file
-    session.source = args.input_text
-    session.ribbon_id = args.ribbon_id
-    session.diecase_id = args.diecase_id
-    session.wedge_name = args.wedge_name
-    session.manual_mode = args.manual_mode
-    session.line_length = args.measure
-    session.caster.simulation = args.simulation or None
-    session.caster.punching = args.punching
-    # Method dispatcher
-    # Skip menu if casting directly, typesetting or testing
-    if args.input_text:
-        # TODO use object properties instead of arguments/parameters
-        session.quick_typesetting()
-    elif args.direct:
-        session.cast_composition()
-    elif args.testing:
-        session.caster.diagnostics()
-    else:
-        session.main_menu()
+# Paths: user's local settings and data directory, user's config file...
+USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
+USER_CFG_PATH = '{}/rpi2caster.conf'.format(USER_DATA_DIR)
+# database URL (sqlite, mysql, postgres etc.)
+USER_DB_URL = 'sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR)
 
 
-def typesetting_job(args):
-    """Text to ribbon translation and justification"""
-    session = utilities.Typesetting()
-    session.text_file = args.text_file
-    session.input_text = args.input_text
-    session.ribbon_file = args.ribbon_file
-    session.ribbon_id = args.ribbon_id
-    session.diecase_id = args.diecase_id
-    session.wedge_name = args.wedge_name
-    session.manual_mode = args.manual_mode
-    session.line_length = args.measure
-    # Only one method here
-    session.main_menu()
+class StaticConfig(cp.ConfigParser):
+    """Configuration manager based on ConfigParser"""
+    # use custom names for on and off states
+    BOOLEAN_STATES = {name: True for name in dt.TRUE_ALIASES}
+    BOOLEAN_STATES.update({name: False for name in dt.FALSE_ALIASES})
+
+    def __init__(self, config_path=USER_CFG_PATH):
+        super().__init__()
+        self.load(config_path)
+
+    def load(self, config_path):
+        """Loads a config file"""
+        self.read([*d.GLOBAL_CFG_PATHS, config_path])
+
+    def reset(self):
+        """Resets the config to default values"""
+        # Populate data with defaults; convert all names to lowercase
+        self.read_dict(d.DEFAULTS, 'defaults')
+
+    def save(self, file=None):
+        """Save the configuration to file"""
+        if not file:
+            return
+        self.write(file)
+
+    def get_option(self, option_name='', default=None,
+                   minimum=None, maximum=None):
+        """Get an option value."""
+
+        # get the first match for this option name or its aliases
+        matching_options = self.matching_options_generator(option_name)
+        value = next(matching_options)
+
+        # take a default value argument into account, if it was specified
+        default_value = default or d.DEFAULTS.get(option_name)
+
+        # coerce the string into the default value datatype, validate limits
+        return dt.convert_and_validate(value, default_value,
+                                       minimum=minimum, maximum=maximum)
+
+    def get_many(self, **kwargs):
+        """Get multiple options by keyword arguments:
+            (key1=option1, key2=option2...) -> {key1: option_value_1,
+                                                key2: option_value_2...}
+        """
+        return {key: self.get_option(option) for key, option in kwargs.items()}
+
+    def set_option(self, option_name, value, section_name=None):
+        """Set an option to a given value"""
+        section, cfg_option = section_name.lower(), option_name.lower()
+        if section:
+            self.set(section, cfg_option, value)
+        else:
+            self.set('default', cfg_option, value)
+
+    def to_json(self, include_defaults=False):
+        """Dump the config to json"""
+        dump = {section: {option: value}
+                for section, sect_options in self.items()
+                for option, value in sect_options.items()}
+        if include_defaults:
+            dump['default'] = {option: dt.convert(value, str)
+                               for option, value in d.DEFAULTS.items()}
+        return json.dumps(dump, indent=4)
+
+    def from_json(self, json_dump):
+        """Load the config dump from json"""
+        dump = json.loads(json_dump)
+        self.read_dict(dump)
+
+    @property
+    def interface(self):
+        """Return the interface configuration"""
+        data = self.get_many(sensor='sensor', output='output',
+                             simulation='simulation', punching='punching',
+                             parallel='parallel', sensor_gpio='sensor_gpio',
+                             emergency_stop_gpio='emergency_stop_gpio',
+                             signals_arrangement='signals',
+                             mcp0='mcp0', mcp1='mcp1', pin_base='pin_base',
+                             i2c_bus='i2c_bus', bounce_time='bounce_time')
+        return d.Interface(**data)
+
+    @property
+    def preferences(self):
+        """Return the typesetting preferences configuration"""
+        data = self.get_many(default_measure='default_measure',
+                             measurement_unit='measurement_unit')
+        return d.Preferences(**data)
+
+    def matching_options_generator(self, option_name):
+        """Look for an option in ConfigParser object, including aliases,
+        if the option is not found in any section, get a default value."""
+        for section in self.sections():
+            # get all possible names for the desired option
+            option_names = [option_name, *d.ALIASES.get(option_name, ())]
+            for name in option_names:
+                try:
+                    candidate = self[section][name]
+                    yield candidate
+                except (cp.NoSectionError, cp.NoOptionError, KeyError):
+                    continue
+        # option was defined nowhere => use a default one
+        # or raise NoOptionError if it fails
+        yield d.DEFAULTS.get(option_name)
 
 
-def update(args):
-    """Updates the software"""
-    # Upgrade routine
-    dev_prompt = 'Testing version (newest features, but unstable)? '
-    if UI.confirm('Update the software?', default=False):
-        use_dev_version = (args.testing or
-                           UI.confirm(dev_prompt, default=False))
-        pre = '--pre' if use_dev_version else ''
-        print('You may be asked for the admin password...')
-        system('sudo pip3 install {} --upgrade rpi2caster'.format(pre))
+class RuntimeConfig:
+    """runtime config for rpi2caster"""
+    _simulation = False
 
+    def __init__(self, punching=False, simulation=False, measure=None,
+                 diecase_id=None, wedge_name=None, ribbon=None):
+        self.punching = punching
+        self.diecase_id = diecase_id
+        self.wedge_name = wedge_name
+        self.measure = measure
+        self.ribbon = ribbon
+        # set the simulation mode according to command line parameter
+        # or configuration
+        simulation_mode = (simulation or CFG.interface.simulation or
+                           CFG.interface.sensor == 'simulation' or
+                           CFG.interface.output == 'simulation')
+        self.simulation = simulation_mode
 
-def inventory(args):
-    """Inventory management - diecase manipulation etc."""
-    from . import matrix_controller
-    if args.list_diecases:
-        # Just show what we have
-        matrix_controller.list_diecases()
-    else:
-        # edit diecase (or choose, if failed)
-        utilities.InventoryManagement(args.diecase_id)
-
-
-def meow(_):
-    "Easter egg"
-    try:
-        from .resources import easteregg
-        easteregg.show()
-    except (OSError, ImportError, FileNotFoundError):
-        print('There are no Easter Eggs in this program.')
-
-
-def show_version(_):
-    "Show the rpi2caster version"
-    from . import __version__
-    print('rpi2caster v{}'.format(__version__))
-
-
-def main_menu(args):
-    """Main menu - choose the module"""
-    def toggle_punching(args):
+    def toggle_punching(self):
         """Switch between punching and casting modes"""
-        args.punching = not args.punching
+        self.punching = not self.punching
 
-    def toggle_simulation(args):
+    def toggle_simulation(self):
         """Switch between simulation and casting/punching modes"""
-        args.simulation = not args.simulation
+        self.simulation = not self.simulation
 
+    @property
+    def simulation(self):
+        """check whether the software runs in simulation mode"""
+        return self._simulation
+
+    @simulation.setter
+    def simulation(self, status):
+        """choose simulation interface if True, else hardware interface"""
+        if status:
+            self._simulation = True
+            self.interface = drivers.make_simulation_interface()
+        elif CFG.interface.parallel:
+            # special interface for Symbiosys parallel port driver
+            self.interface = drivers.make_parallel_interface()
+            self._simulation = False
+        else:
+            try:
+                # put an interface together from sensor and driver
+                sensor = CFG.interface.sensor
+                output = CFG.interface.output
+                self.interface = drivers.make_interface(sensor, output)
+                self._simulation = False
+            except (NameError, ImportError):
+                UI.confirm('Hardware interface unavailable. Use simulation?',
+                           abort_answer=False)
+                self.simulation = True
+
+
+class DBProxy(pw.Proxy):
+    """Database object sitting on top of Peewee"""
+    def __init__(self, url=USER_DB_URL):
+        super().__init__()
+        self.load(url)
+
+    def __call__(self, routine):
+        @wraps(routine)
+        def wrapper(*args, **kwargs):
+            """decorator for routines needing database connection"""
+            with self:
+                retval = routine(*args, **kwargs)
+            return retval
+
+        return wrapper
+
+    def __enter__(self):
+        """context manager for routines needing database connection"""
+        with suppress(pw.OperationalError):
+            self.connect()
+        return self
+
+    def __exit__(self, *_):
+        with suppress(pw.OperationalError):
+            self.close()
+
+    def load(self, url):
+        """New database session"""
+        base = db_url.connect(url)
+        self.initialize(base)
+
+
+class UIProxy(object):
+    """UI abstraction layer"""
+    impl = ClickUI()
+    implementations = {'text_ui': ClickUI,
+                       'click': ClickUI}
+
+    def __init__(self, impl='click', verbosity=0):
+        self.load(impl, verbosity)
+
+    def __getattr__(self, name):
+        result = getattr(self.impl, name)
+        if result is None:
+            raise NameError('{implementation} has no function named {function}'
+                            .format(implementation=self.impl.__name__,
+                                    function=name))
+        else:
+            return result
+
+    def get_name(self):
+        """Get the underlying user interface implementation's name."""
+        return self.impl.__name__
+
+    def load(self, implementation, verbosity):
+        """Load another user interface implementation"""
+        impl = self.implementations.get(implementation, ClickUI)
+        self.impl = impl(verbosity)
+
+
+DB, CFG, UI = DBProxy(), StaticConfig(), UIProxy()
+pass_runtime_config = click.make_pass_decorator(RuntimeConfig, ensure=True)
+
+
+@click.group(invoke_without_command=True)
+@click.option('--verbosity', '-v', count=True, default=0,
+              help='verbose mode')
+@click.option('--conffile', '-c', default=USER_CFG_PATH, show_default=True,
+              help='config file to use')
+@click.option('--database', '-d', default=USER_DB_URL, show_default=True,
+              metavar='URL', help='database URL to use')
+@click.option('--web', '-W', 'ui_impl', flag_value='web_ui',
+              help='use web user interface (not implemented)')
+@click.option('--text', '-T', 'ui_impl', flag_value='text_ui',
+              default=True, help='use text user interface')
+@click.option('--diecase', '-m', metavar='diecase ID',
+              help='diecase ID from the database to use')
+@click.option('--wedge', '-w', metavar='[S]X...-Y[E]', help='wedge to use')
+@click.option('--measure', '-M', metavar='value, unit',
+              help='line length to use')
+@click.version_option(__version__)
+@click.pass_context
+def cli(ctx, conffile, database, verbosity, ui_impl, diecase, wedge, measure):
+    """command-line interface for rpi2caster"""
+    # update the database and configuration parameters
+    CFG.load(conffile)
+    DB.load(database)
+    UI.load(ui_impl, verbosity)
+    ctx.obj = RuntimeConfig(diecase_id=diecase, wedge_name=wedge,
+                            measure=measure)
+
+    try:
+        if not ctx.invoked_subcommand:
+            main_menu()
+        else:
+            return
+    except (Abort, Finish, KeyboardInterrupt):
+        UI.display('Goodbye!')
+
+
+@pass_runtime_config
+def main_menu(runtime_config):
+    """Main menu for rpi2caster"""
+    # main menu - choose the module
     header = ('rpi2caster - computer aided type casting for Monotype '
               'composition / type & rule casters.'
               '\n\nMain menu:\n')
-    options = [option(key='c', value=casting_job, seq=20,
-                      cond=lambda: not args.punching,
+    options = [option(key='c', value=cast, seq=20,
+                      cond=lambda: not runtime_config.punching,
                       text='Casting...',
-                      desc=('Cast composition, sorts, typecases or spaces; '
-                            'test the machine')),
-               option(key='c', value=toggle_punching, seq=70,
-                      cond=lambda: args.punching,
+                      desc=('Cast composition, sorts, typecases or spaces;'
+                            ' test the machine')),
+               option(key='c', value=runtime_config.toggle_punching, seq=70,
+                      cond=lambda: runtime_config.punching,
                       text='Switch to casting mode',
                       desc='Switch from punching to casting'),
 
@@ -114,199 +324,116 @@ def main_menu(args):
                       text='Diecase manipulation...',
                       desc='Manage the matrix case collection'),
 
-               option(key='p', value=casting_job, seq=20,
-                      cond=lambda: args.punching,
+               option(key='p', value=cast, seq=20,
+                      cond=lambda: runtime_config.punching,
                       text='Punching...',
                       desc='Punch a ribbon with a keyboard\'s perforator'),
-               option(key='p', value=toggle_punching, seq=70,
-                      cond=lambda: not args.punching,
+               option(key='p', value=runtime_config.toggle_punching, seq=70,
+                      cond=lambda: not runtime_config.punching,
                       text='Switch to perforation mode',
                       desc='Switch from casting to ribbon punching'),
 
-               option(key='s', value=toggle_simulation, seq=80,
-                      cond=lambda: not args.simulation,
+               option(key='s', value=runtime_config.toggle_simulation, seq=80,
+                      cond=lambda: not runtime_config.simulation,
                       text='Switch to simulation mode',
                       desc='Test casting without the caster or interface'),
-               option(key='s', value=toggle_simulation, seq=80,
-                      cond=lambda: args.simulation,
+               option(key='s', value=runtime_config.toggle_simulation, seq=80,
+                      cond=lambda: runtime_config.simulation,
                       text='Switch to machine control mode',
                       desc='Use a real Monotype caster or perforator'),
 
-               option(key='t', value=typesetting_job, seq=10,
+               option(key='t', value=translate, seq=10,
                       text='Typesetting...',
                       desc='Compose text for casting'),
 
                option(key='u', value=update,
                       text='Update the program', seq=90)]
 
-    UI.dynamic_menu(options, header, allow_abort=True, func_args=(args,))
+    UI.dynamic_menu(options, header, allow_abort=True)
 
 
-def main():
-    """Main function
+@cli.command()
+@click.option('--testing', '-T', is_flag=True, flag_value=True,
+              help='caster testing / diagnostics')
+@click.option('--material', '-h', is_flag=True, flag_value=True,
+              help='cast material for manual typesetting')
+@click.option('--punch', '-p', is_flag=True, flag_value=True,
+              help='ribbon perforation instead of casting')
+@click.option('--simulate', '-s', is_flag=True, flag_value=True,
+              show_default=True, help='simulation mode - no actual casting')
+@click.argument('ribbon', required=False, type=click.File('r'))
+@pass_runtime_config
+def cast(runtime_config, punch, simulate, testing, material, ribbon):
+    """Casting on an actual caster or simulation"""
+    from .core import Casting
+    runtime_config.punching, runtime_config.simulation = punch, simulate
+    runtime_config.ribbon = ribbon
+    _casting = Casting(runtime_config)
+    if material:
+        _casting.cast_material()
+    elif ribbon:
+        # cast ribbon directly - no need to go through the menu
+        _casting.cast_composition()
+    elif testing:
+        _casting.caster.diagnostics()
+    else:
+        _casting.main_menu()
 
-    Parse input options and decide which to run"""
-    def build_casting_parser():
-        """Define options for the casting parser"""
-        # Casting subparser
-        parser = cmds.add_parser('cast', aliases=['c'],
-                                 help=('Casting with a Monotype caster '
-                                       'or mockup caster for testing'))
-        # Choose specific diecase
-        parser.add_argument('-m', '--diecase', metavar='ID',
-                            dest='diecase_id',
-                            help='diecase ID for casting')
-        # Punch ribbon: uses different sensor, always adds O+15 to combinations
-        parser.add_argument('-p', '--punch', action='store_true',
-                            dest='punching',
-                            help='ribbon punching (perforation) mode')
-        # Simulation mode: casting/punching without the actual caster/interface
-        parser.add_argument('-s', '--simulation', action='store_true',
-                            help='simulation run instead of real casting')
-        # Entry point decides where the user starts the program
-        start = parser.add_mutually_exclusive_group()
-        # Starts in the diagnostics submenu of the casting program
-        start.add_argument('-T', '--test', action='store_true', dest='testing',
-                           help='caster / interface diagnostics')
-        # Allows to start casting right away without entering menu
-        start.add_argument('-D', '--direct', action="store_true",
-                           help='direct casting - no menu',)
-        # Quick typesetting feature
-        start.add_argument('-t', '--text', dest='input_text',
-                           metavar='"input text"',
-                           help=('compose and cast the '
-                                 'single- or double-quoted input text'))
-        # Choose specific wedge
-        parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
-                            help='wedge to use: [s]series-set_width[e]')
-        # Ribbon ID for choosing from database
-        parser.add_argument('-R', '--ribbon_id', metavar='R',
-                            help='ribbon ID to choose from database')
-        # Ribbon - input file specification
-        parser.add_argument('ribbon_file', metavar='ribbon', nargs='?',
-                            type=argparse.FileType('r', encoding='UTF-8'),
-                            help='ribbon file name')
-        parser.set_defaults(job=casting_job)
 
-    def build_typesetting_parser():
-        """Typesetting a.k.a. text translation options"""
-        parser = cmds.add_parser('translate', aliases=['t', 'set'],
-                                 help='Typesetting program')
-        # Choose diecase layout
-        parser.add_argument('-m', '--diecase', dest='diecase_id', metavar='ID',
-                            help='diecase ID for typesetting')
-        # Input filename option
-        parser.add_argument('text_file', metavar='text_file', nargs='?',
-                            help='source (text) file to translate',
-                            type=argparse.FileType('r', encoding='UTF-8'))
-        # Quick typesetting feature
-        parser.add_argument('-t', '--text', dest='input_text',
-                            metavar='"input text"',
-                            help=('compose and cast the '
-                                  'single- or double-quoted input text'))
-        # Output filename option
-        parser.add_argument('ribbon_file', metavar='ribbon_file', nargs='?',
-                            help='ribbon file to generate',
-                            type=argparse.FileType('w+', encoding='UTF-8'))
-        # Measure (line length)
-        parser.add_argument('-M', '--measure',
-                            metavar='measure', dest='measure',
-                            help='line length with units e.g. 16cc')
-        # Wedge name to use instead of diecase's assigned wedge
-        parser.add_argument('-w', '--wedge', metavar='W', dest='wedge_name',
-                            help='wedge to use: [s]series-set_width[e]')
-        # Automatic typesetting
-        parser.add_argument('--manual', dest='manual_mode',
-                            action='store_true',
-                            help='use manual typesetting engine')
-        # Default action
-        parser.set_defaults(job=typesetting_job)
+@cli.command()
+@click.option('--src', type=click.File('r'))
+@click.option('--out', type=click.File('w+', atomic=True))
+@pass_runtime_config
+def translate(runtime_config, src, out):
+    """Text to ribbon translation and justification"""
+    from .core import Typesetting
+    typesetting = Typesetting()
+    typesetting.diecase_id = runtime_config.diecase_id
+    typesetting.wedge_name = runtime_config.wedge_name
+    typesetting.text_file = src
+    typesetting.ribbon_file = out
+    # Only one method here
+    typesetting.main_menu()
 
-    def build_misc_parsers():
-        """Miscellaneous parsers"""
-        # Update subparser
-        upd_parser = cmds.add_parser('update', aliases=['u', 'upd'],
-                                     help='Update the software')
-        upd_parser.add_argument('-t', '--testing', action='store_true',
-                                help='use testing rather than stable version')
-        upd_parser.set_defaults(job=update)
-        # Easter egg subparser
-        meow_parser = cmds.add_parser('meow', help='here, kitty, kitty!',
-                                      aliases=['miauw', 'miau', 'miaou', 'mio',
-                                               'miaow', 'mew', 'mjav', 'miao'])
-        meow_parser.set_defaults(job=meow)
-        # Version parser
-        version_parser = cmds.add_parser('version', aliases=['v', 'ver'],
-                                         help='Show the software version')
-        version_parser.set_defaults(job=show_version)
 
-    def build_inv_parser():
-        """Inventory management parser"""
-        parser = cmds.add_parser('inventory', aliases=['i', 'inv'],
-                                 help='Matrix case management')
-        # List the diecases and exit
-        parser.add_argument('-l', '--list_diecases', action='store_true',
-                            help='list all diecases and finish')
-        # Manipulate diecase with given ID
-        parser.add_argument('-m', '--diecase', dest='diecase_id', metavar='ID',
-                            help='work on diecase with given ID')
-        parser.set_defaults(job=inventory)
+@cli.command()
+@click.option('--testing', '-t', is_flag=True, flag_value=True,
+              help='use a unstable/development version instead of stable')
+def update(testing):
+    """Updates the software"""
+    # Upgrade routine
+    dev_prompt = 'Testing version (newest features, but unstable)? '
+    if UI.confirm('Update the software?', default=False):
+        use_dev_version = testing or UI.confirm(dev_prompt, default=False)
+        pre = '--pre' if use_dev_version else ''
+        system('pip3 install {} --upgrade rpi2caster'.format(pre))
 
-    def build_main_parser():
-        """Main parser"""
-        # Help description and epilogue i.e. what you see at the bottom
-        desc = ('Starting rpi2caster without arguments will open the main '
-                'menu, where you can choose what to do (casting, inventory '
-                'management, typesetting), toggle simulation or '
-                'perforation modes.')
-        epi = ('Enter "{} [command] -h" for detailed help about its options. '
-               'Typesetting is not ready yet.'.format(argv[0]))
-        # Initialize the main arguments parser
-        parser = argparse.ArgumentParser(description=desc, epilog=epi)
-        # Debug mode
-        parser.add_argument('-d', '--debug', help='debug mode',
-                            action="store_true")
-        parser.add_argument('--database', metavar='FILE',
-                            help='path to alternative sqlite3 database file')
-        parser.add_argument('--config', metavar='FILE',
-                            help='path to alternative configuration file')
-        # Set default values for all options globally
-        parser.set_defaults(job=main_menu, debug=False, ribbon_file=None,
-                            ribbon_id=None, simulation=False,
-                            punching=False, text_file=None,
-                            list_diecases=False,
-                            diecase_id=None, wedge_name=None, input_text=None,
-                            direct=False, testing=False, database=None,
-                            config=None, measure=None, manual_mode=False)
-        return parser
 
-    # Build the parsers and get the arguments
-    main_parser = build_main_parser()
-    cmds = main_parser.add_subparsers(title='Commands', help='description:',
-                                      description='Choose what you want to do')
-    build_typesetting_parser()
-    build_casting_parser()
-    build_inv_parser()
-    build_misc_parsers()
-    main_parser.parse_args()
-    args = main_parser.parse_args()
-    UI.verbosity = 3 if args.debug else 0
-    # Update configuration and database
-    MQ.update('config', {'config_path': args.config})
-    MQ.update('database', {'url': args.database, 'debug': args.debug})
-    # Parse the arguments, get the entry point
+@cli.command()
+@click.option('--list-diecases', '-l', is_flag=True, flag_value=True,
+              help='list diecases stored in database and quit')
+def inventory(args):
+    """Inventory management - diecase manipulation etc."""
+    from . import matrix_controller
+    from .core import InventoryManagement
+    if args.list_diecases:
+        # Just show what we have
+        matrix_controller.list_diecases()
+    else:
+        # edit diecase (or choose, if failed)
+        InventoryManagement(args.diecase_id)
+
+
+@cli.command()
+def meow():
+    "Easter egg"
     try:
-        job = args.job
-    except AttributeError:
-        # User provided wrong command line arguments. Display help and quit.
-        main_parser.print_help()
-        return
-    # Run the routine
-    try:
-        job(args)
-    except (Abort, Finish):
-        print('Goodbye!')
+        from .data import EASTER_EGG
+        UI.display('\nOh, this was meowsome.\n')
+        UI.display(EASTER_EGG)
+    except (OSError, ImportError, FileNotFoundError):
+        print('There are no Easter Eggs in this program.')
 
 
 if __name__ == '__main__':
-    main()
+    cli()

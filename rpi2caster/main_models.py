@@ -3,65 +3,14 @@
 
 from collections import OrderedDict
 from contextlib import suppress
-from functools import wraps
 from itertools import chain
 import json
 
 import peewee as pw
-from playhouse import db_url
 
-from . import basic_models as bm
-from .config import CFG
+from .rpi2caster import DB
 from .data import TYPEFACES as TF
-from .misc import MQ
-from . import definitions as d, parsing as p
-
-
-class Database(pw.Proxy):
-    """Database object sitting on top of Peewee"""
-    def __init__(self, url=''):
-        super().__init__()
-        database_url = url or CFG.get_option('database_url')
-        MQ.subscribe(self, 'database')
-        self.setup(database_url)
-
-    def __call__(self, routine):
-        @wraps(routine)
-        def wrapper(*args, **kwargs):
-            """decorator for routines needing database connection"""
-            with self:
-                retval = routine(*args, **kwargs)
-            return retval
-
-        return wrapper
-
-    def __enter__(self):
-        """context manager for routines needing database connection"""
-        with suppress(pw.OperationalError):
-            self.connect()
-        return self
-
-    def __exit__(self, *_):
-        with suppress(pw.OperationalError):
-            self.close()
-
-    def update(self, source=None):
-        """Update the connection parameters"""
-        with suppress(AttributeError):
-            url = source.get('url') or CFG.get_option('database_url')
-            self.setup(url)
-
-    def setup(self, url):
-        """New database session"""
-        base = db_url.connect(url)
-        self.initialize(base)
-
-    def new_database(self):
-        """Create the tables for models"""
-        self.create_tables([Diecase, Ribbon], safe=True)
-
-
-DB = Database()
+from . import basic_models as bm, definitions as d, parsing as p
 
 
 class BaseModel(pw.Model):

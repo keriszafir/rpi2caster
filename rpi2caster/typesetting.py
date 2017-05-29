@@ -3,14 +3,11 @@
 
 from collections import OrderedDict
 from contextlib import suppress
+from .rpi2caster import CFG, DB, UI, Abort, option as opt
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .config import CFG
-from .main_models import DB, Ribbon
+from .main_models import Ribbon
 from .matrix_controller import DiecaseMixin
 from .parsing import token_parser
-from .ui import UI, Abort, option as opt
-
-PREFS_CFG = CFG.preferences
 
 
 # Ribbon control routines
@@ -151,7 +148,8 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
         """Typesetting measure i.e. line length"""
         if not self._measure:
             # get measure configuration and return default one
-            m_cfg = (PREFS_CFG.default_measure, PREFS_CFG.measurement_unit)
+            m_cfg = (CFG.preferences.default_measure,
+                     CFG.preferences.measurement_unit)
             self._measure = bm.Measure(*m_cfg, set_width=self.wedge.set_width)
         return self._measure
 
@@ -159,7 +157,8 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     def measure(self, measure):
         """Measure setter"""
         with suppress(ValueError):
-            self._measure = bm.Measure(measure, PREFS_CFG.measurement_unit,
+            self._measure = bm.Measure(measure,
+                                       CFG.preferences.measurement_unit,
                                        set_width=self.wedge.set_width)
 
     @measure.setter

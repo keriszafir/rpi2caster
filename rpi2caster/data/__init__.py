@@ -6,7 +6,6 @@ from pkg_resources import resource_string as rs
 
 SOURCE = 'rpi2caster.data'
 
-
 def get_data(name):
     """Get the resource from a JSON-encoded file"""
     return loads(rs(SOURCE, '{}.json'.format(name)).decode())
@@ -22,3 +21,15 @@ WEDGE_DEFINITIONS = get_data('wedge_units')
 TYPEFACES = get_data('typefaces')
 # Help and documentation
 HELP = get_data('help')
+# Easter egg
+EASTER_EGG = ('+=======================================================================+\n'
+              '|                                   _                              _    |\n'
+              '|    /\___/\       __   __     __   |    __  _ __       __   __    |    |\n'
+              '|   |       |     /  \ /  \   /  \ -+-  |  \ |/  \     /  \ /  \  -+-   |\n'
+              '|  _  *   *  _   |      __ |  \__   |   +--/ |        |      __ |  |    |\n'
+              '|  -   /_\   -   |     /  \|     \  |   |    |        |     /  \|  |    |\n'
+              '|      ---        \__/_\__/\__\__/___\_/ \__/|_        \__/_\__/\___\_  |\n'
+              '|                                                                       |\n'
+              '| Hello Kitty!              gives your MONOTYPE nine lives              |\n'
+              '|                                                                       |\n'
+              '+=======================================================================+\n')

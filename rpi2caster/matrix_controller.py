@@ -6,12 +6,9 @@ from collections import OrderedDict
 from contextlib import suppress
 from functools import partial, wraps
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .config import USER_DATA_DIR, CFG
+from .rpi2caster import USER_DATA_DIR, UI, Abort, Finish, option
 from .data import TYPEFACES as TF, UNIT_ARRANGEMENTS as UA
 from .main_models import DB, Diecase
-from .ui import UI, Abort, Finish, option
-
-PREFS_CFG = CFG.preferences
 
 
 def import_csv(diecase, filename=''):

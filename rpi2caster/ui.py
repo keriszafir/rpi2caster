@@ -10,7 +10,6 @@ from functools import partial
 import click
 from . import datatypes
 from .definitions import MenuItem, DEFAULT_ABORT_KEYS
-from .misc import MQ
 from .parsing import get_key
 
 
@@ -103,13 +102,13 @@ def build_entry(opt, trailing_newline=1):
         return short_entry.format(key=key_name, text=text)
 
 
-class Abort(Exception):
+class Abort(click.Abort):
     """Exception - abort the current action"""
     def __str__(self):
         return ''
 
 
-class Finish(Exception):
+class Finish(click.Abort):
     """Exception - finish the current exit to menu etc."""
     def __str__(self):
         return ''
@@ -118,7 +117,9 @@ class Finish(Exception):
 class ClickUI(object):
     """Click-based text user interface"""
     __name__ = 'Text UI based on Click'
-    verbosity = 0
+
+    def __init__(self, verbosity=0):
+        self.verbosity = verbosity
 
     def dynamic_menu(self, options,
                      header='', footer='',
@@ -688,37 +689,3 @@ class ClickUI(object):
 
             # return answer, or raise it (if it was Abort)
             return datatypes.try_raising(answer)
-
-
-class UIFactory(object):
-    """UI abstraction layer"""
-    impl = ClickUI()
-    implementations = {'text_ui': ClickUI,
-                       'click': ClickUI}
-
-    def __init__(self):
-        MQ.subscribe(self, 'UI')
-        self.impl = ClickUI()
-
-    def __getattr__(self, name):
-        result = getattr(self.impl, name)
-        if result is None:
-            raise NameError('{implementation} has no function named {function}'
-                            .format(implementation=self.impl.__name__,
-                                    function=name))
-        else:
-            return result
-
-    def update(self, source):
-        """Update the UI implementation"""
-        name = source.get('impl') or source.get('implementation')
-        impl = self.implementations.get(name)
-        if impl:
-            self.impl = impl()
-
-    def get_name(self):
-        """Get the underlying user interface implementation's name."""
-        return self.impl.__name__
-
-# instantiate it only once
-UI = UIFactory()

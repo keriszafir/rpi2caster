@@ -6,12 +6,9 @@ from contextlib import suppress
 from functools import wraps
 from itertools import zip_longest
 from string import ascii_lowercase, ascii_uppercase, digits
+from .rpi2caster import CFG, UI, Abort, Finish, option
 from . import basic_models as bm, definitions as d
-from .config import CFG
-from .ui import UI, Abort, Finish, option
 from .data import TYPEFACES, WEDGE_DEFINITIONS
-
-PREFS_CFG = CFG.preferences
 
 
 # Letter frequency controller routines
@@ -191,8 +188,8 @@ def list_typefaces(*_):
 
 # Measure controller routines
 
-def set_measure(input_value=PREFS_CFG.default_measure,
-                unit=PREFS_CFG.measurement_unit,
+def set_measure(input_value=CFG.preferences.default_measure,
+                unit=CFG.preferences.measurement_unit,
                 what='measure', set_width=12.0):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).

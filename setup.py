@@ -39,4 +39,4 @@ setup(name='rpi2caster',
                 'typesetting', 'typecasting', 'Raspberry Pi'],
       packages=find_packages(exclude=['data', 'docs', 'tests']),
       entry_points={'console_scripts':
-                    ['rpi2caster = rpi2caster.rpi2caster:main']})
+                    ['rpi2caster = rpi2caster:cli']})
