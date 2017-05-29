@@ -160,12 +160,12 @@ class RuntimeConfig:
         self.wedge_name = wedge_name
         self.measure = measure
         self.ribbon = ribbon
-        # set the simulation mode according to command line parameter
-        # or configuration
-        simulation_mode = (simulation or CFG.interface.simulation or
-                           CFG.interface.sensor == 'simulation' or
-                           CFG.interface.output == 'simulation')
-        self.simulation = simulation_mode
+        # is the configuration set to simulation?
+        simulation_in_cfg = CFG.interface.simulation
+        # is the sensor and output set properly?
+        hw_configured = CFG.interface.sensor and CFG.interface.output
+        # set simulation mode or hardware interface
+        self.simulation = simulation or simulation_in_cfg or not hw_configured
 
     def toggle_punching(self):
         """Switch between punching and casting modes"""

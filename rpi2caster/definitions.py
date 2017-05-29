@@ -208,7 +208,7 @@ GLOBAL_CFG_PATHS = ['/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
 DEFAULTS = dict(default_measure='25cc', measurement_unit='cc',
                 database_url=GLOBAL_DB_URL, signals=SIGNALS,
                 punching=False, simulation=False, parallel=False,
-                sensor='sysfs', output='wiringpi',
+                sensor=False, output=False,
                 emergency_stop_gpio=22, sensor_gpio=17, bounce_time=25,
                 pin_base=65, i2c_bus=1, mcp0=0x20, mcp1=0x21)
 

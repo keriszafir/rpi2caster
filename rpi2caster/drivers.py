@@ -532,8 +532,8 @@ def make_interface(sensor_name, output_name):
     outputs = {'smbus': make_smbus_output,
                'wiringpi': make_wiringpi_output}
     try:
-        sensor_factory = sensors[sensor_name.lower()]
-        output_factory = outputs[output_name.lower()]
+        sensor_factory = sensors[str(sensor_name).lower()]
+        output_factory = outputs[str(output_name).lower()]
         sensor, output = sensor_factory(), output_factory()
         return HardwareBackend(sensor, output)
     except KeyError as exc:
