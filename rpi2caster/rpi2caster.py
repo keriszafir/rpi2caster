@@ -151,7 +151,8 @@ class StaticConfig(cp.ConfigParser):
 
 class RuntimeConfig:
     """runtime config for rpi2caster"""
-    _simulation = False
+    _simulation, punching = False, False
+    interface = None
 
     def __init__(self, punching=False, simulation=False, measure=None,
                  diecase_id=None, wedge_name=None, ribbon=None):
@@ -160,12 +161,8 @@ class RuntimeConfig:
         self.wedge_name = wedge_name
         self.measure = measure
         self.ribbon = ribbon
-        # is the configuration set to simulation?
-        simulation_in_cfg = CFG.interface.simulation
-        # is the sensor and output set properly?
-        hw_configured = CFG.interface.sensor and CFG.interface.output
-        # set simulation mode or hardware interface
-        self.simulation = simulation or simulation_in_cfg or not hw_configured
+        # simulation mode from configuration
+        self.simulation = simulation or CFG.interface.simulation
 
     def toggle_punching(self):
         """Switch between punching and casting modes"""
@@ -174,6 +171,28 @@ class RuntimeConfig:
     def toggle_simulation(self):
         """Switch between simulation and casting/punching modes"""
         self.simulation = not self.simulation
+
+    def hardware_setup(self):
+        """Configure the hardware interface"""
+        try:
+            # special interfaces go here
+            if CFG.interface.parallel:
+                # Symbiosys parallel port driver
+                self.interface = drivers.make_parallel_interface()
+                self._simulation = False
+                return
+            else:
+                # put an interface together from sensor and driver
+                sensor = CFG.interface.sensor
+                output = CFG.interface.output
+                self.interface = drivers.make_interface(sensor, output)
+                self._simulation = False
+        except drivers.ConfigurationError as exc:
+            # cannot initialize hardware interface: explain why,
+            # offer to simulate casting instead
+            UI.display(str(exc))
+            UI.pause('Hardware interface unavailable. Using simulation mode.')
+            self.simulation = True
 
     @property
     def simulation(self):
@@ -184,23 +203,12 @@ class RuntimeConfig:
     def simulation(self, status):
         """choose simulation interface if True, else hardware interface"""
         if status:
+            # simulation mode ON
             self._simulation = True
             self.interface = drivers.make_simulation_interface()
-        elif CFG.interface.parallel:
-            # special interface for Symbiosys parallel port driver
-            self.interface = drivers.make_parallel_interface()
-            self._simulation = False
         else:
-            try:
-                # put an interface together from sensor and driver
-                sensor = CFG.interface.sensor
-                output = CFG.interface.output
-                self.interface = drivers.make_interface(sensor, output)
-                self._simulation = False
-            except (NameError, ImportError):
-                UI.confirm('Hardware interface unavailable. Use simulation?',
-                           abort_answer=False)
-                self.simulation = True
+            self._simulation = False
+            self.hardware_setup()
 
 
 class DBProxy(pw.Proxy):

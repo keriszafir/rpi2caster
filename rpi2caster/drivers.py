@@ -170,7 +170,10 @@ def make_simulation_interface():
 def make_parallel_interface():
     """"Parallel port controller
     (PyPI: pyparallel, Debian: python3-parallel)"""
-    from parallel import Parallel
+    try:
+        from parallel import Parallel
+    except ImportError:
+        raise ConfigurationError('Cannot import parallel port driver!')
 
     @weakref_singleton
     class ParallelOutput(OutputBase):
@@ -525,16 +528,39 @@ def make_smbus_output():
 
 
 def make_interface(sensor_name, output_name):
-    """Return a HardwareBackend namedtuple with sensor and driver"""
+    """Return a HardwareBackend namedtuple with sensor and driver.
+    Raise ConfigurationError if sensor or output name is not recognized,
+    or modules supporting the hardware backends cannot be imported."""
     sensors = {'sysfs': make_sysfs_sensor,
                'gpio': make_gpio_sensor,
                'rpi_gpio': make_gpio_sensor}
     outputs = {'smbus': make_smbus_output,
                'wiringpi': make_wiringpi_output}
+    # look up the sensor factory function:
     try:
-        sensor_factory = sensors[str(sensor_name).lower()]
-        output_factory = outputs[str(output_name).lower()]
-        sensor, output = sensor_factory(), output_factory()
-        return HardwareBackend(sensor, output)
+        if not sensor_name:
+            raise ConfigurationError('Sensor not configured.')
+        s_name = str(sensor_name).lower()
+        sensor_factory = sensors[s_name]
+        sensor = sensor_factory()
     except KeyError as exc:
-        raise NameError('{}: not defined'.format(str(exc)))
+        raise ConfigurationError('Unknown sensor: {}.'.format(s_name))
+    except ImportError as exc:
+        raise ConfigurationError('Module not installed for {}'.format(s_name))
+    # the same with output:
+    try:
+        if not output_name:
+            raise ConfigurationError('Output not configured.')
+        o_name = str(output_name).lower()
+        output_factory = outputs[o_name]
+        output = output_factory()
+    except KeyError as exc:
+        raise ConfigurationError('Unknown output: {}.'.format(o_name))
+    except ImportError as exc:
+        raise ConfigurationError('Module not installed for {}'.format(o_name))
+    # no exceptions? then interface initialization succeeded
+    return HardwareBackend(sensor, output)
+
+
+class ConfigurationError(Exception):
+    """configuration error: wrong name or cannot import module"""
