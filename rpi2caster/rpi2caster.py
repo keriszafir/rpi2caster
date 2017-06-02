@@ -510,21 +510,29 @@ def translate(src, out, align, manual, **kwargs):
     typesetting.main_menu()
 
 
-@cli.command()
-@click.option('--list', '-l', is_flag=True, flag_value=True,
-              help='list diecases stored in database and quit')
-@click.option('--diecase', '-m', metavar='diecase ID',
-              help='diecase ID from the database to use')
-def inventory(**kwargs):
+@cli.group(invoke_without_command=True, cls=CommandGroup)
+@click.pass_context
+def inventory(ctx):
     """Diecase definition and layout management."""
-    from . import matrix_controller
-    from .core import InventoryManagement
-    if kwargs.get('list'):
-        # Just show what we have
-        matrix_controller.list_diecases()
-    else:
-        # edit diecase (or choose, if failed)
-        InventoryManagement(kwargs.get('diecase_id'))
+    if not ctx.invoked_subcommand:
+        ctx.invoke(edit_diecase)
+
+
+@inventory.command('edit')
+@click.argument('diecase', required=False, default=None)
+def edit_diecase(diecase):
+    """Load and edit a matrix case."""
+    from . import matrix_controller as mc
+    editor = mc.DiecaseMixin()
+    editor.diecase_id = diecase
+    editor.diecase_manipulation()
+
+
+@inventory.command('list')
+def list_diecases():
+    """List all available diecases and exit."""
+    from . import matrix_controller as mc
+    mc.list_diecases()
 
 
 @cli.command()

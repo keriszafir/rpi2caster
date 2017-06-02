@@ -4,7 +4,6 @@ make a diecase proof, quickly compose and cast text.
 """
 
 from collections import deque
-from contextlib import suppress
 from functools import wraps
 
 # QR code generating backend
@@ -17,7 +16,7 @@ from rpi2caster import UI, Abort, Finish, option
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .casting_models import Stats, Record
 from . import monotype
-from .matrix_controller import get_diecase, temp_diecase, DiecaseMixin
+from .matrix_controller import temp_diecase
 from .typesetting import TypesettingContext
 
 
@@ -811,14 +810,3 @@ class Typesetting(TypesettingContext):
         UI.dynamic_menu(options, header, default_key='c',
                         abort_suffix='Press [{keys}] to exit.\n',
                         catch_exceptions=exceptions)
-
-
-class InventoryManagement(DiecaseMixin):
-    """Entry point for editing matrices and matrix cases."""
-    def __init__(self, diecase_id=None):
-        with suppress(Abort, Finish):
-            while True:
-                self.diecase = get_diecase(diecase_id)
-                with suppress(Abort):
-                    self.diecase_manipulation()
-                diecase_id = None

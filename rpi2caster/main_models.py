@@ -225,7 +225,7 @@ class DiecaseLayout:
     def styles(self):
         """Get all available character styles from the diecase layout."""
         return sum(mat.styles for mat in self.all_mats
-                   if not mat.styles.use_all)
+                   if not mat.styles.use_all) or bm.Styles()
 
     def get_charset(self, diecase_chars=True, outside_chars=False):
         """Diecase character set"""

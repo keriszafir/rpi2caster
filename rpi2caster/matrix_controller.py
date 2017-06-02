@@ -692,6 +692,10 @@ class DiecaseMixin:
                 self.diecase.delete_instance()
                 UI.pause('Matrix case deleted.')
 
+        def _change_diecase():
+            """Chooses another diecase"""
+            self.diecase = choose_diecase()
+
         def _edit_typeface():
             """Edit diecase's typeface info"""
             edit_typeface(self.diecase)
@@ -746,6 +750,8 @@ class DiecaseMixin:
                           text='Delete diecase from database'),
                    option(key='F2', value=bc.list_typefaces, seq=95,
                           text='List typefaces'),
+                   option(key='F3', value=_change_diecase, seq=96,
+                          text='Change diecase'),
                    option(key='Esc', value=Abort, seq=98, text='Back'),
                    option(key='f10', value=Finish, seq=99,
                           text='Exit the diecase manipulation utility')]
