@@ -442,6 +442,7 @@ class Ribbon(BaseModel):
     wedge_name = pw.TextField(db_column='wedge_name', default='')
     source_text = pw.TextField(db_column='source_text', default='')
     contents = pw.TextField(db_column='contents', default='')
+    file = None
 
     def __iter__(self):
         return iter(self.contents)
@@ -491,11 +492,13 @@ class Ribbon(BaseModel):
                 ribbon = [line for line in raw_data if line]
             metadata = p.parse_ribbon(ribbon)
             # Update the attributes with what we found
+            self.file = ribbon_file
             self.update(metadata)
 
-    def export_to_file(self, ribbon_file):
+    def export_to_file(self, file=None):
         """Exports the ribbon to a text file"""
         # Choose file, write metadata, write contents
+        ribbon_file = file or self.file
         with ribbon_file:
             ribbon_file.write('description: ' + self.description)
             ribbon_file.write('customer: ' + self.customer)

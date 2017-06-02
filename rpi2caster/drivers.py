@@ -139,6 +139,10 @@ class OutputBase(object):
         UI.display('All valves off', min_verbosity=2)
 
 
+class HWConfigError(Exception):
+    """configuration error: wrong name or cannot import module"""
+
+
 def make_simulation_interface():
     """Simulation interface - no hardware control;
     used for testing the casting/punching routines."""
@@ -173,7 +177,7 @@ def make_parallel_interface():
     try:
         from parallel import Parallel
     except ImportError:
-        raise ConfigurationError('Cannot import parallel port driver!')
+        raise HWConfigError('Cannot import parallel port driver!')
 
     @weakref_singleton
     class ParallelOutput(OutputBase):
@@ -539,28 +543,24 @@ def make_interface(sensor_name, output_name):
     # look up the sensor factory function:
     try:
         if not sensor_name:
-            raise ConfigurationError('Sensor not configured.')
+            raise HWConfigError('Sensor not configured.')
         s_name = str(sensor_name).lower()
         sensor_factory = sensors[s_name]
         sensor = sensor_factory()
     except KeyError as exc:
-        raise ConfigurationError('Unknown sensor: {}.'.format(s_name))
+        raise HWConfigError('Unknown sensor: {}.'.format(s_name))
     except ImportError as exc:
-        raise ConfigurationError('Module not installed for {}'.format(s_name))
+        raise HWConfigError('Module not installed for {}'.format(s_name))
     # the same with output:
     try:
         if not output_name:
-            raise ConfigurationError('Output not configured.')
+            raise HWConfigError('Output not configured.')
         o_name = str(output_name).lower()
         output_factory = outputs[o_name]
         output = output_factory()
     except KeyError as exc:
-        raise ConfigurationError('Unknown output: {}.'.format(o_name))
+        raise HWConfigError('Unknown output: {}.'.format(o_name))
     except ImportError as exc:
-        raise ConfigurationError('Module not installed for {}'.format(o_name))
+        raise HWConfigError('Module not installed for {}'.format(o_name))
     # no exceptions? then interface initialization succeeded
     return HardwareBackend(sensor, output)
-
-
-class ConfigurationError(Exception):
-    """configuration error: wrong name or cannot import module"""

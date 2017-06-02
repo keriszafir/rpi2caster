@@ -51,15 +51,10 @@ class Casting(TypesettingContext):
         # Caster for this job
         self.runtime_config = runtime_config
         self.machine = monotype.MonotypeCaster(runtime_config)
-        self.wedge_name = runtime_config.wedge_name
-        self.diecase_id = runtime_config.diecase_id
-        self.measure = runtime_config.measure
-        with suppress(FileNotFoundError, PermissionError, IOError):
-            self.ribbon_file = runtime_config.ribbon
 
     def punch_ribbon(self, ribbon):
         """Punch the ribbon from start to end"""
-        self.caster.punch(ribbon)
+        self.machine.punch(ribbon)
 
     def cast_ribbon(self, ribbon):
         """Main casting routine.

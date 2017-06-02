@@ -35,12 +35,18 @@ def list_ribbons(data=get_all_ribbons()):
         UI.display(template.format(**values))
 
 
-def ribbon_from_file():
-    """Choose the ribbon from file"""
-    ribbon = Ribbon()
-    ribbon_file = UI.import_file()
-    ribbon.import_from_file(ribbon_file)
-    return ribbon
+def ribbon_from_file(file=None, manual_choice=True):
+    """Import the ribbon from file object specified as argument.
+    Choose the file manually if file object is not specified.
+
+    file: any object with the readlines() method"""
+    ribbon_file = (file if 'readlines' in dir(file)
+                   else open(file, 'r') if file
+                   else UI.import_file() if manual_choice else None)
+    if ribbon_file:
+        ribbon = Ribbon()
+        ribbon.import_from_file(ribbon_file)
+        return ribbon
 
 
 def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
@@ -63,7 +69,7 @@ def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
     if ribbon_id:
         with suppress(Ribbon.DoesNotExist):
             return Ribbon.get(Ribbon.ribbon_id == ribbon_id)
-        UI.display('Ribbon {} not found in database!'.format(ribbon_id))
+        UI.display('Ribbon {} not found in database.'.format(ribbon_id))
     return fallback()
 
 
@@ -73,30 +79,55 @@ class RibbonMixin:
 
     @property
     def ribbon(self):
-        """Ribbon for the casting session"""
-        if not self._ribbon:
-            # instantiate a new one and cache it
-            self._ribbon = Ribbon()
+        """Ribbon for the casting/typesetting session"""
         return self._ribbon
 
     @ribbon.setter
     def ribbon(self, ribbon):
-        """Ribbon setter"""
+        """Ribbon setter. False or None will result in new empty Ribbon()"""
         self._ribbon = ribbon or Ribbon()
 
     @ribbon.setter
     def ribbon_file(self, ribbon_file):
         """Use a ribbon file"""
-        with suppress(Abort):
-            new_ribbon = Ribbon()
-            new_ribbon.import_from_file(ribbon_file)
-            self.ribbon = new_ribbon
+        self.ribbon = ribbon_from_file(ribbon_file)
+
+    @ribbon.setter
+    def output_file(self, ribbon_file):
+        """Use a ribbon file"""
+        self.ribbon.file = ribbon_file
 
     @ribbon.setter
     def ribbon_id(self, ribbon_id):
         """Use a ribbon with a given ID, or an empty one"""
-        with suppress(Abort):
-            self.ribbon = get_ribbon(ribbon_id, fallback=self.ribbon)
+        self.ribbon = get_ribbon(ribbon_id, fallback=self.ribbon)
+
+    def ribbon_by_name(self, name, choose_if_not_found=False):
+        """Try to determine if the name supplied is a ribbon ID or filename.
+        Otherwise use the fallback option."""
+        # 1. try looking it up in the database
+        # 2. try loading it from file
+        # 3. optionally try choosing another ribbon if both lookups failed
+        # 4. if all fails, just keep the current ribbon
+        def sources():
+            """try different ribbon sources"""
+            # no name? fresh ribbon then
+            if not name:
+                yield Ribbon()
+            # try looking it up in the database
+            yield get_ribbon(name, fallback=lambda *_: None)
+            # try to get a file
+            yield ribbon_from_file(name, manual_choice=False)
+            # choose manually
+            if choose_if_not_found:
+                yield choose_ribbon()
+            # all of these failed = don't change anything
+            yield self.ribbon
+
+        for ribbon in sources():
+            if ribbon:
+                self.ribbon = ribbon
+                break
 
     def choose_ribbon(self):
         """Chooses a ribbon from database or file"""

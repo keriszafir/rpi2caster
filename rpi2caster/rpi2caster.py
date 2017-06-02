@@ -8,16 +8,20 @@
     or a pneumatic paper tape perforator from the Monotype keyboard.
 
     The rpi2caster package consists of three main utilities:
-        * machine control,
-        * typesetting,
-        * inventory management.
+
+        * casting (composition, material etc.),
+
+        * caster/interface testing and diagnostics,
+
+        * typesetting (not ready yet),
+
+        * diecase and layout management.
 
     Machine control utility also serves as a diagnostic program
     for calibrating and testing the machine and control interface.
 
-    For usage info, run `rpi2caster --help`
-
 """
+from collections import OrderedDict
 import configparser as cp
 from contextlib import suppress
 from functools import wraps
@@ -41,6 +45,33 @@ USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
 USER_CFG_PATH = '{}/rpi2caster.conf'.format(USER_DATA_DIR)
 # database URL (sqlite, mysql, postgres etc.)
 USER_DB_URL = 'sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR)
+
+
+class CommandGroup(click.Group):
+    """Click group which allows using abbreviated commands,
+    and arranges them in the order they were defined."""
+    def __init__(self, name=None, commands=None, **attrs):
+        if commands is None:
+            commands = OrderedDict()
+        elif not isinstance(commands, OrderedDict):
+            commands = OrderedDict(commands)
+        click.Group.__init__(self, name=name, commands=commands, **attrs)
+
+    def list_commands(self, ctx):
+        """List command names as they are in commands dict."""
+        return self.commands.keys()
+
+    def get_command(self, ctx, cmd_name):
+        retval = click.Group.get_command(self, ctx, cmd_name)
+        if retval is not None:
+            return retval
+        matches = [x for x in self.list_commands(ctx)
+                   if x.startswith(cmd_name)]
+        if not matches:
+            return None
+        elif len(matches) == 1:
+            return click.Group.get_command(self, ctx, matches[0])
+        ctx.fail('Too many matches: %s' % ', '.join(sorted(matches)))
 
 
 class StaticConfig(cp.ConfigParser):
@@ -154,16 +185,6 @@ class RuntimeConfig:
     _simulation, punching = False, False
     interface = None
 
-    def __init__(self, punching=False, simulation=False, measure=None,
-                 diecase_id=None, wedge_name=None, ribbon=None):
-        self.punching = punching
-        self.diecase_id = diecase_id
-        self.wedge_name = wedge_name
-        self.measure = measure
-        self.ribbon = ribbon
-        # simulation mode from configuration
-        self.simulation = simulation or CFG.interface.simulation
-
     def toggle_punching(self):
         """Switch between punching and casting modes"""
         self.punching = not self.punching
@@ -187,7 +208,7 @@ class RuntimeConfig:
                 output = CFG.interface.output
                 self.interface = drivers.make_interface(sensor, output)
                 self._simulation = False
-        except drivers.ConfigurationError as exc:
+        except drivers.HWConfigError as exc:
             # cannot initialize hardware interface: explain why,
             # offer to simulate casting instead
             UI.display(str(exc))
@@ -200,10 +221,9 @@ class RuntimeConfig:
         return self._simulation
 
     @simulation.setter
-    def simulation(self, status):
+    def simulation(self, is_on):
         """choose simulation interface if True, else hardware interface"""
-        if status:
-            # simulation mode ON
+        if is_on:
             self._simulation = True
             self.interface = drivers.make_simulation_interface()
         else:
@@ -272,74 +292,54 @@ class UIProxy(object):
 
 
 DB, CFG, UI = DBProxy(), StaticConfig(), UIProxy()
-pass_runtime_config = click.make_pass_decorator(RuntimeConfig, ensure=True)
 
 
-@click.group(invoke_without_command=True)
+@click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
+             context_settings=dict(help_option_names=['-h', '--help']))
+@click.version_option(__version__)
 @click.option('--verbosity', '-v', count=True, default=0,
               help='verbose mode')
-@click.option('--conffile', '-c', default=USER_CFG_PATH, show_default=True,
+@click.option('--conffile', '-c', default=USER_CFG_PATH,
               help='config file to use')
-@click.option('--database', '-d', default=USER_DB_URL, show_default=True,
-              metavar='URL', help='database URL to use')
+@click.option('--database', '-d', default=USER_DB_URL,
+              metavar='[database URL]', help='database URL to use')
 @click.option('--web', '-W', 'ui_impl', flag_value='web_ui',
               help='use web user interface (not implemented)')
 @click.option('--text', '-T', 'ui_impl', flag_value='text_ui',
               default=True, help='use text user interface')
-@click.option('--diecase', '-m', metavar='diecase ID',
-              help='diecase ID from the database to use')
-@click.option('--wedge', '-w', metavar='[S]X...-Y[E]', help='wedge to use')
-@click.option('--measure', '-M', metavar='value, unit',
-              help='line length to use')
-@click.version_option(__version__)
 @click.pass_context
-def cli(ctx, conffile, database, verbosity, ui_impl, diecase, wedge, measure):
-    """command-line interface for rpi2caster"""
-    # update the database and configuration parameters
+def cli(ctx, conffile, database, ui_impl, verbosity):
+    """decide whether to go to a subcommand or enter main menu"""
+    def wrapped(function):
+        """wrap a function so that the context will invoke it"""
+        return lambda: ctx.invoke(function)
+
+    runtime_config = RuntimeConfig()
     CFG.load(conffile)
     DB.load(database)
     UI.load(ui_impl, verbosity)
-    ctx.obj = RuntimeConfig(diecase_id=diecase, wedge_name=wedge,
-                            measure=measure)
+    ctx.obj = runtime_config
 
-    try:
-        if not ctx.invoked_subcommand:
-            main_menu()
-        else:
-            return
-    except (Abort, Finish, KeyboardInterrupt):
-        UI.display('Goodbye!')
-
-
-@pass_runtime_config
-def main_menu(runtime_config):
-    """Main menu for rpi2caster"""
-    # main menu - choose the module
+    # main menu
     header = ('rpi2caster - computer aided type casting for Monotype '
               'composition / type & rule casters.'
               '\n\nMain menu:\n')
-    options = [option(key='c', value=cast, seq=20,
-                      cond=lambda: not runtime_config.punching,
+    options = [option(key='t', value=wrapped(translate), seq=10,
+                      text='Typesetting...',
+                      desc='Compose text for casting'),
+
+               option(key='c', value=wrapped(cast), seq=20,
                       text='Casting...',
                       desc=('Cast composition, sorts, typecases or spaces;'
                             ' test the machine')),
-               option(key='c', value=runtime_config.toggle_punching, seq=70,
-                      cond=lambda: runtime_config.punching,
-                      text='Switch to casting mode',
-                      desc='Switch from punching to casting'),
 
-               option(key='d', value=inventory, seq=30,
-                      text='Diecase manipulation...',
-                      desc='Manage the matrix case collection'),
-
-               option(key='p', value=cast, seq=20,
-                      cond=lambda: runtime_config.punching,
+               option(key='p', value=wrapped(punch), seq=20,
                       text='Punching...',
                       desc='Punch a ribbon with a keyboard\'s perforator'),
-               option(key='p', value=runtime_config.toggle_punching, seq=70,
-                      cond=lambda: not runtime_config.punching,
-                      text='Switch to perforation mode',
-                      desc='Switch from casting to ribbon punching'),
+
+               option(key='d', value=wrapped(inventory), seq=30,
+                      text='Diecase manipulation...',
+                      desc='Manage the matrix case collection'),
 
                option(key='s', value=runtime_config.toggle_simulation, seq=80,
                       cond=lambda: not runtime_config.simulation,
@@ -350,65 +350,188 @@ def main_menu(runtime_config):
                       text='Switch to machine control mode',
                       desc='Use a real Monotype caster or perforator'),
 
-               option(key='t', value=translate, seq=10,
-                      text='Typesetting...',
-                      desc='Compose text for casting'),
-
-               option(key='u', value=update,
+               option(key='u', value=wrapped(update),
                       text='Update the program', seq=90)]
 
-    UI.dynamic_menu(options, header, allow_abort=True)
+    if not ctx.invoked_subcommand:
+        UI.dynamic_menu(options, header, allow_abort=True,
+                        catch_exceptions=(Abort, Finish, click.Abort))
 
 
-@cli.command()
-@click.option('--testing', '-T', is_flag=True, flag_value=True,
-              help='caster testing / diagnostics')
-@click.option('--material', '-h', is_flag=True, flag_value=True,
-              help='cast material for manual typesetting')
-@click.option('--punch', '-p', is_flag=True, flag_value=True,
-              help='ribbon perforation instead of casting')
+@cli.group(invoke_without_command=True, cls=CommandGroup)
 @click.option('--simulate', '-s', is_flag=True, flag_value=True,
-              show_default=True, help='simulation mode - no actual casting')
-@click.argument('ribbon', required=False, type=click.File('r'))
-@pass_runtime_config
-def cast(runtime_config, punch, simulate, testing, material, ribbon):
-    """Casting on an actual caster or simulation"""
+              default=CFG.interface.simulation, show_default=True,
+              help='simulate machine control')
+@click.option('--diecase', '-m', metavar='[diecase ID]',
+              help='diecase ID from the database to use')
+@click.option('--wedge', '-w', metavar='e.g. S5-12E',
+              help='series, set width, E for European wedges')
+@click.option('--measure', '-l', metavar='[value+unit]',
+              help='line length to use')
+@click.pass_context
+def cast(ctx, simulate, diecase, wedge, measure):
+    """Cast type with a Monotype caster.
+
+    Casts composition, material for handsetting, QR codes.
+    Can also cast a diecase proof.
+
+    Can also be run in simulation mode without the actual caster."""
     from .core import Casting
-    runtime_config.punching, runtime_config.simulation = punch, simulate
-    runtime_config.ribbon = ribbon
-    _casting = Casting(runtime_config)
-    if material:
-        _casting.cast_material()
-    elif ribbon:
-        # cast ribbon directly - no need to go through the menu
-        _casting.cast_composition()
-    elif testing:
-        _casting.caster.diagnostics()
-    else:
-        _casting.main_menu()
+    # context object stores parameters passed in top-level command...
+    runtime_config = ctx.obj
+    # allow override if we call this from menu
+    runtime_config.simulation = runtime_config.simulation or simulate
+    casting = Casting(runtime_config)
+    casting.measure = measure
+    casting.diecase_id = diecase
+    casting.wedge_name = wedge
+    # replace the context object for the subcommands to see
+    ctx.obj = casting
+    if not ctx.invoked_subcommand:
+        casting.main_menu()
+
+
+@cast.command('ribbon')
+@click.argument('ribbon', metavar='[FILENAME / RIBBON_ID]')
+@click.pass_obj
+def cast_ribbon(casting, ribbon):
+    """Cast composition from file or database."""
+    casting.ribbon_by_name(ribbon)
+    casting.cast_composition()
+
+
+@cast.command('material')
+@click.pass_obj
+def cast_handsetting_material(casting):
+    """Cast founts, sorts and spaces/quads."""
+    casting.cast_material()
+
+
+@cast.command('qrcode')
+@click.pass_obj
+def cast_qr_code(casting):
+    """Generate and cast QR codes."""
+    casting.cast_qr_code()
+
+
+@cast.command('proof')
+@click.pass_obj
+def cast_diecase_proof(casting):
+    """Cast a matrix case proof."""
+    casting.diecase_proof()
+
+
+@cli.group(invoke_without_command=True, cls=CommandGroup)
+@click.option('--simulate', '-s', is_flag=True, flag_value=True,
+              default=CFG.interface.simulation, show_default=True,
+              help='simulate machine control')
+@click.option('--diecase', '-m', metavar='[diecase ID]',
+              help='diecase ID from the database to use')
+@click.option('--wedge', '-w', metavar='e.g. S5-12E',
+              help='series, set width, E for European wedges')
+@click.option('--measure', '-l', metavar='[value+unit]',
+              help='line length to use')
+@click.pass_context
+def punch(ctx, simulate, diecase, wedge, measure):
+    """Punch the paper ribbon with a perforator.
+
+    Punches composition, material for handsetting or QR codes.
+
+    Can also be run in simulation mode without the actual interface."""
+    from .core import Casting
+    # context object stores parameters passed in top-level command...
+    runtime_config = ctx.obj
+    runtime_config.punching = True
+    # allow override if we call this from menu
+    runtime_config.simulation = runtime_config.simulation or simulate
+    casting = Casting(runtime_config)
+    casting.measure = measure
+    casting.diecase_id = diecase
+    casting.wedge_name = wedge
+    # replace the context object for the subcommands to see
+    ctx.obj = casting
+    if not ctx.invoked_subcommand:
+        casting.main_menu()
+
+
+punch.add_command(cast_ribbon, 'ribbon')
+punch.add_command(cast_qr_code, 'qrcode')
+punch.add_command(cast_handsetting_material, 'material')
+
+
+@cli.command('test')
+@click.option('--punch', '-p', is_flag=True, flag_value=True,
+              help='test the interface in punching mode')
+@click.option('--simulate', '-s', is_flag=True, flag_value=True,
+              default=CFG.interface.simulation, show_default=True,
+              help='simulate machine control')
+@click.pass_obj
+def test_machine(runtime_config, simulate, punch):
+    """Monotype caster testing and diagnostics."""
+    from .monotype import MonotypeCaster
+    runtime_config.punching = punch
+    runtime_config.simulation = simulate
+    machine = MonotypeCaster(runtime_config)
+    machine.diagnostics()
 
 
 @cli.command()
 @click.option('--src', type=click.File('r'))
 @click.option('--out', type=click.File('w+', atomic=True))
-@pass_runtime_config
-def translate(runtime_config, src, out):
-    """Text to ribbon translation and justification"""
+@click.option('--diecase', '-m', metavar='[diecase ID]',
+              help='diecase ID from the database to use')
+@click.option('--wedge', '-w', metavar='e.g. S5-12E',
+              help='series, set width, E for European wedges')
+@click.option('--measure', '-l', metavar='[value+unit]',
+              help='line length to use')
+@click.option('--align', '-a', metavar='[ALIGNMENT]', default='left',
+              help='default text alignment')
+@click.option('--manual', '-M', is_flag=True, flag_value=True,
+              help='leave end-of-line decisions to the operator')
+def translate(src, out, align, manual, **kwargs):
+    """Translate text to a sequence of Monotype codes.
+
+    Set and justify a text with control codes.
+
+    The output is a sequence of codes which can control the
+    Monotype composition caster.
+
+    These codes are specific to a diecase and wedge used."""
     from .core import Typesetting
     typesetting = Typesetting()
-    typesetting.diecase_id = runtime_config.diecase_id
-    typesetting.wedge_name = runtime_config.wedge_name
+    typesetting.measure = kwargs.get('measure')
+    typesetting.diecase_id = kwargs.get('diecase')
+    typesetting.wedge_name = kwargs.get('wedge')
+    typesetting.manual_mode = manual
+    typesetting.default_alignment = align
     typesetting.text_file = src
-    typesetting.ribbon_file = out
+    typesetting.ribbon.file = out
     # Only one method here
     typesetting.main_menu()
+
+
+@cli.command()
+@click.option('--list', '-l', is_flag=True, flag_value=True,
+              help='list diecases stored in database and quit')
+@click.option('--diecase', '-m', metavar='diecase ID',
+              help='diecase ID from the database to use')
+def inventory(**kwargs):
+    """Diecase definition and layout management."""
+    from . import matrix_controller
+    from .core import InventoryManagement
+    if kwargs.get('list'):
+        # Just show what we have
+        matrix_controller.list_diecases()
+    else:
+        # edit diecase (or choose, if failed)
+        InventoryManagement(kwargs.get('diecase_id'))
 
 
 @cli.command()
 @click.option('--testing', '-t', is_flag=True, flag_value=True,
               help='use a unstable/development version instead of stable')
 def update(testing):
-    """Updates the software"""
+    """Update the software."""
     # Upgrade routine
     dev_prompt = 'Testing version (newest features, but unstable)? '
     if UI.confirm('Update the software?', default=False):
@@ -418,30 +541,11 @@ def update(testing):
 
 
 @cli.command()
-@click.option('--list-diecases', '-l', is_flag=True, flag_value=True,
-              help='list diecases stored in database and quit')
-def inventory(args):
-    """Inventory management - diecase manipulation etc."""
-    from . import matrix_controller
-    from .core import InventoryManagement
-    if args.list_diecases:
-        # Just show what we have
-        matrix_controller.list_diecases()
-    else:
-        # edit diecase (or choose, if failed)
-        InventoryManagement(args.diecase_id)
-
-
-@cli.command()
 def meow():
-    "Easter egg"
+    "Easter egg."
     try:
         from .data import EASTER_EGG
         UI.display('\nOh, this was meowsome.\n')
         UI.display(EASTER_EGG)
     except (OSError, ImportError, FileNotFoundError):
         print('There are no Easter Eggs in this program.')
-
-
-if __name__ == '__main__':
-    cli()

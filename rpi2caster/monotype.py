@@ -176,13 +176,13 @@ class MonotypeCaster(object):
         info = '{r.adjusted_signals_string:<20}{r.comment}'
         punch_one = manual if UI.confirm('Manual advance?') else by_timer
         # do we need to use any row16 addressing attachment?
-        r16_needed = any((record.code.uses_row_16
-                          for record in signals_sequence))
+        source = [Record(item, signal_o15=True, default_o15=True)
+                  for item in signals_sequence]
+        r16_needed = any(record.code.uses_row_16 for record in source)
         self.check_row_16(r16_needed)
-        # we only need output for this action
+        # we only need output and not sensor for this action
         with self.output:
-            for item in signals_sequence:
-                record = Record(item, signal_o15=True, default_o15=True)
+            for record in source:
                 UI.display(info.format(r=record))
                 punch_one(record.adjusted_signals)
 
