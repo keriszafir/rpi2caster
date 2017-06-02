@@ -333,7 +333,7 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
                       desc=('Cast composition, sorts, typecases or spaces;'
                             ' test the machine')),
 
-               option(key='p', value=wrapped(punch), seq=20,
+               option(key='p', value=wrapped(punch_ribbon), seq=20,
                       text='Punching...',
                       desc='Punch a ribbon with a keyboard\'s perforator'),
 
@@ -421,7 +421,7 @@ def cast_diecase_proof(casting):
     casting.diecase_proof()
 
 
-@cli.group(invoke_without_command=True, cls=CommandGroup)
+@cli.group(invoke_without_command=True, cls=CommandGroup, name='punch')
 @click.option('--simulate', '-s', is_flag=True, flag_value=True,
               default=CFG.interface.simulation, show_default=True,
               help='simulate machine control')
@@ -432,7 +432,7 @@ def cast_diecase_proof(casting):
 @click.option('--measure', '-l', metavar='[value+unit]',
               help='line length to use')
 @click.pass_context
-def punch(ctx, simulate, diecase, wedge, measure):
+def punch_ribbon(ctx, simulate, diecase, wedge, measure):
     """Punch the paper ribbon with a perforator.
 
     Punches composition, material for handsetting or QR codes.
@@ -454,9 +454,9 @@ def punch(ctx, simulate, diecase, wedge, measure):
         casting.main_menu()
 
 
-punch.add_command(cast_ribbon, 'ribbon')
-punch.add_command(cast_qr_code, 'qrcode')
-punch.add_command(cast_handsetting_material, 'material')
+punch_ribbon.add_command(cast_ribbon, 'ribbon')
+punch_ribbon.add_command(cast_qr_code, 'qrcode')
+punch_ribbon.add_command(cast_handsetting_material, 'material')
 
 
 @cli.command('test')
