@@ -40,11 +40,34 @@ __version__ = '0.7.dev1'
 __author__ = 'Krzysztof Słychań'
 
 
+# Default configuration
+# database URL (sqlite, mysql, postgres etc.)
+GLOBAL_DB_URL = 'sqlite:///var/local/rpi2caster.db'
+# all applicable system-wide config file locations
+GLOBAL_CFG_PATHS = ['/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
 # Paths: user's local settings and data directory, user's config file...
 USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
 USER_CFG_PATH = '{}/rpi2caster.conf'.format(USER_DATA_DIR)
 # database URL (sqlite, mysql, postgres etc.)
 USER_DB_URL = 'sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR)
+
+# Default values for options
+DEFAULTS = dict(default_measure='25cc', measurement_unit='cc',
+                database_url=USER_DB_URL, signals=d.SIGNALS,
+                punching=False, simulation=False, parallel=False,
+                sensor=False, output=False,
+                emergency_stop_gpio=22, sensor_gpio=17, bounce_time=25,
+                pin_base=65, i2c_bus=1, mcp0=0x20, mcp1=0x21)
+
+# Option aliases - alternate names for options in files
+ALIASES = dict(signals=('signals_arrangement', 'arrangement'),
+               default_measure=('line_length', 'default_line_length'),
+               measurement_unit=('typesetting_unit', 'unit', 'pica'),
+               sensor_gpio=('photocell_gpio', 'light_switch_gpio'),
+               emergency_stop_gpio=('stop_gpio', 'stop_button_gpio'),
+               database_url=('db_url', 'database_uri', 'db_uri'),
+               simulation=('simulation_mode', 'mock'),
+               punching=('perforation', 'punch'))
 
 
 class CommandGroup(click.Group):
@@ -77,21 +100,23 @@ class CommandGroup(click.Group):
 class StaticConfig(cp.ConfigParser):
     """Configuration manager based on ConfigParser"""
     # use custom names for on and off states
+    config_path = None
     BOOLEAN_STATES = {name: True for name in dt.TRUE_ALIASES}
     BOOLEAN_STATES.update({name: False for name in dt.FALSE_ALIASES})
 
-    def __init__(self, config_path=USER_CFG_PATH):
+    def __init__(self, config_path=None):
         super().__init__()
         self.load(config_path)
 
     def load(self, config_path):
         """Loads a config file"""
-        self.read([*d.GLOBAL_CFG_PATHS, config_path])
+        self.config_path = config_path
+        self.read([*GLOBAL_CFG_PATHS, config_path or USER_CFG_PATH])
 
     def reset(self):
         """Resets the config to default values"""
         # Populate data with defaults; convert all names to lowercase
-        self.read_dict(d.DEFAULTS, 'defaults')
+        self.read_dict(DEFAULTS, 'defaults')
 
     def save(self, file=None):
         """Save the configuration to file"""
@@ -108,7 +133,7 @@ class StaticConfig(cp.ConfigParser):
         value = next(matching_options)
 
         # take a default value argument into account, if it was specified
-        default_value = default or d.DEFAULTS.get(option_name)
+        default_value = default or DEFAULTS.get(option_name)
 
         # coerce the string into the default value datatype, validate limits
         return dt.convert_and_validate(value, default_value,
@@ -136,7 +161,7 @@ class StaticConfig(cp.ConfigParser):
                 for option, value in sect_options.items()}
         if include_defaults:
             dump['default'] = {option: dt.convert(value, str)
-                               for option, value in d.DEFAULTS.items()}
+                               for option, value in DEFAULTS.items()}
         return json.dumps(dump, indent=4)
 
     def from_json(self, json_dump):
@@ -168,7 +193,7 @@ class StaticConfig(cp.ConfigParser):
         if the option is not found in any section, get a default value."""
         for section in self.sections():
             # get all possible names for the desired option
-            option_names = [option_name, *d.ALIASES.get(option_name, ())]
+            option_names = [option_name, *ALIASES.get(option_name, ())]
             for name in option_names:
                 try:
                     candidate = self[section][name]
@@ -177,12 +202,12 @@ class StaticConfig(cp.ConfigParser):
                     continue
         # option was defined nowhere => use a default one
         # or raise NoOptionError if it fails
-        yield d.DEFAULTS.get(option_name)
+        yield DEFAULTS.get(option_name)
 
 
 class RuntimeConfig:
     """runtime config for rpi2caster"""
-    _simulation, punching = False, False
+    _simulation, punching, database_url, config_path = False, False, None, None
     interface = None
 
     def toggle_punching(self):
@@ -233,7 +258,7 @@ class RuntimeConfig:
 
 class DBProxy(pw.Proxy):
     """Database object sitting on top of Peewee"""
-    def __init__(self, url=USER_DB_URL):
+    def __init__(self, url=None):
         super().__init__()
         self.load(url)
 
@@ -259,7 +284,7 @@ class DBProxy(pw.Proxy):
 
     def load(self, url):
         """New database session"""
-        base = db_url.connect(url)
+        base = db_url.connect(url or CFG.get_option('database_url'))
         self.initialize(base)
 
 
@@ -291,7 +316,11 @@ class UIProxy(object):
         self.impl = impl(verbosity)
 
 
-DB, CFG, UI = DBProxy(), StaticConfig(), UIProxy()
+# initialize the user interface, configuration and database
+# these will be reconfigured as needed
+UI = UIProxy()
+CFG = StaticConfig()
+DB = DBProxy()
 
 
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
@@ -301,8 +330,8 @@ DB, CFG, UI = DBProxy(), StaticConfig(), UIProxy()
               help='verbose mode')
 @click.option('--conffile', '-c', default=USER_CFG_PATH,
               help='config file to use')
-@click.option('--database', '-d', default=USER_DB_URL,
-              metavar='[database URL]', help='database URL to use')
+@click.option('--database', '-d', metavar='[database URL]',
+              help='database URL to use')
 @click.option('--web', '-W', 'ui_impl', flag_value='web_ui',
               help='use web user interface (not implemented)')
 @click.option('--text', '-T', 'ui_impl', flag_value='text_ui',
@@ -315,7 +344,9 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
         return lambda: ctx.invoke(function)
 
     runtime_config = RuntimeConfig()
+    runtime_config.config_path = conffile or USER_CFG_PATH
     CFG.load(conffile)
+    runtime_config.database_url = database or CFG.get_option('database_url')
     DB.load(database)
     UI.load(ui_impl, verbosity)
     ctx.obj = runtime_config
@@ -353,12 +384,14 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
                option(key='u', value=wrapped(update),
                       text='Update the program', seq=90)]
 
+    exceptions = (Abort, Finish, click.Abort)
     if not ctx.invoked_subcommand:
         UI.dynamic_menu(options, header, allow_abort=True,
-                        catch_exceptions=(Abort, Finish, click.Abort))
+                        catch_exceptions=exceptions)
 
 
-@cli.group(invoke_without_command=True, cls=CommandGroup)
+@cli.group(invoke_without_command=True, cls=CommandGroup,
+           options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
 @click.option('--simulate', '-s', is_flag=True, flag_value=True,
               default=CFG.interface.simulation, show_default=True,
               help='simulate machine control')
@@ -391,8 +424,8 @@ def cast(ctx, simulate, diecase, wedge, measure):
         casting.main_menu()
 
 
-@cast.command('ribbon')
-@click.argument('ribbon', metavar='[FILENAME / RIBBON_ID]')
+@cast.command('ribbon', options_metavar='[-h]')
+@click.argument('ribbon', metavar='[filename|ribbon_id]')
 @click.pass_obj
 def cast_ribbon(casting, ribbon):
     """Cast composition from file or database."""
@@ -400,14 +433,14 @@ def cast_ribbon(casting, ribbon):
     casting.cast_composition()
 
 
-@cast.command('material')
+@cast.command('material', options_metavar='[-h]')
 @click.pass_obj
 def cast_handsetting_material(casting):
     """Cast founts, sorts and spaces/quads."""
     casting.cast_material()
 
 
-@cast.command('qrcode')
+@cast.command('qrcode', options_metavar='[-h]')
 @click.pass_obj
 def cast_qr_code(casting):
     """Generate and cast QR codes."""
@@ -421,7 +454,8 @@ def cast_diecase_proof(casting):
     casting.diecase_proof()
 
 
-@cli.group(invoke_without_command=True, cls=CommandGroup, name='punch')
+@cli.group(invoke_without_command=True, cls=CommandGroup, name='punch',
+           options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
 @click.option('--simulate', '-s', is_flag=True, flag_value=True,
               default=CFG.interface.simulation, show_default=True,
               help='simulate machine control')
@@ -459,7 +493,7 @@ punch_ribbon.add_command(cast_qr_code, 'qrcode')
 punch_ribbon.add_command(cast_handsetting_material, 'material')
 
 
-@cli.command('test')
+@cli.command('test', options_metavar='[-hps]')
 @click.option('--punch', '-p', is_flag=True, flag_value=True,
               help='test the interface in punching mode')
 @click.option('--simulate', '-s', is_flag=True, flag_value=True,
@@ -475,7 +509,7 @@ def test_machine(runtime_config, simulate, punch):
     machine.diagnostics()
 
 
-@cli.command()
+@cli.command(options_metavar='[-ahlmMw] [--src textfile] [--out ribbonfile]')
 @click.option('--src', type=click.File('r'))
 @click.option('--out', type=click.File('w+', atomic=True))
 @click.option('--diecase', '-m', metavar='[diecase ID]',
@@ -510,7 +544,8 @@ def translate(src, out, align, manual, **kwargs):
     typesetting.main_menu()
 
 
-@cli.group(invoke_without_command=True, cls=CommandGroup)
+@cli.group(invoke_without_command=True, cls=CommandGroup,
+           options_metavar='[-h]', subcommand_metavar='[d|e] [-h]')
 @click.pass_context
 def inventory(ctx):
     """Diecase definition and layout management."""
@@ -518,8 +553,9 @@ def inventory(ctx):
         ctx.invoke(edit_diecase)
 
 
-@inventory.command('edit')
-@click.argument('diecase', required=False, default=None)
+@inventory.command('edit', options_metavar='[-h]')
+@click.argument('diecase', required=False, default=None,
+                metavar='[diecase_id]')
 def edit_diecase(diecase):
     """Load and edit a matrix case."""
     from . import matrix_controller as mc
@@ -528,14 +564,65 @@ def edit_diecase(diecase):
     editor.diecase_manipulation()
 
 
-@inventory.command('list')
+@inventory.command('list', options_metavar='[-h]')
 def list_diecases():
     """List all available diecases and exit."""
     from . import matrix_controller as mc
     mc.list_diecases()
 
 
-@cli.command()
+@cli.group(invoke_without_command=True, cls=CommandGroup,
+           options_metavar='[-h]', subcommand_metavar='[d|r] [-h]')
+@click.pass_context
+def settings(ctx):
+    """Display the local and global configuration for rpi2caster."""
+    if not ctx.invoked_subcommand:
+        ctx.invoke(settings_dump)
+
+
+@settings.command('dump', options_metavar='[-h]')
+@click.argument('output', required=False, type=click.File('w+'),
+                default=click.open_file('-', 'w'), metavar='[path]')
+def settings_dump(output):
+    """Write all settings to a file or stdout.
+
+    Dumps all current configuration settings, both user-specific and global.
+
+    Path can be any file on the local filesystem."""
+    CFG.write(output)
+
+
+@settings.command('read', options_metavar='[h]')
+@click.argument('option')
+def settings_read(option):
+    """Read a specified option from configuration.
+
+    If option is not found, display error message."""
+    try:
+        click.echo(CFG.get_option(option))
+    except (KeyError, ValueError):
+        click.secho('Error: no such option: {}'.format(option), fg='red')
+
+
+@settings.command('paths', options_metavar='[h]')
+@click.pass_obj
+def settings_paths(runtime_config):
+    """Display paths used by rpi2caster."""
+    click.echo('Current settings:')
+    click.echo('Configuration file: {}'.format(runtime_config.config_path))
+    click.echo('Database URL: {}'.format(runtime_config.database_url))
+    click.echo()
+    click.echo('User defaults:')
+    click.echo('Data directory: {}'.format(USER_DATA_DIR))
+    click.echo('Configuration file: {}'.format(USER_CFG_PATH))
+    click.echo('Database URL: {}'.format(USER_DB_URL))
+    click.echo()
+    click.echo('Global defaults:')
+    click.echo('Configuration file(s): {}'.format(', '.join(GLOBAL_CFG_PATHS)))
+    click.echo('Database URL: {}'.format(GLOBAL_DB_URL))
+
+
+@cli.command(options_metavar='[-ht]')
 @click.option('--testing', '-t', is_flag=True, flag_value=True,
               help='use a unstable/development version instead of stable')
 def update(testing):

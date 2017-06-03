@@ -198,26 +198,3 @@ COLUMNS_17 = ['NI', 'NL', *'ABCDEFGHIJKLMNO']
 # Build a sequence of Monotype signals as they appear on the paper tower
 SIGNALS = [*'NMLKJIHGFSED', '0075', *'CBA',
            *(str(x) for x in range(1, 15)), '0005', 'O15']
-
-# Default configuration
-# database URL (sqlite, mysql, postgres etc.)
-GLOBAL_DB_URL = 'sqlite:///var/local/rpi2caster.db'
-# all applicable system-wide config file locations
-GLOBAL_CFG_PATHS = ['/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
-# Default values for options
-DEFAULTS = dict(default_measure='25cc', measurement_unit='cc',
-                database_url=GLOBAL_DB_URL, signals=SIGNALS,
-                punching=False, simulation=False, parallel=False,
-                sensor=False, output=False,
-                emergency_stop_gpio=22, sensor_gpio=17, bounce_time=25,
-                pin_base=65, i2c_bus=1, mcp0=0x20, mcp1=0x21)
-
-# Option aliases - alternate names for options in files
-ALIASES = dict(signals=('signals_arrangement', 'arrangement'),
-               default_measure=('line_length', 'default_line_length'),
-               measurement_unit=('typesetting_unit', 'unit', 'pica'),
-               sensor_gpio=('photocell_gpio', 'light_switch_gpio'),
-               emergency_stop_gpio=('stop_gpio', 'stop_button_gpio'),
-               database_url=('db_url', 'database_uri', 'db_uri'),
-               simulation=('simulation_mode', 'mock'),
-               punching=('perforation', 'punch'))
