@@ -449,13 +449,14 @@ def make_wiringpi_output():
     class WiringPiOutput(OutputBase):
         """A 32-channel control interface based on two MCP23017 chips"""
         name = 'MCP23017 driver using wiringPi2-Python library'
-        pin_base = CFG.interface.pin_base
+        pin_base = 65
         signal_numbers = [*range(pin_base, pin_base+32)]
 
         def __init__(self):
             # Set up an output interface on two MCP23017 chips
             wiringpi.mcp23017Setup(self.pin_base, self.mcp0_address)
             wiringpi.mcp23017Setup(self.pin_base + 16, self.mcp1_address)
+            WiringPiOutput.pin_base += 32
             # Set all I/O lines on MCP23017s as outputs - mode=1
             for pin in self.mapping.values():
                 wiringpi.pinMode(pin, 1)

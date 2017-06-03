@@ -54,10 +54,10 @@ USER_DB_URL = 'sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR)
 # Default values for options
 DEFAULTS = dict(default_measure='25cc', measurement_unit='cc',
                 database_url=USER_DB_URL, signals=d.SIGNALS,
-                punching=False, simulation=False, parallel=False,
+                simulation=False, parallel=False,
                 sensor=False, output=False,
                 emergency_stop_gpio=22, sensor_gpio=17, bounce_time=25,
-                pin_base=65, i2c_bus=1, mcp0=0x20, mcp1=0x21)
+                i2c_bus=1, mcp0=0x20, mcp1=0x21)
 
 # Option aliases - alternate names for options in files
 ALIASES = dict(signals=('signals_arrangement', 'arrangement'),
@@ -66,8 +66,7 @@ ALIASES = dict(signals=('signals_arrangement', 'arrangement'),
                sensor_gpio=('photocell_gpio', 'light_switch_gpio'),
                emergency_stop_gpio=('stop_gpio', 'stop_button_gpio'),
                database_url=('db_url', 'database_uri', 'db_uri'),
-               simulation=('simulation_mode', 'mock'),
-               punching=('perforation', 'punch'))
+               simulation=('simulation_mode', 'mock'))
 
 
 class CommandGroup(click.Group):
@@ -139,7 +138,7 @@ class StaticConfig(cp.ConfigParser):
         return dt.convert_and_validate(value, default_value,
                                        minimum=minimum, maximum=maximum)
 
-    def get_many(self, **kwargs):
+    def get_options(self, **kwargs):
         """Get multiple options by keyword arguments:
             (key1=option1, key2=option2...) -> {key1: option_value_1,
                                                 key2: option_value_2...}
@@ -172,20 +171,20 @@ class StaticConfig(cp.ConfigParser):
     @property
     def interface(self):
         """Return the interface configuration"""
-        data = self.get_many(sensor='sensor', output='output',
-                             simulation='simulation', punching='punching',
-                             parallel='parallel', sensor_gpio='sensor_gpio',
-                             emergency_stop_gpio='emergency_stop_gpio',
-                             signals_arrangement='signals',
-                             mcp0='mcp0', mcp1='mcp1', pin_base='pin_base',
-                             i2c_bus='i2c_bus', bounce_time='bounce_time')
+        data = self.get_options(sensor='sensor', output='output',
+                                simulation='simulation', parallel='parallel',
+                                sensor_gpio='sensor_gpio',
+                                bounce_time='bounce_time',
+                                emergency_stop_gpio='emergency_stop_gpio',
+                                signals_arrangement='signals',
+                                mcp0='mcp0', mcp1='mcp1', i2c_bus='i2c_bus')
         return d.Interface(**data)
 
     @property
     def preferences(self):
         """Return the typesetting preferences configuration"""
-        data = self.get_many(default_measure='default_measure',
-                             measurement_unit='measurement_unit')
+        data = self.get_options(default_measure='default_measure',
+                                measurement_unit='measurement_unit')
         return d.Preferences(**data)
 
     def matching_options_generator(self, option_name):
@@ -592,7 +591,7 @@ def settings_dump(output):
     CFG.write(output)
 
 
-@settings.command('read', options_metavar='[h]')
+@settings.command('read', options_metavar='[-h]')
 @click.argument('option')
 def settings_read(option):
     """Read a specified option from configuration.
@@ -604,22 +603,21 @@ def settings_read(option):
         click.secho('Error: no such option: {}'.format(option), fg='red')
 
 
-@settings.command('paths', options_metavar='[h]')
+@settings.command('paths', options_metavar='[-h]')
 @click.pass_obj
 def settings_paths(runtime_config):
     """Display paths used by rpi2caster."""
-    click.echo('Current settings:')
-    click.echo('Configuration file: {}'.format(runtime_config.config_path))
-    click.echo('Database URL: {}'.format(runtime_config.database_url))
-    click.echo()
-    click.echo('User defaults:')
-    click.echo('Data directory: {}'.format(USER_DATA_DIR))
-    click.echo('Configuration file: {}'.format(USER_CFG_PATH))
-    click.echo('Database URL: {}'.format(USER_DB_URL))
-    click.echo()
-    click.echo('Global defaults:')
-    click.echo('Configuration file(s): {}'.format(', '.join(GLOBAL_CFG_PATHS)))
-    click.echo('Database URL: {}'.format(GLOBAL_DB_URL))
+    items = ('Current settings:',
+             'Configuration file: {}'.format(runtime_config.config_path),
+             'Database URL: {}'.format(runtime_config.database_url),
+             '', 'User defaults:',
+             'Data directory: {}'.format(USER_DATA_DIR),
+             'Configuration file: {}'.format(USER_CFG_PATH),
+             'Database URL: {}'.format(USER_DB_URL),
+             '', 'Global defaults:',
+             'Configuration file(s): {}'.format(', '.join(GLOBAL_CFG_PATHS)),
+             'Database URL: {}'.format(GLOBAL_DB_URL))
+    click.echo('\n'.join(items))
 
 
 @cli.command(options_metavar='[-ht]')

@@ -36,9 +36,9 @@ MenuItem = namedtuple('MenuItem',
 # Configuration namedtuple definitions
 Preferences = namedtuple('Preferences', 'default_measure measurement_unit')
 Interface = namedtuple('Interface',
-                       ('sensor output parallel simulation punching '
-                        'sensor_gpio emergency_stop_gpio signals_arrangement '
-                        'mcp0 mcp1 pin_base i2c_bus bounce_time'))
+                       ('sensor output parallel simulation '
+                        'sensor_gpio emergency_stop_gpio bounce_time '
+                        'signals_arrangement mcp0 mcp1 i2c_bus'))
 
 # Style definitions
 Style = namedtuple('Style', 'name alternatives short codes ansi')
