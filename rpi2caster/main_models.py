@@ -15,6 +15,9 @@ from . import basic_models as bm, definitions as d, parsing as p
 
 class BaseModel(pw.Model):
     """Base class for all models"""
+    # define the class exception here, to appease linters
+    DoesNotExist = pw.DoesNotExist
+
     class Meta:
         """Database metadata"""
         database = DB

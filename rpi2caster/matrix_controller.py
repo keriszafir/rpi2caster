@@ -299,6 +299,18 @@ def display_layout(layout):
     UI.display('\n'.join(table))
 
 
+def resize_layout(diecase):
+    """Change the diecase layout size"""
+    # select one of 3 sizes used by Monotype
+    sizes = [(15, 15), (15, 17), (16, 17)]
+    options = [option(key=n, value=size, text='{} x {}'.format(*size))
+               for n, size in enumerate(sizes, start=1)]
+    selected_size = UI.simple_menu(message='Matrix case size:',
+                                   options=options,
+                                   default_key=2, allow_abort=True)
+    diecase.layout.resize(*selected_size)
+
+
 def edit_layout(layout):
     """Edits a matrix case layout, row by row, matrix by matrix.
     Allows to enter a position to be edited. """
@@ -664,6 +676,10 @@ class DiecaseMixin:
         kwargs: char, styles, position, units: search criteria."""
         return find_matrix(self.diecase.layout, choose, **kwargs)
 
+    def resize_layout(self):
+        """Resize the layout of currently used diecase"""
+        resize_layout(self.diecase)
+
     def display_diecase_layout(self, layout=None):
         """Display the diecase layout, unit values, styles."""
         display_layout(layout or self.diecase.layout)
@@ -740,6 +756,8 @@ class DiecaseMixin:
                           text='Import layout from file'),
                    option(key='x', value=_export, seq=31,
                           text='Export layout to file'),
+                   option(key='r', value=self.resize_layout, seq=89,
+                          text='Change the diecase layout size'),
                    option(key='n', value=_clear_layout,
                           text='Clear the diecase layout', seq=90),
                    option(key='ins', value=_save, seq=91,

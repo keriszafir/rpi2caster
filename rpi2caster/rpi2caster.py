@@ -592,15 +592,15 @@ def settings_dump(output):
 
 
 @settings.command('read', options_metavar='[-h]')
-@click.argument('option')
-def settings_read(option):
+@click.argument('cfg_option')
+def settings_read(cfg_option):
     """Read a specified option from configuration.
 
     If option is not found, display error message."""
     try:
-        click.echo(CFG.get_option(option))
+        click.echo(CFG.get_option(cfg_option))
     except (KeyError, ValueError):
-        click.secho('Error: no such option: {}'.format(option), fg='red')
+        click.secho('Error: no such option: {}'.format(cfg_option), fg='red')
 
 
 @settings.command('paths', options_metavar='[-h]')

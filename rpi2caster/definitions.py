@@ -117,7 +117,7 @@ DEFAULT_HIGH_SPACE_POSITIONS = (('O', 16),)
 # Names for low and high spaces, depending on their width
 SPACE_NAMES = {'   ': 'low em quad', '  ': 'low en quad', ' ': 'low space',
                '___': 'high em quad', '__': 'high en quad', '_': 'high space'}
-SPACE_SYMBOLS = {' ': chr(0x1f790), '_': chr(0x1f795)}
+SPACE_SYMBOLS = {' ': '□', '_': '▣'}
 
 # Measurement units for line length, character/space width etc.
 TYPOGRAPHIC_UNITS = dict(pc=12.0, pt=1.0, Pp=12*0.166/0.1667, pp=0.166/0.1667,

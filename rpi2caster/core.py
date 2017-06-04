@@ -624,14 +624,8 @@ class Casting(TypesettingContext):
         if self.diecase:
             self.display_diecase_layout()
         else:
-            # select size
-            sizes = [(15, 15), (15, 17), (16, 17)]
-            options = [option(key=n, value=size, text='{} x {}'.format(*size))
-                       for n, size in enumerate(sizes, start=1)]
-            selected_size = UI.simple_menu(message='Matrix case size:',
-                                           options=options,
-                                           default_key=2, allow_abort=True)
-            self.diecase.layout.resize(*selected_size)
+            # select size for an empty layout
+            self.resize_layout()
 
         if not UI.confirm('Proceed?', default=True, abort_answer=False):
             return
