@@ -527,12 +527,14 @@ class Measure:
     def __init__(self, input_value, unit='pt', set_width=12.0):
         if not input_value:
             raise ValueError('Cannot parse measure: {}'.format(input_value))
-        raw = str(input_value).strip()
-        # Sanitize the input value; add relative Monotype units
-        string = ''.join(x for x in raw if x.isalnum() or x in ',.')
+        # Support parsing of the relative Monotype units, based on set width
+        # We know the set width now, and need to update the unit definitions
         units = d.TYPOGRAPHIC_UNITS.copy()
         units.update(em=round(set_width, 2), en=round(set_width / 2, 2),
                      u=round(set_width / 18, 2))
+        # Parse the value
+        raw = str(input_value).strip()
+        string = ''.join(x for x in raw if x.isalnum() or x in ',.')
         # Get the unit suffix (end on first match), otherwise keep default
         self.unit = unit
         for symbol in sorted(units, reverse=True):
