@@ -8,8 +8,8 @@ from collections import OrderedDict
 from contextlib import suppress
 from functools import partial
 import click
-from . import datatypes
-from .definitions import MenuItem, DEFAULT_ABORT_KEYS
+from . import datatypes as dt
+from .definitions import MenuItem, DEFAULT_ABORT_KEYS, NONSENSE
 from .parsing import get_key
 
 
@@ -274,7 +274,7 @@ class ClickUI(object):
                             .format(keys=', '.join(abort_keys))
                             if abort_keys else '')
             # add default key combo if it was specified
-            if default_retval == 'etaoin shrdlu cmfwyp':
+            if default_retval == NONSENSE:
                 prompt = 'Your choice? :\n'
             else:
                 prompt = 'Your choice? [{}] :\n'.format(def_key.name)
@@ -292,10 +292,8 @@ class ClickUI(object):
         # get default return value for wrong keypress if we have default_key
         # default to some nonsensical string for wrong dict hits
         # this will make it possible to have None as an option
-        # why "etaoin shrdlu cmfwyp"? it's related to typography somehow:
-        # https://en.wikipedia.org/wiki/Etaoin_shrdlu
         def_key = get_key(default_key)
-        default_retval = rets.get(def_key.getchar, 'etaoin shrdlu cmfwyp')
+        default_retval = rets.get(def_key.getchar, NONSENSE)
         # check which keys can be used for aborting the menu
         # pressing one of them would raise Abort, if two conditions are met:
         # aborting is enabled (allow_abort=True) and key is not in options
@@ -312,8 +310,8 @@ class ClickUI(object):
             if getchar in abort_getchars:
                 raise Abort
             retval = rets.get(getchar, default_retval)
-            if retval != 'etaoin shrdlu cmfwyp':
-                return datatypes.try_raising(retval)
+            if retval != NONSENSE:
+                return dt.try_raising(retval)
 
     @staticmethod
     def simple_menu(message, options, default_key=None, allow_abort=True):
@@ -336,10 +334,8 @@ class ClickUI(object):
         # get default return value for wrong keypress if we have default_key
         # default to some nonsensical string for wrong dict hits
         # this will make it possible to have None as an option
-        # why "etaoin shrdlu cmfwyp"? it's related to typography somehow:
-        # https://en.wikipedia.org/wiki/Etaoin_shrdlu
         def_key = get_key(default_key)
-        default_retval = rets.get(def_key.getchar, 'etaoin shrdlu cmfwyp')
+        default_retval = rets.get(def_key.getchar, NONSENSE)
         # check which keys can be used for aborting the menu
         # pressing one of them would raise Abort, if two conditions are met:
         # aborting is enabled (allow_abort=True) and key is not in options
@@ -351,7 +347,7 @@ class ClickUI(object):
                    .format(', '.join(key.name for key in abort_keys))
                    if abort_keys else '')
         # add default key combo if it was specified
-        if default_retval == 'etaoin shrdlu cmfwyp':
+        if default_retval == NONSENSE:
             prompt = 'Your choice? :'
         else:
             prompt = 'Your choice? [{}] :'.format(def_key.name)
@@ -364,8 +360,8 @@ class ClickUI(object):
             if getchar in abort_getchars:
                 raise Abort
             retval = rets.get(getchar, default_retval)
-            if retval != 'etaoin shrdlu cmfwyp':
-                return datatypes.try_raising(retval)
+            if retval != NONSENSE:
+                return dt.try_raising(retval)
 
     @staticmethod
     def clear():
@@ -495,7 +491,7 @@ class ClickUI(object):
         """
         def build_requirements_message():
             """Make a prompt about required datatype and limits."""
-            retval_type_handler = datatypes.get_handler(retval_datatype)
+            retval_type_handler = dt.get_handler(retval_datatype)
 
             # what type should the input be?
             type_name = retval_type_handler.type_name
@@ -504,7 +500,7 @@ class ClickUI(object):
 
             # what limits are imposed?
             validated_parameter = retval_type_handler.validated_parameter
-            vp_name = datatypes.LIMITED_PARAMETERS.get(validated_parameter)
+            vp_name = dt.LIMITED_PARAMETERS.get(validated_parameter)
             min_string = 'min: {}'.format(minimum)
             max_string = 'max: {}'.format(maximum)
             limits_string = [min_string if minimum is not None else '',
@@ -521,7 +517,7 @@ class ClickUI(object):
             # prefill takes a default and if it evaluates to False
             def prefill_callback():
                 """A insert_text function wrapper"""
-                pf_value = datatypes.get_string(default, default_value_type)
+                pf_value = dt.get_string(default, default_value_type)
                 return readline.insert_text(pf_value)
 
             # get value from user
@@ -531,10 +527,10 @@ class ClickUI(object):
 
         # desired type:
         # specified datatype -> type of default value -> string
-        default_value_type = datatypes.get_type(default)
+        default_value_type = dt.get_type(default)
         retval_datatype = datatype or default_value_type or str
         # configure the conversion/validation function
-        conv_validate = partial(datatypes.convert_and_validate,
+        conv_validate = partial(dt.convert_and_validate,
                                 default=default,
                                 datatype=retval_datatype,
                                 minimum=minimum, maximum=maximum,
@@ -688,4 +684,4 @@ class ClickUI(object):
                 continue
 
             # return answer, or raise it (if it was Abort)
-            return datatypes.try_raising(answer)
+            return dt.try_raising(answer)

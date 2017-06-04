@@ -198,3 +198,5 @@ COLUMNS_17 = ['NI', 'NL', *'ABCDEFGHIJKLMNO']
 # Build a sequence of Monotype signals as they appear on the paper tower
 SIGNALS = [*'NMLKJIHGFSED', '0075', *'CBA',
            *(str(x) for x in range(1, 15)), '0005', 'O15']
+# Nonsensical string for options (has Linotype heritage, btw)
+NONSENSE = 'etaoin shrdlu cmfwyp'
