@@ -272,21 +272,21 @@ def display_layout(layout):
         left = '{d.diecase_id} ({d.typeface.text})'.format(d=layout.diecase)
         right = layout.diecase.wedge.name
         center = ' ' * (len(header) - len(left) - len(right) - 4)
-        description = '| {}{}{} |'.format(left, center, right)
-        line = '=' * len(description)
-        return '\n'.join((line, description, line))
+        description = '║ {}{}{} ║'.format(left, center, right)
+        line = '═' * (len(description) - 2)
+        upper_border = '╔{}╗'.format(line)
+        lower_border = '╠{}╣'.format(line)
+        return '\n'.join((upper_border, description, lower_border))
 
     # table row template
     widths = get_column_widths()
     fields = ' '.join(' {{{col}:^{width}}} '.format(col=col, width=width)
                       for col, width in widths.items())
-    template = '| {{row:>3}} |{fields}| {{units:>5}} |'.format(fields=fields)
+    template = '║ {{row:>3}} │{fields}│ {{units:>5}} ║'.format(fields=fields)
     # header row template
     header = dict(units='Units', row='Row')
     header.update({col: col for col in widths})
     header = template.format(**header)
-    # a line of dases to separate the rows
-    separator_line = '-' * len(header)
     # proper layout
     contents = (build_row(num) for num in layout.size.row_numbers)
     # info about styles
@@ -294,7 +294,9 @@ def display_layout(layout):
     # table description
     desc = build_description()
     # put the thing together
-    table = (desc, header, separator_line, *contents, separator_line, legend)
+    table = (desc, header, '╟{}╢'.format('─' * (len(header) - 2)),
+             *contents, '╚{}╝'.format('═' * (len(header) - 2)),
+             legend)
     # finally display it
     UI.display('\n'.join(table))
 

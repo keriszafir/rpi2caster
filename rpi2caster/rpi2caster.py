@@ -544,7 +544,7 @@ def translate(src, out, align, manual, **kwargs):
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
-           options_metavar='[-h]', subcommand_metavar='[d|e] [-h]')
+           options_metavar='[-h]', subcommand_metavar='[d|e|l] [-h]')
 @click.pass_context
 def inventory(ctx):
     """Diecase definition and layout management."""
@@ -568,6 +568,18 @@ def list_diecases():
     """List all available diecases and exit."""
     from . import matrix_controller as mc
     mc.list_diecases()
+
+
+@inventory.command('display', options_metavar='[-h]')
+@click.argument('diecase', required=False, default=None,
+                metavar='[diecase_id]')
+def display_layout(diecase):
+    """Display a diecase layout.
+
+    If diecase_id is not specified, choose a diecase from the database."""
+    from . import matrix_controller as mc
+    case = mc.get_diecase(diecase)
+    mc.display_layout(case.layout)
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
