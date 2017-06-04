@@ -269,14 +269,33 @@ def display_layout(layout):
 
     def build_description():
         """diecase description: ID, typeface, wedge name and set width"""
-        left = '{d.diecase_id} ({d.typeface.text})'.format(d=layout.diecase)
-        right = layout.diecase.wedge.name
-        center = ' ' * (len(header) - len(left) - len(right) - 4)
-        description = '║ {}{}{} ║'.format(left, center, right)
+        table_width = len(header)
+        # diecase ID, typeface, wedge used
+        row1_left = ('{d.diecase_id} ({d.typeface.text})'
+                     .format(d=layout.diecase))
+        row1_right = 'wedge: {}'.format(layout.diecase.wedge.name)
+        row1_filled = len(row1_left) + len(row1_right) + 4
+        row1_center = ' ' * (table_width - row1_filled)
+        description = '║ {}{}{} ║'.format(row1_left, row1_center, row1_right)
+        # available styles
+        row2_left = ', '.join(get_formatted_text(s.name, s)
+                              for s in layout.styles)
+        # warning: ANSI-formatting the strings affects their length!
+        # calculate the correct length of formatted style names
+        styles_length = len(', '.join(s.name for s in layout.styles))
+        # space symbols
+        spaces = [(d.SPACE_NAMES.get(space), symbol)
+                  for space, symbol in d.SPACE_SYMBOLS.items()]
+        row2_right = ', '.join('{} = {}'.format(*item)
+                               for item in sorted(spaces))
+        # calculate the length of occupied space
+        row2_filled = styles_length + len(row2_right) + 4
+        row2_center = ' ' * (table_width - row2_filled)
+        desc2 = '║ {}{}{} ║'.format(row2_left, row2_center, row2_right)
         line = '═' * (len(description) - 2)
         upper_border = '╔{}╗'.format(line)
         lower_border = '╠{}╣'.format(line)
-        return '\n'.join((upper_border, description, lower_border))
+        return '\n'.join((upper_border, description, desc2, lower_border))
 
     # table row template
     widths = get_column_widths()
@@ -289,14 +308,11 @@ def display_layout(layout):
     header = template.format(**header)
     # proper layout
     contents = (build_row(num) for num in layout.size.row_numbers)
-    # info about styles
-    legend = ', '.join(get_formatted_text(s.name, s) for s in layout.styles)
     # table description
     desc = build_description()
     # put the thing together
     table = (desc, header, '╟{}╢'.format('─' * (len(header) - 2)),
-             *contents, '╚{}╝'.format('═' * (len(header) - 2)),
-             legend)
+             *contents, '╚{}╝'.format('═' * (len(header) - 2)))
     # finally display it
     UI.display('\n'.join(table))
 
