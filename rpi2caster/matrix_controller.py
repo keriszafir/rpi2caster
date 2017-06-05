@@ -274,9 +274,8 @@ def display_layout(layout):
         row1_left = ('{d.diecase_id} ({d.typeface.text})'
                      .format(d=layout.diecase))
         row1_right = 'wedge: {}'.format(layout.diecase.wedge.name)
-        row1_filled = len(row1_left) + len(row1_right) + 4
-        row1_center = ' ' * (table_width - row1_filled)
-        description = '║ {}{}{} ║'.format(row1_left, row1_center, row1_right)
+        row1_filled_width = len(row1_left) + len(row1_right) + 4
+        row1_center = ' ' * (table_width - row1_filled_width)
         # available styles
         row2_left = ', '.join(get_formatted_text(s.name, s)
                               for s in layout.styles)
@@ -289,13 +288,17 @@ def display_layout(layout):
         row2_right = ', '.join('{} = {}'.format(*item)
                                for item in sorted(spaces))
         # calculate the length of occupied space
-        row2_filled = styles_length + len(row2_right) + 4
-        row2_center = ' ' * (table_width - row2_filled)
-        desc2 = '║ {}{}{} ║'.format(row2_left, row2_center, row2_right)
-        line = '═' * (len(description) - 2)
+        row2_filled_width = styles_length + len(row2_right) + 4
+        row2_center = ' ' * (table_width - row2_filled_width)
+        # table border template
+        line = '═' * (table_width - 2)
         upper_border = '╔{}╗'.format(line)
         lower_border = '╠{}╣'.format(line)
-        return '\n'.join((upper_border, description, desc2, lower_border))
+        row_tmpl = '║ {}{}{} ║'
+        return '\n'.join((upper_border,
+                          row_tmpl.format(row1_left, row1_center, row1_right),
+                          row_tmpl.format(row2_left, row2_center, row2_right),
+                          lower_border))
 
     # table row template
     widths = get_column_widths()

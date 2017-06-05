@@ -55,7 +55,7 @@ USER_DB_URL = 'sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR)
 DEFAULTS = dict(default_measure='25cc', measurement_unit='cc',
                 database_url=USER_DB_URL, signals=d.SIGNALS,
                 simulation=False, parallel=False,
-                sensor=False, output=False,
+                sensor='rpi_gpio', output='smbus',
                 emergency_stop_gpio=22, sensor_gpio=17, bounce_time=25,
                 i2c_bus=1, mcp0=0x20, mcp1=0x21)
 
