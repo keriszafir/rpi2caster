@@ -6,6 +6,7 @@ from pkg_resources import resource_string as rs
 
 SOURCE = 'rpi2caster.data'
 
+
 def get_data(name):
     """Get the resource from a JSON-encoded file"""
     return loads(rs(SOURCE, '{}.json'.format(name)).decode())

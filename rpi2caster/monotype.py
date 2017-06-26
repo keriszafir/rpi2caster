@@ -3,25 +3,167 @@
 # Standard library imports
 import time
 from collections import OrderedDict
+import requests
 
 # Intra-package imports
 from .rpi2caster import UI, option, Abort
 from .casting_models import Record
-from .definitions import ROW16_ADDRESSING, SIGNALS
 from .matrix_controller import MatrixEngine
 
 # Constants for readability
 AIR_ON = True
 AIR_OFF = False
 
+# Error codes in rpi2caster interface API
+MACHINE_STOPPED = 0
+UNSUPPORTED_MODE = 1
+UNSUPPORTED_ROW16_MODE = 2
+INTERFACE_BUSY = 3
+INTERFACE_NOT_STARTED = 4
+HARDWARE_CONFIG_ERROR = 5
 
-class MonotypeCaster(object):
+
+class Interface:
+    """A class for controlling the remote or local interfaces
+    via JSON-over-HTTP.
+
+    Interfaces need following parameters:
+        * interface URL (HTTP non-typical port 23017 - for MCP23017)
+        * mode (casting / punching / testing)
+    """
+    def __init__(self, url='http://localhost:23017/interfaces/0',
+                 operation_mode='casting', row16_mode='off'):
+        self.url = url
+        self.pump_working = False
+        try:
+            interface_config = self._request('config', timeout=(3.2, 5))
+            if not interface_config.get('success'):
+                raise WrongConfiguration
+            interface_config.pop('success')
+            self.config = interface_config
+        except requests.Timeout:
+            UI.pause('Cannot connect to the interface. Check your link.')
+        except WrongConfiguration:
+            UI.pause('ERROR: Interface is not configured properly!')
+        self.operation_mode = operation_mode
+        self.row16_mode = row16_mode
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *_):
+        self.stop()
+
+    def _request(self, path, timeout=None, method=requests.get, **kwargs):
+        """Encode data with JSON and send it to self.url in a request."""
+        url = '{}/{}'.format(self.url, path)
+        response = method(url, json=kwargs, timeout=timeout)
+        return response.json()
+
+    @property
+    def operation_mode(self):
+        """Get the interface's operation mode:
+            testing, casting, punching, manual punching"""
+        modes = self._request('modes')
+        return modes.get('current_operation_mode')
+
+    @property
+    def row16_mode(self):
+        """Get the interface's row 16 addressing mode:
+            off, HMN, KMN, unit shift"""
+        modes = self._request('modes')
+        return modes.get('current_row16_mode')
+
+    @operation_mode.setter
+    def operation_mode(self, mode):
+        """Set the new operation mode."""
+        response_data = self._request('modes', method=requests.post,
+                                      operation_mode=mode)
+        if not response_data.get('success'):
+            UI.pause('Operation mode setting failed.')
+
+    @row16_mode.setter
+    def row16_mode(self, mode):
+        """Set the new row 16 addressing mode."""
+        response_data = self._request('modes', method=requests.post,
+                                      row16_mode=mode)
+        if not response_data.get('success'):
+            UI.display('Row 16 addressing mode setting failed.')
+
+    def send(self, signals=''):
+        """Send signals to the interface. Wait for an OK response."""
+        send_response = self._request('send', method=requests.post,
+                                      signals=signals)
+        if send_response.get('success'):
+            # ask the interface for status
+            status = self.status
+            self.pump_working = status.get('pump_working')
+            return status
+        else:
+            error_code = send_response.get('error_code')
+            if error_code == MACHINE_STOPPED:
+                raise MachineStopped
+            elif error_code == INTERFACE_NOT_STARTED:
+                self.start()
+
+    def start(self):
+        """Machine startup: before proceeding make sure that the machine
+        has turned a designated number of times in a given period.
+        This is set in the interface's configuration."""
+        response_data = self._request('machine', method=requests.post,
+                                      state=True)
+        if response_data.get('success'):
+            UI.display('Machine started.')
+        else:
+            error_message = response_data.get('error')
+            error_code = response_data.get('error_code')
+            if error_code == MACHINE_STOPPED:
+                raise MachineStopped(error_message)
+
+    def stop(self):
+        """Ensure that the pump is stopped and optionally stop the motor,
+        if the interface supports this."""
+        response_data = self._request('machine', method=requests.delete)
+        if response_data.get('success'):
+            return 'Machine successfully stopped.'
+
+    @property
+    def status(self):
+        """Get the interface status"""
+        return self._request('status')
+
+    def valves_on(self, signals=()):
+        """Low-level valve control on the interface: ON"""
+        return self._request('valves', method=requests.post,
+                             signals=list(signals))
+
+    def valves_off(self):
+        """Low-level valve control on the interface: OFF"""
+        return self._request('valves', method=requests.delete)
+
+
+class SimulationInterface:
+    """Simulates the interface without sending/receiving any requests."""
+    def __init__(self, url='simulation'):
+        self.url = url
+        self.mode = 'casting'
+        self.row16_mode = 'off'
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *_):
+        self.stop()
+
+
+class MonotypeCaster:
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
     working, pump_working = False, False
     sensor, output = None, None
-    # caster modes
-    row_16_mode = ROW16_ADDRESSING.off
+    row_16_mode = 'off'
 
     def __init__(self, runtime_config):
         """Lock the resource so that only one object can use it
@@ -49,8 +191,7 @@ class MonotypeCaster(object):
         """Gets a list of parameters"""
         # Collect data from I/O drivers
         parameters = OrderedDict({'': 'Caster parameters'})
-        parameters.update(**self.sensor.parameters)
-        parameters.update(**self.output.parameters)
+        parameters.update(**self.interface.config)
         return parameters
 
     def check_row_16(self, is_required=False):
@@ -64,7 +205,7 @@ class MonotypeCaster(object):
 
         Row 16 is not needed and is off, or is needed and is on: do nothing.
         """
-        is_active = self.row_16_mode is not ROW16_ADDRESSING.off
+        is_active = self.row_16_mode != 'off'
 
         # check and notify the user
         if is_required and not is_active:
@@ -72,7 +213,7 @@ class MonotypeCaster(object):
         elif is_active and not is_required:
             UI.pause('\n\nTurn off the {} attachment.\n\n'
                      .format(self.row_16_mode))
-            self.row_16_mode = ROW16_ADDRESSING.off
+            self.row_16_mode = 'off'
         elif is_required and is_active:
             UI.display('The {} attachment is turned on - OK.'
                        .format(self.row_16_mode))
@@ -83,13 +224,11 @@ class MonotypeCaster(object):
                   'It is supported by special attachments for the machine.\n'
                   'Which mode does your caster use: HMN, KMN, Unit-Shift?\n\n'
                   'If off - characters from row 15 will be cast instead.')
-        options = [option(key='h', value=ROW16_ADDRESSING.hmn,
-                          seq=1, text=ROW16_ADDRESSING.hmn),
-                   option(key='k', value=ROW16_ADDRESSING.kmn,
-                          seq=2, text=ROW16_ADDRESSING.kmn),
-                   option(key='u', value=ROW16_ADDRESSING.unitshift,
-                          seq=3, text=ROW16_ADDRESSING.unitshift),
-                   option(key='o', value=ROW16_ADDRESSING.off, seq=4,
+        options = [option(key='h', value='HMN', seq=1, text='HMN'),
+                   option(key='k', value='KMN', seq=2, text='KMN'),
+                   option(key='u', value='unit shift', seq=3,
+                          text='Unit shift'),
+                   option(key='o', value='off', seq=4,
                           text='Off - cast from row 15 instead')]
         mode = UI.simple_menu(prompt, options,
                               default_key='o', allow_abort=True)
@@ -224,8 +363,10 @@ class MonotypeCaster(object):
             info = ('This will test all the air lines in the same order '
                     'as the holes on the paper tower: \n{}\n'
                     'MAKE SURE THE PUMP IS DISENGAGED.')
-            UI.pause(info.format(' '.join(SIGNALS)), allow_abort=True)
-            self.test(SIGNALS)
+            signals = [*'ONMLKJIHGFSED', '0075', *'CBA',
+                       *(str(x) for x in range(1, 15)), '0005', '15']
+            UI.pause(info.format(' '.join(signals)), allow_abort=True)
+            self.test(signals)
 
         def test_justification(*_):
             """Tests the 0075-S-0005"""
@@ -251,7 +392,7 @@ class MonotypeCaster(object):
             UI.pause(info, allow_abort=True)
             queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
                      'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14',
-                     '0075 S', '0005 O15']
+                     '0075 S', '0005 O 15']
             self.test(queue, duration=0.3)
 
         def calibrate_draw_rods(*_):
@@ -411,4 +552,8 @@ class MonotypeCaster(object):
 class MachineStopped(Exception):
     """Machine stopped exception"""
     def __str__(self):
-        return ''
+        return 'Machine stopped: no rotation detected'
+
+
+class WrongConfiguration(Exception):
+    """Interface improperly configured"""

@@ -110,7 +110,7 @@ class StaticConfig(cp.ConfigParser):
     def load(self, config_path):
         """Loads a config file"""
         self.config_path = config_path
-        self.read([*GLOBAL_CFG_PATHS, config_path or USER_CFG_PATH])
+        self.read([*GLOBAL_CFG_PATHS, USER_CFG_PATH, config_path or ''])
 
     def reset(self):
         """Resets the config to default values"""

@@ -121,10 +121,10 @@ class Record:
                 column_set.update('D')
 
         # register these functions
-        functions = {d.ROW16_ADDRESSING.off: do_not_convert,
-                     d.ROW16_ADDRESSING.hmn: hmn,
-                     d.ROW16_ADDRESSING.kmn: kmn,
-                     d.ROW16_ADDRESSING.unitshift: unit_shift}
+        functions = {d.ROW16_MODES.off: do_not_convert,
+                     d.ROW16_MODES.hmn: hmn,
+                     d.ROW16_MODES.kmn: kmn,
+                     d.ROW16_MODES.unitshift: unit_shift}
 
         # determine if explicit O15 would be used
         use_o15 = ('O' in self.content.columns, 15 in self.content.rows,

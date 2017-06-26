@@ -15,10 +15,6 @@ HardwareBackend = namedtuple('CasterInterface', 'sensor output')
 # typeface metadata definition
 Typeface = namedtuple('Typeface', 'raw ids uas styles text')
 
-# Row 16 addressing modes
-Addressing = namedtuple('Row16_addressing', 'off hmn kmn unitshift')
-ROW16_ADDRESSING = Addressing('off', 'HMN', 'KMN', 'unit shift')
-
 # some parameter namedtuples for records
 Settings = namedtuple('Settings',
                       'row_16_mode explicit_o15 add_missing_o15')
