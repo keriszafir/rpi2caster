@@ -9,8 +9,11 @@ import requests
 from .rpi2caster import UI, option, Abort
 from .casting_models import Record
 from .matrix_controller import MatrixEngine
+from .definitions import WedgePositions
 
 # Constants for readability
+ON = True
+OFF = True
 AIR_ON = True
 AIR_OFF = False
 
@@ -22,6 +25,18 @@ INTERFACE_BUSY = 3
 INTERFACE_NOT_STARTED = 4
 HARDWARE_CONFIG_ERROR = 5
 
+# Operation modes
+TESTING = 'testing'
+CASTING = 'casting'
+PUNCHING = 'punching'
+MANUAL_PUNCHING = 'manual_punching'
+
+# Row 16 adressing modes
+ROW16_OFF = 'off'
+ROW16_HMN = 'HMN'
+ROW16_KMN = 'KMN'
+ROW16_SHIFT = 'unit shift'
+
 
 class Interface:
     """A class for controlling the remote or local interfaces
@@ -32,21 +47,17 @@ class Interface:
         * mode (casting / punching / testing)
     """
     def __init__(self, url='http://localhost:23017/interfaces/0',
-                 operation_mode='casting', row16_mode='off'):
+                 operation_mode=CASTING, row16_mode=ROW16_OFF):
         self.url = url
-        self.pump_working = False
-        try:
-            interface_config = self._request('config', timeout=(3.2, 5))
-            if not interface_config.get('success'):
-                raise WrongConfiguration
-            interface_config.pop('success')
-            self.config = interface_config
-        except requests.Timeout:
-            UI.pause('Cannot connect to the interface. Check your link.')
-        except WrongConfiguration:
-            UI.pause('ERROR: Interface is not configured properly!')
-        self.operation_mode = operation_mode
-        self.row16_mode = row16_mode
+        interface_config = self._request(timeout=(3.2, 5)).get('settings')
+        self.config = interface_config
+        # set the modes
+        self.modes(operation_mode, row16_mode)
+
+    def __call__(self, operation_mode=None, row16_mode=None):
+        # call interface with modes in entering the context manager
+        self.modes(operation_mode, row16_mode)
+        return self
 
     def __enter__(self):
         self.start()
@@ -55,95 +66,189 @@ class Interface:
     def __exit__(self, *_):
         self.stop()
 
-    def _request(self, path, timeout=None, method=requests.get, **kwargs):
+    def _request(self, path='', timeout=None, method=requests.get, **kwargs):
         """Encode data with JSON and send it to self.url in a request."""
         url = '{}/{}'.format(self.url, path)
-        response = method(url, json=kwargs, timeout=timeout)
-        return response.json()
+        data = kwargs or {}
+        try:
+            # get the info from the server
+            response = method(url, json=data, timeout=timeout)
+            # raise any HTTP errors ASAP
+            response.raise_for_status()
+            # we're sure we have a proper 200 OK status code
+            reply = response.json()
+            if not reply.get('success'):
+                # shit happened in the driver
+                exception = DriverError
+                exception.code = reply.get('error_code', 666)
+                exception.message = reply.get('error_name', 'unknown error')
+                exception.offending_value = reply.get('offending_value')
+                raise exception
+            # return the content without the success value
+            reply.pop('success')
+            return reply
+        except requests.exceptions.InvalidSchema:
+            # wrong URL
+            msg = 'The URL: {} must be a http://... or https://... address.'
+            raise WrongConfiguration(msg.format(self.url))
+        except requests.HTTPError as error:
+            if response.status_code == 501:
+                raise NotImplementedError('{}: not supported by server'
+                                          .format(url))
+            # 400, 404, 503 etc.
+            raise CommunicationError(str(error))
+        except (requests.ConnectionError, requests.Timeout):
+            # address not on the network; no network on client or server;
+            # DNS failure; blocked by firewall etc.
+            msg = 'Cannot connect to {}. Check the network configuration.'
+            raise CommunicationError(msg.format(self.url))
 
-    @property
-    def operation_mode(self):
-        """Get the interface's operation mode:
-            testing, casting, punching, manual punching"""
-        modes = self._request('modes')
-        return modes.get('current_operation_mode')
-
-    @property
-    def row16_mode(self):
-        """Get the interface's row 16 addressing mode:
-            off, HMN, KMN, unit shift"""
-        modes = self._request('modes')
-        return modes.get('current_row16_mode')
-
-    @operation_mode.setter
-    def operation_mode(self, mode):
-        """Set the new operation mode."""
-        response_data = self._request('modes', method=requests.post,
-                                      operation_mode=mode)
-        if not response_data.get('success'):
-            UI.pause('Operation mode setting failed.')
-
-    @row16_mode.setter
-    def row16_mode(self, mode):
-        """Set the new row 16 addressing mode."""
-        response_data = self._request('modes', method=requests.post,
-                                      row16_mode=mode)
-        if not response_data.get('success'):
-            UI.display('Row 16 addressing mode setting failed.')
+    def modes(self, operation_mode=None, row16_mode=None):
+        """Mode manager: get or set interface operation
+        and row 16 addressing modes"""
+        cached = self.__dict__.get('_modes')
+        if operation_mode is None and row16_mode is None and cached:
+            return cached
+        # no cached modes or not setting new ones - then send a request
+        try:
+            modes = self._request('modes', method=requests.post,
+                                  operation_mode=operation_mode,
+                                  row16_mode=row16_mode)
+            self.__dict__['_modes'] = modes
+            return modes
+        except DriverError as error:
+            if error.code == UNSUPPORTED_MODE:
+                UI.pause('Cannot set the operation mode to {}.'
+                         .format(operation_mode))
+            if error.code == UNSUPPORTED_ROW16_MODE:
+                UI.pause('Cannot set the row 16 addressing mode to {}.'
+                         .format(row16_mode))
+            return cached
 
     def send(self, signals=''):
         """Send signals to the interface. Wait for an OK response."""
-        send_response = self._request('send', method=requests.post,
-                                      signals=signals)
-        if send_response.get('success'):
-            # ask the interface for status
-            status = self.status
-            self.pump_working = status.get('pump_working')
-            return status
-        else:
-            error_code = send_response.get('error_code')
-            if error_code == MACHINE_STOPPED:
+        try:
+            self._request('signals', method=requests.post, signals=signals)
+        except DriverError as error:
+            if error.code == MACHINE_STOPPED:
                 raise MachineStopped
-            elif error_code == INTERFACE_NOT_STARTED:
-                self.start()
+            elif error.code == INTERFACE_NOT_STARTED:
+                self.machine(ON)
+                return self.send(signals)
+
+    def justification(self, pos_0075=None, pos_0005=None, galley_trip=False):
+        """Get or set the justification wedge positions"""
+        reply = self._request('wedges', method=requests.post,
+                              wedge_0005=pos_0005, wedge_0075=pos_0075)
+        new_0075 = reply.get('wedge_0075')
+        new_0005 = reply.get('wedge_0005')
+        return WedgePositions(new_0075, new_0005)
+
+    def pump(self, state=None):
+        """Pump control:
+            None - get status,
+            True or False - turn on or off.
+        """
+        reply = self._request('pump', method=requests.post, pump=state)
+        return reply.get('state')
+
+    def air(self, state=None):
+        """Air supply control:
+            None - get status,
+            True or False - turn on or off.
+        """
+        reply = self._request('air', method=requests.post, air=state)
+        return reply.get('state')
+
+    def water(self, state=None):
+        """Cooling water supply control:
+            None - get status,
+            True or False - turn on or off.
+        """
+        reply = self._request('water', method=requests.post, water=state)
+        return reply.get('state')
+
+    def motor(self, state=None):
+        """Motor control:
+            None - get status,
+            True or False - turn on or off.
+        """
+        reply = self._request('motor', method=requests.post, motor=state)
+        return reply.get('state')
 
     def start(self):
-        """Machine startup: before proceeding make sure that the machine
-        has turned a designated number of times in a given period.
-        This is set in the interface's configuration."""
-        response_data = self._request('machine', method=requests.post,
-                                      state=True)
-        if response_data.get('success'):
-            UI.display('Machine started.')
-        else:
-            error_message = response_data.get('error')
-            error_code = response_data.get('error_code')
-            if error_code == MACHINE_STOPPED:
-                raise MachineStopped(error_message)
+        """Machine startup sequence.
+        In the casting mode:
+            The interface will start the subsystems, if possible:
+                compressed air supply, cooling water supply and motor.
+            The operator has to turn the machine's shaft clutch on.
+            The interface driver will detect rotation, and if the machine
+            is stalling, a MachineStopped exception is raised.
+
+        In other modes (testing, punching, manual punching):
+            The interface will just turn on the compressed air supply.
+        """
+        mode = self.modes()['current_operation_mode']
+        if mode == CASTING:
+            info = ('Starting the composition caster...\n'
+                    'Turn on the motor if necessary, and engage the clutch.\n'
+                    'Casting will begin after detecting the machine rotation.')
+            UI.display(info)
+        elif mode in (PUNCHING, MANUAL_PUNCHING):
+            UI.pause('Waiting for you to start punching...')
+        # send the request and handle any exceptions
+        try:
+            self._request('machine', method=requests.post, machine=True)
+        except DriverError as error:
+            if error.code == MACHINE_STOPPED:
+                raise MachineStopped
+            elif error.code == INTERFACE_BUSY:
+                UI.pause('This interface is already working. Aborting...')
+                raise Abort
+        if mode == CASTING:
+            UI.display('OK, the machine is running...')
 
     def stop(self):
-        """Ensure that the pump is stopped and optionally stop the motor,
-        if the interface supports this."""
-        response_data = self._request('machine', method=requests.delete)
-        if response_data.get('success'):
-            return 'Machine successfully stopped.'
+        """Machine stop sequence.
+        The interface driver checks if the pump is active
+        and turns it off if necessary.
+
+        In the casting mode, the driver will turn off the motor
+        and cut off the cooling water supply.
+        Then, the air supply is cut off.
+        """
+        mode = self.modes()['current_operation_mode']
+        if mode == CASTING:
+            UI.display('Turning the machine off...')
+        elif mode in (PUNCHING, MANUAL_PUNCHING):
+            UI.display('Punching finished. Take the ribbon off the tower.')
+        self._request('machine', method=requests.post, machine=True)
 
     @property
     def status(self):
         """Get the interface status"""
-        return self._request('status')
+        return self._request().get('status')
 
-    def valves_on(self, signals=()):
+    @property
+    def speed(self):
+        """Get the speed in revolutions-per-minute speed."""
+        return self.status.get('speed')
+
+    @property
+    def signals(self):
+        """Get the signals from the machine"""
+        return self._request('signals')
+
+    def valves_on(self, signals=''):
         """Low-level valve control on the interface: ON"""
-        return self._request('valves', method=requests.post,
-                             signals=list(signals))
+        return self._request('valves', method=requests.post, valves=signals)
 
     def valves_off(self):
         """Low-level valve control on the interface: OFF"""
         return self._request('valves', method=requests.delete)
 
 
-class SimulationInterface:
+class SimulationInterface(Interface):
     """Simulates the interface without sending/receiving any requests."""
     def __init__(self, url='simulation'):
         self.url = url
@@ -151,11 +256,57 @@ class SimulationInterface:
         self.row16_mode = 'off'
 
     def __enter__(self):
-        self.start()
+        UI.display('Now turning the machine on...')
         return self
 
-    def __exit__(self, *_):
-        self.stop()
+    @staticmethod
+    def __exit__(*_):
+        UI.display('Now turning the machine off...')
+
+    def send(self, signals):
+        """Simulates sending the signals to the caster."""
+        converted_signals = signals
+        if self.mode == CASTING:
+            UI.display('photocell ON')
+            UI.display('sending {}'.format(converted_signals))
+            time.sleep(0.2)
+            UI.display('photocell OFF')
+            time.sleep(0.2)
+
+    @staticmethod
+    def valves_on(signals):
+        """Simulates sending signals to the valves directly."""
+        UI.display('Sending {}'.format(''.join(signals)))
+
+    @staticmethod
+    def valves_off():
+        """Simulates turning the valves off."""
+        UI.display('Valves off.')
+
+    def modes(self, operation_mode=None, row16_mode=None):
+        """This interface supports all modes."""
+        modes = self.__dict__.get('_modes')
+        if not modes:
+            modes = dict(current_operation_mode=CASTING,
+                         current_row16_mode=ROW16_OFF,
+                         default_operation_mode=CASTING,
+                         default_row16_mode=OFF,
+                         supported_modes=[TESTING, CASTING,
+                                          PUNCHING, MANUAL_PUNCHING],
+                         supported_row16_modes=[ROW16_OFF, ROW16_HMN,
+                                                ROW16_KMN, ROW16_SHIFT])
+            self.__dict__['_modes'] = modes
+        if operation_mode in self.__dict__['_modes']['supported_modes']:
+            self.__dict__['_modes']['current_operation_mode'] = operation_mode
+        elif operation_mode is not None:
+            UI.pause('Cannot set the operation mode to {}'
+                     .format(operation_mode))
+        if row16_mode in self.__dict__['_modes']['supported_row16_modes']:
+            self.__dict__['_modes']['current_row16_mode'] = row16_mode
+        elif row16_mode is not None:
+            UI.pause('Cannot set the row 16 addressing mode to {}'
+                     .format(row16_mode))
+        return self.__dict__['_modes']
 
 
 class MonotypeCaster:
@@ -169,22 +320,16 @@ class MonotypeCaster:
         """Lock the resource so that only one object can use it
         with context manager"""
         self.runtime_config = runtime_config
-        interface = runtime_config.interface
-        self.sensor = interface.sensor()
-        self.output = interface.output()
+        self.interface = Interface(runtime_config.interface_url,
+                                   operation_mode=runtime_config.mode)
 
     def __enter__(self):
         # initialize hardware interface; check if machine is running
-        self.output.__enter__()
-        self.sensor.__enter__()
-        if not self.working:
-            self.sensor.check_if_machine_is_working()
-            self.working = True
+        self.interface.__enter__()
         return self
 
     def __exit__(self, *_):
-        self.output.__exit__()
-        self.sensor.__exit__()
+        self.interface.__exit__()
 
     @property
     def parameters(self):
@@ -499,7 +644,8 @@ class MonotypeCaster:
             else:
                 self.test(row)
 
-        is_a_caster = not self.runtime_config.punching
+        supported_modes = self.interface.modes['supported_operation_modes']
+        is_a_caster = CASTING in supported_modes
         options = [option(key='a', value=test_all, seq=1,
                           text='Test outputs',
                           desc='Test all the air outputs N...O15, one by one'),
@@ -557,3 +703,12 @@ class MachineStopped(Exception):
 
 class WrongConfiguration(Exception):
     """Interface improperly configured"""
+
+
+class DriverError(Exception):
+    """The interface API replied with a proper 200 status code,
+    but the driver failed to perform the action."""
+
+
+class CommunicationError(Exception):
+    """Error communicating with the interface."""
