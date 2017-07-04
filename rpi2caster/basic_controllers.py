@@ -188,8 +188,8 @@ def list_typefaces(*_):
 
 # Measure controller routines
 
-def set_measure(input_value=CFG.preferences.default_measure,
-                unit=CFG.preferences.measurement_unit,
+def set_measure(input_value=CFG['Typesetting'].get('default_measure'),
+                unit=CFG['Typesetting'].get('measurement_unit'),
                 what='measure', set_width=12.0):
     """Enter the line length, choose measurement units
     (for e.g. British or European measurement system).

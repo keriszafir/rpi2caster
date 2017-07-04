@@ -1,7 +1,92 @@
 # -*- coding: utf-8 -*-
 """Functions and classes for parsing strings/iterables for usable data."""
+from collections import namedtuple
 from contextlib import suppress
-from . import definitions as d
+from functools import lru_cache
+
+# parsing delimiters
+COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
+ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
+
+# definitions
+ParsedRecord = namedtuple('ParsedRecord',
+                          ('raw signals comment column row has_signals is_char'
+                           ' uses_row_16 has_0005 has_0075 has_s_needle '
+                           'is_pump_start is_pump_stop is_newline'))
+
+
+@lru_cache(maxsize=350)
+def parse_record(input_data):
+    """Parses the record and gets its row, column and justification codes.
+    First split the input data into two parts:
+    -the Monotype signals (unprocessed),
+    -any comments delimited by symbols from COMMENT_SYMBOLS list.
+
+    Looks for any comment symbols defined here - **, *, ##, #, // etc.
+    splits the line at it and saves the comment to return it later on.
+    If it's an inline comment (placed after Monotype code combination),
+    this combination will be returned for casting."""
+    def split_on_delimiter(sequence):
+        """Iterate over known comment delimiter symbols to find
+        whether a record has a comment; split on that delimiter
+        and normalize the signals"""
+        source = ''.join(str(x) for x in sequence)
+        for symbol in COMMENT_SYMBOLS:
+            if symbol in source:
+                # Split on the first encountered symbol
+                raw_signals, comment = source.split(symbol, 1)
+                break
+        else:
+            # no comment symbol encountered, so we only have signals
+            raw_signals, comment = source, ''
+
+        return raw_signals.upper().strip(), comment.strip()
+
+    def find(value):
+        """Detect and dispatch known signals in source string"""
+        nonlocal signals
+        string = str(value)
+        if string in signals:
+            signals = signals.replace(string, '')
+            return True
+        else:
+            return False
+
+    def analyze():
+        """Check if signals perform certain functions"""
+        has_signals = any((columns, rows, justification))
+        column = (None if not has_signals
+                  else 'NI' if set('NI').issubset(columns)
+                  else 'NL' if set('NL').issubset(columns)
+                  else columns[0] if columns else 'O')
+        row = None if not has_signals else rows[0] if rows else 15
+        has_0005 = '0005' in justification or set('NJ').issubset(columns)
+        has_0075 = '0075' in justification or set('NK').issubset(columns)
+        uses_row_16 = row == 16
+        is_pump_start = has_0075
+        is_pump_stop = has_0005 and not has_0075
+        is_newline = has_0005 and has_0075
+        is_char = not justification
+        has_s_needle = 'S' in signals
+
+        return dict(has_signals=has_signals, column=column, row=row,
+                    has_0005=has_0005, has_0075=has_0075, is_char=is_char,
+                    is_newline=is_newline, uses_row_16=uses_row_16,
+                    is_pump_start=is_pump_start, is_pump_stop=is_pump_stop,
+                    has_s_needle=has_s_needle)
+
+    # we know signals and comment right away
+    raw_signals, comment = split_on_delimiter(input_data)
+    signals = raw_signals
+
+    # read the signals to know what's inside
+    justification = tuple(x for x in ('0075', '0005') if find(x))
+    parsed_rows = [x for x in range(16, 0, -1) if find(x)]
+    rows = tuple(x for x in reversed(parsed_rows))
+    columns = tuple(x for x in [*'ABCDEFGHIJKLMNO'] if find(x))
+
+    return ParsedRecord(signals=raw_signals, comment=comment,
+                        raw=input_data, **analyze())
 
 
 def parse_ribbon(ribbon):
@@ -26,7 +111,7 @@ def parse_ribbon(ribbon):
     for line in ribbon:
         for keyword, target in parameters.items():
             if line.startswith(keyword):
-                for sym in d.ASSIGNMENT_SYMBOLS:
+                for sym in ASSIGNMENT_SYMBOLS:
                     if sym in line:
                         # Data found
                         metadata[target] = get_value(line, sym)
@@ -37,21 +122,6 @@ def parse_ribbon(ribbon):
     # We need to add contents too
     metadata['contents'] = contents
     return metadata
-
-
-def get_key(source):
-    """Get the Key namedtuple of a key. First look it up in special keys."""
-    # normalize to lowercase and strip all whitespace ('Esc' -> 'esc')
-    # replace spaces and dashes to underscores ('ctrl-C -> ctrl_c)
-    if source is None:
-        # can be used to generate numbers on the fly
-        return d.Key(getchar=None, name=None)
-    else:
-        key = str(source)
-        normalized_key = key.lower().strip()
-        normalized_key.replace('-', '_')
-        normalized_key.replace(' ', '_')
-        return d.KEYS.get(normalized_key) or d.Key(getchar=key, name=key)
 
 
 def token_parser(source, *token_sources, skip_unknown=True):

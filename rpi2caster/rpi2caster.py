@@ -22,51 +22,30 @@
 
 """
 from collections import OrderedDict
-import configparser as cp
+from configparser import ConfigParser
 from contextlib import suppress
 from functools import wraps
-import json
-from os import system
+import os
 
 import click
 import peewee as pw
 from playhouse import db_url
 
-from . import datatypes as dt, definitions as d, drivers
 from .ui import ClickUI, Abort, Finish, option
 
 # global package-wide declarations
 __version__ = '0.7.dev1'
 __author__ = 'Krzysztof Słychań'
 
-
-# Default configuration
-# database URL (sqlite, mysql, postgres etc.)
-GLOBAL_DB_URL = 'sqlite:///var/local/rpi2caster.db'
-# all applicable system-wide config file locations
-GLOBAL_CFG_PATHS = ['/etc/rpi2caster/rpi2caster.conf', '/etc/rpi2caster.conf']
-# Paths: user's local settings and data directory, user's config file...
+# Find the data directory path
 USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
-USER_CFG_PATH = '{}/rpi2caster.conf'.format(USER_DATA_DIR)
-# database URL (sqlite, mysql, postgres etc.)
-USER_DB_URL = 'sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR)
 
 # Default values for options
-DEFAULTS = dict(default_measure='25cc', measurement_unit='cc',
-                database_url=USER_DB_URL, signals=d.SIGNALS,
-                simulation=False, parallel=False,
-                sensor='rpi_gpio', output='smbus',
-                emergency_stop_gpio=22, sensor_gpio=17, bounce_time=25,
-                i2c_bus=1, mcp0=0x20, mcp1=0x21)
-
-# Option aliases - alternate names for options in files
-ALIASES = dict(signals=('signals_arrangement', 'arrangement'),
-               default_measure=('line_length', 'default_line_length'),
-               measurement_unit=('typesetting_unit', 'unit', 'pica'),
-               sensor_gpio=('photocell_gpio', 'light_switch_gpio'),
-               emergency_stop_gpio=('stop_gpio', 'stop_button_gpio'),
-               database_url=('db_url', 'database_uri', 'db_uri'),
-               simulation=('simulation_mode', 'mock'))
+CONFIG = {'System': {'database': ('sqlite:///{}/rpi2caster.db'
+                                  .format(USER_DATA_DIR)),
+                     'interfaces': ('http://monotype:23017/interfaces/0, '
+                                    'http://localhost:23017/interfaces/0')},
+          'Typesetting': dict(default_measure='25cc', measurement_unit='cc')}
 
 
 class CommandGroup(click.Group):
@@ -96,170 +75,12 @@ class CommandGroup(click.Group):
         ctx.fail('Too many matches: %s' % ', '.join(sorted(matches)))
 
 
-class StaticConfig(cp.ConfigParser):
-    """Configuration manager based on ConfigParser"""
-    # use custom names for on and off states
-    config_path = None
-    BOOLEAN_STATES = {name: True for name in dt.TRUE_ALIASES}
-    BOOLEAN_STATES.update({name: False for name in dt.FALSE_ALIASES})
-
-    def __init__(self, config_path=None):
-        super().__init__()
-        self.load(config_path)
-
-    def load(self, config_path):
-        """Loads a config file"""
-        self.config_path = config_path
-        self.read([*GLOBAL_CFG_PATHS, USER_CFG_PATH, config_path or ''])
-
-    def reset(self):
-        """Resets the config to default values"""
-        # Populate data with defaults; convert all names to lowercase
-        self.read_dict(DEFAULTS, 'defaults')
-
-    def save(self, file=None):
-        """Save the configuration to file"""
-        if not file:
-            return
-        self.write(file)
-
-    def get_option(self, option_name='', default=None,
-                   minimum=None, maximum=None):
-        """Get an option value."""
-
-        # get the first match for this option name or its aliases
-        matching_options = self.matching_options_generator(option_name)
-        value = next(matching_options)
-
-        # take a default value argument into account, if it was specified
-        default_value = default or DEFAULTS.get(option_name)
-
-        # coerce the string into the default value datatype, validate limits
-        return dt.convert_and_validate(value, default_value,
-                                       minimum=minimum, maximum=maximum)
-
-    def get_options(self, **kwargs):
-        """Get multiple options by keyword arguments:
-            (key1=option1, key2=option2...) -> {key1: option_value_1,
-                                                key2: option_value_2...}
-        """
-        return {key: self.get_option(option) for key, option in kwargs.items()}
-
-    def set_option(self, option_name, value, section_name=None):
-        """Set an option to a given value"""
-        section, cfg_option = section_name.lower(), option_name.lower()
-        if section:
-            self.set(section, cfg_option, value)
-        else:
-            self.set('default', cfg_option, value)
-
-    def to_json(self, include_defaults=False):
-        """Dump the config to json"""
-        dump = {section: {option: value}
-                for section, sect_options in self.items()
-                for option, value in sect_options.items()}
-        if include_defaults:
-            dump['default'] = {option: dt.convert(value, str)
-                               for option, value in DEFAULTS.items()}
-        return json.dumps(dump, indent=4)
-
-    def from_json(self, json_dump):
-        """Load the config dump from json"""
-        dump = json.loads(json_dump)
-        self.read_dict(dump)
-
-    @property
-    def interface(self):
-        """Return the interface configuration"""
-        data = self.get_options(sensor='sensor', output='output',
-                                simulation='simulation', parallel='parallel',
-                                sensor_gpio='sensor_gpio',
-                                bounce_time='bounce_time',
-                                emergency_stop_gpio='emergency_stop_gpio',
-                                signals_arrangement='signals',
-                                mcp0='mcp0', mcp1='mcp1', i2c_bus='i2c_bus')
-        return d.Interface(**data)
-
-    @property
-    def preferences(self):
-        """Return the typesetting preferences configuration"""
-        data = self.get_options(default_measure='default_measure',
-                                measurement_unit='measurement_unit')
-        return d.Preferences(**data)
-
-    def matching_options_generator(self, option_name):
-        """Look for an option in ConfigParser object, including aliases,
-        if the option is not found in any section, get a default value."""
-        for section in self.sections():
-            # get all possible names for the desired option
-            option_names = [option_name, *ALIASES.get(option_name, ())]
-            for name in option_names:
-                try:
-                    candidate = self[section][name]
-                    yield candidate
-                except (cp.NoSectionError, cp.NoOptionError, KeyError):
-                    continue
-        # option was defined nowhere => use a default one
-        # or raise NoOptionError if it fails
-        yield DEFAULTS.get(option_name)
-
-
-class RuntimeConfig:
-    """runtime config for rpi2caster"""
-    _simulation, punching, database_url, config_path = False, False, None, None
-    interface = None
-
-    def toggle_punching(self):
-        """Switch between punching and casting modes"""
-        self.punching = not self.punching
-
-    def toggle_simulation(self):
-        """Switch between simulation and casting/punching modes"""
-        self.simulation = not self.simulation
-
-    def hardware_setup(self):
-        """Configure the hardware interface"""
-        try:
-            # special interfaces go here
-            if CFG.interface.parallel:
-                # Symbiosys parallel port driver
-                self.interface = drivers.make_parallel_interface()
-                self._simulation = False
-                return
-            else:
-                # put an interface together from sensor and driver
-                sensor = CFG.interface.sensor
-                output = CFG.interface.output
-                self.interface = drivers.make_interface(sensor, output)
-                self._simulation = False
-        except drivers.HWConfigError as exc:
-            # cannot initialize hardware interface: explain why,
-            # offer to simulate casting instead
-            UI.display(str(exc))
-            UI.pause('Hardware interface unavailable. Using simulation mode.')
-            self.simulation = True
-
-    @property
-    def simulation(self):
-        """check whether the software runs in simulation mode"""
-        return self._simulation
-
-    @simulation.setter
-    def simulation(self, is_on):
-        """choose simulation interface if True, else hardware interface"""
-        if is_on:
-            self._simulation = True
-            self.interface = drivers.make_simulation_interface()
-        else:
-            self._simulation = False
-            self.hardware_setup()
-
-
 class DBProxy(pw.Proxy):
     """Database object sitting on top of Peewee"""
-    def __init__(self, url=None):
+    def __init__(self, url=''):
         super().__init__()
-        self.load(url)
+        if url:
+            self.load(url)
 
     def __call__(self, routine):
         @wraps(routine)
@@ -283,8 +104,11 @@ class DBProxy(pw.Proxy):
 
     def load(self, url):
         """New database session"""
-        base = db_url.connect(url or CFG.get_option('database_url'))
-        self.initialize(base)
+        try:
+            base = db_url.connect(url)
+            self.initialize(base)
+        except RuntimeError:
+            click.echo('Failed loading database at {}'.format(url))
 
 
 class UIProxy(object):
@@ -318,8 +142,9 @@ class UIProxy(object):
 # initialize the user interface, configuration and database
 # these will be reconfigured as needed
 UI = UIProxy()
-CFG = StaticConfig()
-DB = DBProxy()
+CFG = ConfigParser()
+CFG.read_dict(CONFIG)
+DB = DBProxy(CFG['System'].get('database'))
 
 
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
@@ -327,9 +152,9 @@ DB = DBProxy()
 @click.version_option(__version__)
 @click.option('--verbosity', '-v', count=True, default=0,
               help='verbose mode')
-@click.option('--conffile', '-c', default=USER_CFG_PATH,
-              help='config file to use')
-@click.option('--database', '-d', metavar='[database URL]',
+@click.option('--conffile', '-c', help='config file to use',
+              default=os.path.join(USER_DATA_DIR, 'rpi2caster.conf'))
+@click.option('--database', '-d', metavar='[database URL]', default='',
               help='database URL to use')
 @click.option('--web', '-W', 'ui_impl', flag_value='web_ui',
               help='use web user interface (not implemented)')
@@ -342,11 +167,14 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
         """wrap a function so that the context will invoke it"""
         return lambda: ctx.invoke(function)
 
-    runtime_config = RuntimeConfig()
-    runtime_config.config_path = conffile or USER_CFG_PATH
-    CFG.load(conffile)
-    runtime_config.database_url = database or CFG.get_option('database_url')
-    DB.load(database)
+    CFG.read(conffile)
+    database_url = database or CFG['System'].get('database')
+    CFG.add_section('runtime')
+    runtime_config = CFG['runtime']
+    runtime_config['conffile'] = conffile
+    runtime_config['database'] = database_url
+    runtime_config['ui_implementation'] = ui_impl
+    DB.load(database_url)
     UI.load(ui_impl, verbosity)
     ctx.obj = runtime_config
 
@@ -359,26 +187,13 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
                       desc='Compose text for casting'),
 
                option(key='c', value=wrapped(cast), seq=20,
-                      text='Casting...',
+                      text='Casting or punching...',
                       desc=('Cast composition, sorts, typecases or spaces;'
                             ' test the machine')),
-
-               option(key='p', value=wrapped(punch_ribbon), seq=20,
-                      text='Punching...',
-                      desc='Punch a ribbon with a keyboard\'s perforator'),
 
                option(key='d', value=wrapped(inventory), seq=30,
                       text='Diecase manipulation...',
                       desc='Manage the matrix case collection'),
-
-               option(key='s', value=runtime_config.toggle_simulation, seq=80,
-                      cond=lambda: not runtime_config.simulation,
-                      text='Switch to simulation mode',
-                      desc='Test casting without the caster or interface'),
-               option(key='s', value=runtime_config.toggle_simulation, seq=80,
-                      cond=lambda: runtime_config.simulation,
-                      text='Switch to machine control mode',
-                      desc='Use a real Monotype caster or perforator'),
 
                option(key='u', value=wrapped(update),
                       text='Update the program', seq=90)]
@@ -391,9 +206,10 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
            options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
-@click.option('--simulate', '-s', is_flag=True, flag_value=True,
-              default=CFG.interface.simulation, show_default=True,
-              help='simulate machine control')
+@click.option('--interface', '-i', default=1, metavar='[number]',
+              help='choose interface:\n0=simulation, 1,2...=hardware')
+@click.option('--punch', '-p', is_flag=True, flag_value=True,
+              help='punch ribbon instead of casting type')
 @click.option('--diecase', '-m', metavar='[diecase ID]',
               help='diecase ID from the database to use')
 @click.option('--wedge', '-w', metavar='e.g. S5-12E',
@@ -401,7 +217,7 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
 @click.option('--measure', '-l', metavar='[value+unit]',
               help='line length to use')
 @click.pass_context
-def cast(ctx, simulate, diecase, wedge, measure):
+def cast(ctx, interface, punch, diecase, wedge, measure):
     """Cast type with a Monotype caster.
 
     Casts composition, material for handsetting, QR codes.
@@ -411,8 +227,18 @@ def cast(ctx, simulate, diecase, wedge, measure):
     from .core import Casting
     # context object stores parameters passed in top-level command...
     runtime_config = ctx.obj
+    # get the interface URLs
+    raw_interfaces = CFG['System']['interfaces']
+    # interface 0 is always there and will be used for simulation
+    interface_urls = ['', *(x.strip() for x in raw_interfaces.split(','))]
+    try:
+        runtime_config['interface_url'] = interface_urls[interface]
+    except IndexError:
+        UI.pause('Interface {} is not set. Using simulation mode instead.'
+                 .format(interface))
+    # allow to use punching instead of casting
+    runtime_config['operation_mode'] = 'punching' if punch else 'casting'
     # allow override if we call this from menu
-    runtime_config.simulation = runtime_config.simulation or simulate
     casting = Casting(runtime_config)
     casting.measure = measure
     casting.diecase_id = diecase
@@ -453,57 +279,26 @@ def cast_diecase_proof(casting):
     casting.diecase_proof()
 
 
-@cli.group(invoke_without_command=True, cls=CommandGroup, name='punch',
-           options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
-@click.option('--simulate', '-s', is_flag=True, flag_value=True,
-              default=CFG.interface.simulation, show_default=True,
-              help='simulate machine control')
-@click.option('--diecase', '-m', metavar='[diecase ID]',
-              help='diecase ID from the database to use')
-@click.option('--wedge', '-w', metavar='e.g. S5-12E',
-              help='series, set width, E for European wedges')
-@click.option('--measure', '-l', metavar='[value+unit]',
-              help='line length to use')
-@click.pass_context
-def punch_ribbon(ctx, simulate, diecase, wedge, measure):
-    """Punch the paper ribbon with a perforator.
-
-    Punches composition, material for handsetting or QR codes.
-
-    Can also be run in simulation mode without the actual interface."""
-    from .core import Casting
-    # context object stores parameters passed in top-level command...
-    runtime_config = ctx.obj
-    runtime_config.punching = True
-    # allow override if we call this from menu
-    runtime_config.simulation = runtime_config.simulation or simulate
-    casting = Casting(runtime_config)
-    casting.measure = measure
-    casting.diecase_id = diecase
-    casting.wedge_name = wedge
-    # replace the context object for the subcommands to see
-    ctx.obj = casting
-    if not ctx.invoked_subcommand:
-        casting.main_menu()
-
-
-punch_ribbon.add_command(cast_ribbon, 'ribbon')
-punch_ribbon.add_command(cast_qr_code, 'qrcode')
-punch_ribbon.add_command(cast_handsetting_material, 'material')
-
-
 @cli.command('test', options_metavar='[-hps]')
 @click.option('--punch', '-p', is_flag=True, flag_value=True,
               help='test the interface in punching mode')
-@click.option('--simulate', '-s', is_flag=True, flag_value=True,
-              default=CFG.interface.simulation, show_default=True,
-              help='simulate machine control')
+@click.option('--interface', '-i', default=1, show_default=True,
+              help='choose interface: 0 = simulation, 1... - real interfaces')
 @click.pass_obj
-def test_machine(runtime_config, simulate, punch):
+def test_machine(runtime_config, interface, punch):
     """Monotype caster testing and diagnostics."""
     from .monotype import MonotypeCaster
-    runtime_config.punching = punch
-    runtime_config.simulation = simulate
+    # get the interface URLs
+    raw_interfaces = CFG['System']['interfaces']
+    # interface 0 is always there and will be used for simulation
+    interface_urls = [None, *(x.strip() for x in raw_interfaces.split(','))]
+    try:
+        runtime_config['interface_url'] = interface_urls[interface]
+    except IndexError:
+        UI.pause('Interface {} is not set. Using simulation mode instead.'
+                 .format(interface))
+    # allow to use punching instead of casting
+    runtime_config['operation_mode'] = 'punching' if punch else 'casting'
     machine = MonotypeCaster(runtime_config)
     machine.diagnostics()
 
@@ -609,27 +404,11 @@ def settings_read(cfg_option):
     """Read a specified option from configuration.
 
     If option is not found, display error message."""
-    try:
-        click.echo(CFG.get_option(cfg_option))
-    except (KeyError, ValueError):
-        click.secho('Error: no such option: {}'.format(cfg_option), fg='red')
-
-
-@settings.command('paths', options_metavar='[-h]')
-@click.pass_obj
-def settings_paths(runtime_config):
-    """Display paths used by rpi2caster."""
-    items = ('Current settings:',
-             'Configuration file: {}'.format(runtime_config.config_path),
-             'Database URL: {}'.format(runtime_config.database_url),
-             '', 'User defaults:',
-             'Data directory: {}'.format(USER_DATA_DIR),
-             'Configuration file: {}'.format(USER_CFG_PATH),
-             'Database URL: {}'.format(USER_DB_URL),
-             '', 'Global defaults:',
-             'Configuration file(s): {}'.format(', '.join(GLOBAL_CFG_PATHS)),
-             'Database URL: {}'.format(GLOBAL_DB_URL))
-    click.echo('\n'.join(items))
+    for section_name in CFG.sections():
+        section = CFG[section_name]
+        for option_name, option_value in section.items():
+            if option_name.lower() == cfg_option.lower():
+                click.echo('{}: {}'.format(section_name, option_value))
 
 
 @cli.command(options_metavar='[-ht]')
@@ -642,7 +421,7 @@ def update(testing):
     if UI.confirm('Update the software?', default=False):
         use_dev_version = testing or UI.confirm(dev_prompt, default=False)
         pre = '--pre' if use_dev_version else ''
-        system('pip3 install {} --upgrade rpi2caster'.format(pre))
+        os.system('pip3 install {} --upgrade rpi2caster'.format(pre))
 
 
 @cli.command()

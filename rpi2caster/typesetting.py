@@ -179,18 +179,17 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
         """Typesetting measure i.e. line length"""
         if not self._measure:
             # get measure configuration and return default one
-            m_cfg = (CFG.preferences.default_measure,
-                     CFG.preferences.measurement_unit)
-            self._measure = bm.Measure(*m_cfg, set_width=self.wedge.set_width)
+            measure = CFG['Typesetting'].get('default_measure')
+            unit = CFG['Typesetting'].get('measurement_unit')
+            self._measure = bm.Measure(measure, unit, self.wedge.set_width)
         return self._measure
 
     @measure.setter
     def measure(self, measure):
         """Measure setter"""
         with suppress(ValueError):
-            self._measure = bm.Measure(measure,
-                                       CFG.preferences.measurement_unit,
-                                       set_width=self.wedge.set_width)
+            unit = CFG['Typesetting'].get('measurement_unit')
+            self._measure = bm.Measure(measure, unit, self.wedge.set_width)
 
     @measure.setter
     def line_length(self, measure):

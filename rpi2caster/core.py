@@ -14,9 +14,9 @@ except ImportError:
 
 from rpi2caster import UI, Abort, Finish, option
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .casting_models import Stats, Record
 from . import monotype
 from .matrix_controller import temp_diecase
+from .parsing import parse_record
 from .typesetting import TypesettingContext
 
 
@@ -28,9 +28,10 @@ def cast_this(ribbon_source):
         ribbon = ribbon_source(self, *args, **kwargs)
         if not ribbon:
             return
-        process = (self.punch_ribbon if self.runtime_config.punching
-                   else self.cast_ribbon)
-        return process(ribbon)
+        if self.machine.is_punching():
+            return self.punch_ribbon(ribbon)
+        else:
+            return self.cast_ribbon(ribbon)
     return wrapper
 
 
@@ -47,15 +48,19 @@ class Casting(TypesettingContext):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
     def __init__(self, runtime_config):
-        # Caster for this job
-        self.runtime_config = runtime_config
-        self.machine = monotype.MonotypeCaster(runtime_config)
+        try:
+            self.machine = monotype.MonotypeCaster(runtime_config)
+        except (monotype.WrongConfiguration,
+                monotype.CommunicationError):
+            self.machine = monotype.SimulationCaster(runtime_config)
+        except monotype.UnsupportedMode as error:
+            UI.pause(error, runtime_config['operation_mode'])
 
     def punch_ribbon(self, ribbon):
         """Punch the ribbon from start to end"""
         self.machine.punch(ribbon)
 
-    def cast_ribbon(self, ribbon):
+    def cast_ribbon(self, input_iterable):
         """Main casting routine.
 
         First check if ribbon needs rewinding (when it starts with pump stop).
@@ -73,15 +78,18 @@ class Casting(TypesettingContext):
         If casting multiple runs, repeat until all are done,
         offer adding some more.
         """
-        def rewind_if_needed(source):
+        def rewind_if_needed():
             """Decide whether to rewind the ribbon or not.
             If casting and stop comes first, rewind. Otherwise not."""
-            for item in source:
-                code = Record(item).code
-                if code.is_pump_stop:
-                    return [x for x in reversed(source)]
-                elif code.is_pump_start:
-                    return [x for x in source]
+            nonlocal ribbon
+            for record in ribbon:
+                if record.is_pump_stop:
+                    # rewind
+                    ribbon = [x for x in reversed(ribbon)]
+                    return
+                elif record.is_pump_start:
+                    # no need to rewind
+                    return
 
         def skip_lines(source):
             """Skip a definite number of lines"""
@@ -92,14 +100,13 @@ class Casting(TypesettingContext):
             # Take away combinations until we skip the desired number of lines
             # BEWARE: ribbon starts with galley trip!
             # We must give it back after lines are taken away
-            code = ''
+            record = parse_record('')
             sequence = deque(source)
             while lines_skipped > 0:
-                record = Record(sequence.popleft())
-                code = record.original_entry
-                lines_skipped -= 1 * record.code.is_newline
+                record = sequence.popleft()
+                lines_skipped -= 1 * record.is_newline
             # give the last code back
-            sequence.appendleft(code)
+            sequence.appendleft(record)
             return sequence
 
         def set_lines_skipped(run=True, session=True):
@@ -156,67 +163,71 @@ class Casting(TypesettingContext):
             # lack of column will trigger signal O
             # in punching and testing mode, signal O or 15 will be present
             # in the output combination as O15
-            for item in queue:
+            for record in queue:
                 UI.clear()
-                record = Record(item, row_16_mode=self.machine.row_16_mode)
                 # check if signal will be cast at all
-                if not record.code.has_signals:
+                if not record.has_signals:
                     UI.display_header(record.comment)
                     continue
                 # display some info and cast the signals
                 stats.update(record=record)
                 UI.display_parameters(stats.code_parameters)
                 self.machine.cast_one(record)
+                UI.display_parameters(self.machine.casting_status)
 
-        # setup the statistics engine
-        stats = Stats(self.machine)
         # Ribbon pre-processing and casting parameters setup
-        queue = rewind_if_needed(ribbon)
+        ribbon = [parse_record(code) for code in input_iterable]
+        rewind_if_needed()
+        # initialize statistics
+        stats = bm.Stats()
         stats.update(ribbon=ribbon)
+        # display some info for the user
         UI.display_parameters(stats.ribbon_parameters)
         # set the number of casting runs
         stats.update(runs=UI.enter('How many times do you want to cast this?',
                                    default=1, minimum=0))
-        # Initial line skipping
+        # initial line skipping
         set_lines_skipped(run=True, session=True)
         UI.display_parameters(stats.session_parameters)
-        # Mould heatup to stabilize the temperature
+        # mould heatup to stabilize the temperature
         extra_quads = preheat_if_needed()
-        # Cast until there are no more runs left
-        while stats.get_runs_left():
-            # Prepare the ribbon ad hoc
-            casting_queue = skip_lines(queue)
-            stats.update(queue=casting_queue)
-            # Cast the run and check if it was successful
-            try:
-                # use caster context i.e. check if machine is running first
-                with self.machine:
+        # check if the row 16 addressing will be used;
+        # connect with the interface
+        row16_in_use = any(record.uses_row_16 for record in ribbon)
+        self.machine.choose_row16_mode(row16_in_use)
+        with self.machine:
+            while stats.get_runs_left():
+                # Prepare the ribbon ad hoc
+                queue = skip_lines(ribbon)
+                stats.update(queue=queue)
+                # Cast the run and check if it was successful
+                try:
                     # this part will be cast only once
                     cast_queue(extra_quads)
                     # proper queue with characters
-                    cast_queue(casting_queue)
-                stats.update(casting_success=True)
-                if not stats.get_runs_left():
-                    # make sure the machine will check
-                    # whether it's running next time
-                    self.machine.working = False
-                    # user might want to re-run this
-                    prm = 'Casting successfully finished. Any more runs?'
-                    stats.update(runs=UI.enter(prm, default=0, minimum=0))
+                    cast_queue(queue)
+                    stats.update(casting_success=True)
+                    if not stats.get_runs_left():
+                        # make sure the machine will check
+                        # whether it's running next time
+                        self.machine.working = False
+                        # user might want to re-run this
+                        prm = 'Casting successfully finished. Any more runs?'
+                        stats.update(runs=UI.enter(prm, default=0, minimum=0))
 
-            except monotype.MachineStopped:
-                stats.update(casting_success=False)
-                # aborted - ask if user wants to continue
-                runs_left = stats.get_runs_left()
-                if runs_left:
-                    UI.confirm('{} runs left, continue?'.format(runs_left),
-                               default=True, abort_answer=False)
-                else:
-                    UI.confirm('Retry casting?', default=True,
-                               abort_answer=False)
-                # offer to skip lines for re-casting the failed run
-                skip_successful = stats.get_lines_done() >= 2
-                set_lines_skipped(run=skip_successful, session=False)
+                except monotype.MachineStopped:
+                    stats.update(casting_success=False)
+                    # aborted - ask if user wants to continue
+                    runs_left = stats.get_runs_left()
+                    if runs_left:
+                        UI.confirm('{} runs left, continue?'.format(runs_left),
+                                   default=True, abort_answer=False)
+                    else:
+                        UI.confirm('Retry casting?', default=True,
+                                   abort_answer=False)
+                    # offer to skip lines for re-casting the failed run
+                    skip_successful = stats.get_lines_done() >= 2
+                    set_lines_skipped(run=skip_successful, session=False)
 
     @cast_this
     @temp_diecase
@@ -650,21 +661,32 @@ class Casting(TypesettingContext):
 
     def main_menu(self):
         """Main menu for the type casting utility."""
-        punching = self.runtime_config.punching
+        def got_ribbon():
+            """Check if ribbon is not empty"""
+            return bool(self.ribbon)
+
+        def diecase_id():
+            """Get the diecase ID for display"""
+            return ('( current diecase ID: {})'.format(self.diecase.diecase_id)
+                    if bool(self.diecase) else '')
+
+        is_casting = self.machine.is_casting
+        is_punching = self.machine.is_punching
+
         hdr = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                'for Monotype Composition or Type and Rule casters.\n\n'
                'This program reads a ribbon (from file or database) '
                'and casts the type on a composition caster.'
                '\n\n{} Menu:')
-        header = hdr.format('Punching' if punching else 'Casting')
+        header = hdr.format('Punching' if is_punching() else 'Casting')
 
         options = [option(key='c', value=self.cast_composition, seq=10,
-                          cond=lambda: (not punching and bool(self.ribbon)),
+                          cond=lambda: (is_casting() and got_ribbon()),
                           text='Cast composition',
                           desc='Cast type from a selected ribbon'),
 
                    option(key='p', value=self.cast_composition, seq=10,
-                          cond=lambda: (punching and bool(self.ribbon)),
+                          cond=lambda: (is_punching() and got_ribbon()),
                           text='Punch ribbon',
                           desc='Punch a paper ribbon for casting'),
 
@@ -677,25 +699,20 @@ class Casting(TypesettingContext):
                           desc='Select a matrix case from database'),
 
                    option(key='v', value=self.display_ribbon_contents, seq=80,
-                          cond=lambda: bool(self.ribbon),
-                          text='View codes',
+                          text='View codes', cond=got_ribbon,
                           desc='Display all codes in the selected ribbon'),
 
                    option(key='l', value=self.display_diecase_layout, seq=80,
-                          cond=lambda: bool(self.diecase),
-                          text='Show diecase layout{}',
+                          text='Show diecase layout{}', cond=diecase_id,
                           desc='View the matrix case layout',
-                          lazy=lambda: ('( current diecase ID: {})'
-                                        .format(self.diecase.diecase_id)
-                                        if bool(self.diecase) else '')),
+                          lazy=diecase_id),
 
                    option(key='t', value=self.quick_typesetting, seq=20,
                           text='Quick typesetting',
                           desc='Compose and cast a line of text'),
 
                    option(key='h', value=self.cast_material, seq=60,
-                          cond=lambda: not punching,
-                          text='Cast handsetting material',
+                          cond=is_casting, text='Cast handsetting material',
                           desc='Cast sorts, spaces and typecases'),
 
                    option(key='q', value=self.cast_qr_code, seq=70,
@@ -703,12 +720,10 @@ class Casting(TypesettingContext):
                           desc='Cast QR codes from high and low spaces'),
 
                    option(key='F5', value=self.display_details, seq=85,
-                          cond=lambda: not punching,
-                          text='Show details...',
+                          text='Show details...', cond=is_casting,
                           desc='Display ribbon, diecase and wedge info'),
                    option(key='F5', value=self.display_details, seq=85,
-                          cond=lambda: punching,
-                          text='Show details...',
+                          text='Show details...', cond=is_punching,
                           desc='Display ribbon and interface details'),
 
                    option(key='F7', value=self.diecase_manipulation, seq=90,
@@ -729,11 +744,10 @@ class Casting(TypesettingContext):
 
     def display_details(self):
         """Collect ribbon, diecase and wedge data here"""
-        ribbon, casting = self.ribbon, not self.runtime_config.punching
-        diecase, wedge = self.diecase, self.wedge
+        ribbon, diecase, wedge = self.ribbon, self.diecase, self.wedge
         data = [ribbon.parameters if ribbon else {},
-                diecase.parameters if diecase and casting else {},
-                wedge.parameters if wedge and casting else {},
+                diecase.parameters if diecase else {},
+                wedge.parameters if wedge else {},
                 self.machine.parameters]
         UI.display_parameters(*data)
         UI.pause()

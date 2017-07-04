@@ -10,6 +10,195 @@ from math import ceil
 from . import data, definitions as d
 
 
+class Stats:
+    """Casting statistics gathering and displaying functions"""
+    def __init__(self):
+        self._ribbon = defaultdict(int)
+        self._run, self._session = defaultdict(int), defaultdict(int)
+        self._current = defaultdict(lambda: defaultdict(str))
+        self._previous = defaultdict(lambda: defaultdict(str))
+
+    def update(self, **kwargs):
+        """Update parameters"""
+        def session_line_skip(lines):
+            """skip lines for every run in the session"""
+            self._session['lines_skipped'] = lines
+
+        def run_line_skip(lines):
+            """skip lines for a single run"""
+            self._run['lines_skipped'] = lines
+
+        def add_runs(delta):
+            """change a number of runs in casting session"""
+            old_value = self._session['runs']
+            runs = old_value + delta
+            self._session['runs'] = runs
+            self._session['codes'] = runs * self._ribbon['codes']
+            self._session['chars'] = runs * self._ribbon['chars']
+            self._session['lines'] = runs * self._ribbon['lines']
+
+        def end_run(success):
+            """Updates the info about the runs"""
+            if success:
+                # update the counters
+                self._session['runs_done'] += 1
+                self._session['current_run'] += 1
+            else:
+                # reset last run stats - don't update the counters
+                self._session['failed_runs'] += 1
+                for par in ('current_line', 'current_code', 'current_char'):
+                    self._session[par] -= self._run[par]
+
+        parameters = dict(ribbon=self.update_session_stats,
+                          queue=self.update_run_stats,
+                          record=self.update_record_stats,
+                          session_line_skip=session_line_skip,
+                          run_line_skip=run_line_skip,
+                          runs=add_runs,
+                          casting_success=end_run)
+        for argument, value in kwargs.items():
+            routine = parameters.get(argument)
+            if not routine:
+                continue
+            return routine(value)
+
+    @property
+    def runs(self):
+        """Gets the runs (repetitions) number"""
+        return self._session['runs']
+
+    def get_ribbon_lines(self):
+        """Gets number of lines per ribbon"""
+        return self._ribbon['lines']
+
+    def get_run_lines_skipped(self):
+        """Get a number of lines to skip - decide whether to use
+        the run or ribbon skipped lines"""
+        return self._run['lines_skipped'] or self._session['lines_skipped']
+
+    @property
+    def ribbon_parameters(self):
+        """Gets ribbon parameters"""
+        parameters = OrderedDict({'': 'Ribbon parameters'})
+        parameters['Combinations in ribbon'] = self._ribbon['codes']
+        parameters['Characters incl. spaces'] = self._ribbon['chars']
+        parameters['Lines to cast'] = self._ribbon['lines']
+        return parameters
+
+    @property
+    def session_parameters(self):
+        """Displays the ribbon data"""
+        # display this only for multi-run sessions
+        if self._session['runs'] < 2:
+            return {}
+        parameters = OrderedDict({'': 'Casting session parameters'})
+        parameters['Casting runs'] = self._session['runs']
+        parameters['All codes'] = self._session['codes']
+        parameters['All chars'] = self._session['chars']
+        parameters['All lines'] = self._session['lines']
+        return parameters
+
+    @property
+    def code_parameters(self):
+        """Displays info about the current combination"""
+        def build_info(source, name):
+            """Builds data to display based on the given parameter"""
+            current_name = 'current_{}'.format(name)
+            current_value = source[current_name]
+            total_name = '{}s'.format(name)
+            total_value = source[total_name]
+            if not total_value:
+                return '{current}'.format(current=current_value)
+            done = max(0, current_value - 1)
+            remaining = total_value - current_value
+            percent = done / total_value * 100
+            desc = ('{current} of {total} [{percent:.2f}%], '
+                    '{done} done, {left} left')
+            return desc.format(current=current_value, total=total_value,
+                               percent=percent, done=done, left=remaining)
+
+        record = self._current['record']
+        runs_number = self._session['runs']
+        # display comment as a header
+        info = OrderedDict({'': record.comment})
+        # display codes
+        info['Raw signals from ribbon'] = record.signals
+        if record.is_newline:
+            info['Starting a new line'] = self._run['current_line']
+        if runs_number > 1:
+            info['Code / run'] = build_info(self._run, 'code')
+            info['Char / run'] = build_info(self._run, 'char')
+            info['Line / run'] = build_info(self._run, 'line')
+            info['Run / job'] = build_info(self._session, 'run')
+            info['Failed runs'] = self._session['failed_runs']
+        info['Code / job'] = build_info(self._session, 'code')
+        info['Char / job'] = build_info(self._session, 'char')
+        info['Line / job'] = build_info(self._session, 'line')
+        return info
+
+    def update_session_stats(self, ribbon):
+        """Parses the ribbon, counts combinations, lines and characters"""
+        # first, reset counters
+        self._session, self._ribbon = defaultdict(int), defaultdict(int)
+        self._current = defaultdict(lambda: defaultdict(str))
+        self._previous = defaultdict(lambda: defaultdict(str))
+        # parse the ribbon to read its stats
+        records = [record for record in ribbon if record.has_signals]
+        # number of codes is just a number of valid combinations
+        num_codes = len(records)
+        # ribbon starts and ends with newline, so lines = newline codes - 1
+        num_lines = sum(1 for record in records if record.is_newline) - 1
+        # characters: if combination has no justification codes
+        num_chars = sum(1 for record in records if record.is_char)
+        # Set ribbon and session counters
+        self._ribbon.update(codes=num_codes, chars=num_chars,
+                            lines=max(0, num_lines))
+        self._session.update(lines_skipped=0, current_run=1,
+                             current_line=0, current_code=0, current_char=0)
+
+    def update_run_stats(self, queue):
+        """Parses the ribbon, counts combinations, lines and characters"""
+        records = [record for record in queue if record.has_signals]
+        # all codes is a number of valid signals
+        num_codes = len(records)
+        # clear and start with -1 line for the initial galley trip
+        n_lines = sum(1 for record in records if record.is_newline) - 1
+        num_lines = max(n_lines, 0)
+        # determine number of characters
+        num_chars = sum(1 for record in records if record.is_char)
+        # update run statistics
+        self._run.update(lines_skipped=0,
+                         current_line=0, current_code=0, current_char=0,
+                         lines=num_lines, codes=num_codes, chars=num_chars)
+
+    def update_record_stats(self, record):
+        """Updates the stats based on parsed signals."""
+        # Update previous stats and current record
+        self._previous, self._current['record'] = self._current.copy(), record
+        # advance or set the run and session code counters
+        self._run['current_code'] += 1
+        self._session['current_code'] += 1
+        # detect 0075+0005(+pos_0005)->0075(+pos_0075) = double justification
+        # this means starting new line
+        with suppress(AttributeError):
+            was_newline = self._previous['record'].is_newline
+            if was_newline and record.is_pump_start:
+                self._run['current_line'] += 1
+                self._session['current_line'] += 1
+        # advance or set the character counters
+        self._run['current_char'] += 1 * record.is_char
+        self._session['current_char'] += 1 * record.is_char
+
+    def get_runs_left(self):
+        """Gets the runs left number"""
+        diff = self._session['runs'] - self._session['runs_done']
+        return max(0, diff)
+
+    def get_lines_done(self):
+        """Gets the current run line number"""
+        return max(0, self._run['current_line'] - 1)
+
+
 class Matrix:
     """A class for single matrices - all matrix data"""
     __slots__ = ('char', '_units', 'row', 'column', '_styles', 'diecase',
@@ -96,7 +285,7 @@ class Matrix:
         def column_generator():
             """Generate column numbers"""
             nonlocal sigs
-            for column in d.COLUMNS_17:
+            for column in ['NI', 'NL', *'ABCDEFGHIJKLMNO']:
                 if column in sigs:
                     sigs = sigs.replace(column, '')
                     yield column
@@ -212,9 +401,8 @@ class VariableSpace(Matrix):
     __slots__ = ['matrix', '_units', 'position', 'diecase', 'char']
 
     def __init__(self, diecase, units=0, low=True):
-        self.diecase = diecase
-        self.char = ' ' if low else '_'
-        self.units = units
+        super().__init__(diecase=diecase, char=' ' if low else '_',
+                         units=units)
 
     def match(self):
         """locate the best suitable space for the given number of units"""
@@ -487,9 +675,9 @@ class LayoutSize:
     def column_numbers(self):
         """A tuple of column numbers."""
         if self.columns > 15 or self.rows > 15:
-            return d.COLUMNS_17
+            return ['NI', 'NL', *'ABCDEFGHIJKLMNO']
         else:
-            return d.COLUMNS_15
+            return [*'ABCDEFGHIJKLMNO']
 
     @column_numbers.setter
     def column_numbers(self, column_numbers):

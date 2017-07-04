@@ -4,13 +4,55 @@ can be added later or imported from separate modules"""
 import readline
 import glob
 import string
-from collections import OrderedDict
+from collections import namedtuple, OrderedDict
 from contextlib import suppress
 from functools import partial
 import click
 from . import datatypes as dt
-from .definitions import MenuItem, DEFAULT_ABORT_KEYS, NONSENSE
-from .parsing import get_key
+
+
+# menu item namedtuple
+MenuItem = namedtuple('Item', 'key value condition lazy text description seq')
+# control key definitions
+Key = namedtuple('Key', 'getchar name')
+KEYS = dict(
+    # main keys
+    esc=Key('\x1b', 'Esc'), enter=Key('\r', 'Enter'), space=Key(' ', 'Space'),
+    tab=Key('\t', 'Tab'), backspace=Key('\x7f', 'Backspace'),
+    # arrow keys
+    up=Key('\x1b[A', 'Up'), down=Key('\x1b[B', 'Down'),
+    left=Key('\x1b[D', 'Left'), right=Key('\x1b[C', 'Right'),
+    # editor keys
+    ins=Key('\x1b[2~', 'Ins'), delete=Key('\x1b[3~', 'Del'),
+    home=Key('\x1b[H', 'Home'), end=Key('\x1b[F', 'End'),
+    pgup=Key('\x1b[5~', 'PgUp'), pgdn=Key('\x1b[6~', 'PgDn'),
+    # ctrl combinations
+    ctrl_c=Key('\x03', 'Ctrl-C'), ctrl_z=Key('\x1a', 'Ctrl-Z'),
+    # function keys
+    f1=Key('\x1bOP', 'F1'), f2=Key('\x1bOQ', 'F2'),
+    f3=Key('\x1bOR', 'F3'), f4=Key('\x1bOS', 'F4'),
+    f5=Key('\x1b[15~', 'F5'), f6=Key('\x1b[17~', 'F6'),
+    f7=Key('\x1b[18~', 'F7'), f8=Key('\x1b[19~', 'F8'),
+    f9=Key('\x1b[20~', 'F9'), f10=Key('\x1b[21~', 'F10'),
+    f11=Key('\x1b[23~', 'F11'), f12=Key('\x1b[24~', 'F12')
+    )
+DEFAULT_ABORT_KEYS = [KEYS[key] for key in ('esc', 'ctrl_c', 'ctrl_z', 'f10')]
+NONSENSE = 'etaoin shrdlu cmfwyp'
+
+
+def get_key(source):
+    """Get the Key namedtuple of a key. First look it up in special keys."""
+    # normalize to lowercase and strip all whitespace ('Esc' -> 'esc')
+    # replace spaces and dashes to underscores ('ctrl-C -> ctrl_c)
+    if source is None:
+        # can be used to generate numbers on the fly
+        return Key(getchar=None, name=None)
+    else:
+        key = str(source)
+        normalized_key = key.lower().strip()
+        normalized_key.replace('-', '_')
+        normalized_key.replace(' ', '_')
+        return KEYS.get(normalized_key) or Key(getchar=key, name=key)
 
 
 def option(key=None, value=None, cond=True, lazy='', text='', desc='', seq=50):
@@ -267,8 +309,7 @@ class ClickUI(object):
                             .format(self.verbosity)
                             if self.verbosity else '')
             # additional info if abort is allowed
-            abort_keys = sorted(key.name
-                                for key in DEFAULT_ABORT_KEYS
+            abort_keys = sorted(key.name for key in DEFAULT_ABORT_KEYS
                                 if allow_abort and key.getchar not in rets)
             abort_string = (abort_suffix
                             .format(keys=', '.join(abort_keys))
@@ -408,16 +449,15 @@ class ClickUI(object):
         data : [OrderedDict('': header, par1: val1, par2: val2)...]
 
         If key evaluates False, display a header."""
-
-        kv_gen = ((k, v) for par_dict in data for (k, v) in par_dict.items())
-        for name, value in kv_gen:
-            if name:
-                # parameter : value
-                entry = '{name} : {value}'.format(name=name, value=value)
-                click.echo(entry)
-            else:
-                # parameter evaluating False: value is a header
-                self.display_header('{}'.format(value), trailing_newline=0)
+        for parameter_dict in data:
+            for name, value in parameter_dict.items():
+                if name:
+                    # parameter : value
+                    entry = '{name} : {value}'.format(name=name, value=value)
+                    click.echo(entry)
+                else:
+                    # parameter evaluating False: value is a header
+                    self.display_header('{}'.format(value), trailing_newline=0)
 
     def pause(self, msg1='', msg2='Press any key to continue...',
               min_verbosity=0, allow_abort=False):
