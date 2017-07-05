@@ -169,8 +169,8 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
 
     CFG.read(conffile)
     database_url = database or CFG['System'].get('database')
-    CFG.add_section('runtime')
-    runtime_config = CFG['runtime']
+    CFG.add_section('Runtime')
+    runtime_config = CFG['Runtime']
     runtime_config['conffile'] = conffile
     runtime_config['database'] = database_url
     runtime_config['ui_implementation'] = ui_impl
@@ -225,21 +225,10 @@ def cast(ctx, interface, punch, diecase, wedge, measure):
 
     Can also be run in simulation mode without the actual caster."""
     from .core import Casting
-    # context object stores parameters passed in top-level command...
-    runtime_config = ctx.obj
-    # get the interface URLs
-    raw_interfaces = CFG['System']['interfaces']
-    # interface 0 is always there and will be used for simulation
-    interface_urls = ['', *(x.strip() for x in raw_interfaces.split(','))]
-    try:
-        runtime_config['interface_url'] = interface_urls[interface]
-    except IndexError:
-        UI.pause('Interface {} is not set. Using simulation mode instead.'
-                 .format(interface))
-    # allow to use punching instead of casting
+    runtime_config = CFG['Runtime']
     runtime_config['operation_mode'] = 'punching' if punch else 'casting'
     # allow override if we call this from menu
-    casting = Casting(runtime_config)
+    casting = Casting(interface)
     casting.measure = measure
     casting.diecase_id = diecase
     casting.wedge_name = wedge
@@ -282,24 +271,14 @@ def cast_diecase_proof(casting):
 @cli.command('test', options_metavar='[-hps]')
 @click.option('--punch', '-p', is_flag=True, flag_value=True,
               help='test the interface in punching mode')
-@click.option('--interface', '-i', default=1, show_default=True,
+@click.option('--interface', '-i', default=None, show_default=True,
               help='choose interface: 0 = simulation, 1... - real interfaces')
 @click.pass_obj
 def test_machine(runtime_config, interface, punch):
     """Monotype caster testing and diagnostics."""
-    from .monotype import MonotypeCaster
-    # get the interface URLs
-    raw_interfaces = CFG['System']['interfaces']
-    # interface 0 is always there and will be used for simulation
-    interface_urls = [None, *(x.strip() for x in raw_interfaces.split(','))]
-    try:
-        runtime_config['interface_url'] = interface_urls[interface]
-    except IndexError:
-        UI.pause('Interface {} is not set. Using simulation mode instead.'
-                 .format(interface))
-    # allow to use punching instead of casting
-    runtime_config['operation_mode'] = 'punching' if punch else 'casting'
-    machine = MonotypeCaster(runtime_config)
+    from .monotype import choose_machine
+    operation_mode = 'punching' if punch else 'casting'
+    machine = choose_machine(interface, operation_mode)
     machine.diagnostics()
 
 

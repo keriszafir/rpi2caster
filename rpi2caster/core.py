@@ -47,14 +47,8 @@ class Casting(TypesettingContext):
     -testing the interface,
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
-    def __init__(self, runtime_config):
-        try:
-            self.machine = monotype.MonotypeCaster(runtime_config)
-        except (monotype.WrongConfiguration,
-                monotype.CommunicationError):
-            self.machine = monotype.SimulationCaster(runtime_config)
-        except monotype.UnsupportedMode as error:
-            UI.pause(error, runtime_config['operation_mode'])
+    def __init__(self, interface_id):
+        self.caster = monotype.choose_machine(interface_id)
 
     def punch_ribbon(self, ribbon):
         """Punch the ribbon from start to end"""
@@ -164,16 +158,16 @@ class Casting(TypesettingContext):
             # in punching and testing mode, signal O or 15 will be present
             # in the output combination as O15
             for record in queue:
-                UI.clear()
                 # check if signal will be cast at all
                 if not record.has_signals:
                     UI.display_header(record.comment)
                     continue
                 # display some info and cast the signals
                 stats.update(record=record)
-                UI.display_parameters(stats.code_parameters)
                 self.machine.cast_one(record)
-                UI.display_parameters(self.machine.casting_status)
+                UI.clear()
+                UI.display_parameters(stats.code_parameters,
+                                      self.machine.casting_status)
 
         # Ribbon pre-processing and casting parameters setup
         ribbon = [parse_record(code) for code in input_iterable]

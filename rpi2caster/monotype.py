@@ -6,7 +6,7 @@ from collections import OrderedDict
 import requests
 
 # Intra-package imports
-from .rpi2caster import UI, option, Abort
+from .rpi2caster import UI, CFG, option, Abort
 from .parsing import parse_record
 from .matrix_controller import MatrixEngine
 
@@ -14,9 +14,59 @@ from .matrix_controller import MatrixEngine
 ON, OFF = True, False
 
 
+def choose_machine(interface_id=None):
+    """Choose a machine from the available interfaces."""
+    def make_caster(url):
+        """caster factory method: make a real or simulation caster;
+        if something bad happens, just return None"""
+        if url:
+            try:
+                return MonotypeCaster(url, operation_mode)
+            except (CommunicationError, UnsupportedMode):
+                return None
+        else:
+            return SimulationCaster(url, operation_mode)
+
+    def make_caster_menu_entry(caster):
+        """make a menu entry for caster choice"""
+        config = caster.config
+        name = config.get('name', 'Unknown caster')
+        modes = ', '.join(config['supported_modes'])
+        row16_modes = ', '.join(config['supported_row16_modes']) or 'none'
+        description = ('{}, modes: {}, row 16 addressing modes: {}'
+                       .format(name, modes, row16_modes))
+        return option(value=caster, text=description)
+
+    # get the interface URLs (first one is empty and corresponds to a
+    # simulation interface)
+    raw_urls = CFG['System']['interfaces']
+    operation_mode = CFG['Runtime']['operation_mode']
+    urls = ['', *(x.strip() for x in raw_urls.split(','))]
+    casters = [make_caster(url) for url in urls]
+    try:
+        caster = casters[interface_id]
+        if not caster:
+            raise ValueError
+        return caster
+    except (IndexError, TypeError, ValueError):
+        # choose caster from menu
+        options = [make_caster_menu_entry(caster)
+                   for caster in casters if caster]
+        return UI.simple_menu('Choose the caster:', options)
+
+
 class SimulationCaster:
     """Common methods for a caster class."""
-    def __init__(self, runtime_config):
+    def __init__(self, url=None, operation_mode=None):
+        self.url = url
+        self.config, self.status = dict(), dict()
+        self._setup()
+        default_operation_mode = self.config['default_operation_mode']
+        self.operation_mode = operation_mode or default_operation_mode
+        self.row16_mode = None
+
+    def _setup(self):
+        """Setup a simulation caster"""
         self.config = dict(supported_modes=['casting', 'punching'],
                            supported_row16_modes=['HMN', 'KMN', 'unit shift'],
                            default_operation_mode='casting',
@@ -25,8 +75,6 @@ class SimulationCaster:
         self.status = dict(water=OFF, air=OFF, motor=OFF, pump=OFF,
                            wedge_0005=15, wedge_0075=15, speed='0rpm',
                            working=OFF, signals=[])
-        self.operation_mode = runtime_config['operation_mode']
-        self.row16_mode = None
 
     def __enter__(self):
         self.start()
@@ -48,7 +96,7 @@ class SimulationCaster:
         """Get the interface status"""
         data = self.status
         casting_status = OrderedDict()
-        casting_status['Signals sent'] = ' '.join(data['signals'])
+        casting_status['Signals sent'] = data['signals']
         casting_status['Pump'] = 'ON' if data['pump'] else 'OFF'
         casting_status['Wedge 0005 at'] = data['wedge_0005']
         casting_status['Wedge 0075 at'] = data['wedge_0075']
@@ -422,55 +470,11 @@ class SimulationCaster:
 class MonotypeCaster(SimulationCaster):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
-    def __init__(self, runtime_config):
-        url = runtime_config['interface_url']
-        if not url:
+    def _setup(self):
+        """Initialize the caster"""
+        if not self.url:
             raise WrongConfiguration('Interface URL not specified!')
-        self.url = url
-        super().__init__(runtime_config)
         self.config = self._request(request_timeout=(3.2, 5)).get('settings')
-        self.operation_mode = runtime_config['operation_mode']
-
-    @property
-    def operation_mode(self):
-        """Get the current operation mode:
-            None = testing; casting; punching"""
-        # use False as a fallback value because None is a valid option here
-        if self.__dict__.get('_operation_mode', False) is False:
-            mode = self._request('operation_mode')
-            self.__dict__['_operation_mode'] = mode
-        # we're sure that we have a value by now (and it's cached for future)
-        return self.__dict__['_operation_mode']
-
-    @operation_mode.setter
-    def operation_mode(self, mode):
-        """Set the operation mode"""
-        data = self._request('operation_mode', method=requests.post, mode=mode)
-        self.__dict__['_operation_mode'] = data.get('mode')
-
-    @property
-    def row16_mode(self):
-        """Get the row 16 addressing mode:
-            None = off, HMN, KMN, unit shift"""
-        # use False as a fallback value because None is a valid option here
-        if self.__dict__.get('_row16_mode', False) is False:
-            mode = self._request('row16_mode')
-            self.__dict__['_row16_mode'] = mode
-        # we're sure that we have a value by now (and it's cached for future)
-        return self.__dict__['_row16_mode']
-
-    @row16_mode.setter
-    def row16_mode(self, mode):
-        """Change the row 16 addressing mode:
-            None (row 16 addressing is off = cast from row 15 instead)
-            is available in all operation modes;
-
-            HMN, KMN, unit shift are always available in the punching
-            or testing modes, and conditionally available in the casting
-            mode: they need to be supported in the interface configuration.
-        """
-        data = self._request('row16_mode', method=requests.post, mode=mode)
-        self.__dict__['_row16_mode'] = data.get('mode')
 
     def _request(self, path='', request_timeout=None,
                  method=requests.get, **kwargs):
@@ -512,6 +516,47 @@ class MonotypeCaster(SimulationCaster):
             # DNS failure; blocked by firewall etc.
             msg = 'Cannot connect to {}. Check the network configuration.'
             raise CommunicationError(msg.format(self.url))
+
+    @property
+    def operation_mode(self):
+        """Get the current operation mode:
+            None = testing; casting; punching"""
+        # use False as a fallback value because None is a valid option here
+        if self.__dict__.get('_operation_mode', False) is False:
+            mode = self._request('operation_mode')
+            self.__dict__['_operation_mode'] = mode
+        # we're sure that we have a value by now (and it's cached for future)
+        return self.__dict__['_operation_mode']
+
+    @operation_mode.setter
+    def operation_mode(self, mode):
+        """Set the operation mode"""
+        data = self._request('operation_mode', method=requests.post, mode=mode)
+        self.__dict__['_operation_mode'] = data.get('mode')
+
+    @property
+    def row16_mode(self):
+        """Get the row 16 addressing mode:
+            None = off, HMN, KMN, unit shift"""
+        # use False as a fallback value because None is a valid option here
+        if self.__dict__.get('_row16_mode', False) is False:
+            mode = self._request('row16_mode')
+            self.__dict__['_row16_mode'] = mode
+        # we're sure that we have a value by now (and it's cached for future)
+        return self.__dict__['_row16_mode']
+
+    @row16_mode.setter
+    def row16_mode(self, mode):
+        """Change the row 16 addressing mode:
+            None (row 16 addressing is off = cast from row 15 instead)
+            is available in all operation modes;
+
+            HMN, KMN, unit shift are always available in the punching
+            or testing modes, and conditionally available in the casting
+            mode: they need to be supported in the interface configuration.
+        """
+        data = self._request('row16_mode', method=requests.post, mode=mode)
+        self.__dict__['_row16_mode'] = data.get('mode')
 
     def send(self, signals='', timeout=None):
         """Send signals to the interface. Wait for an OK response."""
