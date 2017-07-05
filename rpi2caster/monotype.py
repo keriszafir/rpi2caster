@@ -14,7 +14,7 @@ from .matrix_controller import MatrixEngine
 ON, OFF = True, False
 
 
-def choose_machine(interface_id=None):
+def choose_machine(interface_id=None, operation_mode=None):
     """Choose a machine from the available interfaces."""
     def make_caster(url):
         """caster factory method: make a real or simulation caster;
@@ -33,14 +33,14 @@ def choose_machine(interface_id=None):
         name = config.get('name', 'Unknown caster')
         modes = ', '.join(config['supported_modes'])
         row16_modes = ', '.join(config['supported_row16_modes']) or 'none'
-        description = ('{}, modes: {}, row 16 addressing modes: {}'
+        description = ('{} - modes: {} - row 16 addressing modes: {}'
                        .format(name, modes, row16_modes))
         return option(value=caster, text=description)
 
     # get the interface URLs (first one is empty and corresponds to a
     # simulation interface)
     raw_urls = CFG['System']['interfaces']
-    operation_mode = CFG['Runtime']['operation_mode']
+    operation_mode = operation_mode or CFG['Runtime']['operation_mode']
     urls = ['', *(x.strip() for x in raw_urls.split(','))]
     casters = [make_caster(url) for url in urls]
     try:
@@ -71,6 +71,7 @@ class SimulationCaster:
                            supported_row16_modes=['HMN', 'KMN', 'unit shift'],
                            default_operation_mode='casting',
                            default_row16_mode=None,
+                           punching_on_time=0.2, punching_off_time=0.3,
                            name='Simulation interface')
         self.status = dict(water=OFF, air=OFF, motor=OFF, pump=OFF,
                            wedge_0005=15, wedge_0075=15, speed='0rpm',
@@ -173,10 +174,16 @@ class SimulationCaster:
         # placeholder for mode-dependent signal conversions
         converted_signals = signals
         self.status['signals'] = converted_signals
-        UI.display('photocell ON')
-        time.sleep(0.5)
-        UI.display('photocell OFF')
-        time.sleep(0.5)
+        if self.is_casting():
+            UI.display('photocell ON')
+            time.sleep(0.5)
+            UI.display('photocell OFF')
+            time.sleep(0.5)
+        elif self.is_punching():
+            UI.display('punches going up')
+            time.sleep(self.config['punching_on_time'])
+            UI.display('punches going down')
+            time.sleep(self.config['punching_off_time'])
         if (time.time() - start_time) > (timeout or 10):
             raise MachineStopped
         return converted_signals
@@ -258,7 +265,7 @@ class SimulationCaster:
             while True:
                 for record in source:
                     signals = self.test_one(record.signals)
-                    UI.display('Sending: {}'.format(' '.join(signals)))
+                    UI.display('Sending: {}'.format(signals))
                     if duration:
                         time.sleep(duration)
                     else:
