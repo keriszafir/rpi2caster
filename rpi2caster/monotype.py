@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Caster object for either real or virtual Monotype composition caster"""
 # Standard library imports
+from json.decoder import JSONDecodeError
 import time
 from collections import OrderedDict
 import requests
@@ -552,7 +553,8 @@ class MonotypeCaster(SimulationCaster):
                                           .format(url))
             # 400, 404, 503 etc.
             raise CommunicationError(str(error))
-        except (requests.ConnectionError, requests.Timeout):
+        except (requests.ConnectionError, requests.Timeout,
+                JSONDecodeError):
             # address not on the network; no network on client or server;
             # DNS failure; blocked by firewall etc.
             msg = 'Cannot connect to {}. Check the network configuration.'
