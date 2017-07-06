@@ -170,8 +170,11 @@ def cast(ctx, interface, punch, diecase, wedge, measure):
 @click.pass_obj
 def cast_ribbon(casting, ribbon):
     """Cast composition from file or database."""
-    casting.ribbon_by_name(ribbon)
-    casting.cast_composition()
+    try:
+        casting.ribbon_by_name(ribbon)
+        casting.cast_composition()
+    except FileNotFoundError:
+        UI.display('File {} not found.'.format(ribbon))
 
 
 @cast.command('material', options_metavar='[-h]')
