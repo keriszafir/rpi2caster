@@ -48,6 +48,10 @@ class Casting(TypesettingContext):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
     def __init__(self, interface_id):
+        self.choose_machine(interface_id)
+
+    def choose_machine(self, interface_id=None):
+        """Choose a different interface for casting/punching"""
         self.machine = monotype.choose_machine(interface_id)
 
     def punch_ribbon(self, ribbon):
@@ -720,6 +724,9 @@ class Casting(TypesettingContext):
                    option(key='q', value=self.cast_qr_code, seq=70,
                           cond=qrcode, text='Cast QR codes',
                           desc='Cast QR codes from high and low spaces'),
+
+                   option(key='F3', value=self.choose_machine, seq=90,
+                          text='Change the machine in use'),
 
                    option(key='F4', value=self.machine.switch_operation_mode,
                           seq=91, text='Change operation mode (current: {})',
