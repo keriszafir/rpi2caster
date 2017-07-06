@@ -31,7 +31,7 @@ def choose_machine(interface_id=None, operation_mode=None):
         """make a menu entry for caster choice"""
         config = caster.config
         name = config.get('name', 'Unknown caster')
-        modes = ', '.join(config['supported_modes'])
+        modes = ', '.join(config['supported_operation_modes'])
         row16_modes = ', '.join(config['supported_row16_modes']) or 'none'
         description = ('{} - modes: {} - row 16 addressing modes: {}'
                        .format(name, modes, row16_modes))
@@ -67,7 +67,7 @@ class SimulationCaster:
 
     def _setup(self):
         """Setup a simulation caster"""
-        self.config = dict(supported_modes=['casting', 'punching'],
+        self.config = dict(supported_operation_modes=['casting', 'punching'],
                            supported_row16_modes=['HMN', 'KMN', 'unit shift'],
                            default_operation_mode='casting',
                            default_row16_mode=None,
@@ -75,7 +75,14 @@ class SimulationCaster:
                            name='Simulation interface')
         self.status = dict(water=OFF, air=OFF, motor=OFF, pump=OFF,
                            wedge_0005=15, wedge_0075=15, speed='0rpm',
-                           working=OFF, signals=[])
+                           working=OFF, testing=OFF, signals=[])
+
+    def __call__(self, operation_mode=None, testing_mode=None):
+        if operation_mode is not None:
+            self.operation_mode = operation_mode
+        if testing_mode is not None:
+            self.testing_mode = testing_mode
+        return self
 
     def __enter__(self):
         self.start()
@@ -91,6 +98,17 @@ class SimulationCaster:
     def is_casting(self):
         """Determines if this caster is set to casting"""
         return self.operation_mode == 'casting'
+
+    @property
+    def testing_mode(self):
+        """Check whether the interface is in the testing mode"""
+        return self.status['testing']
+
+    @testing_mode.setter
+    def testing_mode(self, state):
+        """Set the testing mode"""
+        if state is not None:
+            self.status['testing'] = True if state else False
 
     @property
     def casting_status(self):
@@ -164,6 +182,7 @@ class SimulationCaster:
         if self.is_casting():
             self.status.update(pump=OFF, water=OFF, motor=OFF)
         self.status.update(air=OFF, working=OFF)
+        self.testing_mode = False
 
     def send(self, signals, timeout=None):
         """Simulates sending the signals to the caster."""
@@ -174,7 +193,10 @@ class SimulationCaster:
         # placeholder for mode-dependent signal conversions
         converted_signals = signals
         self.status['signals'] = converted_signals
-        if self.is_casting():
+        if self.testing_mode:
+            UI.display('Testing signals: {}'
+                       .format(''.join(converted_signals)))
+        elif self.is_casting():
             UI.display('photocell ON')
             time.sleep(0.5)
             UI.display('photocell OFF')
@@ -186,7 +208,7 @@ class SimulationCaster:
             time.sleep(self.config['punching_off_time'])
         if (time.time() - start_time) > (timeout or 10):
             raise MachineStopped
-        return converted_signals
+        return self.status
 
     def cast_one(self, record, timeout=None):
         """Casting sequence: sensor on - valves on - sensor off - valves off"""
@@ -214,7 +236,7 @@ class SimulationCaster:
 
     def test_one(self, signals):
         """Simulates testing."""
-        self.operation_mode = None
+        self.testing_mode = True
         return self.send(signals)
 
     def cast(self, input_sequence, ask=True, repetitions=1):
@@ -227,14 +249,14 @@ class SimulationCaster:
         self.choose_row16_mode(row16_in_use)
         # use caster context to check machine rotation and ensure
         # that no valves stay open after we're done
-        with self:
+        with self(operation_mode='casting'):
             # cast as many as initially ordered and ask to continue
             while repetitions > 0:
                 try:
                     for record in source:
                         UI.display('{r.signals:<20}{r.comment}'
                                    .format(r=record))
-                        codes = self.cast_one(record)
+                        codes = self.cast_one(record).get('signals', [])
                         UI.display('signals cast: {}'.format(' '.join(codes)))
                     # repetition successful
                     repetitions -= 1
@@ -252,20 +274,20 @@ class SimulationCaster:
         row16_in_use = any(record.uses_row_16 for record in source)
         self.choose_row16_mode(row16_in_use)
         # start punching
-        with self:
+        with self(operation_mode='punching'):
             for record in source:
                 UI.display('{r.signals:<20}{r.comment}'.format(r=record))
-                signals = self.punch_one(record.signals)
+                signals = self.punch_one(record.signals).get('signals', [])
                 UI.display('signals punched: {}'.format(' '.join(signals)))
 
     def test(self, signals_sequence, duration=None):
         """Testing: advance manually or automatically"""
         source = [parse_record(item) for item in signals_sequence]
-        with self:
+        with self(testing_mode=True):
             while True:
                 for record in source:
-                    signals = self.test_one(record.signals)
-                    UI.display('Sending: {}'.format(signals))
+                    signals = self.test_one(record.signals).get('signals', [])
+                    UI.display('Sending: {}'.format(' '.join(signals)))
                     if duration:
                         time.sleep(duration)
                     else:
@@ -307,7 +329,7 @@ class SimulationCaster:
 
         def test_any_code(*_):
             """Tests a user-specified combination of signals"""
-            with self:
+            with self(operation_mode=None):
                 while True:
                     UI.display('Enter the signals to send to the caster, '
                                'or leave empty to return to menu: ')
@@ -334,7 +356,7 @@ class SimulationCaster:
                        'draw rods until the diecase stops wobbling.\n')
             if not UI.confirm('Proceed?', default=True, abort_answer=False):
                 return
-            with self:
+            with self(testing_mode=True):
                 self.test_one('G8')
                 UI.pause('Sending G8, waiting for you to stop...')
 
@@ -565,12 +587,23 @@ class MonotypeCaster(SimulationCaster):
         data = self._request('row16_mode', method=requests.post, mode=mode)
         self.__dict__['_row16_mode'] = data.get('mode')
 
+    @property
+    def testing_mode(self):
+        """Get the current testing mode state"""
+        return self.status['testing']
+
+    @testing_mode.setter
+    def testing_mode(self, state):
+        """Set the temporary testing mode on the interface"""
+        if state is not None:
+            self._request(method=requests.post,
+                          testing_mode=True if state else False)
+
     def send(self, signals='', timeout=None):
         """Send signals to the interface. Wait for an OK response."""
         try:
-            reply = self._request('signals', method=requests.post,
-                                  signals=signals, timeout=timeout)
-            return reply.get('signals')
+            return self._request('signals', method=requests.post,
+                                 signals=signals, timeout=timeout)
         except InterfaceNotStarted:
             self.start()
             return self.send(signals, timeout)
@@ -587,7 +620,9 @@ class MonotypeCaster(SimulationCaster):
         In other modes (testing, punching, manual punching):
             The interface will just turn on the compressed air supply.
         """
-        if self.is_casting():
+        if self.testing_mode:
+            request_timeout = 2
+        elif self.is_casting():
             info = ('Starting the composition caster...\n'
                     'Turn on the motor if necessary, and engage the clutch.\n'
                     'Casting will begin after detecting the machine rotation.')
@@ -615,14 +650,16 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
-        if self.is_casting():
+        if self.testing_mode:
+            request_timeout = 2
+        elif self.is_casting():
             UI.display('Turning the machine off...')
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         elif self.is_punching():
             UI.display('Punching finished. Take the ribbon off the tower.')
             request_timeout = 2
-        self._request('machine', method=requests.post,
-                      request_timeout=request_timeout, machine=True)
+        self._request('machine', method=requests.delete,
+                      request_timeout=request_timeout)
 
     @property
     def status(self):
@@ -646,16 +683,14 @@ class MonotypeCaster(SimulationCaster):
         else:
             request_timeout = 2 * self.config['sensor_timeout'] + 2
         try:
-            reply = self._request('cast', method=requests.post,
-                                  request_timeout=request_timeout,
-                                  signals=signals, timeout=timeout)
-            return reply.get('signals')
+            return self._request(method=requests.post,
+                                 request_timeout=request_timeout,
+                                 cast_signals=signals, timeout=timeout)
         except InterfaceNotStarted:
             self.start()
-            reply = self._request('cast', method=requests.post,
-                                  request_timeout=request_timeout,
-                                  signals=signals, timeout=timeout)
-            return reply.get('signals')
+            return self._request(method=requests.post,
+                                 request_timeout=request_timeout,
+                                 cast_signals=signals, timeout=timeout)
         except (KeyboardInterrupt, EOFError):
             self.stop()
             raise MachineStopped
@@ -667,15 +702,13 @@ class MonotypeCaster(SimulationCaster):
         off_time = self.config['punching_off_time']
         on_time = self.config['punching_on_time']
         timeout = on_time + off_time + 2
-        reply = self._request('punch', request_timeout=timeout,
-                              method=requests.post, signals=signals)
-        return reply.get('signals')
+        return self._request(request_timeout=timeout, method=requests.post,
+                             punch_signals=signals)
 
     def test_one(self, signals):
         """Test a single signals combination"""
-        reply = self._request('test', request_timeout=2,
-                              method=requests.post, signals=signals)
-        return reply.get('signals')
+        return self._request(request_timeout=2, method=requests.post,
+                             test_signals=signals)
 
 
 class InterfaceException(Exception):

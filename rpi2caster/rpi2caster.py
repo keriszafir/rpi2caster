@@ -22,30 +22,15 @@
 
 """
 from collections import OrderedDict
-from configparser import ConfigParser
-from contextlib import suppress
-from functools import wraps
 import os
-
 import click
-import peewee as pw
-from playhouse import db_url
 
-from .ui import ClickUI, Abort, Finish, option
+from . import global_state
+from .ui import Abort, Finish, option
 
 # global package-wide declarations
 __version__ = '0.7.dev1'
 __author__ = 'Krzysztof Słychań'
-
-# Find the data directory path
-USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
-
-# Default values for options
-CONFIG = {'System': {'database': ('sqlite:///{}/rpi2caster.db'
-                                  .format(USER_DATA_DIR)),
-                     'interfaces': ('http://monotype:23017/interfaces/0, '
-                                    'http://localhost:23017/interfaces/0')},
-          'Typesetting': dict(default_measure='25cc', measurement_unit='cc')}
 
 
 class CommandGroup(click.Group):
@@ -75,76 +60,13 @@ class CommandGroup(click.Group):
         ctx.fail('Too many matches: %s' % ', '.join(sorted(matches)))
 
 
-class DBProxy(pw.Proxy):
-    """Database object sitting on top of Peewee"""
-    def __init__(self, url=''):
-        super().__init__()
-        if url:
-            self.load(url)
-
-    def __call__(self, routine):
-        @wraps(routine)
-        def wrapper(*args, **kwargs):
-            """decorator for routines needing database connection"""
-            with self:
-                retval = routine(*args, **kwargs)
-            return retval
-
-        return wrapper
-
-    def __enter__(self):
-        """context manager for routines needing database connection"""
-        with suppress(pw.OperationalError):
-            self.connect()
-        return self
-
-    def __exit__(self, *_):
-        with suppress(pw.OperationalError):
-            self.close()
-
-    def load(self, url):
-        """New database session"""
-        try:
-            base = db_url.connect(url)
-            self.initialize(base)
-        except RuntimeError:
-            click.echo('Failed loading database at {}'.format(url))
-
-
-class UIProxy(object):
-    """UI abstraction layer"""
-    impl = ClickUI()
-    implementations = {'text_ui': ClickUI,
-                       'click': ClickUI}
-
-    def __init__(self, impl='click', verbosity=0):
-        self.load(impl, verbosity)
-
-    def __getattr__(self, name):
-        result = getattr(self.impl, name)
-        if result is None:
-            raise NameError('{implementation} has no function named {function}'
-                            .format(implementation=self.impl.__name__,
-                                    function=name))
-        else:
-            return result
-
-    def get_name(self):
-        """Get the underlying user interface implementation's name."""
-        return self.impl.__name__
-
-    def load(self, implementation, verbosity):
-        """Load another user interface implementation"""
-        impl = self.implementations.get(implementation, ClickUI)
-        self.impl = impl(verbosity)
-
-
-# initialize the user interface, configuration and database
-# these will be reconfigured as needed
-UI = UIProxy()
-CFG = ConfigParser()
-CFG.read_dict(CONFIG)
-DB = DBProxy(CFG['System'].get('database'))
+# get singleton instances for user interface, database and configuration
+USER_DATA_DIR = global_state.USER_DATA_DIR
+UI = global_state.UI
+DB = global_state.DB
+CFG = global_state.CFG
+CFG.read_dict({'System': {}, 'Typesetting': {}, 'Runtime': {}})
+DB.load(CFG['System'].get('database'))
 
 
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
@@ -169,7 +91,6 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
 
     CFG.read(conffile)
     database_url = database or CFG['System'].get('database')
-    CFG.add_section('Runtime')
     runtime_config = CFG['Runtime']
     runtime_config['conffile'] = conffile
     runtime_config['database'] = database_url
@@ -177,7 +98,6 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
     DB.load(database_url)
     UI.load(ui_impl, verbosity)
     ctx.obj = runtime_config
-
     # main menu
     header = ('rpi2caster - computer aided type casting for Monotype '
               'composition / type & rule casters.'
