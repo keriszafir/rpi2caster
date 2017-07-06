@@ -74,7 +74,7 @@ CFG.read_dict(CONFIG)
 
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
              context_settings=dict(help_option_names=['-h', '--help']))
-@click.version_option(__version__)
+@click.version_option()
 @click.option('--verbosity', '-v', count=True, default=0,
               help='verbose mode')
 @click.option('--conffile', '-c', help='config file to use',
