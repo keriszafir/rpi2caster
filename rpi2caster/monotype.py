@@ -41,7 +41,12 @@ def choose_machine(interface_id=None, operation_mode=None):
     # simulation interface)
     raw_urls = CFG['System']['interfaces']
     operation_mode = operation_mode or CFG['Runtime']['operation_mode']
-    urls = ['', *(x.strip() for x in raw_urls.split(','))]
+    # make several default interfaces so the program will always
+    # try to connect to these as a priority
+    # the first interface is a simulation and it is available as interface 0
+    urls = ['', 'http://localhost:23017',
+            'http://localhost:23017/interfaces/0',
+            *(x.strip() for x in raw_urls.split(','))]
     casters = [make_caster(url) for url in urls]
     try:
         caster = casters[interface_id]
@@ -75,7 +80,7 @@ class SimulationCaster:
                            name='Simulation interface')
         self.status = dict(water=OFF, air=OFF, motor=OFF, pump=OFF,
                            wedge_0005=15, wedge_0075=15, speed='0rpm',
-                           working=OFF, testing=OFF, signals=[])
+                           working=OFF, testing_mode=OFF, signals=[])
 
     def __call__(self, operation_mode=None, testing_mode=None):
         if operation_mode is not None:
@@ -102,13 +107,13 @@ class SimulationCaster:
     @property
     def testing_mode(self):
         """Check whether the interface is in the testing mode"""
-        return self.status['testing']
+        return self.status['testing_mode']
 
     @testing_mode.setter
     def testing_mode(self, state):
         """Set the testing mode"""
         if state is not None:
-            self.status['testing'] = True if state else False
+            self.status['testing_mode'] = True if state else False
 
     @property
     def casting_status(self):
@@ -173,13 +178,13 @@ class SimulationCaster:
     def start(self):
         """Simulates the machine start"""
         self.status.update(air=ON)
-        if self.is_casting():
+        if self.is_casting() and not self.testing_mode:
             self.status.update(water=ON, motor=ON)
         self.status.update(working=ON)
 
     def stop(self):
         """Simulates the machine stop"""
-        if self.is_casting():
+        if self.is_casting() and not self.testing_mode:
             self.status.update(pump=OFF, water=OFF, motor=OFF)
         self.status.update(air=OFF, working=OFF)
         self.testing_mode = False
@@ -590,7 +595,7 @@ class MonotypeCaster(SimulationCaster):
     @property
     def testing_mode(self):
         """Get the current testing mode state"""
-        return self.status['testing']
+        return self.status['testing_mode']
 
     @testing_mode.setter
     def testing_mode(self, state):
