@@ -28,10 +28,6 @@ import click
 from . import global_state
 from .ui import Abort, Finish, option
 
-# global package-wide declarations
-__version__ = '0.7.dev1'
-__author__ = 'Krzysztof Słychań'
-
 # Find the data directory path
 USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
 # Default configuration'
