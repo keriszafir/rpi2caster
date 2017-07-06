@@ -3,7 +3,7 @@
 make a diecase proof, quickly compose and cast text.
 """
 
-from collections import deque
+from collections import deque, OrderedDict
 from functools import wraps
 
 # QR code generating backend
@@ -48,7 +48,7 @@ class Casting(TypesettingContext):
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
     def __init__(self, interface_id):
-        self.caster = monotype.choose_machine(interface_id)
+        self.machine = monotype.choose_machine(interface_id)
 
     def punch_ribbon(self, ribbon):
         """Punch the ribbon from start to end"""
@@ -164,10 +164,18 @@ class Casting(TypesettingContext):
                     continue
                 # display some info and cast the signals
                 stats.update(record=record)
-                self.machine.cast_one(record)
+                # cast it and get current machine status
+                status = self.machine.cast_one(record)
+                # prepare data for display
+                casting_status = OrderedDict()
+                casting_status['Signals sent'] = status['signals']
+                casting_status['Pump'] = 'ON' if status['pump'] else 'OFF'
+                casting_status['Wedge 0005 at'] = status['wedge_0005']
+                casting_status['Wedge 0075 at'] = status['wedge_0075']
+                casting_status['Speed'] = status['speed']
+                # display status
                 UI.clear()
-                UI.display_parameters(stats.code_parameters,
-                                      self.machine.casting_status)
+                UI.display_parameters(stats.code_parameters, casting_status)
 
         # Ribbon pre-processing and casting parameters setup
         ribbon = [parse_record(code) for code in input_iterable]
@@ -713,19 +721,24 @@ class Casting(TypesettingContext):
                           cond=qrcode, text='Cast QR codes',
                           desc='Cast QR codes from high and low spaces'),
 
-                   option(key='F5', value=self.display_details, seq=85,
+                   option(key='F4', value=self.machine.switch_operation_mode,
+                          seq=91, text='Change operation mode (current: {})',
+                          cond=len(self.machine.supported_operation_modes) > 1,
+                          lazy=lambda: self.machine.operation_mode),
+
+                   option(key='F5', value=self.display_details, seq=92,
                           text='Show details...', cond=is_casting,
                           desc='Display ribbon, diecase and wedge info'),
-                   option(key='F5', value=self.display_details, seq=85,
+                   option(key='F5', value=self.display_details, seq=92,
                           text='Show details...', cond=is_punching,
                           desc='Display ribbon and interface details'),
 
-                   option(key='F7', value=self.diecase_manipulation, seq=90,
-                          text='Matrix manipulation...'),
-
-                   option(key='F6', value=self.diecase_proof, seq=85,
+                   option(key='F6', value=self.diecase_proof, seq=93,
                           text='Diecase proof',
                           desc='Cast every character from the diecase'),
+
+                   option(key='F7', value=self.diecase_manipulation, seq=94,
+                          text='Matrix manipulation...'),
 
                    option(key='F8', value=self.machine.diagnostics, seq=95,
                           text='Diagnostics menu...',

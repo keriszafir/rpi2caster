@@ -5,20 +5,10 @@ from configparser import ConfigParser
 from contextlib import suppress
 from functools import wraps
 
-import click
 import peewee as pw
 from playhouse import db_url
 
 from .ui import ClickUI
-
-# Find the data directory path
-USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
-
-# Default values for options
-DEFAULTS = dict(database='sqlite:///{}/rpi2caster.db'.format(USER_DATA_DIR),
-                interfaces=('http://monotype:23017/interfaces/0, '
-                            'http://localhost:23017/interfaces/0'),
-                default_measure='25cc', measurement_unit='cc')
 
 
 class DBProxy(pw.Proxy):
@@ -86,6 +76,4 @@ class UIProxy(object):
 
 UI = UIProxy()
 DB = DBProxy()
-CFG = ConfigParser(defaults=DEFAULTS)
-CFG.read_dict({'System': {}, 'Typesetting': {}, 'Runtime': {}})
-DB.load(CFG['System'].get('database'))
+CFG = ConfigParser()

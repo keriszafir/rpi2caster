@@ -31,8 +31,8 @@ def choose_machine(interface_id=None, operation_mode=None):
         """make a menu entry for caster choice"""
         config = caster.config
         name = config.get('name', 'Unknown caster')
-        modes = ', '.join(config['supported_operation_modes'])
-        row16_modes = ', '.join(config['supported_row16_modes']) or 'none'
+        modes = ', '.join(caster.supported_operation_modes)
+        row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
         description = ('{} - modes: {} - row 16 addressing modes: {}'
                        .format(name, modes, row16_modes))
         return option(value=caster, text=description)
@@ -116,16 +116,25 @@ class SimulationCaster:
             self.status['testing_mode'] = True if state else False
 
     @property
-    def casting_status(self):
-        """Get the interface status"""
-        data = self.status
-        casting_status = OrderedDict()
-        casting_status['Signals sent'] = data['signals']
-        casting_status['Pump'] = 'ON' if data['pump'] else 'OFF'
-        casting_status['Wedge 0005 at'] = data['wedge_0005']
-        casting_status['Wedge 0075 at'] = data['wedge_0075']
-        casting_status['Speed'] = data['speed']
-        return casting_status
+    def supported_operation_modes(self):
+        """Get a list of supported operation modes"""
+        return self.config['supported_operation_modes']
+
+    @property
+    def supported_row16_modes(self):
+        """Get a list of supported row 16 addressing modes"""
+        return self.config['supported_row16_modes']
+
+    def switch_operation_mode(self):
+        """Switch between casting and punching"""
+        new_mode = 'casting' if self.is_punching() else 'punching'
+        try:
+            self.operation_mode = new_mode
+        except UnsupportedMode:
+            UI.pause('This caster does not support the {} mode'
+                     .format(new_mode))
+        except InterfaceBusy:
+            UI.pause('Cannot change the mode while the machine is working.')
 
     @property
     def parameters(self):
@@ -136,13 +145,11 @@ class SimulationCaster:
 
     def choose_row16_mode(self, row16_needed=False):
         """Choose the addressing system for the diecase row 16."""
-        supported_modes = self.config['supported_row16_modes']
-
         if row16_needed and not self.row16_mode:
             # choose the row 16 addressing mode
             prompt = 'Choose the row 16 addressing mode'
             options = [option(key=name[0], value=name, text=name)
-                       for name in supported_modes]
+                       for name in self.supported_row16_modes]
             options.append(option(key='o', value=None,
                                   text='Off - cast from row 15 instead'))
             if len(options) > 1:
@@ -189,29 +196,33 @@ class SimulationCaster:
         self.status.update(air=OFF, working=OFF)
         self.testing_mode = False
 
-    def send(self, signals, timeout=None):
+    def send(self, signals, timeout=None, request_timeout=None):
         """Simulates sending the signals to the caster."""
         if not self.status['working']:
             raise InterfaceNotStarted
 
         start_time = time.time()
+        max_wait_time = max(timeout or 0, request_timeout or 0) or 10
         # placeholder for mode-dependent signal conversions
         converted_signals = signals
         self.status['signals'] = converted_signals
-        if self.testing_mode:
-            UI.display('Testing signals: {}'
-                       .format(''.join(converted_signals)))
-        elif self.is_casting():
-            UI.display('photocell ON')
-            time.sleep(0.5)
-            UI.display('photocell OFF')
-            time.sleep(0.5)
-        elif self.is_punching():
-            UI.display('punches going up')
-            time.sleep(self.config['punching_on_time'])
-            UI.display('punches going down')
-            time.sleep(self.config['punching_off_time'])
-        if (time.time() - start_time) > (timeout or 10):
+        try:
+            if self.testing_mode:
+                UI.display('Testing signals: {}'
+                           .format(''.join(converted_signals)))
+            elif self.is_casting():
+                UI.display('photocell ON')
+                time.sleep(0.5)
+                UI.display('photocell OFF')
+                time.sleep(0.5)
+            elif self.is_punching():
+                UI.display('punches going up')
+                time.sleep(self.config['punching_on_time'])
+                UI.display('punches going down')
+                time.sleep(self.config['punching_off_time'])
+            if (time.time() - start_time) > max_wait_time:
+                raise MachineStopped
+        except (KeyboardInterrupt, EOFError):
             raise MachineStopped
         return self.status
 
@@ -221,28 +232,24 @@ class SimulationCaster:
             signals = record.signals
         except AttributeError:
             signals = record
-
-        try:
-            self.operation_mode = 'casting'
-            return self.send(signals, timeout=timeout)
-        except InterfaceNotStarted:
-            self.start()
-            return self.send(signals, timeout=timeout)
-        except (KeyboardInterrupt, EOFError):
-            self.stop()
-            raise MachineStopped
-        except UnsupportedMode:
-            UI.pause('This interface does not support casting.')
+        # calculate the timeout to prevent the request
+        # from hanging indefinitely
+        if timeout:
+            request_timeout = 2 * timeout + 5
+        else:
+            request_timeout = 2 * self.config['sensor_timeout'] + 2
+        return self.send(signals, timeout, request_timeout)
 
     def punch_one(self, signals):
-        """Simulates punching."""
-        self.operation_mode = 'punching'
-        return self.send(signals)
+        """Punch a single signals combination"""
+        off_time = self.config['punching_off_time']
+        on_time = self.config['punching_on_time']
+        timeout = on_time + off_time + 5
+        return self.send(signals, request_timeout=timeout)
 
     def test_one(self, signals):
-        """Simulates testing."""
-        self.testing_mode = True
-        return self.send(signals)
+        """Test a single signals combination"""
+        return self.send(signals, request_timeout=5)
 
     def cast(self, input_sequence, ask=True, repetitions=1):
         """Cast a series of multiple records.
@@ -508,7 +515,7 @@ class MonotypeCaster(SimulationCaster):
         """Initialize the caster"""
         if not self.url:
             raise WrongConfiguration('Interface URL not specified!')
-        self.config = self._request(request_timeout=(3.2, 5)).get('settings')
+        self.config = self._request(request_timeout=(3.05, 5)).get('settings')
 
     def _request(self, path='', request_timeout=None,
                  method=requests.get, **kwargs):
@@ -604,14 +611,20 @@ class MonotypeCaster(SimulationCaster):
             self._request(method=requests.post,
                           testing_mode=True if state else False)
 
-    def send(self, signals='', timeout=None):
+    def send(self, signals='', timeout=None, request_timeout=None):
         """Send signals to the interface. Wait for an OK response."""
         try:
             return self._request('signals', method=requests.post,
-                                 signals=signals, timeout=timeout)
+                                 signals=signals, timeout=timeout,
+                                 request_timeout=request_timeout)
         except InterfaceNotStarted:
             self.start()
             return self.send(signals, timeout)
+        except (KeyboardInterrupt, EOFError):
+            self.stop()
+            raise MachineStopped
+        except UnsupportedMode:
+            UI.pause('This interface does not support casting.')
 
     def start(self):
         """Machine startup sequence.
@@ -626,7 +639,7 @@ class MonotypeCaster(SimulationCaster):
             The interface will just turn on the compressed air supply.
         """
         if self.testing_mode:
-            request_timeout = 2
+            request_timeout = 5
         elif self.is_casting():
             info = ('Starting the composition caster...\n'
                     'Turn on the motor if necessary, and engage the clutch.\n'
@@ -635,7 +648,7 @@ class MonotypeCaster(SimulationCaster):
             request_timeout = 3 * self.config['startup_timeout'] + 2
         elif self.is_punching():
             UI.pause('Waiting for you to start punching...')
-            request_timeout = 2
+            request_timeout = 5
         # send the request and handle any exceptions
         try:
             self._request('machine', method=requests.post,
@@ -656,7 +669,7 @@ class MonotypeCaster(SimulationCaster):
         Then, the air supply is cut off.
         """
         if self.testing_mode:
-            request_timeout = 2
+            request_timeout = 3
         elif self.is_casting():
             UI.display('Turning the machine off...')
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
@@ -674,46 +687,6 @@ class MonotypeCaster(SimulationCaster):
     @status.setter
     def status(self, _):
         """Prevents raising AttributeError when assigning to status"""
-
-    def cast_one(self, record, timeout=None):
-        """Casting sequence: sensor on - valves on - sensor off - valves off"""
-        try:
-            signals = record.signals
-        except AttributeError:
-            signals = record
-        # calculate the timeout to prevent the request
-        # from hanging indefinitely
-        if timeout:
-            request_timeout = 2 * timeout + 2
-        else:
-            request_timeout = 2 * self.config['sensor_timeout'] + 2
-        try:
-            return self._request(method=requests.post,
-                                 request_timeout=request_timeout,
-                                 cast_signals=signals, timeout=timeout)
-        except InterfaceNotStarted:
-            self.start()
-            return self._request(method=requests.post,
-                                 request_timeout=request_timeout,
-                                 cast_signals=signals, timeout=timeout)
-        except (KeyboardInterrupt, EOFError):
-            self.stop()
-            raise MachineStopped
-        except UnsupportedMode:
-            UI.pause('This interface does not support casting.')
-
-    def punch_one(self, signals):
-        """Punch a single signals combination"""
-        off_time = self.config['punching_off_time']
-        on_time = self.config['punching_on_time']
-        timeout = on_time + off_time + 2
-        return self._request(request_timeout=timeout, method=requests.post,
-                             punch_signals=signals)
-
-    def test_one(self, signals):
-        """Test a single signals combination"""
-        return self._request(request_timeout=2, method=requests.post,
-                             test_signals=signals)
 
 
 class InterfaceException(Exception):

@@ -32,6 +32,15 @@ from .ui import Abort, Finish, option
 __version__ = '0.7.dev1'
 __author__ = 'Krzysztof Słychań'
 
+# Find the data directory path
+USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
+# Default configuration'
+CONFIG = dict(System={'database': ('sqlite:///{}/rpi2caster.db'
+                                   .format(USER_DATA_DIR)),
+                      'interfaces': 'http://monotype:23017/interfaces/0'},
+              Typesetting=dict(default_measure='25cc', measurement_unit='cc'),
+              Runtime=dict())
+
 
 class CommandGroup(click.Group):
     """Click group which allows using abbreviated commands,
@@ -61,12 +70,10 @@ class CommandGroup(click.Group):
 
 
 # get singleton instances for user interface, database and configuration
-USER_DATA_DIR = global_state.USER_DATA_DIR
 UI = global_state.UI
 DB = global_state.DB
 CFG = global_state.CFG
-CFG.read_dict({'System': {}, 'Typesetting': {}, 'Runtime': {}})
-DB.load(CFG['System'].get('database'))
+CFG.read_dict(CONFIG)
 
 
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
@@ -76,8 +83,8 @@ DB.load(CFG['System'].get('database'))
               help='verbose mode')
 @click.option('--conffile', '-c', help='config file to use',
               default=os.path.join(USER_DATA_DIR, 'rpi2caster.conf'))
-@click.option('--database', '-d', metavar='[database URL]', default='',
-              help='database URL to use')
+@click.option('--database', '-d', metavar='[database URL]',
+              default=CFG['System']['database'], help='database URL to use')
 @click.option('--web', '-W', 'ui_impl', flag_value='web_ui',
               help='use web user interface (not implemented)')
 @click.option('--text', '-T', 'ui_impl', flag_value='text_ui',
