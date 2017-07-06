@@ -30,18 +30,11 @@ from .ui import Abort, Finish, option
 
 # Find the data directory path
 USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
-# Default configuration'
-CONFIG = dict(System={'database': ('sqlite:///{}/rpi2caster.db'
-                                   .format(USER_DATA_DIR)),
-                      'interfaces': 'http://monotype:23017/interfaces/0'},
-              Typesetting=dict(default_measure='25cc', measurement_unit='cc'),
-              Runtime=dict())
 
 # get singleton instances for user interface, database and configuration
 UI = global_state.UI
 DB = global_state.DB
 CFG = global_state.CFG
-CFG.read_dict(CONFIG)
 
 
 class CommandGroup(click.Group):
@@ -78,8 +71,7 @@ class CommandGroup(click.Group):
               help='verbose mode (count, default=0)')
 @click.option('--conffile', '-c', help='config file to use', metavar='[PATH]',
               default=os.path.join(USER_DATA_DIR, 'rpi2caster.conf'))
-@click.option('--database', '-d', metavar='[URL]',
-              default=CFG['System']['database'], help='database URL to use')
+@click.option('--database', '-d', metavar='[URL]', help='database URL to use')
 @click.option('--web', '-W', 'ui_impl', flag_value='web_ui',
               help='use web user interface (not implemented)')
 @click.option('--text', '-T', 'ui_impl', flag_value='text_ui',
@@ -92,14 +84,10 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
         return lambda: ctx.invoke(function)
 
     CFG.read(conffile)
-    database_url = database or CFG['System'].get('database')
-    runtime_config = CFG['Runtime']
-    runtime_config['conffile'] = conffile
-    runtime_config['database'] = database_url
-    runtime_config['ui_implementation'] = ui_impl
+    # get the URL from the argv or updated config
+    database_url = database or CFG['System']['database']
     DB.load(database_url)
     UI.load(ui_impl, verbosity)
-    ctx.obj = runtime_config
     # main menu
     header = ('rpi2caster - computer aided typesetting software '
               'for Monotype composition casters.'
@@ -130,8 +118,10 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
            options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
 @click.option('--interface', '-i', default=1, metavar='[number]',
               help='choose interface:\n0=simulation, 1,2...=hardware')
-@click.option('--punch', '-p', is_flag=True, flag_value=True,
-              help='punch ribbon instead of casting type')
+@click.option('--punch', '-p', 'operation_mode', flag_value='punching',
+              help='punch ribbon with a perforator (if supported)')
+@click.option('--cast', '-c', 'operation_mode', flag_value='casting',
+              help='cast type on a composition caster (if supported)')
 @click.option('--diecase', '-m', metavar='[diecase ID]',
               help='diecase ID from the database to use')
 @click.option('--wedge', '-w', metavar='e.g. S5-12E',
@@ -139,7 +129,7 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
 @click.option('--measure', '-l', metavar='[value+unit]',
               help='line length to use')
 @click.pass_context
-def cast(ctx, interface, punch, diecase, wedge, measure):
+def cast(ctx, interface, operation_mode, diecase, wedge, measure):
     """Cast type with a Monotype caster.
 
     Casts composition, material for handsetting, QR codes.
@@ -147,10 +137,8 @@ def cast(ctx, interface, punch, diecase, wedge, measure):
 
     Can also be run in simulation mode without the actual caster."""
     from .core import Casting
-    runtime_config = CFG['Runtime']
-    runtime_config['operation_mode'] = 'punching' if punch else 'casting'
     # allow override if we call this from menu
-    casting = Casting(interface)
+    casting = Casting(interface, operation_mode)
     casting.measure = measure
     casting.diecase_id = diecase
     casting.wedge_name = wedge
@@ -194,15 +182,15 @@ def cast_diecase_proof(casting):
 
 
 @cli.command('test', options_metavar='[-hps]')
-@click.option('--punch', '-p', is_flag=True, flag_value=True,
-              help='test the interface in punching mode')
+@click.option('--punch', '-p', 'operation_mode', flag_value='punching',
+              help='punch ribbon with a perforator (if supported)')
+@click.option('--cast', '-c', 'operation_mode', flag_value='casting',
+              help='cast type on a composition caster (if supported)')
 @click.option('--interface', '-i', default=None, show_default=True,
               help='choose interface: 0 = simulation, 1... - real interfaces')
-@click.pass_obj
-def test_machine(runtime_config, interface, punch):
+def test_machine(interface, operation_mode):
     """Monotype caster testing and diagnostics."""
     from .monotype import choose_machine
-    operation_mode = 'punching' if punch else 'casting'
     machine = choose_machine(interface, operation_mode)
     machine.diagnostics()
 

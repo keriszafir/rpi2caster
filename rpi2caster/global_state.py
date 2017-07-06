@@ -74,6 +74,11 @@ class UIProxy(object):
         impl = self.implementations.get(implementation, ClickUI)
         self.impl = impl(verbosity)
 
+INITIAL_CONFIG = {"System": {}, "Typesetting": {}}
+DEFAULTS = dict(database='sqlite:////var/local/rpi2caster/rpi2caster.db',
+                interfaces='', default_measure='25cc', measurement_unit='cc')
+
 UI = UIProxy()
-DB = DBProxy()
-CFG = ConfigParser()
+CFG = ConfigParser(defaults=DEFAULTS)
+CFG.read_dict(INITIAL_CONFIG)
+DB = DBProxy(CFG['System']['database'])

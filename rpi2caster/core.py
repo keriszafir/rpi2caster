@@ -12,7 +12,7 @@ try:
 except ImportError:
     qrcode = None
 
-from rpi2caster import UI, Abort, Finish, option
+from .rpi2caster import UI, Abort, Finish, option
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from . import monotype
 from .matrix_controller import temp_diecase
@@ -47,12 +47,14 @@ class Casting(TypesettingContext):
     -testing the interface,
     -sending an arbitrary combination of signals,
     -casting spaces to heat up the mould."""
-    def __init__(self, interface_id):
-        self.choose_machine(interface_id)
+    machine = None
 
-    def choose_machine(self, interface_id=None):
+    def __init__(self, interface_id, operation_mode=None):
+        self.choose_machine(interface_id, operation_mode)
+
+    def choose_machine(self, interface_id=None, operation_mode=None):
         """Choose a different interface for casting/punching"""
-        self.machine = monotype.choose_machine(interface_id)
+        self.machine = monotype.choose_machine(interface_id, operation_mode)
 
     def punch_ribbon(self, ribbon):
         """Punch the ribbon from start to end"""
@@ -481,7 +483,7 @@ class Casting(TypesettingContext):
         def make_qr(data):
             """make a QR code matrix from data"""
             # QR rendering parameters
-            border = UI.enter('QR code border width (squares)?', default=4,
+            border = UI.enter('QR code border width (squares)?', default=1,
                               minimum=1, maximum=10)
             ec_option = UI.enter('Error correction: 0 = lowest, 3 = highest?',
                                  default=1, minimum=0, maximum=3)

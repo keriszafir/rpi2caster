@@ -11,7 +11,6 @@ def get_data(name):
     """Get the resource from a JSON-encoded file"""
     return loads(rs(SOURCE, '{}.json'.format(name)).decode())
 
-
 # Unit arrangement dictionary: {UA_ID: {style1: {char1: unit_value1...}...}...}
 UNIT_ARRANGEMENTS = get_data('unit_arrangements')
 # Letter frequencies dictionary: {LANG: {char1: freq1...}...}

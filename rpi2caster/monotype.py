@@ -41,12 +41,12 @@ def choose_machine(interface_id=None, operation_mode=None):
     # get the interface URLs (first one is empty and corresponds to a
     # simulation interface)
     raw_urls = CFG['System']['interfaces']
-    operation_mode = operation_mode or CFG['Runtime']['operation_mode']
     # make several default interfaces so the program will always
     # try to connect to these as a priority
     # the first interface is a simulation and it is available as interface 0
     urls = ['', 'http://localhost:23017',
             'http://localhost:23017/interfaces/0',
+            'http://monotype:23017/interfaces/0',
             *(x.strip() for x in raw_urls.split(','))]
     casters = [make_caster(url) for url in urls]
     try:
@@ -270,7 +270,7 @@ class SimulationCaster:
                         UI.display('{r.signals:<20}{r.comment}'
                                    .format(r=record))
                         codes = self.cast_one(record).get('signals', [])
-                        UI.display('signals cast: {}'.format(' '.join(codes)))
+                        UI.display('casting: {}'.format(' '.join(codes)))
                     # repetition successful
                     repetitions -= 1
                 except MachineStopped:
@@ -289,22 +289,37 @@ class SimulationCaster:
         # start punching
         with self(operation_mode='punching'):
             for record in source:
-                UI.display('{r.signals:<20}{r.comment}'.format(r=record))
-                signals = self.punch_one(record.signals).get('signals', [])
-                UI.display('signals punched: {}'.format(' '.join(signals)))
+                try:
+                    UI.display('{r.signals:<20}{r.comment}'.format(r=record))
+                    signals = self.punch_one(record.signals).get('signals', [])
+                    UI.display('punching: {}'.format(' '.join(signals)))
+                except MachineStopped:
+                    if UI.confirm('Machine stopped - continue?'):
+                        signals = (self.punch_one(record.signals)
+                                   .get('signals', []))
+                        UI.display('punching: {}'.format(' '.join(signals)))
+                    else:
+                        break
+            else:
+                UI.display('All codes successfully punched.')
+            UI.pause('Punching finished. Take the ribbon off the tower.')
 
     def test(self, signals_sequence, duration=None):
         """Testing: advance manually or automatically"""
         source = [parse_record(item) for item in signals_sequence]
         with self(testing_mode=True):
             while True:
-                for record in source:
-                    signals = self.test_one(record.signals).get('signals', [])
-                    UI.display('Sending: {}'.format(' '.join(signals)))
-                    if duration:
-                        time.sleep(duration)
-                    else:
-                        UI.pause('Next?', allow_abort=True)
+                try:
+                    for record in source:
+                        signals = (self.test_one(record.signals)
+                                   .get('signals', []))
+                        UI.display('testing: {}'.format(' '.join(signals)))
+                        if duration:
+                            time.sleep(duration)
+                        else:
+                            UI.pause('Next?', allow_abort=True)
+                except MachineStopped:
+                    UI.display('Testing stopped.')
                 UI.confirm('Repeat?', abort_answer=False)
 
     def diagnostics(self):
@@ -625,8 +640,6 @@ class MonotypeCaster(SimulationCaster):
         except (KeyboardInterrupt, EOFError):
             self.stop()
             raise MachineStopped
-        except UnsupportedMode:
-            UI.pause('This interface does not support casting.')
 
     def start(self):
         """Machine startup sequence.
@@ -670,14 +683,11 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
-        if self.testing_mode:
+        if self.testing_mode or self.is_punching():
             request_timeout = 3
         elif self.is_casting():
             UI.display('Turning the machine off...')
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
-        elif self.is_punching():
-            UI.display('Punching finished. Take the ribbon off the tower.')
-            request_timeout = 2
         self._request('machine', method=requests.delete,
                       request_timeout=request_timeout)
 
@@ -700,27 +710,27 @@ class InterfaceException(Exception):
         return self.message
 
 
-class MachineStopped(Exception):
+class MachineStopped(InterfaceException):
     """machine not turning exception"""
     code = 0
     message = 'The machine has been stopped.'
 
 
-class UnsupportedMode(Exception):
+class UnsupportedMode(InterfaceException):
     """The operation mode is not supported by this interface."""
     code = 1
     message = ("This operation mode is not supported "
                "in the interface's configuration")
 
 
-class UnsupportedRow16Mode(Exception):
+class UnsupportedRow16Mode(InterfaceException):
     """The row 16 addressing mode is not supported by this interface."""
     code = 2
     message = ("This row 16 addressing mode is not supported "
                "in the interface's configuration")
 
 
-class InterfaceBusy(Exception):
+class InterfaceBusy(InterfaceException):
     """the interface was claimed by another client and cannot be used
     until it is released"""
     code = 3
@@ -728,19 +738,19 @@ class InterfaceBusy(Exception):
                'If this is not the case, restart it.')
 
 
-class InterfaceNotStarted(Exception):
+class InterfaceNotStarted(InterfaceException):
     """the interface was not started and cannot accept signals"""
     code = 4
     message = 'The interface needs to be started first to be operated.'
 
 
-class WrongConfiguration(Exception):
+class WrongConfiguration(InterfaceException):
     """Interface improperly configured"""
     code = 5
     message = 'Wrong value encountered in the configuration file.'
 
 
-class CommunicationError(Exception):
+class CommunicationError(InterfaceException):
     """Error communicating with the interface."""
     code = 6
     message = ('Cannot communicate with the interface. '
