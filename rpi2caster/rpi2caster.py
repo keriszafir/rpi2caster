@@ -37,6 +37,12 @@ CONFIG = dict(System={'database': ('sqlite:///{}/rpi2caster.db'
               Typesetting=dict(default_measure='25cc', measurement_unit='cc'),
               Runtime=dict())
 
+# get singleton instances for user interface, database and configuration
+UI = global_state.UI
+DB = global_state.DB
+CFG = global_state.CFG
+CFG.read_dict(CONFIG)
+
 
 class CommandGroup(click.Group):
     """Click group which allows using abbreviated commands,
@@ -65,21 +71,14 @@ class CommandGroup(click.Group):
         ctx.fail('Too many matches: %s' % ', '.join(sorted(matches)))
 
 
-# get singleton instances for user interface, database and configuration
-UI = global_state.UI
-DB = global_state.DB
-CFG = global_state.CFG
-CFG.read_dict(CONFIG)
-
-
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
              context_settings=dict(help_option_names=['-h', '--help']))
-@click.version_option()
-@click.option('--verbosity', '-v', count=True, default=0,
-              help='verbose mode')
-@click.option('--conffile', '-c', help='config file to use',
+@click.version_option(None, '--version', '-v')
+@click.option('verbosity', '-V', count=True, default=0,
+              help='verbose mode (count, default=0)')
+@click.option('--conffile', '-c', help='config file to use', metavar='[PATH]',
               default=os.path.join(USER_DATA_DIR, 'rpi2caster.conf'))
-@click.option('--database', '-d', metavar='[database URL]',
+@click.option('--database', '-d', metavar='[URL]',
               default=CFG['System']['database'], help='database URL to use')
 @click.option('--web', '-W', 'ui_impl', flag_value='web_ui',
               help='use web user interface (not implemented)')
@@ -102,8 +101,8 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
     UI.load(ui_impl, verbosity)
     ctx.obj = runtime_config
     # main menu
-    header = ('rpi2caster - computer aided type casting for Monotype '
-              'composition / type & rule casters.'
+    header = ('rpi2caster - computer aided typesetting software '
+              'for Monotype composition casters.'
               '\n\nMain menu:\n')
     options = [option(key='t', value=wrapped(translate), seq=10,
                       text='Typesetting...',
