@@ -28,37 +28,40 @@ def choose_machine(interface_id=None, operation_mode=None):
         else:
             return SimulationCaster(url, operation_mode)
 
-    def make_caster_menu_entry(caster):
-        """make a menu entry for caster choice"""
-        config = caster.config
-        name = config.get('name', 'Unknown caster')
-        modes = ', '.join(caster.supported_operation_modes)
-        row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
-        description = ('{} - modes: {} - row 16 addressing modes: {}'
-                       .format(name, modes, row16_modes))
-        return option(value=caster, text=description)
-
-    # get the interface URLs (first one is empty and corresponds to a
-    # simulation interface)
-    raw_urls = CFG['System']['interfaces']
-    # make several default interfaces so the program will always
-    # try to connect to these as a priority
+    # get the interface URLs
     # the first interface is a simulation and it is available as interface 0
-    urls = ['', 'http://localhost:23017',
-            'http://localhost:23017/interfaces/0',
-            'http://monotype:23017/interfaces/0',
-            *(x.strip() for x in raw_urls.split(','))]
-    casters = [make_caster(url) for url in urls]
+    config_urls = CFG['System']['interfaces']
+    caster_urls = [*(x.strip() for x in config_urls.split(','))]
+    casters = {}
+    # simulation interface is always available
+    casters[0] = option(key=0, seq=0,
+                        value=SimulationCaster('', operation_mode),
+                        text='Virtual interface for simulation')
+    # gather them all and bind them
+    for number, url in enumerate(caster_urls, start=1):
+        caster = make_caster(url)
+        if caster:
+            modes = ', '.join(caster.supported_operation_modes)
+            row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
+            description = ('{} - modes: {} - row 16 addressing modes: {}'
+                           .format(caster, modes, row16_modes))
+        else:
+            description = '\t[Unavailable] {}'.format(url)
+        casters[number] = option(key=number, value=caster, text=description)
+    # look a caster up by the index
     try:
-        caster = casters[interface_id]
+        caster = casters[interface_id].value
         if not caster:
             raise ValueError
         return caster
-    except (IndexError, TypeError, ValueError):
+    except (KeyError, IndexError, TypeError, ValueError):
         # choose caster from menu
-        options = [make_caster_menu_entry(caster)
-                   for caster in casters if caster]
-        return UI.simple_menu('Choose the caster:', options)
+        caster = UI.simple_menu('Choose the caster:', casters.values())
+        if not caster:
+            UI.display('Tried to use the unavailable caster.')
+            raise Abort
+        else:
+            return caster
 
 
 class SimulationCaster:
@@ -82,6 +85,9 @@ class SimulationCaster:
         self.status = dict(water=OFF, air=OFF, motor=OFF, pump=OFF,
                            wedge_0005=15, wedge_0075=15, speed='0rpm',
                            working=OFF, testing_mode=OFF, signals=[])
+
+    def __str__(self):
+        return self.config['name']
 
     def __call__(self, operation_mode=None, testing_mode=None):
         if operation_mode is not None:

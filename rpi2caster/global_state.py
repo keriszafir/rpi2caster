@@ -76,7 +76,10 @@ class UIProxy(object):
 
 INITIAL_CONFIG = {"System": {}, "Typesetting": {}}
 DEFAULTS = dict(database='sqlite:////var/local/rpi2caster/rpi2caster.db',
-                interfaces='', default_measure='25cc', measurement_unit='cc')
+                interfaces='''http://localhost:23017,
+                              http://localhost:23017/interfaces/0,
+                              http://monotype:23017/interfaces/0''',
+                default_measure='25cc', measurement_unit='cc')
 
 UI = UIProxy()
 CFG = ConfigParser(defaults=DEFAULTS)
