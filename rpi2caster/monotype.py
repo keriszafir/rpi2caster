@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 """Caster object for either real or virtual Monotype composition caster"""
 # Standard library imports
+from collections import OrderedDict
 from json.decoder import JSONDecodeError
 import time
-from collections import OrderedDict
+
 import requests
+import librpi2caster
+from librpi2caster import ON, OFF, CASTING, PUNCHING
 
 # Intra-package imports
 from .rpi2caster import UI, CFG, option, Abort
 from .parsing import parse_record
 from .matrix_controller import MatrixEngine
-
-# Constants for readability
-ON, OFF = True, False
 
 
 def choose_machine(interface_id=None, operation_mode=None):
@@ -23,7 +23,8 @@ def choose_machine(interface_id=None, operation_mode=None):
         if url:
             try:
                 return MonotypeCaster(url, operation_mode)
-            except (CommunicationError, UnsupportedMode):
+            except (librpi2caster.CommunicationError,
+                    librpi2caster.UnsupportedMode):
                 return None
         else:
             return SimulationCaster(url, operation_mode)
@@ -72,7 +73,7 @@ class SimulationCaster:
         self._setup()
         default_operation_mode = self.config['default_operation_mode']
         self.operation_mode = operation_mode or default_operation_mode
-        self.row16_mode = None
+        self.row16_mode = OFF
 
     def _setup(self):
         """Setup a simulation caster"""
@@ -105,11 +106,11 @@ class SimulationCaster:
 
     def is_punching(self):
         """Determines if this caster is set to punching """
-        return self.operation_mode == 'punching'
+        return self.operation_mode == PUNCHING
 
     def is_casting(self):
         """Determines if this caster is set to casting"""
-        return self.operation_mode == 'casting'
+        return self.operation_mode == CASTING
 
     @property
     def testing_mode(self):
@@ -134,13 +135,13 @@ class SimulationCaster:
 
     def switch_operation_mode(self):
         """Switch between casting and punching"""
-        new_mode = 'casting' if self.is_punching() else 'punching'
+        new_mode = PUNCHING if self.is_casting() else CASTING
         try:
             self.operation_mode = new_mode
-        except UnsupportedMode:
+        except librpi2caster.UnsupportedMode:
             UI.pause('This caster does not support the {} mode'
                      .format(new_mode))
-        except InterfaceBusy:
+        except librpi2caster.InterfaceBusy:
             UI.pause('Cannot change the mode while the machine is working.')
 
     @property
@@ -157,20 +158,20 @@ class SimulationCaster:
             prompt = 'Choose the row 16 addressing mode'
             options = [option(key=name[0], value=name, text=name)
                        for name in self.supported_row16_modes]
-            options.append(option(key='o', value=None,
+            options.append(option(key='o', value=OFF,
                                   text='Off - cast from row 15 instead'))
             if len(options) > 1:
-                new_mode = UI.simple_menu(prompt, options,
-                                          default_key='o', allow_abort=True)
+                self.row16_mode = UI.simple_menu(prompt, options,
+                                                 default_key='o',
+                                                 allow_abort=True)
             else:
-                new_mode = None
-            self.row16_mode = new_mode
+                self.row16_mode = OFF
 
         elif self.row16_mode and not row16_needed:
             # turn off the unneeded row 16 adddressing attachment
             UI.display('The {} attachment is not needed - turn it off.'
                        .format(self.row16_mode))
-            self.row16_mode = None
+            self.row16_mode = OFF
 
         else:
             if not self.row16_mode:
@@ -206,7 +207,7 @@ class SimulationCaster:
     def send(self, signals, timeout=None, request_timeout=None):
         """Simulates sending the signals to the caster."""
         if not self.status['working']:
-            raise InterfaceNotStarted
+            raise librpi2caster.InterfaceNotStarted
 
         start_time = time.time()
         max_wait_time = max(timeout or 0, request_timeout or 0) or 10
@@ -222,15 +223,15 @@ class SimulationCaster:
                 time.sleep(0.5)
                 UI.display('photocell OFF')
                 time.sleep(0.5)
-            elif self.is_punching():
+            else:
                 UI.display('punches going up')
                 time.sleep(self.config['punching_on_time'])
                 UI.display('punches going down')
                 time.sleep(self.config['punching_off_time'])
             if (time.time() - start_time) > max_wait_time:
-                raise MachineStopped
+                raise librpi2caster.MachineStopped
         except (KeyboardInterrupt, EOFError):
-            raise MachineStopped
+            raise librpi2caster.MachineStopped
         return self.status
 
     def cast_one(self, record, timeout=None):
@@ -279,7 +280,7 @@ class SimulationCaster:
                         UI.display('casting: {}'.format(' '.join(codes)))
                     # repetition successful
                     repetitions -= 1
-                except MachineStopped:
+                except librpi2caster.MachineStopped:
                     # repetition failed
                     UI.confirm('Machine stopped: continue casting?',
                                abort_answer=False)
@@ -299,7 +300,7 @@ class SimulationCaster:
                     UI.display('{r.signals:<20}{r.comment}'.format(r=record))
                     signals = self.punch_one(record.signals).get('signals', [])
                     UI.display('punching: {}'.format(' '.join(signals)))
-                except MachineStopped:
+                except librpi2caster.MachineStopped:
                     if UI.confirm('Machine stopped - continue?'):
                         signals = (self.punch_one(record.signals)
                                    .get('signals', []))
@@ -324,7 +325,7 @@ class SimulationCaster:
                             time.sleep(duration)
                         else:
                             UI.pause('Next?', allow_abort=True)
-                except MachineStopped:
+                except librpi2caster.MachineStopped:
                     UI.display('Testing stopped.')
                 UI.confirm('Repeat?', abort_answer=False)
 
@@ -524,7 +525,8 @@ class SimulationCaster:
                                 'with HMN, KMN or unit-shift'))]
 
         header = 'Diagnostics and machine calibration menu:'
-        catch_exceptions = (Abort, KeyboardInterrupt, EOFError, MachineStopped)
+        catch_exceptions = (Abort, KeyboardInterrupt, EOFError,
+                            librpi2caster.MachineStopped)
         # Keep displaying the menu and go back here after any method ends
         UI.dynamic_menu(options=options, header=header, func_args=(self,),
                         catch_exceptions=catch_exceptions)
@@ -536,16 +538,19 @@ class MonotypeCaster(SimulationCaster):
     def _setup(self):
         """Initialize the caster"""
         if not self.url:
-            raise WrongConfiguration('Interface URL not specified!')
+            message = 'Interface URL not specified!'
+            raise librpi2caster.WrongConfiguration(message)
         self.config = self._request(request_timeout=(3.05, 5)).get('settings')
 
     def _request(self, path='', request_timeout=None,
                  method=requests.get, **kwargs):
         """Encode data with JSON and send it to self.url in a request."""
         errors = {exc.code: exc
-                  for exc in (MachineStopped,
-                              UnsupportedMode, UnsupportedRow16Mode,
-                              InterfaceBusy, InterfaceNotStarted)}
+                  for exc in (librpi2caster.MachineStopped,
+                              librpi2caster.UnsupportedMode,
+                              librpi2caster.UnsupportedRow16Mode,
+                              librpi2caster.InterfaceBusy,
+                              librpi2caster.InterfaceNotStarted)}
         url = '{}/{}'.format(self.url, path).strip('/')
         data = kwargs or {}
         try:
@@ -567,26 +572,25 @@ class MonotypeCaster(SimulationCaster):
         except requests.exceptions.InvalidSchema:
             # wrong URL
             msg = 'The URL: {} must be a http://... or https://... address.'
-            raise WrongConfiguration(msg.format(self.url))
+            raise librpi2caster.WrongConfiguration(msg.format(self.url))
         except requests.HTTPError as error:
             if response.status_code == 501:
                 raise NotImplementedError('{}: not supported by server'
                                           .format(url))
             # 400, 404, 503 etc.
-            raise CommunicationError(str(error))
+            raise librpi2caster.CommunicationError(str(error))
         except (requests.ConnectionError, requests.Timeout,
                 JSONDecodeError):
             # address not on the network; no network on client or server;
             # DNS failure; blocked by firewall etc.
             msg = 'Cannot connect to {}. Check the network configuration.'
-            raise CommunicationError(msg.format(self.url))
+            raise librpi2caster.CommunicationError(msg.format(self.url))
 
     @property
     def operation_mode(self):
         """Get the current operation mode:
             None = testing; casting; punching"""
-        # use False as a fallback value because None is a valid option here
-        if self.__dict__.get('_operation_mode', False) is False:
+        if not self.__dict__.get('_operation_mode'):
             mode = self._request('operation_mode')
             self.__dict__['_operation_mode'] = mode
         # we're sure that we have a value by now (and it's cached for future)
@@ -602,8 +606,7 @@ class MonotypeCaster(SimulationCaster):
     def row16_mode(self):
         """Get the row 16 addressing mode:
             None = off, HMN, KMN, unit shift"""
-        # use False as a fallback value because None is a valid option here
-        if self.__dict__.get('_row16_mode', False) is False:
+        if self.__dict__.get('_row16_mode') is None:
             mode = self._request('row16_mode')
             self.__dict__['_row16_mode'] = mode
         # we're sure that we have a value by now (and it's cached for future)
@@ -640,12 +643,12 @@ class MonotypeCaster(SimulationCaster):
             return self._request('signals', method=requests.post,
                                  signals=signals, timeout=timeout,
                                  request_timeout=request_timeout)
-        except InterfaceNotStarted:
+        except librpi2caster.InterfaceNotStarted:
             self.start()
             return self.send(signals, timeout)
         except (KeyboardInterrupt, EOFError):
             self.stop()
-            raise MachineStopped
+            raise librpi2caster.MachineStopped
 
     def start(self):
         """Machine startup sequence.
@@ -667,14 +670,14 @@ class MonotypeCaster(SimulationCaster):
                     'Casting will begin after detecting the machine rotation.')
             UI.display(info)
             request_timeout = 3 * self.config['startup_timeout'] + 2
-        elif self.is_punching():
+        else:
             UI.pause('Waiting for you to start punching...')
             request_timeout = 5
         # send the request and handle any exceptions
         try:
             self._request('machine', method=requests.post,
                           request_timeout=request_timeout, machine=True)
-        except InterfaceBusy:
+        except librpi2caster.InterfaceBusy:
             UI.pause('This interface is already working. Aborting...')
             raise Abort
         if self.is_casting():
@@ -705,59 +708,3 @@ class MonotypeCaster(SimulationCaster):
     @status.setter
     def status(self, _):
         """Prevents raising AttributeError when assigning to status"""
-
-
-class InterfaceException(Exception):
-    """Base class for interface-related exceptions"""
-    message = 'General interface error.'
-    offending_value = ''
-
-    def __str__(self):
-        return self.message
-
-
-class MachineStopped(InterfaceException):
-    """machine not turning exception"""
-    code = 0
-    message = 'The machine has been stopped.'
-
-
-class UnsupportedMode(InterfaceException):
-    """The operation mode is not supported by this interface."""
-    code = 1
-    message = ("This operation mode is not supported "
-               "in the interface's configuration")
-
-
-class UnsupportedRow16Mode(InterfaceException):
-    """The row 16 addressing mode is not supported by this interface."""
-    code = 2
-    message = ("This row 16 addressing mode is not supported "
-               "in the interface's configuration")
-
-
-class InterfaceBusy(InterfaceException):
-    """the interface was claimed by another client and cannot be used
-    until it is released"""
-    code = 3
-    message = ('This interface has been claimed by another client. '
-               'If this is not the case, restart it.')
-
-
-class InterfaceNotStarted(InterfaceException):
-    """the interface was not started and cannot accept signals"""
-    code = 4
-    message = 'The interface needs to be started first to be operated.'
-
-
-class WrongConfiguration(InterfaceException):
-    """Interface improperly configured"""
-    code = 5
-    message = 'Wrong value encountered in the configuration file.'
-
-
-class CommunicationError(InterfaceException):
-    """Error communicating with the interface."""
-    code = 6
-    message = ('Cannot communicate with the interface. '
-               'Check the network connection and/or configuration.')

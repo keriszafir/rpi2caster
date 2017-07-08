@@ -28,10 +28,10 @@ def cast_this(ribbon_source):
         ribbon = ribbon_source(self, *args, **kwargs)
         if not ribbon:
             return
-        if self.machine.is_punching():
-            return self.punch_ribbon(ribbon)
-        else:
+        if self.machine.is_casting():
             return self.cast_ribbon(ribbon)
+        else:
+            return self.punch_ribbon(ribbon)
     return wrapper
 
 

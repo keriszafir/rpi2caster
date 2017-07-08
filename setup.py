@@ -9,7 +9,8 @@ __author__ = 'Christophe Slychan'
 __author_email__ = 'krzysztof.slychan@gmail.com'
 __github_url__ = 'http://github.com/elegantandrogyne/rpi2caster'
 __dependencies__ = ['pip > 1.5', 'click > 6.0', 'peewee > 2.0',
-                    'qrcode > 5.0', 'requests > 2.0'],
+                    'qrcode > 5.0', 'requests > 2.0', 
+                    'librpi2caster >= 1.0'],
 
 with open('README.rst', 'r') as readme_file:
     long_description = readme_file.read()
