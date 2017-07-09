@@ -181,18 +181,11 @@ def cast_diecase_proof(casting):
     casting.diecase_proof()
 
 
-@cli.command('test', options_metavar='[-hps]')
-@click.option('--punch', '-p', 'operation_mode', flag_value='punching',
-              help='punch ribbon with a perforator (if supported)')
-@click.option('--cast', '-c', 'operation_mode', flag_value='casting',
-              help='cast type on a composition caster (if supported)')
-@click.option('--interface', '-i', default=None, show_default=True,
-              help='choose interface: 0 = simulation, 1... - real interfaces')
-def test_machine(interface, operation_mode):
+@cast.command('test', options_metavar='[-hps]')
+@click.pass_obj
+def test_machine(casting):
     """Monotype caster testing and diagnostics."""
-    from .monotype import choose_machine
-    machine = choose_machine(interface, operation_mode)
-    machine.diagnostics()
+    casting.machine.diagnostics()
 
 
 @cli.command(options_metavar='[-ahlmMw] [--src textfile] [--out ribbonfile]')

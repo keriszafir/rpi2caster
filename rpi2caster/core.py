@@ -6,16 +6,18 @@ make a diecase proof, quickly compose and cast text.
 from collections import deque, OrderedDict
 from functools import wraps
 
+# common definitions
+import librpi2caster
 # QR code generating backend
 try:
     import qrcode
 except ImportError:
     qrcode = None
 
-from .rpi2caster import UI, Abort, Finish, option
+from .rpi2caster import UI, CFG, Abort, Finish, option
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from . import monotype
 from .matrix_controller import temp_diecase
+from .monotype import MonotypeCaster, SimulationCaster
 from .parsing import parse_record
 from .typesetting import TypesettingContext
 
@@ -53,8 +55,52 @@ class Casting(TypesettingContext):
         self.choose_machine(interface_id, operation_mode)
 
     def choose_machine(self, interface_id=None, operation_mode=None):
-        """Choose a different interface for casting/punching"""
-        self.machine = monotype.choose_machine(interface_id, operation_mode)
+        """Choose a machine from the available interfaces."""
+        def make_caster(url):
+            """caster factory method: make a real or simulation caster;
+            if something bad happens, just return None"""
+            if url:
+                try:
+                    return MonotypeCaster(url, operation_mode)
+                except (librpi2caster.CommunicationError,
+                        librpi2caster.UnsupportedMode):
+                    return None
+            else:
+                return SimulationCaster(url, operation_mode)
+
+        # get the interface URLs
+        # the first interface is a simulation interface numbered 0
+        config_urls = CFG['System']['interfaces']
+        caster_urls = [*(x.strip() for x in config_urls.split(','))]
+        casters = {}
+        # simulation interface is always available
+        casters[0] = option(key=0, seq=0,
+                            value=SimulationCaster('', operation_mode),
+                            text='Virtual interface for simulation')
+        # gather them all and bind them
+        for number, url in enumerate(caster_urls, start=1):
+            caster = make_caster(url)
+            if caster:
+                modes = ', '.join(caster.supported_operation_modes)
+                row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
+                description = ('{} - modes: {} - row 16 addressing modes: {}'
+                               .format(caster, modes, row16_modes))
+            else:
+                description = '\t[Unavailable] {}'.format(url)
+            casters[number] = option(key=number, value=caster,
+                                     text=description)
+        # look a caster up by the index
+        try:
+            caster = casters[interface_id].value
+            if not caster:
+                raise ValueError
+        except (KeyError, IndexError, TypeError, ValueError):
+            # choose caster from menu
+            caster = UI.simple_menu('Choose the caster:', casters.values())
+            if not caster:
+                UI.display('Tried to use the unavailable caster.')
+                raise Abort
+        self.machine = caster
 
     def punch_ribbon(self, ribbon):
         """Punch the ribbon from start to end"""
@@ -223,7 +269,7 @@ class Casting(TypesettingContext):
                         prm = 'Casting successfully finished. Any more runs?'
                         stats.update(runs=UI.enter(prm, default=0, minimum=0))
 
-                except monotype.MachineStopped:
+                except librpi2caster.MachineStopped:
                     stats.update(casting_success=False)
                     # aborted - ask if user wants to continue
                     runs_left = stats.get_runs_left()
