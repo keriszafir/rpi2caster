@@ -14,10 +14,9 @@ try:
 except ImportError:
     qrcode = None
 
-from .rpi2caster import UI, CFG, Abort, Finish, option
+from .rpi2caster import UI, Abort, Finish, option, find_casters
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .matrix_controller import temp_diecase
-from .monotype import MonotypeCaster, SimulationCaster
 from .parsing import parse_record
 from .typesetting import TypesettingContext
 
@@ -56,49 +55,30 @@ class Casting(TypesettingContext):
 
     def choose_machine(self, interface_id=None, operation_mode=None):
         """Choose a machine from the available interfaces."""
-        def make_caster(url):
-            """caster factory method: make a real or simulation caster;
-            if something bad happens, just return None"""
-            if url:
-                try:
-                    return MonotypeCaster(url, operation_mode)
-                except (librpi2caster.CommunicationError,
-                        librpi2caster.UnsupportedMode):
-                    return None
-            else:
-                return SimulationCaster(url, operation_mode)
-
-        # get the interface URLs
-        # the first interface is a simulation interface numbered 0
-        config_urls = CFG['System']['interfaces']
-        caster_urls = [*(x.strip() for x in config_urls.split(','))]
-        casters = {}
-        # simulation interface is always available
-        casters[0] = option(key=0, seq=0,
-                            value=SimulationCaster('', operation_mode),
-                            text='Virtual interface for simulation')
-        # gather them all and bind them
-        for number, url in enumerate(caster_urls, start=1):
-            caster = make_caster(url)
+        def make_menu_entry(number, caster, url):
+            """build a menu entry"""
             if caster:
                 modes = ', '.join(caster.supported_operation_modes)
                 row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
-                description = ('{} - modes: {} - row 16 addressing modes: {}'
-                               .format(caster, modes, row16_modes))
+                text = ('{} - modes: {} - row 16 addressing modes: {}'
+                        .format(caster, modes, row16_modes))
             else:
-                description = '\t[Unavailable] {}'.format(url)
-            casters[number] = option(key=number, value=caster,
-                                     text=description)
+                text = '\t[Unavailable] {}'.format(url)
+            return option(key=number, seq=number, value=caster, text=text)
+
+        casters = find_casters(operation_mode)
         # look a caster up by the index
         try:
-            caster = casters[interface_id].value
+            caster = casters[interface_id][0]
             if not caster:
                 raise ValueError
         except (KeyError, IndexError, TypeError, ValueError):
             # choose caster from menu
-            caster = UI.simple_menu('Choose the caster:', casters.values())
+            menu_options = [make_menu_entry(number, caster, url)
+                            for number, (caster, url) in casters.items()]
+            caster = UI.simple_menu('Choose the caster:', menu_options)
             if not caster:
-                UI.display('Tried to use the unavailable caster.')
+                UI.pause('Tried to use the unavailable caster.')
                 raise Abort
         self.machine = caster
 
@@ -715,32 +695,25 @@ class Casting(TypesettingContext):
 
     def main_menu(self):
         """Main menu for the type casting utility."""
-        def got_ribbon():
-            """Check if ribbon is not empty"""
-            return bool(self.ribbon)
+        def options():
+            """Generate options based on current state of the program."""
+            machine = self.machine
+            is_casting = self.machine.is_casting()
+            is_punching = not is_casting
+            multiple_modes = len(self.machine.supported_operation_modes) >= 2
+            diecase_str = ('( current diecase ID: {})'
+                           .format(self.diecase.diecase_id)
+                           if bool(self.diecase) else '')
 
-        def diecase_id():
-            """Get the diecase ID for display"""
-            return ('( current diecase ID: {})'.format(self.diecase.diecase_id)
-                    if bool(self.diecase) else '')
+            got_ribbon, got_diecase = bool(self.ribbon), bool(self.diecase)
 
-        is_casting = self.machine.is_casting
-        is_punching = self.machine.is_punching
-
-        hdr = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-               'for Monotype Composition or Type and Rule casters.\n\n'
-               'This program reads a ribbon (from file or database) '
-               'and casts the type on a composition caster.'
-               '\n\n{} Menu:')
-        header = hdr.format('Punching' if is_punching() else 'Casting')
-
-        options = [option(key='c', value=self.cast_composition, seq=10,
-                          cond=lambda: (is_casting() and got_ribbon()),
+            ret = [option(key='c', value=self.cast_composition, seq=10,
+                          cond=is_casting and got_ribbon,
                           text='Cast composition',
                           desc='Cast type from a selected ribbon'),
 
                    option(key='p', value=self.cast_composition, seq=10,
-                          cond=lambda: (is_punching() and got_ribbon()),
+                          cond=is_punching and got_ribbon,
                           text='Punch ribbon',
                           desc='Punch a paper ribbon for casting'),
 
@@ -757,9 +730,9 @@ class Casting(TypesettingContext):
                           desc='Display all codes in the selected ribbon'),
 
                    option(key='l', value=self.display_diecase_layout, seq=80,
-                          text='Show diecase layout{}', cond=diecase_id,
-                          desc='View the matrix case layout',
-                          lazy=diecase_id),
+                          text='Show diecase layout{}'.format(diecase_str),
+                          cond=got_diecase,
+                          desc='View the matrix case layout'),
 
                    option(key='t', value=self.quick_typesetting, seq=20,
                           text='Quick typesetting',
@@ -774,12 +747,13 @@ class Casting(TypesettingContext):
                           desc='Cast QR codes from high and low spaces'),
 
                    option(key='F3', value=self.choose_machine, seq=90,
-                          text='Change the machine in use'),
+                          text=('Change the machine in use (current: {})'
+                                .format(machine))),
 
                    option(key='F4', value=self.machine.switch_operation_mode,
-                          seq=91, text='Change operation mode (current: {})',
-                          cond=len(self.machine.supported_operation_modes) > 1,
-                          lazy=lambda: self.machine.operation_mode),
+                          seq=91, cond=multiple_modes,
+                          text=('Change operation mode (current: {})'
+                                .format(machine.operation_mode))),
 
                    option(key='F5', value=self.display_details, seq=92,
                           text='Show details...', cond=is_casting,
@@ -795,10 +769,16 @@ class Casting(TypesettingContext):
                    option(key='F7', value=self.diecase_manipulation, seq=94,
                           text='Matrix manipulation...'),
 
-                   option(key='F8', value=self.machine.diagnostics, seq=95,
+                   option(key='F8', value=machine.diagnostics, seq=95,
                           text='Diagnostics menu...',
                           desc='Interface and machine diagnostic functions')]
+            return ret
 
+        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+                  'for Monotype Composition or Type and Rule casters.\n\n'
+                  'This program reads a ribbon (from file or database) '
+                  'and casts the type on a composition caster.'
+                  '\n\nCasting / Punching Menu:')
         exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
         UI.dynamic_menu(options, header, default_key='c',
                         abort_suffix='Press [{keys}] to exit.\n',
@@ -822,60 +802,64 @@ class Typesetting(TypesettingContext):
     """
     def main_menu(self):
         """Main menu for the typesetting utility."""
-        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-                  'for Monotype Composition or Type and Rule casters.\n\n'
-                  'Composition Menu:')
-        options = [option(key='e', value=self.edit_text, seq=1,
+        def options():
+            """Generate menu options"""
+            diecase, source = self.diecase, self.source
+            manual_mode = self.manual_mode
+            diecase_str = (' (current: {})'.format(self.diecase.diecase_id)
+                           if self.diecase else '')
+
+            ret = [option(key='e', value=self.edit_text, seq=1,
                           text='Edit source text'),
                    option(key='c', value=self.compose, seq=2,
                           text='Compose the text',
-                          cond=(self.diecase and self.source and
-                                self.manual_mode),
+                          cond=diecase and source and manual_mode,
                           desc='User makes end-of-line decisions'),
 
                    option(key='c', value=self.compose, seq=2,
                           text='Compose the text',
-                          cond=(self.diecase and self.source and not
-                                self.manual_mode),
+                          cond=diecase and source and not manual_mode,
                           desc='Automatic typesetting'),
 
                    option(key='m', value=self.change_measure, seq=5,
-                          text='Change measure', lazy=self.measure,
-                          desc='Set new line length (current: {})'),
+                          text=('Change measure (current: {})'
+                                .format(self.measure)),
+                          desc='Set the new line length for composed text'),
 
                    option(key='d', value=self.choose_diecase, seq=30,
-                          text='Select diecase',
+                          text='Select diecase{}'.format(diecase_str),
                           desc='Select a matrix case from database'),
 
                    option(key='w', value=self.choose_wedge, seq=35,
-                          text='Select alternative wedge', cond=self.diecase),
+                          text=('Select a normal wedge (current: {})'
+                                .format(self.wedge)), cond=self.diecase),
 
                    option(key='a', value=self.change_alignment, seq=40,
-                          text='Change default alignment (current: {})',
-                          lazy=self.default_alignment),
+                          text=('Change default alignment (current: {})'
+                                .format(self.default_alignment))),
 
                    option(key='t', value=self.toggle_manual_mode,
                           text='Switch to automatic typesetting mode',
-                          cond=self.manual_mode),
+                          cond=manual_mode),
 
                    option(key='t', value=self.toggle_manual_mode,
                           text='Switch to manual typesetting mode',
-                          cond=not self.manual_mode),
+                          cond=not manual_mode),
 
                    option(key='v', value=self.display_ribbon_contents, seq=80,
-                          cond=lambda: bool(self.ribbon),
-                          text='View codes',
+                          cond=self.ribbon, text='View codes',
                           desc='Display all codes in the selected ribbon'),
 
                    option(key='l', value=self.display_diecase_layout, seq=80,
                           cond=self.diecase,
-                          text='Show diecase layout{}',
-                          desc='View the matrix case layout',
-                          lazy=lambda: ('( current diecase ID: {})'
-                                        .format(self.diecase.diecase_id))),
+                          text='View the diecase layout'),
                    option(key='F7', value=self.diecase_manipulation, seq=90,
                           text='Matrix manipulation...')]
+            return ret
 
+        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
+                  'for Monotype Composition or Type and Rule casters.\n\n'
+                  'Typesetting Menu:')
         exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
         UI.dynamic_menu(options, header, default_key='c',
                         abort_suffix='Press [{keys}] to exit.\n',

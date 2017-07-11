@@ -22,8 +22,10 @@
 
 """
 from collections import OrderedDict
+from functools import partial
 import os
 import click
+import librpi2caster
 
 from . import global_state
 from .ui import Abort, Finish, option
@@ -52,6 +54,8 @@ class CommandGroup(click.Group):
         return self.commands.keys()
 
     def get_command(self, ctx, cmd_name):
+        """Try to get a command with given partial name;
+        in case of multiple match, abort."""
         retval = click.Group.get_command(self, ctx, cmd_name)
         if retval is not None:
             return retval
@@ -62,6 +66,31 @@ class CommandGroup(click.Group):
         elif len(matches) == 1:
             return click.Group.get_command(self, ctx, matches[0])
         ctx.fail('Too many matches: %s' % ', '.join(sorted(matches)))
+
+
+def find_casters(operation_mode=None):
+    """Finds casters and returns dictionary of number-caster values"""
+    from .monotype import MonotypeCaster, SimulationCaster
+
+    def make_caster(url):
+        """caster factory method: make a real or simulation caster;
+        if something bad happens, just return None"""
+        try:
+            return MonotypeCaster(url, operation_mode)
+        except (librpi2caster.CommunicationError,
+                librpi2caster.UnsupportedMode):
+            return None
+
+    # get the interface URLs
+    # the first interface is a simulation interface numbered 0
+    config_urls = CFG['System']['interfaces']
+    caster_urls = [*(x.strip() for x in config_urls.split(','))]
+    # make a dictionary of casters starting with 0 for a simulation caster
+    casters = {0: (SimulationCaster(), 'Virtual interface for simulation')}
+    for number, url in enumerate(caster_urls, start=1):
+        caster = make_caster(url)
+        casters[number] = (caster, url)
+    return casters
 
 
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
@@ -79,9 +108,24 @@ class CommandGroup(click.Group):
 @click.pass_context
 def cli(ctx, conffile, database, ui_impl, verbosity):
     """decide whether to go to a subcommand or enter main menu"""
-    def wrapped(function):
-        """wrap a function so that the context will invoke it"""
-        return lambda: ctx.invoke(function)
+    def options():
+        """Dynamically generate options"""
+        ret = [option(key='t', value=partial(ctx.invoke, translate), seq=10,
+                      text='Typesetting...',
+                      desc='Compose text for casting'),
+
+               option(key='c', value=partial(ctx.invoke, cast), seq=20,
+                      text='Casting or punching...',
+                      desc=('Cast composition, sorts, typecases or spaces;'
+                            ' test the machine')),
+
+               option(key='d', value=partial(ctx.invoke, inventory), seq=30,
+                      text='Diecase manipulation...',
+                      desc='Manage the matrix case collection'),
+
+               option(key='u', value=partial(ctx.invoke, update),
+                      text='Update the program', seq=90)]
+        return ret
 
     CFG.read(conffile)
     # get the URL from the argv or updated config
@@ -92,22 +136,6 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
     header = ('rpi2caster - computer aided typesetting software '
               'for Monotype composition casters.'
               '\n\nMain menu:\n')
-    options = [option(key='t', value=wrapped(translate), seq=10,
-                      text='Typesetting...',
-                      desc='Compose text for casting'),
-
-               option(key='c', value=wrapped(cast), seq=20,
-                      text='Casting or punching...',
-                      desc=('Cast composition, sorts, typecases or spaces;'
-                            ' test the machine')),
-
-               option(key='d', value=wrapped(inventory), seq=30,
-                      text='Diecase manipulation...',
-                      desc='Manage the matrix case collection'),
-
-               option(key='u', value=wrapped(update),
-                      text='Update the program', seq=90)]
-
     exceptions = (Abort, Finish, click.Abort)
     if not ctx.invoked_subcommand:
         UI.dynamic_menu(options, header, allow_abort=True,
@@ -116,7 +144,7 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
            options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
-@click.option('--interface', '-i', default=1, metavar='[number]',
+@click.option('--interface', '-i', default=None, type=int, metavar='[number]',
               help='choose interface:\n0=simulation, 1,2...=hardware')
 @click.option('--punch', '-p', 'operation_mode', flag_value='punching',
               help='punch ribbon with a perforator (if supported)')

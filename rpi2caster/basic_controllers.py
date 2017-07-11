@@ -126,44 +126,37 @@ def edit_matrix(matrix,
         new_units = UI.enter(prompt, default=curr_units, datatype=int)
         matrix.units = new_units or ua_units or row_units
 
+    def options():
+        """Generate menu options"""
+        ret = [option(key='c', value=_edit_char, seq=1, cond=edit_char,
+                      text=('change character (current: {})'
+                            .format(_get_char()))),
+               option(key='p', value=_edit_position, seq=2, cond=edit_position,
+                      text=('change matrix position in diecase (current: {})'
+                            .format(matrix.code))),
+               option(key='s', value=_edit_styles, seq=3,
+                      cond=(edit_styles and
+                            matrix.char and not matrix.isspace()),
+                      text=('assign styles (current: {})'
+                            .format(matrix.styles.names))),
+               option(key='w', value=_edit_units, seq=4,
+                      cond=edit_units and not matrix.isspace(),
+                      text=('change width (current: {} units)'
+                            .format(matrix.units))),
+               option(key='d', value=_edit_dimensions, seq=5,
+                      text=('change matrix size (current: {}x{})'
+                            .format(*matrix.size))),
+               option(key='Enter', value=Abort, seq=90, text='done editing'),
+               option(key='Esc', value=Finish, seq=99, text='finish')]
+        return ret
+
     with suppress(Abort):
         # keep displaying this menu until aborted
         while True:
-            # generate menu options dynamically
-            options = [option(key='c', value=_edit_char, seq=1,
-                              lazy=_get_char, cond=edit_char,
-                              text='change character (current: {})'),
-                       option(key='p', value=_edit_position, seq=2,
-                              lazy=matrix.code, cond=edit_position,
-                              text='change position (current: {})'),
-                       option(key='s', value=_edit_styles, seq=3,
-                              lazy=matrix.styles.names,
-                              cond=(edit_styles and matrix.char and not
-                                    matrix.isspace()),
-                              text='assign styles (current: {})'),
-                       option(key='w', value=_edit_units, seq=4,
-                              lazy=matrix.units,
-                              cond=edit_units and not matrix.isspace(),
-                              text='change width (current: {} units)'),
-                       option(key='d', value=_edit_dimensions, seq=5,
-                              text='change matrix size (current: {})',
-                              lazy='{}x{}'.format(*matrix.size)),
-                       option(key='Enter', value=Abort, seq=90,
-                              text='done editing'),
-                       option(key='Esc', value=Finish, seq=99,
-                              text='finish')]
-            valid_options = [opt for opt in options if opt.condition]
-            if not valid_options:
-                # nothing to do
-                break
-            elif len(valid_options) == 1:
-                # only one thing - no need for the menu
-                choice = valid_options[0].value
-            else:
-                # display the menu for user to choose
-                choice = UI.simple_menu('Edit the matrix for {} at {}:'
-                                        .format(_get_char(), matrix.code),
-                                        options, allow_abort=False)
+            # display the menu for user to choose
+            choice = UI.simple_menu('Edit the matrix for {} at {}:'
+                                    .format(_get_char(), matrix.code),
+                                    options, allow_abort=False)
             # execute the subroutine
             choice()
     return matrix

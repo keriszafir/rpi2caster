@@ -2,6 +2,7 @@
 """Caster object for either real or virtual Monotype composition caster"""
 # Standard library imports
 from collections import OrderedDict
+from functools import wraps
 from json.decoder import JSONDecodeError
 import time
 
@@ -13,6 +14,21 @@ from librpi2caster import ON, OFF, CASTING, PUNCHING, HMN, KMN, UNITSHIFT
 from .rpi2caster import UI, Abort, option
 from .parsing import parse_record
 from .matrix_controller import MatrixEngine
+
+
+def handle_communication_error(routine):
+    @wraps(routine)
+    def wrapper(*args, **kwargs):
+        """wrapper function"""
+        try:
+            return routine(*args, **kwargs)
+        except librpi2caster.CommunicationError as error:
+            message = ('Connection to the interface lost. Check your link.\n'
+                       'Original error message:\n{}\n'
+                       'Do you want to try again, or abort?')
+            if UI.confirm(message.format(error), abort_answer=False):
+                return routine(*args, **kwargs)
+    return wrapper
 
 
 class SimulationCaster:
@@ -53,10 +69,6 @@ class SimulationCaster:
 
     def __exit__(self, *_):
         self.stop()
-
-    def is_punching(self):
-        """Determines if this caster is set to punching """
-        return self.operation_mode == PUNCHING
 
     def is_casting(self):
         """Determines if this caster is set to casting"""
@@ -483,7 +495,9 @@ class SimulationCaster:
                 self.choose_row16_mode(row16_needed=True)
                 self.test(row)
 
-        options = [option(key='a', value=test_all, seq=1,
+        def options():
+            """Generate the menu options"""
+            ret = [option(key='a', value=test_all, seq=1,
                           text='Test outputs',
                           desc='Test all the air outputs N...O15, one by one'),
                    option(key='f', value=test_front_pinblock, seq=2,
@@ -521,6 +535,7 @@ class SimulationCaster:
                           text='Test the extended 16x17 diecase system',
                           desc=('Cast type from row 16 '
                                 'with HMN, KMN or unit-shift'))]
+            return ret
 
         header = 'Diagnostics and machine calibration menu:'
         catch_exceptions = (Abort, KeyboardInterrupt, EOFError,
@@ -538,7 +553,7 @@ class MonotypeCaster(SimulationCaster):
         if not self.url:
             message = 'Interface URL not specified!'
             raise librpi2caster.WrongConfiguration(message)
-        self.config = self._request(request_timeout=(3.05, 5)).get('settings')
+        self.config = self._request(request_timeout=(1, 1)).get('settings')
 
     def _request(self, path='', request_timeout=None,
                  method=requests.get, **kwargs):
@@ -573,15 +588,18 @@ class MonotypeCaster(SimulationCaster):
             raise librpi2caster.WrongConfiguration(msg.format(self.url))
         except requests.HTTPError as error:
             if response.status_code == 501:
-                raise NotImplementedError('{}: not supported by server'
+                raise NotImplementedError('{}: feature not supported by server'
                                           .format(url))
             # 400, 404, 503 etc.
             raise librpi2caster.CommunicationError(str(error))
-        except (requests.ConnectionError, requests.Timeout,
-                JSONDecodeError):
-            # address not on the network; no network on client or server;
-            # DNS failure; blocked by firewall etc.
-            msg = 'Cannot connect to {}. Check the network configuration.'
+        except requests.Timeout:
+            msg = 'Connection to {} timed out.'
+            raise librpi2caster.CommunicationError(msg.format(self.url))
+        except JSONDecodeError:
+            msg = 'Connection to {} returned incorrect data (expected: JSON).'
+            raise librpi2caster.CommunicationError(msg.format(self.url))
+        except requests.ConnectionError:
+            msg = 'Error connecting to {}.'
             raise librpi2caster.CommunicationError(msg.format(self.url))
 
     @property
@@ -591,6 +609,7 @@ class MonotypeCaster(SimulationCaster):
         return self.status['current_operation_mode']
 
     @operation_mode.setter
+    @handle_communication_error
     def operation_mode(self, mode):
         """Set the operation mode"""
         self._request('operation_mode', method=requests.post, mode=mode)
@@ -602,6 +621,7 @@ class MonotypeCaster(SimulationCaster):
         return self.status['current_row16_mode']
 
     @row16_mode.setter
+    @handle_communication_error
     def row16_mode(self, mode):
         """Change the row 16 addressing mode:
             None (row 16 addressing is off = cast from row 15 instead)
@@ -619,11 +639,13 @@ class MonotypeCaster(SimulationCaster):
         return self.status['testing_mode']
 
     @testing_mode.setter
+    @handle_communication_error
     def testing_mode(self, state):
         """Set the temporary testing mode on the interface"""
         value = True if state else False
         self._request(method=requests.post, testing_mode=value)
 
+    @handle_communication_error
     def send(self, signals='', repeat=1, timeout=None, request_timeout=None):
         """Send signals to the interface. Wait for an OK response."""
         try:
@@ -634,10 +656,11 @@ class MonotypeCaster(SimulationCaster):
             self.start()
             return self._request('signals', method=requests.post,
                                  request_timeout=request_timeout, **data)
-        except (KeyboardInterrupt, EOFError):
+        except (KeyboardInterrupt, EOFError, librpi2caster.CommunicationError):
             self.stop()
             raise librpi2caster.MachineStopped
 
+    @handle_communication_error
     def start(self):
         """Machine startup sequence.
         In the casting mode:
@@ -664,13 +687,14 @@ class MonotypeCaster(SimulationCaster):
         # send the request and handle any exceptions
         try:
             self._request('machine', method=requests.post,
-                          request_timeout=request_timeout, machine=True)
+                          request_timeout=request_timeout, machine=ON)
         except librpi2caster.InterfaceBusy:
             UI.pause('This interface is already working. Aborting...')
             raise Abort
         if self.is_casting():
             UI.display('OK, the machine is running...')
 
+    @handle_communication_error
     def stop(self):
         """Machine stop sequence.
         The interface driver checks if the pump is active
@@ -691,6 +715,7 @@ class MonotypeCaster(SimulationCaster):
                       request_timeout=request_timeout)
 
     @property
+    @handle_communication_error
     def status(self):
         """Get the interface status"""
         return self._request().get('status')
