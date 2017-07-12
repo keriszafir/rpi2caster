@@ -275,7 +275,7 @@ class SimulationCaster:
         normally use Casting.cast_ribbon which provides more info"""
         source = [parse_record(item) for item in input_sequence]
         # do we need to cast from row 16 and choose an attachment?
-        row16_in_use = any((record.code.uses_row_16 for record in source))
+        row16_in_use = any(record.uses_row_16 for record in source)
         self.choose_row16_mode(row16_in_use)
         # use caster context to check machine rotation and ensure
         # that no valves stay open after we're done

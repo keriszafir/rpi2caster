@@ -86,7 +86,7 @@ def find_casters(operation_mode=None):
     config_urls = CFG['System']['interfaces']
     caster_urls = [*(x.strip() for x in config_urls.split(','))]
     # make a dictionary of casters starting with 0 for a simulation caster
-    casters = {0: (SimulationCaster(), 'Virtual interface for simulation')}
+    casters = {0: (SimulationCaster(), 'No URL')}
     for number, url in enumerate(caster_urls, start=1):
         caster = make_caster(url)
         casters[number] = (caster, url)
@@ -142,13 +142,29 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
                         catch_exceptions=exceptions)
 
 
+@cli.command('machines', options_metavar='[-h]')
+@click.option('--punching', '-p', 'operation_mode', flag_value='punching',
+              help='punch ribbon with a perforator (if supported)')
+@click.option('--casting', '-c', 'operation_mode', flag_value='casting',
+              help='cast type on a composition caster (if supported)')
+def list_casters(operation_mode):
+    """List all configured casters and show the available ones."""
+    data = find_casters(operation_mode)
+    unavailable = click.style('currently unavailable', fg='red')
+    UI.display('\nList of configured interfaces:\n')
+    for number, (caster, url) in data.items():
+        name = caster if caster else unavailable
+        caster_url = '[{}]'.format(url)
+        UI.display('{:^4}{:<50}: {}'.format(number, caster_url, name))
+
+
 @cli.group(invoke_without_command=True, cls=CommandGroup,
            options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
 @click.option('--interface', '-i', default=None, type=int, metavar='[number]',
               help='choose interface:\n0=simulation, 1,2...=hardware')
-@click.option('--punch', '-p', 'operation_mode', flag_value='punching',
+@click.option('--punching', '-p', 'operation_mode', flag_value='punching',
               help='punch ribbon with a perforator (if supported)')
-@click.option('--cast', '-c', 'operation_mode', flag_value='casting',
+@click.option('--casting', '-c', 'operation_mode', flag_value='casting',
               help='cast type on a composition caster (if supported)')
 @click.option('--diecase', '-m', metavar='[diecase ID]',
               help='diecase ID from the database to use')

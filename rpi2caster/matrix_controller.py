@@ -197,7 +197,7 @@ def temp_diecase(routine):
         """Wrapper function"""
         if not self.diecase:
             # empty diecase? then let the user choose...
-            old_diecase, self.diecase = self.wedge, choose_diecase()
+            old_diecase, self.diecase = self.diecase, choose_diecase()
             UI.display_parameters(self.diecase.parameters)
             UI.display('\n\n')
             retval = routine(self, *args, **kwargs)

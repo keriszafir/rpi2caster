@@ -846,9 +846,10 @@ class Wedge:
     @property
     def parameters(self):
         """Gets a list of parameters"""
+        em_inches = round(self.pica * self.set_width / 12, 5)
         parameters = OrderedDict()
         parameters['Wedge designation'] = self.name
-        parameters['Pica value'] = '{:.4f}'.format(self.pica)
+        parameters['Inch width of 18 units [1em]'] = em_inches
         parameters['Units per row'] = ' '.join(str(x) for x in self.units if x)
         return parameters
 
