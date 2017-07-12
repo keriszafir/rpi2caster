@@ -200,7 +200,7 @@ class Casting(TypesettingContext):
                 status = self.machine.cast_one(record)
                 # prepare data for display
                 casting_status = OrderedDict()
-                casting_status['Signals sent'] = status['signals']
+                casting_status['Signals sent'] = ' '.join(status['signals'])
                 casting_status['Pump'] = 'ON' if status['pump'] else 'OFF'
                 casting_status['Wedge 0005 at'] = status['wedge_0005']
                 casting_status['Wedge 0075 at'] = status['wedge_0075']
@@ -489,20 +489,16 @@ class Casting(TypesettingContext):
         return ribbon
 
     @cast_this
-    @temp_diecase
     @bc.temp_wedge
     def cast_qr_code(self):
         """Set up and cast a QR code which can be printed and then scanned
         with a mobile device."""
         def define_space(low):
             """find and set up a high or low space"""
-            try:
-                space = self.find_space(units, low=low)
-            except bm.MatrixNotFound as exc:
-                UI.display(str(exc))
-                what = 'Low' if low else 'High'
-                code = UI.enter('{} space coordinates?'.format(what), '')
-                space = bm.Matrix(code=code, diecase=self.diecase)
+            what = 'Low' if low else 'High'
+            char = ' ' if low else '_'
+            code = UI.enter('{} space matrix coordinates?'.format(what), '')
+            space = bm.Matrix(char=char, code=code, diecase=self.diecase)
             wedges = self.get_wedge_positions(space, units)
             return space.get_ribbon_record(s_needle=wedges != (3, 8)), wedges
 
@@ -557,6 +553,8 @@ class Casting(TypesettingContext):
         px_size = bc.set_measure('6pt', what='pixel size (the same as mould)',
                                  set_width=self.wedge.set_width)
         units = px_size.units
+        UI.display('The pixel is {} units {} set wide.'
+                   .format(units, self.wedge.set_width))
         # determine the low and high space first
         try:
             low_space, ls_wedges = define_space(True)

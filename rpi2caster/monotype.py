@@ -17,6 +17,7 @@ from .matrix_controller import MatrixEngine
 
 
 def handle_communication_error(routine):
+    """If something goes wrong with a connection, ask what to do."""
     @wraps(routine)
     def wrapper(*args, **kwargs):
         """wrapper function"""
@@ -140,6 +141,13 @@ class SimulationCaster:
         """Get a list of supported row 16 addressing modes"""
         return self.config['supported_row16_modes']
 
+    @property
+    def parameters(self):
+        """Gets a list of parameters"""
+        parameters = OrderedDict({'': 'Caster parameters'})
+        parameters.update(**self.config)
+        return parameters
+
     def switch_operation_mode(self):
         """Switch between casting and punching"""
         new_mode = PUNCHING if self.is_casting() else CASTING
@@ -150,13 +158,6 @@ class SimulationCaster:
                      .format(new_mode))
         except librpi2caster.InterfaceBusy:
             UI.pause('Cannot change the mode while the machine is working.')
-
-    @property
-    def parameters(self):
-        """Gets a list of parameters"""
-        parameters = OrderedDict({'': 'Caster parameters'})
-        parameters.update(**self.config)
-        return parameters
 
     def choose_row16_mode(self, row16_needed=False):
         """Choose the addressing system for the diecase row 16."""
@@ -188,11 +189,6 @@ class SimulationCaster:
                            .format(self.row16_mode))
 
     @property
-    def speed(self):
-        """Simulate getting the current speed"""
-        return self.status.get('speed', '0rpm')
-
-    @property
     def signals(self):
         """Get the signals from the machine"""
         return self.status.get('signals', [])
@@ -213,6 +209,38 @@ class SimulationCaster:
 
     def send(self, signals, repeat=1, timeout=None, request_timeout=None):
         """Simulates sending the signals to the caster."""
+        def update_wedges_and_pump():
+            """Check the pump state and wedge positions;
+            update the current status if neeeded."""
+            def found(code):
+                """check if code was found in a combination"""
+                return set(code).issubset(signals)
+            # check 0075 wedge position and determine the pump status:
+            # find the earliest row number or default to 15
+            if found(['0075']) or found('NK'):
+                # 0075 always turns the pump on
+                self.status['pump'] = ON
+                for pos in range(1, 15):
+                    if str(pos) in signals:
+                        self.status['wedge_0075'] = pos
+                        break
+                else:
+                    self.status['wedge_0075'] = 15
+
+            elif found(['0005']) or found('NJ'):
+                # 0005 without 0075 turns the pump off
+                self.status['pump'] = OFF
+
+            # check 0005 wedge position:
+            # find the earliest row number or default to 15
+            if found(['0005']) or found('NJ'):
+                for pos in range(1, 15):
+                    if str(pos) in signals:
+                        self.status['wedge_0005'] = pos
+                        break
+                else:
+                    self.status['wedge_0005'] = 15
+
         if not self.status['working']:
             raise librpi2caster.InterfaceNotStarted
 
@@ -225,6 +253,7 @@ class SimulationCaster:
         self.status['signals'] = codes
         try:
             for _ in range(repeat):
+                update_wedges_and_pump()
                 if self.testing_mode:
                     UI.display('Testing signals: {}'.format(''.join(codes)))
                 elif self.is_casting():
@@ -552,7 +581,7 @@ class MonotypeCaster(SimulationCaster):
         """Initialize the caster"""
         if not self.url:
             message = 'Interface URL not specified!'
-            raise librpi2caster.WrongConfiguration(message)
+            raise librpi2caster.ConfigurationError(message)
         self.config = self._request(request_timeout=(1, 1)).get('settings')
 
     def _request(self, path='', request_timeout=None,
@@ -585,7 +614,7 @@ class MonotypeCaster(SimulationCaster):
         except requests.exceptions.InvalidSchema:
             # wrong URL
             msg = 'The URL: {} must be a http://... or https://... address.'
-            raise librpi2caster.WrongConfiguration(msg.format(self.url))
+            raise librpi2caster.ConfigurationError(msg.format(self.url))
         except requests.HTTPError as error:
             if response.status_code == 501:
                 raise NotImplementedError('{}: feature not supported by server'
