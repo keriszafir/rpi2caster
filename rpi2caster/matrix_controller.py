@@ -152,6 +152,27 @@ def get_all_diecases():
         return get_all_diecases()
 
 
+@DB
+def count_diecases():
+    """Count the diecases in database"""
+    try:
+        return Diecase.select().count()
+    except DB.OperationalError:
+        # since we're creating a new table, we're sure no diecases are there
+        Diecase.create_table(fail_silently=True)
+        return 0
+
+
+@DB
+def check_persistence(diecase_id):
+    """Check if the diecase is stored in the database"""
+    try:
+        return Diecase.select().where(Diecase.diecase_id == diecase_id).count()
+    except DB.OperationalError:
+        Diecase.create_table(fail_silently=True)
+        return 0
+
+
 def list_diecases(data=get_all_diecases()):
     """Display all diecases in a dictionary, plus an empty new one"""
     UI.display('\nAvailable diecases:\n')
@@ -326,7 +347,7 @@ def display_layout(layout):
     UI.display('\n'.join(table))
 
 
-def resize_layout(diecase):
+def resize_layout(layout):
     """Change the diecase layout size"""
     # select one of 3 sizes used by Monotype
     sizes = [(15, 15), (15, 17), (16, 17)]
@@ -335,7 +356,7 @@ def resize_layout(diecase):
     selected_size = UI.simple_menu(message='Matrix case size:',
                                    options=options,
                                    default_key=2, allow_abort=True)
-    diecase.layout.resize(*selected_size)
+    layout.resize(*selected_size)
 
 
 def edit_layout(layout):
@@ -355,11 +376,11 @@ def edit_layout(layout):
             # Swap their coordinates
             mat1.code, mat2.code = mat2.code, mat1.code
 
-    def edit(mat):
+    def edit(mat, single=False):
         """Edit a matrix"""
         UI.clear()
         display_layout(layout)
-        mat = bc.edit_matrix(mat)
+        mat = bc.edit_matrix(mat, single=single)
 
     def all_rows():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
@@ -416,7 +437,7 @@ def edit_layout(layout):
             else:
                 # user entered matrix coordinates
                 mat = layout.select_one(code=answer)
-                edit(mat)
+                edit(mat, single=True)
 
 
 def test_layout_charset(layout):
@@ -705,7 +726,7 @@ class DiecaseMixin:
 
     def resize_layout(self):
         """Resize the layout of currently used diecase"""
-        resize_layout(self.diecase)
+        resize_layout(self.diecase.layout)
 
     def display_diecase_layout(self, layout=None):
         """Display the diecase layout, unit values, styles."""
@@ -757,7 +778,7 @@ class DiecaseMixin:
         def _clear_layout():
             """Generates a new layout for the diecase"""
             if UI.confirm('Are you sure?', default=False, abort_answer=False):
-                self.diecase.layout.reset()
+                self.diecase.layout.purge()
                 self.diecase.store_layout()
 
         def _import():
@@ -800,11 +821,12 @@ class DiecaseMixin:
                           cond=(self.diecase.diecase_id and
                                 self.diecase.typeface)),
                    option(key='delete', value=_delete, seq=92,
-                          text='Delete diecase from database'),
+                          text='Delete diecase from database',
+                          cond=check_persistence(self.diecase.diecase_id)),
                    option(key='F2', value=bc.list_typefaces, seq=95,
                           text='List typefaces'),
                    option(key='F3', value=_change_diecase, seq=96,
-                          text='Change diecase'),
+                          text='Change diecase', cond=count_diecases()),
                    option(key='Esc', value=Abort, seq=98, text='Back'),
                    option(key='f10', value=Finish, seq=99,
                           text='Exit the diecase manipulation utility')]

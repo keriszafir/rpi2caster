@@ -4,7 +4,9 @@
 from configparser import ConfigParser
 from contextlib import suppress
 from functools import wraps
+import os
 
+import click
 import peewee as pw
 from playhouse import db_url
 
@@ -76,8 +78,12 @@ class UIProxy(object):
         impl = self.implementations.get(implementation, ClickUI)
         self.impl = impl(verbosity)
 
+USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
+with suppress(FileExistsError):
+    os.mkdir(USER_DATA_DIR, mode=0o775)
+
 INITIAL_CONFIG = {"System": {}, "Typesetting": {}}
-DEFAULTS = dict(database='sqlite:////var/local/rpi2caster/rpi2caster.db',
+DEFAULTS = dict(database='sqlite:////{}/rpi2caster.db'.format(USER_DATA_DIR),
                 interfaces='''http://localhost:23017,
                               http://localhost:23017/interfaces/0,
                               http://monotype:23017/interfaces/0''',

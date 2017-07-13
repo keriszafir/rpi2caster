@@ -45,9 +45,7 @@ def get_letter_frequencies():
 
 # Matrix control routines
 
-def edit_matrix(matrix,
-                edit_char=True, edit_position=True,
-                edit_styles=True, edit_units=True):
+def edit_matrix(matrix, single=True):
     """Edits the matrix data.
 
     matrix : a Matrix class object to edit,
@@ -56,17 +54,17 @@ def edit_matrix(matrix,
     edit_position : whether or not to edit the matrix coordinates,
     edit_styles : whether or not to change the styles for the matrix,
     edit_units : whether or not to change the matrix unit value
+    single : if True, editing only one matrix, else: more
+             (adds an option to escape editing the whole series)
     """
     def _get_char():
         """Get a character or space information"""
         # either a space description or mat character
         char = d.SPACE_NAMES.get(matrix.char, matrix.char)
-        return char or 'undefined'
+        return char or 'undefined character'
 
     def _edit_char():
         """Edit the matrix character"""
-        if not edit_char:
-            return
         prompt = 'Char? (" ": low / "_": high space, blank = keep)'
         matrix.char = UI.enter(prompt, default=matrix.char or '')
 
@@ -85,8 +83,6 @@ def edit_matrix(matrix,
 
     def _edit_position():
         """Edit the matrix coordinates"""
-        if not edit_position:
-            return
         matrix.code = UI.enter('Enter the matrix position',
                                default=matrix.code or '')
         # reset the unit width
@@ -96,9 +92,8 @@ def edit_matrix(matrix,
     def _edit_styles():
         """Change the matrix styles"""
         # skip this for spaces
-        if not edit_styles or matrix.isspace():
-            return
-        matrix.styles = choose_styles(matrix.styles)
+        string = '' if matrix.styles.use_all else matrix.styles
+        matrix.styles = choose_styles(string)
 
     def _edit_units():
         """Change the matrix unit width value"""
@@ -128,35 +123,38 @@ def edit_matrix(matrix,
 
     def options():
         """Generate menu options"""
-        ret = [option(key='c', value=_edit_char, seq=1, cond=edit_char,
+        ret = [option(key='c', value=_edit_char, seq=1,
                       text=('change character (current: {})'
                             .format(_get_char()))),
-               option(key='p', value=_edit_position, seq=2, cond=edit_position,
+               option(key='p', value=_edit_position, seq=2,
                       text=('change matrix position in diecase (current: {})'
                             .format(matrix.code))),
                option(key='s', value=_edit_styles, seq=3,
-                      cond=(edit_styles and
-                            matrix.char and not matrix.isspace()),
+                      cond=(matrix.char and not matrix.isspace()),
                       text=('assign styles (current: {})'
                             .format(matrix.styles.names))),
                option(key='w', value=_edit_units, seq=4,
-                      cond=edit_units and not matrix.isspace(),
+                      cond=not matrix.isspace(),
                       text=('change width (current: {} units)'
                             .format(matrix.units))),
                option(key='d', value=_edit_dimensions, seq=5,
                       text=('change matrix size (current: {}x{})'
                             .format(*matrix.size))),
-               option(key='Enter', value=Abort, seq=90, text='done editing'),
-               option(key='Esc', value=Finish, seq=99, text='finish')]
+               option(key='Enter', value=Abort, seq=90,
+                      text='edit next matrix', cond=not single),
+               option(key='Enter', value=Abort, seq=90,
+                      text='done - back to diecase edition menu', cond=single),
+               option(key='Esc', value=Finish, seq=99, cond=not single,
+                      text='done - back to diecase edition menu')]
         return ret
 
     with suppress(Abort):
         # keep displaying this menu until aborted
         while True:
             # display the menu for user to choose
-            choice = UI.simple_menu('Edit the matrix for {} at {}:'
-                                    .format(_get_char(), matrix.code),
-                                    options, allow_abort=False)
+            header = ('Edit the matrix for {} at {}:'
+                      .format(_get_char(), matrix.code))
+            choice = UI.simple_menu(header, options, allow_abort=False)
             # execute the subroutine
             choice()
     return matrix
@@ -232,9 +230,13 @@ def temp_measure(routine):
 
 # Style controller routines
 
-def choose_styles(styles='*', default=d.STYLES.roman, multiple=True):
+def choose_styles(styles='', default=d.STYLES.roman, multiple=True):
     """Manual style choice"""
-    styles_string = str(styles) if styles else ''
+    try:
+        default_style = default.short
+    except AttributeError:
+        default_style = str(default)
+    styles_string = str(styles) if styles else default_style
     if multiple:
         header = 'Choose one or more text styles.'
         all_styles = ',\na or * - all styles.\n'
@@ -244,7 +246,7 @@ def choose_styles(styles='*', default=d.STYLES.roman, multiple=True):
     prompt = ('{} Available options:\n'
               'r - roman/regular, b - bold, i - italic, s - small caps,\n'
               'l - lower index (inferior), u - upper index (superior),\n'
-              's1...s5 - size 1...size 5 (titling){}'
+              '1...5 - size 1...size 5 (titling){}'
               'Your choice?'.format(header, all_styles))
     result = UI.enter(prompt, default=styles_string, datatype=str)
     if not multiple:

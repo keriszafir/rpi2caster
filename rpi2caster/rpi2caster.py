@@ -30,10 +30,8 @@ import librpi2caster
 from . import global_state
 from .ui import Abort, Finish, option
 
-# Find the data directory path
-USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
-
 # get singleton instances for user interface, database and configuration
+USER_DATA_DIR = global_state.USER_DATA_DIR
 UI = global_state.UI
 DB = global_state.DB
 CFG = global_state.CFG
