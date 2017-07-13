@@ -1,0 +1,3 @@
+[console_scripts]
+rpi2caster = rpi2caster:cli
+
