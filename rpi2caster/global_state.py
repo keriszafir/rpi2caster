@@ -13,6 +13,8 @@ from .ui import ClickUI
 
 class DBProxy(pw.Proxy):
     """Database object sitting on top of Peewee"""
+    OperationalError = pw.OperationalError
+
     def __init__(self, url=''):
         super().__init__()
         if url:

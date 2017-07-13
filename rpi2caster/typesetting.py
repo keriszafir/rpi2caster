@@ -15,9 +15,13 @@ from .parsing import token_parser
 @DB
 def get_all_ribbons():
     """Lists all ribbons we have."""
-    rows = Ribbon.select().order_by(Ribbon.ribbon_id)
-    ribbons = OrderedDict(enumerate(rows, start=1))
-    return ribbons
+    try:
+        rows = Ribbon.select().order_by(Ribbon.ribbon_id)
+        ribbons = OrderedDict(enumerate(rows, start=1))
+        return ribbons
+    except DB.OperationalError:
+        Ribbon.create_table(fail_silently=True)
+        return get_all_ribbons()
 
 
 def list_ribbons(data=get_all_ribbons()):
@@ -67,9 +71,12 @@ def choose_ribbon(fallback=Ribbon, fallback_description='new empty ribbon'):
 def get_ribbon(ribbon_id=None, fallback=choose_ribbon):
     """Get a ribbon with given ribbon_id"""
     if ribbon_id:
-        with suppress(Ribbon.DoesNotExist):
+        try:
             return Ribbon.get(Ribbon.ribbon_id == ribbon_id)
-        UI.display('Ribbon {} not found in database.'.format(ribbon_id))
+        except Ribbon.DoesNotExist:
+            UI.display('Ribbon {} not found in database.'.format(ribbon_id))
+        except DB.OperationalError:
+            Ribbon.create_table(fail_silently=True)
     return fallback()
 
 

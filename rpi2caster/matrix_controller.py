@@ -147,6 +147,9 @@ def get_all_diecases():
         return OrderedDict(enumerated_diecases)
     except Diecase.DoesNotExist:
         return {}
+    except DB.OperationalError:
+        Diecase.create_table(fail_silently=True)
+        return get_all_diecases()
 
 
 def list_diecases(data=get_all_diecases()):
@@ -184,9 +187,12 @@ def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
 def get_diecase(diecase_id=None, fallback=choose_diecase):
     """Get a diecase with given parameters"""
     if diecase_id:
-        with suppress(Diecase.DoesNotExist):
+        try:
             return Diecase.get(Diecase.diecase_id == diecase_id)
-        UI.display('Diecase {} not found in database!'.format(diecase_id))
+        except Diecase.DoesNotExist:
+            UI.display('Diecase {} not found in database!'.format(diecase_id))
+        except DB.OperationalError:
+            Diecase.create_table(fail_silently=True)
     return fallback()
 
 
