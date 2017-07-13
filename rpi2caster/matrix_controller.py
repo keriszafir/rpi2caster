@@ -762,13 +762,20 @@ class DiecaseMixin:
             """Export diecase layout to CSV"""
             return export_csv(self.diecase)
 
-        header = 'Diecase manipulation menu'
-        options = [option(key='l', value=self.display_diecase_layout,
+        def header():
+            """Menu header"""
+            return ('Diecase manipulation menu - current diecase ID: {}'
+                    .format(self.diecase.diecase_id))
+
+        def options():
+            """Generate menu options"""
+            ret = [option(key='l', value=self.display_diecase_layout,
                           text='Display diecase layout', seq=1),
                    option(key='e', value=_edit_layout,
                           text='Edit diecase layout', seq=2),
                    option(key='u', value=_display_arrangements,
-                          text='Display unit arrangements', seq=4),
+                          text='Display unit arrangements', seq=4,
+                          cond=self.diecase.typeface.uas),
                    option(key='p', value=_edit_typeface, seq=11,
                           text='Edit typeface information'),
                    option(key='t', value=self.test_diecase_charset, seq=15,
@@ -778,13 +785,14 @@ class DiecaseMixin:
                    option(key='x', value=_export, seq=31,
                           text='Export layout to file'),
                    option(key='r', value=self.resize_layout, seq=89,
-                          text='Change the diecase layout size'),
+                          text='Change the diecase layout size',
+                          desc='Current: {}'.format(self.diecase.layout.size)),
                    option(key='n', value=_clear_layout,
                           text='Clear the diecase layout', seq=90),
                    option(key='ins', value=_save, seq=91,
                           text='Save diecase to database',
-                          cond=lambda: (self.diecase.diecase_id and
-                                        self.diecase.typeface)),
+                          cond=(self.diecase.diecase_id and
+                                self.diecase.typeface)),
                    option(key='delete', value=_delete, seq=92,
                           text='Delete diecase from database'),
                    option(key='F2', value=bc.list_typefaces, seq=95,
@@ -794,6 +802,8 @@ class DiecaseMixin:
                    option(key='Esc', value=Abort, seq=98, text='Back'),
                    option(key='f10', value=Finish, seq=99,
                           text='Exit the diecase manipulation utility')]
+            return ret
+
         UI.dynamic_menu(options, header=header, allow_abort=False)
 
 

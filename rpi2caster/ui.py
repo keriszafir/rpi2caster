@@ -281,10 +281,13 @@ class ClickUI(object):
         """
         def build_menu():
             """Build a list of options and their descriptions"""
-            # header_stirng: displayed above, footer_string: displayed below
+            # header_string: displayed above, footer_string: displayed below
             # debug_string: displayed only if verbosity != 0
-            header_string = '\n{}\n'.format(header) if header else ''
-            footer_string = '\n{}\n'.format(footer) if footer else '\n'
+            # accept functions for dynamic content generation as well
+            _header = assess(header)
+            _footer = assess(footer)
+            header_string = '\n{}\n'.format(_header) if _header else ''
+            footer_string = '\n{}\n'.format(_footer) if _footer else '\n'
             debug_string = (('\nThe program is now in debugging mode. '
                              'Verbosity: {}\n')
                             .format(self.verbosity)
@@ -365,7 +368,7 @@ class ClickUI(object):
                       if allow_abort and key.getchar not in rets]
         abort_getchars = [key.getchar for key in abort_keys]
         # abort prompt
-        abort_s = ('Press [{}] to abort.'
+        abort_s = ('[{}: abort]'
                    .format(', '.join(key.name for key in abort_keys))
                    if abort_keys else '')
         # add default key combo if it was specified
@@ -532,7 +535,7 @@ class ClickUI(object):
             # glue it all together
             return ' '.join([type_str, limits_str if limits_text else ''])
 
-        def get_user_input(question):
+        def get_user_input():
             """Enter the value and return it"""
             # get a prefill value from type definition
             # prefill takes a default and if it evaluates to False
@@ -543,6 +546,8 @@ class ClickUI(object):
 
             # get value from user
             readline.set_startup_hook(prefill_callback)
+            question = ('Enter value [Ctrl-C, Ctrl-Z = abort] : '
+                        if allow_abort else 'Enter value : ')
             value = input(question)
             return value
 
@@ -558,9 +563,7 @@ class ClickUI(object):
                                 condition=condition)
 
         # display the prompt message once
-        click.echo('\n{}\n'.format(prompt))
-        # tell the user that they can abort
-        click.echo('Press Ctrl-C or Ctrl-Z to abort.' if allow_abort else '')
+        click.echo('\n{}'.format(prompt))
         # tell user about the constraints
         click.echo(build_requirements_message())
 
@@ -569,7 +572,7 @@ class ClickUI(object):
             # get the value from wrapped function
             # raise exceptions (if default value was an exception)
             try:
-                value = conv_validate(get_user_input('Enter value : '))
+                value = conv_validate(get_user_input())
                 if value is None:
                     continue
                 else:

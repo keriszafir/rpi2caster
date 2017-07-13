@@ -657,8 +657,8 @@ class LayoutSize:
 
     def __str__(self):
         name = ('HMN, KMN or unit-shift' if self.rows == 16
-                else 'NI, NL' if self.columns == 17 else 'small')
-        return '{} rows, {} columns - {}'.format(self.rows, self.columns, name)
+                else 'extended: NI, NL' if self.columns == 17 else 'small')
+        return '{}x{} - {}'.format(self.rows, self.columns, name)
 
     @property
     def row_numbers(self):

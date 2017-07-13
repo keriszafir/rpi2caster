@@ -699,7 +699,7 @@ class Casting(TypesettingContext):
             is_casting = self.machine.is_casting()
             is_punching = not is_casting
             multiple_modes = len(self.machine.supported_operation_modes) >= 2
-            diecase_str = ('( current diecase ID: {})'
+            diecase_str = (' (current diecase ID: {})'
                            .format(self.diecase.diecase_id)
                            if bool(self.diecase) else '')
 
@@ -720,7 +720,7 @@ class Casting(TypesettingContext):
                           desc='Select a ribbon from database or file'),
 
                    option(key='d', value=self.choose_diecase, seq=30,
-                          text='Select diecase',
+                          text='Select diecase{}'.format(diecase_str),
                           desc='Select a matrix case from database'),
 
                    option(key='v', value=self.display_ribbon_contents, seq=80,
@@ -728,8 +728,7 @@ class Casting(TypesettingContext):
                           desc='Display all codes in the selected ribbon'),
 
                    option(key='l', value=self.display_diecase_layout, seq=80,
-                          text='Show diecase layout{}'.format(diecase_str),
-                          cond=got_diecase,
+                          text='Show diecase layout', cond=got_diecase,
                           desc='View the matrix case layout'),
 
                    option(key='t', value=self.quick_typesetting, seq=20,
