@@ -447,14 +447,16 @@ class ClickUI(object):
               min_verbosity=0, allow_abort=False):
         """Waits until user presses a key"""
         if self.verbosity >= min_verbosity:
-            abort_key_names = ', '.join(key.name for key in DEFAULT_ABORT_KEYS)
-            abort_key_chars = [key.getchar for key in DEFAULT_ABORT_KEYS]
-            suffix = msg2
+            abort_text = ''
+            abort_key_chars = []
             if allow_abort:
-                suffix = '{}\n[{}: abort]'.format(msg2, abort_key_names)
-            click.echo('{}\n{}\n'.format(msg1, suffix))
+                keys = ', '.join(key.name for key in DEFAULT_ABORT_KEYS)
+                abort_text = click.style(' [{}: abort]'.format(keys),
+                                         fg='cyan')
+                abort_key_chars = [key.getchar for key in DEFAULT_ABORT_KEYS]
+            click.echo('{}\n\t{}{}'.format(msg1, msg2, abort_text))
             char = click.getchar()
-            if allow_abort and char in abort_key_chars:
+            if char in abort_key_chars:
                 raise Abort
 
     @staticmethod
@@ -513,14 +515,18 @@ class ClickUI(object):
 
         type_prompt : info for user about what to enter; if None, use default
         """
-        def build_requirements_message():
+        def build_prompt():
             """Make a prompt about required datatype and limits."""
             retval_type_handler = dt.get_handler(retval_datatype)
 
             # what type should the input be?
             type_name = retval_type_handler.type_name
-            type_str = (type_prompt if type_prompt is not None
-                        else 'Type: {}'.format(type_name) if type_name else '')
+            if type_prompt:
+                type_text = type_prompt
+            elif type_name:
+                type_text = 'Type: {} '.format(type_name)
+            else:
+                type_text = ''
 
             # what limits are imposed?
             validated_parameter = retval_type_handler.validated_parameter
@@ -529,11 +535,15 @@ class ClickUI(object):
             max_string = 'max: {}'.format(maximum)
             limits_string = [min_string if minimum is not None else '',
                              max_string if maximum is not None else '']
-            limits_text = ', '.join(x for x in limits_string if x)
-            limits_str = '({} {})'.format(vp_name, limits_text)
-
+            limits_str = ', '.join(x for x in limits_string if x)
+            limits_text = ('({} {}) '.format(vp_name, limits_str) if limits_str
+                           else '')
+            requirements = '{}{}'.format(type_text, limits_text)
             # glue it all together
-            return ' '.join([type_str, limits_str if limits_text else ''])
+            if requirements:
+                return '{}\n{}'.format(prompt, requirements)
+            else:
+                return prompt
 
         def get_user_input():
             """Enter the value and return it"""
@@ -546,9 +556,8 @@ class ClickUI(object):
 
             # get value from user
             readline.set_startup_hook(prefill_callback)
-            question = ('Enter value [Ctrl-C, Ctrl-Z = abort] : '
-                        if allow_abort else 'Enter value : ')
-            value = input(question)
+            que = '[Ctrl-C, Ctrl-Z = abort] ?: ' if allow_abort else '> ?: '
+            value = input(click.style(que, fg='cyan'))
             return value
 
         # desired type:
@@ -562,10 +571,8 @@ class ClickUI(object):
                                 minimum=minimum, maximum=maximum,
                                 condition=condition)
 
-        # display the prompt message once
-        click.echo('\n{}'.format(prompt))
         # tell user about the constraints
-        click.echo(build_requirements_message())
+        click.echo(build_prompt())
 
         # loop until the function returns correct value
         while True:
@@ -650,7 +657,7 @@ class ClickUI(object):
 
     @staticmethod
     def confirm(question='Your choice?', default=True,
-                abort_answer=None, force_answer=False):
+                abort_answer=None, allow_abort=True):
         """Asks a simple question with yes or no answers.
         Returns True for yes and False for no.
 
@@ -658,50 +665,41 @@ class ClickUI(object):
         abort_answer : if True or False, yes / no answer raises Abort;
                        if None, the outcome is returned for both answers.
 
-        force_answer : disallows aborting by ctrl-C, ctrl-Z or Esc
+        allow_abort : allows aborting by ctrl-C, ctrl-Z or Esc
         """
         # key definitions and their meanings
         keys = OrderedDict()
         keys[get_key('y')] = True
-        keys[get_key('enter')] = default
         keys[get_key('n')] = False
-        keys[get_key('esc')] = False
+        keys[get_key('esc')] = Abort if allow_abort else False
 
-        # if "yes" or "no" answer leads to Abort, make its keys point to Abort
-        keys.update({key: Abort
-                     for key, value in keys.items()
-                     if value == abort_answer and abort_answer is not None})
+        names = {True: 'yes', False: 'no'}
 
-        # add aborting key options if abort is available as a third option
-        if not force_answer:
-            keys.update({key: Abort for key in DEFAULT_ABORT_KEYS})
+        default_text, abort_text = '', ''
+
+        # default and abort answer
+        if default is not None:
+            keys[get_key('enter')] = default
+            default_text = click.style(' Enter = {}'.format(names[default]),
+                                       fg='yellow')
+
+        if allow_abort:
+            keys[get_key('esc')] = Abort
+            abort_text = click.style(' Esc = abort', fg='red')
 
         # all keys are defined
         # build answer dict from key getchars
         answers = {key.getchar: answer for key, answer in keys.items()}
-
-        # chunks will form the answer info
-        chunks = []
-        # get the key names for yes, no, abort
-        for ans, ans_name in [(True, 'yes'), (False, 'no'), (Abort, 'abort')]:
-            names = [key.name for key, answer in keys.items() if answer == ans]
-            if not keys:
-                continue
-            # add a text for this answer
-            chunks.append('{1}: {0}'.format(ans_name, ', '.join(names)))
-
-        # glue the chunks together
-        key_info = '[{}]'.format(' || '.join(chunks)) if chunks else ''
-
         # display user prompts
         click.echo(question)
-        click.secho(key_info, fg='cyan')
 
         while True:
             # get the user input
-            click.echo('Your choice?')
+            click.echo('Choice? [Y/N{}{}]'.format(default_text, abort_text))
             getchar = click.getchar()
             answer = answers.get(getchar)
+            if answer == abort_answer:
+                raise Abort
 
             # loop further if answer lookup failed
             if answer is None:
