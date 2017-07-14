@@ -179,7 +179,7 @@ def convert_and_validate(value, default=None, datatype=None,
     if not value:
         # None is a special case, return it right away
         if default is None:
-            raise ValueError('ERROR: A value is required.')
+            raise ValueError('A value is required.')
 
         # return a default value then
         default_retval = try_raising(default)

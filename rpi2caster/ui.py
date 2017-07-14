@@ -452,7 +452,8 @@ class ClickUI(object):
                 abort_text = click.style(' [{}: abort]'.format(keys),
                                          fg='cyan')
                 abort_key_chars = [key.getchar for key in DEFAULT_ABORT_KEYS]
-            click.echo('{}\n\t{}{}'.format(msg1, msg2, abort_text))
+            _msg2 = click.style(msg2, fg='cyan', blink=True)
+            click.echo('{}\n\t{}{}'.format(msg1, _msg2, abort_text))
             char = click.getchar()
             if char in abort_key_chars:
                 raise Abort
@@ -675,6 +676,7 @@ class ClickUI(object):
         names = {True: 'yes', False: 'no'}
 
         default_text, abort_text = '', ''
+        prompt = click.style('Choice?', fg='yellow', bold=True)
 
         # default and abort answer
         if default is not None:
@@ -694,7 +696,7 @@ class ClickUI(object):
 
         while True:
             # get the user input
-            click.echo('Choice? [Y/N{}{}]'.format(default_text, abort_text))
+            click.echo('{} [Y/N{}{}]'.format(prompt, default_text, abort_text))
             getchar = click.getchar()
             answer = answers.get(getchar)
             if answer == abort_answer:

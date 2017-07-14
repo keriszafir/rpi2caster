@@ -16,7 +16,7 @@ except ImportError:
 
 from .rpi2caster import UI, Abort, Finish, option, find_casters
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .matrix_controller import temp_diecase
+from .matrix_controller import count_diecases, temp_diecase
 from .parsing import parse_record
 from .typesetting import TypesettingContext
 
@@ -561,7 +561,8 @@ class Casting(TypesettingContext):
             high_space, hs_wedges = define_space(False)
         except bm.TypesettingError as exc:
             UI.display(str(exc))
-            UI.pause('Try again with a different wedge')
+            UI.pause('Try again with a different pixel size or wedge')
+            return self.cast_qr_code()
         # enter text and encode it
         text = UI.enter('Enter data to encode', '')
         qr_matrix = make_qr(text)
@@ -721,6 +722,7 @@ class Casting(TypesettingContext):
 
                    option(key='d', value=self.choose_diecase, seq=30,
                           text='Select diecase{}'.format(diecase_str),
+                          cond=count_diecases(),
                           desc='Select a matrix case from database'),
 
                    option(key='v', value=self.display_ribbon_contents, seq=80,
@@ -824,6 +826,7 @@ class Typesetting(TypesettingContext):
 
                    option(key='d', value=self.choose_diecase, seq=30,
                           text='Select diecase{}'.format(diecase_str),
+                          cond=count_diecases(),
                           desc='Select a matrix case from database'),
 
                    option(key='w', value=self.choose_wedge, seq=35,

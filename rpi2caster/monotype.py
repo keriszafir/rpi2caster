@@ -13,7 +13,9 @@ from librpi2caster import ON, OFF, CASTING, PUNCHING, HMN, KMN, UNITSHIFT
 # Intra-package imports
 from .rpi2caster import UI, Abort, option
 from .parsing import parse_record
-from .matrix_controller import MatrixEngine
+from .basic_controllers import choose_wedge
+from .basic_models import Matrix
+from .matrix_controller import get_wedge_positions
 
 
 def handle_communication_error(routine):
@@ -464,12 +466,23 @@ class SimulationCaster:
         def calibrate_mould_and_diecase(*_):
             """Casts the "en dash" characters for calibrating the character X-Y
             relative to type body."""
-            def get_codes(mat):
+            def get_codes(char, default_position):
                 """Gets two mats for a given char and adjusts its parameters"""
-                positions = mat_engine.get_wedge_positions(mat)
+                code = UI.enter('Where is the {}?'.format(char),
+                                default=default_position)
+                matrix = Matrix(' ', code=code.upper())
+                # try again recursively if wrong value
+                if not matrix.position.row or not matrix.position.column:
+                    return get_codes(char, default_position)
+                # ask for unit width
+                row_units = wedge[matrix.position.row]
+                units = UI.enter('Unit width?', default=row_units)
+                matrix.units = units
+                # calculate justifying wedge positions
+                positions = get_wedge_positions(matrix, wedge, units)
                 pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005
                 use_s_needle = (pos_0075, pos_0005) != (3, 8)
-                codes = mat.get_ribbon_record(s_needle=use_s_needle)
+                codes = matrix.get_ribbon_record(s_needle=use_s_needle)
                 sjust = ['NJS 0005 {}'.format(pos_0005),
                          'NKS 0075 {}'.format(pos_0075)]
                 # use single justification to adjust character width, if needed
@@ -482,25 +495,20 @@ class SimulationCaster:
                        'check the position of the character relative to the\n'
                        'type body and adjust the bridge X-Y.\n'
                        'Repeat if needed.\n')
-            UI.confirm('Proceed?', default=True, abort_answer=False)
 
-            # this method needs to know the diecase and wedge
-            mat_engine = MatrixEngine()
-            wedge = mat_engine.choose_wedge()
-            # use half-quad, quad, "n" and en-dash
-            mats = [mat_engine.find_space(units=9),
-                    mat_engine.find_space(units=18),
-                    mat_engine.find_matrix(char='n'),
-                    mat_engine.find_matrix(char='--')]
+            wedge = choose_wedge()
             # operator needs to know how wide (in inches) the sorts should be
             template = '{u} units (1{n}) is {i}" wide'
-            quad_width = mat_engine.wedge.set_width / 12 * wedge.pica
+            quad_width = wedge.set_width / 12 * wedge.pica
             UI.display(template.format(u=9, n='en', i=0.5 * quad_width))
             UI.display(template.format(u=18, n='em', i=quad_width))
             # build a casting queue and cast it repeatedly
             line_out = 'NKJS 0005 0075'
             pump_stop = 'NJS 0005'
-            codes = (code for mat in mats for code in get_codes(mat))
+            # use half-quad, quad, "n" and en-dash
+            chars = [('en quad', 'G5'), ('em quad', 'O15'),
+                     ('n/h', None), ('dash', None)]
+            codes = (code for what in chars for code in get_codes(*what))
             sequence = [*codes, line_out, pump_stop]
             self.cast(sequence)
 

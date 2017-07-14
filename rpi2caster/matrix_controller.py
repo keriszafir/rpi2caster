@@ -571,6 +571,55 @@ def find_matrix(layout, choose=True, **kwargs):
         raise bm.MatrixNotFound('Automatic matrix lookup failed')
 
 
+def get_wedge_positions(matrix, normal_wedge, units, correction=0):
+    """Calculate the 0075 and 0005 wedge positions for this matrix
+    based on the current wedge used.
+
+    matrix - a Matrix object
+    correction - units of self.wedge's set to add/subtract,
+    units - arbitrary character width in units of self.wedge's set"""
+    def steps(wedge, unit_width=0):
+        """get a width (in .0005" steps) of a character
+        for a given number of units or diecase row"""
+        inches = unit_width / 18 * wedge.set_width / 12 * wedge.pica
+        # return a number of 0.0005" steps
+        return int(2000 * inches)
+
+    def limits_exceeded():
+        """raise an error if width can't be adjusted with wedges"""
+        limits = normal_wedge.get_adjustment_limits(matrix.islowspace())
+        minimum = row_units - limits.shrink
+        maximum = row_units + limits.stretch
+        message = ('{}: desired width of {} units exceeds '
+                   'adjustment limits (min: {} / max: {})')
+        width = units + delta
+        error_msg = message.format(matrix, width, minimum, maximum)
+        raise bm.TypesettingError(error_msg)
+
+    # absolute width: how many .0005" steps is it?
+    char_width = steps(normal_wedge, units)
+    # how many do we need to add or take away? (for kerning etc.)
+    delta = steps(normal_wedge, correction)
+    # how wide would a character from the given row normally be?
+    # (using self.wedge, not self.diecase.wedge!)
+    row_units = normal_wedge[matrix.position.row]
+    row_width = steps(normal_wedge, row_units)
+    # calculate the difference and wedge positions
+    # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
+    # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
+    increments = char_width + delta - row_width + 53
+    # Upper limit: 15/15 => 15*15=225 + 15 = 240;
+    # lower limit:  1/ 1 => 1 * 15 + 1 = 16
+    if increments < 16 or increments > 240:
+        limits_exceeded()
+    # calculate wedge positions from the increments
+    pos_0005, pos_0075 = increments % 15, increments // 15
+    if not pos_0005:
+        # wedge positions cannot be zero
+        pos_0005, pos_0075 = 15, pos_0075 - 1
+    return d.WedgePositions(pos_0075, pos_0005)
+
+
 class DiecaseMixin:
     """Mixin for diecase-related operations"""
     _wedge, _diecase = None, None
@@ -617,48 +666,8 @@ class DiecaseMixin:
         matrix - a Matrix object
         correction - units of self.wedge's set to add/subtract,
         units - arbitrary character width in units of self.wedge's set"""
-        def steps(wedge, unit_width=0):
-            """get a width (in .0005" steps) of a character
-            for a given number of units or diecase row"""
-            inches = unit_width / 18 * wedge.set_width / 12 * wedge.pica
-            # return a number of 0.0005" steps
-            return int(2000 * inches)
-
-        def limits_exceeded():
-            """raise an error if width can't be adjusted with wedges"""
-            limits = self.wedge.get_adjustment_limits(matrix.islowspace())
-            minimum = row_units - limits.shrink
-            maximum = row_units + limits.stretch
-            message = ('{}: desired width of {} units exceeds '
-                       'adjustment limits (min: {} / max: {})')
-            width = char_units + delta
-            error_msg = message.format(matrix, width, minimum, maximum)
-            raise bm.TypesettingError(error_msg)
-
-        # first we need to know how many units self.wedge's set the char has
         char_units = units or self.get_units(matrix)
-        # absolute width: how many .0005" steps is it?
-        char_width = steps(self.wedge, char_units)
-        # how many do we need to add or take away? (for kerning etc.)
-        delta = steps(self.wedge, correction)
-        # how wide would a character from the given row normally be?
-        # (using self.wedge, not self.diecase.wedge!)
-        row_units = matrix.get_units_from_row(wedge_used=self.wedge)
-        row_width = steps(self.wedge, row_units)
-        # calculate the difference and wedge positions
-        # 1 step of 0075 wedge is 15 steps of 0005; neutral positions are 3/8
-        # 3 * 15 + 8 = 53, so any increment/decrement is relative to this
-        increments = char_width + delta - row_width + 53
-        # Upper limit: 15/15 => 15*15=225 + 15 = 240;
-        # lower limit:  1/ 1 => 1 * 15 + 1 = 16
-        if increments < 16 or increments > 240:
-            limits_exceeded()
-        # calculate wedge positions from the increments
-        pos_0005, pos_0075 = increments % 15, increments // 15
-        if not pos_0005:
-            # wedge positions cannot be zero
-            pos_0005, pos_0075 = 15, pos_0075 - 1
-        return d.WedgePositions(pos_0075, pos_0005)
+        return get_wedge_positions(matrix, self.wedge, char_units, correction)
 
     @property
     def diecase(self):
