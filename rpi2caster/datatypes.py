@@ -126,7 +126,7 @@ def get_string(value=None, datatype=str):
     """Get a printable string of a value that would act as a prefill
     value for input prompts."""
     to_str = get_handler(datatype).to_str
-    return to_str(value)
+    return to_str('' if value is None else value)
 
 
 def get_false_value(datatype):

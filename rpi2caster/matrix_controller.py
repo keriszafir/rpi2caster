@@ -4,7 +4,7 @@
 import csv
 from collections import OrderedDict
 from contextlib import suppress
-from functools import partial, wraps
+from functools import wraps
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .rpi2caster import USER_DATA_DIR, UI, Abort, Finish, option
 from .data import TYPEFACES as TF, UNIT_ARRANGEMENTS as UA
@@ -362,23 +362,17 @@ def resize_layout(layout):
 def edit_layout(layout):
     """Edits a matrix case layout, row by row, matrix by matrix.
     Allows to enter a position to be edited. """
-    def swap(answer):
+    def swap():
         """Swap two matrices based on command"""
-        command = answer.upper().strip()
-        if command.startswith('SWAP'):
-            # Process the command string (uppercase)
-            command = command.replace('SWAP', '').strip()
-            code1, code2 = command.split(',', 1)
-            code1, code2 = code1.strip(), code2.strip()
-            # Look for matrices
-            mat1 = layout.select_one(code=code1)
-            mat2 = layout.select_one(code=code2)
-            # Swap their coordinates
-            mat1.code, mat2.code = mat2.code, mat1.code
+        mat1_code = UI.enter('Matrix position to replace?')
+        mat1 = layout.select_one(code=mat1_code)
+        mat2_code = UI.enter('Other matrix position?')
+        mat2 = layout.select_one(code=mat2_code)
+        # no exceptions? then swap
+        mat1.code, mat2.code = mat2.code, mat1.code
 
     def edit(mat, single=False):
         """Edit a matrix"""
-        UI.clear()
         display_layout(layout)
         mat = bc.edit_matrix(mat, single=single)
 
@@ -392,52 +386,61 @@ def edit_layout(layout):
         for mat in sum(layout.by_columns(), []):
             edit(mat)
 
-    def single_row(row):
+    def single_row():
         """Edits matrices found in a single row"""
+        row = UI.enter('Row?', datatype=int, default='',
+                       minimum=1, maximum=layout.size.rows)
         for mat in layout.select_row(row):
             edit(mat)
 
-    def single_column(column):
+    def single_column():
         """Edits matrices found in a single column"""
+        def condition(col_num):
+            """Validation condition for column number"""
+            return col_num.upper() in layout.size.column_numbers
+
+        prompt = 'Column? [{}]'.format(', '.join(layout.size.column_numbers))
+        column = UI.enter(prompt, default='', condition=condition).upper()
         for mat in layout.select_column(column):
             edit(mat)
 
-    # Map unit values to rows
-    # If the layout is empty, we need to initialize it
-    diecase = layout.diecase
-    prompt = ('Enter row number to edit all mats in a row,\n'
-              'column number to edit all mats in a column,\n'
-              'matrix coordinates to edit a single matrix,\n'
-              'or choose edit mode: AR - all matrices row by row, '
-              'AC - all matrices column by column.'
-              '\nS - save the layout after editing.'
-              '\nYou can swap two mats by entering: "swap pos1, pos2".')
-    # define functions to execute after choosing the answer
-    routines = dict(AR=all_rows, AC=all_columns, S=diecase.store_layout)
-    # add options for column editing
-    routines.update({x: partial(single_column, x)
-                     for x in ('NI', 'NL', *'ABCDEFGHIJKLMNO')})
-    # add options for row editing
-    routines.update({str(x): partial(single_row, x) for x in range(1, 17)})
+    def single_matrix():
+        """Edits a single matrix with specified coordinates"""
+        position = UI.enter('Coordinates?', default='')
+        mat = layout.select_one(code=position.upper())
+        edit(mat, single=True)
 
-    while True:
+    def show_layout():
+        """Shows diecase layout and pauses"""
         UI.display('\nCurrent diecase layout:\n')
         display_layout(layout)
-        UI.display()
-        # ask what to do
-        answer = UI.enter(prompt, default=Abort, datatype=str).upper()
-        routine = routines.get(answer)
-        # try to perform the chosen action
-        with suppress(bm.MatrixNotFound, Abort, Finish):
-            if routine:
-                routine()
-            elif answer.startswith('SWAP'):
-                # swap two mats
-                swap(answer)
-            else:
-                # user entered matrix coordinates
-                mat = layout.select_one(code=answer)
-                edit(mat, single=True)
+        UI.pause()
+
+    def options():
+        """Menu options"""
+        ret = [option(key='r', value=single_row, text='Single row', seq=10),
+               option(key='R', value=all_rows,
+                      text='All mats, row by row', seq=20),
+               option(key='c', value=single_column,
+                      text='Single column', seq=30),
+               option(key='C', value=all_columns,
+                      text='All mats, column by column', seq=40),
+               option(key='m', value=single_matrix,
+                      text='Single matrix', seq=5),
+               option(key='s', value=swap, text='Swap two matrices', seq=60),
+               option(key='l', value=show_layout,
+                      text='View current layout', seq=70),
+               option(key='Ins', value=layout.diecase.store_layout,
+                      text='Save the changes in diecase layout', seq=80),
+               option(key='Esc', value=Finish, text='Finish editing', seq=99)]
+        return ret
+
+    while True:
+        opt = UI.simple_menu('Diecase layout edition menu:', options=options)
+        with suppress(TypeError):
+            raise opt
+        with suppress(Abort, Finish, bm.MatrixNotFound):
+            opt()
 
 
 def test_layout_charset(layout):
@@ -826,13 +829,10 @@ class DiecaseMixin:
                    option(key='F2', value=bc.list_typefaces, seq=95,
                           text='List typefaces'),
                    option(key='F3', value=_change_diecase, seq=96,
-                          text='Change diecase', cond=count_diecases()),
-                   option(key='Esc', value=Abort, seq=98, text='Back'),
-                   option(key='f10', value=Finish, seq=99,
-                          text='Exit the diecase manipulation utility')]
+                          text='Change diecase', cond=count_diecases())]
             return ret
 
-        UI.dynamic_menu(options, header=header, allow_abort=False)
+        UI.dynamic_menu(options, header=header)
 
 
 class MatrixEngine(DiecaseMixin):

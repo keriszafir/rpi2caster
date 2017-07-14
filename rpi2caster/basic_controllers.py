@@ -124,28 +124,28 @@ def edit_matrix(matrix, single=True):
     def options():
         """Generate menu options"""
         ret = [option(key='c', value=_edit_char, seq=1,
-                      text=('change character (current: {})'
+                      text=('Change character (current: {})'
                             .format(_get_char()))),
                option(key='p', value=_edit_position, seq=2,
-                      text=('change matrix position in diecase (current: {})'
+                      text=('Change matrix position in diecase (current: {})'
                             .format(matrix.code))),
                option(key='s', value=_edit_styles, seq=3,
                       cond=(matrix.char and not matrix.isspace()),
-                      text=('assign styles (current: {})'
+                      text=('Assign styles (current: {})'
                             .format(matrix.styles.names))),
                option(key='w', value=_edit_units, seq=4,
                       cond=not matrix.isspace(),
-                      text=('change width (current: {} units)'
+                      text=('Change width (current: {} units)'
                             .format(matrix.units))),
                option(key='d', value=_edit_dimensions, seq=5,
-                      text=('change matrix size (current: {}x{})'
+                      text=('Change matrix size (current: {}x{})'
                             .format(*matrix.size))),
                option(key='Enter', value=Abort, seq=90,
-                      text='edit next matrix', cond=not single),
+                      text='Edit next matrix', cond=not single),
                option(key='Enter', value=Abort, seq=90,
-                      text='done - back to diecase edition menu', cond=single),
+                      text='Finish editing the matrix', cond=single),
                option(key='Esc', value=Finish, seq=99, cond=not single,
-                      text='done - back to diecase edition menu')]
+                      text='Back to layout editor menu')]
         return ret
 
     with suppress(Abort):
@@ -164,10 +164,10 @@ def edit_matrix(matrix, single=True):
 
 def list_typefaces(*_):
     """Show all available typefaces"""
-    template = '{num:>6}\t{name:<30}\t{styles}'
+    template = '{num:>6}\t{name:<50}\t{styles}'
     UI.display_header('List of known typefaces by series number:')
-    UI.display('Series\t{:<30}\tStyles'.format('Name'))
-    for number, record in sorted(TYPEFACES.items()):
+    UI.display('Series\t{:<50}\tStyles'.format('Name'))
+    for number, record in sorted(TYPEFACES.items(), key=lambda x: int(x[0])):
         name = record.get('typeface')
         if not name:
             continue
