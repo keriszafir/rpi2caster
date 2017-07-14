@@ -244,11 +244,13 @@ def display_layout(layout):
     def get_formatted_text(text, styles, length='^3'):
         """format a text with formatting string in styles definitions"""
         field = '{{:{}}}'.format(length) if length else '{}'
+        collection = bm.Styles(styles)
         if text in d.SPACE_NAMES:
             # got a space = display symbol instead
             return field.format(d.SPACE_SYMBOLS.get(text[0]))
+        elif collection.use_all:
+            return field.format(text)
         else:
-            collection = bm.Styles(styles)
             ansi_codes = ';'.join(str(s.ansi) for s in collection if s.ansi)
             template = '\x1b[{codes}m{text}\x1b[0m'
             return template.format(codes=ansi_codes, text=field.format(text))
