@@ -172,14 +172,15 @@ class Casting(TypesettingContext):
             prompt = 'Cast two lines of quads to heat up the mould?'
             if not UI.confirm(prompt, default=False):
                 return []
-            quad_qty = int(self.measure.units // self.quad.units)
-            text = 'Casting 2 lines of {} quads for mould heatup'
+            measure = bc.set_measure(self.measure)
+            qty = int(measure.units // self.quad.units)
+            text = 'Casting 2 lines of {} quads for mould heatup'.format(qty)
             galley_trip = 'NKJS 0005 0075 // {}'.format(text)
             quad = self.quad.get_ribbon_record()
             # casting queue
-            queue = [galley_trip, *[quad] * quad_qty] * 2
+            queue = [galley_trip, *[quad] * qty] * 2
             # make a generator object - it needs to be single-use only
-            return (x for x in queue)
+            return (parse_record(x) for x in queue)
 
         def cast_queue(queue):
             """Casts the sequence of codes in given sequence.
