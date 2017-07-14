@@ -367,7 +367,8 @@ class Matrix:
         """Try getting the unit width value from diecase's unit arrangement,
         if that fails, return 0"""
         for style in self.styles:
-            with suppress(UnitValueNotFound, UnitArrangementNotFound):
+            with suppress(UnitValueNotFound, UnitArrangementNotFound,
+                          AttributeError):
                 arrangement = self.diecase.unit_arrangements.get(style)
                 if not arrangement:
                     continue
