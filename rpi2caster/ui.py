@@ -680,11 +680,11 @@ class ClickUI(object):
         if default is not None:
             keys[get_key('enter')] = default
             default_text = click.style(' Enter = {}'.format(names[default]),
-                                       fg='green')
+                                       fg='green', bold=True)
 
         if allow_abort:
             keys[get_key('esc')] = Abort
-            abort_text = click.style(' Esc = abort', fg='red')
+            abort_text = click.style(' Esc = abort', fg='red', bold=True)
 
         # all keys are defined
         # build answer dict from key getchars
