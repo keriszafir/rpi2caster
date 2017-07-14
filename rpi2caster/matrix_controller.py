@@ -741,6 +741,7 @@ class DiecaseMixin:
     def resize_layout(self):
         """Resize the layout of currently used diecase"""
         resize_layout(self.diecase.layout)
+        self.diecase.store_layout()
 
     def display_diecase_layout(self, layout=None):
         """Display the diecase layout, unit values, styles."""
@@ -757,8 +758,9 @@ class DiecaseMixin:
         @DB
         def _save():
             """Stores the matrix case definition/layout in database"""
+            is_stored = check_persistence(self.diecase.diecase_id)
             self.diecase.store_layout()
-            self.diecase.save()
+            self.diecase.save(force_insert=not is_stored)
             UI.pause('Data saved.')
 
         @DB
@@ -776,7 +778,13 @@ class DiecaseMixin:
 
         def _edit_typeface():
             """Edit diecase's typeface info"""
-            edit_typeface(self.diecase)
+            # edit_typeface(self.diecase)
+            current_diecase_id = self.diecase.diecase_id
+            diecase_id = UI.enter('Diecase ID?', default=current_diecase_id)
+            self.diecase.diecase_id = diecase_id
+            self.diecase.typeface = "Not implemented yet"
+            if UI.confirm('Save the diecase in database?'):
+                _save()
 
         def _display_arrangements():
             """Display all unit arrangements for this diecase"""
@@ -793,7 +801,6 @@ class DiecaseMixin:
             """Generates a new layout for the diecase"""
             if UI.confirm('Are you sure?', default=False, abort_answer=False):
                 self.diecase.layout.purge()
-                self.diecase.store_layout()
 
         def _import():
             """Import diecase layout from CSV"""
@@ -805,38 +812,49 @@ class DiecaseMixin:
 
         def header():
             """Menu header"""
+            if not self.diecase.diecase_id:
+                return ('Diecase manipulation menu:\n'
+                        'To start, you must name your diecase.\n'
+                        'The name must be unique, for example "327-12-01".')
+            elif not check_persistence(self.diecase.diecase_id):
+                return ('Diecase manipulation menu:\n'
+                        'Diecase ID: {}\n'
+                        'The diecase is not yet stored in the database.\n'
+                        'You have to save it first before you can edit it.'
+                        .format(self.diecase.diecase_id))
             return ('Diecase manipulation menu - current diecase ID: {}'
                     .format(self.diecase.diecase_id))
 
         def options():
             """Generate menu options"""
-            ret = [option(key='l', value=self.display_diecase_layout,
-                          text='Display diecase layout', seq=1),
-                   option(key='e', value=_edit_layout,
+            is_stored = check_persistence(self.diecase.diecase_id)
+            ret = [option(key='l', value=self.display_diecase_layout, seq=1,
+                          text='Display diecase layout', cond=is_stored),
+                   option(key='e', value=_edit_layout, cond=is_stored,
                           text='Edit diecase layout', seq=2),
                    option(key='u', value=_display_arrangements,
                           text='Display unit arrangements', seq=4,
                           cond=self.diecase.typeface.uas),
-                   option(key='p', value=_edit_typeface, seq=11,
-                          text='Edit typeface information'),
+                   option(key='i', value=_edit_typeface, seq=11,
+                          text='Edit the diecase information'),
                    option(key='t', value=self.test_diecase_charset, seq=15,
+                          cond=is_stored,
                           text='Test if diecase contains required characters'),
-                   option(key='i', value=_import, seq=30,
+                   option(key='f', value=_import, seq=30, cond=is_stored,
                           text='Import layout from file'),
-                   option(key='x', value=_export, seq=31,
+                   option(key='x', value=_export, seq=31, cond=is_stored,
                           text='Export layout to file'),
                    option(key='r', value=self.resize_layout, seq=89,
+                          cond=is_stored,
                           text='Change the diecase layout size',
                           desc='Current: {}'.format(self.diecase.layout.size)),
-                   option(key='n', value=_clear_layout,
+                   option(key='n', value=_clear_layout, cond=is_stored,
                           text='Clear the diecase layout', seq=90),
                    option(key='ins', value=_save, seq=91,
                           text='Save diecase to database',
-                          cond=(self.diecase.diecase_id and
-                                self.diecase.typeface)),
-                   option(key='delete', value=_delete, seq=92,
-                          text='Delete diecase from database',
-                          cond=check_persistence(self.diecase.diecase_id)),
+                          cond=self.diecase.diecase_id),
+                   option(key='delete', value=_delete, seq=92, cond=is_stored,
+                          text='Delete diecase from database'),
                    option(key='F2', value=bc.list_typefaces, seq=95,
                           text='List typefaces'),
                    option(key='F3', value=_change_diecase, seq=96,
