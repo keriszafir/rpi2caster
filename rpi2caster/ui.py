@@ -36,7 +36,7 @@ KEYS = dict(
     f9=Key('\x1b[20~', 'F9'), f10=Key('\x1b[21~', 'F10'),
     f11=Key('\x1b[23~', 'F11'), f12=Key('\x1b[24~', 'F12')
     )
-DEFAULT_ABORT_KEYS = [KEYS[key] for key in ('esc', 'ctrl_c', 'ctrl_z', 'f10')]
+DEFAULT_ABORT_KEYS = [KEYS[key] for key in ('esc', 'f10')]
 NONSENSE = 'etaoin shrdlu cmfwyp'
 
 
@@ -126,9 +126,9 @@ def get_sorted_valid_options(options):
 def build_entry(opt, trailing_newline=1):
     """Build a menu entry for an option"""
     # templates for menu entries
-    long_entry = '\t{key:<10}:  {text}\n\t\t\t{desc}' + '\n' * trailing_newline
-    short_entry = '\t{key:<10}:  {text}' + '\n' * trailing_newline
-    key_name = opt.key.name
+    long_entry = '\t{key}:  {text}\n\t\t\t{desc}' + '\n' * trailing_newline
+    short_entry = '\t{key}:  {text}' + '\n' * trailing_newline
+    key_name = click.style('{:<10}'.format(opt.key.name), bold=True, fg='cyan')
     # use a proper template depending on available data
     if opt.desc:
         return long_entry.format(key=key_name, text=opt.text, desc=opt.desc)
@@ -159,14 +159,12 @@ class ClickUI(object):
                      header='', footer='',
                      default_key=None,
                      allow_abort=True,
-                     abort_suffix='Press [{keys}] to exit.\n',
                      func_args=None, func_kwargs=None,
                      catch_exceptions=(Abort, click.Abort,
                                        KeyboardInterrupt, EOFError)):
         """dynamic_menu(options=[MenuItem1, MenuItem2...],
                         header='', footer='',
                         default_key=None, allow_abort=True,
-                        abort_suffix='Press [{keys}] to exit.\n',
                         func_args=None, func_kwargs=None,
                         catch_exceptions=[exceptions]):
 
@@ -203,10 +201,6 @@ class ClickUI(object):
 
         allow_abort : lets Esc, Ctrl-C and Ctrl-Z keystrokes raise Abort,
 
-        abort_suffix : string to display at the end, informing the user
-                       about available abort/exit key combinations
-                       (displayed only if allow_abort is True),
-
         func_args=(), func_kwargs={} : positional and keyword arguments
                                        passed to the function call,
 
@@ -219,17 +213,15 @@ class ClickUI(object):
         kwargs = func_kwargs or {}
         # keep displaying the menu until exception is raised
         while True:
-            ret = self.menu(options, header, footer, default_key,
-                            allow_abort, abort_suffix)
+            ret = self.menu(options, header, footer, default_key, allow_abort)
             # if option value is an expression, it'll bubble up here
             with suppress(catch_exceptions):
                 ret(*args, **kwargs)
 
-    def menu(self, options, header='', footer='', default_key=None,
-             allow_abort=True, abort_suffix='Press [{keys}] to abort.\n'):
+    def menu(self, options, header='', footer='',
+             default_key=None, allow_abort=True):
         """menu(options=[MenuOption1, MenuOption2,...]
-                header='', footer='', default_key=None,
-                allow_abort=True, abort_suffix='Press [{keys}] to abort.\n'):
+                header='', footer='', default_key=None, allow_abort=True):
 
         A menu displaying keys, options and descriptions (if provided).
 
@@ -237,8 +229,8 @@ class ClickUI(object):
         raise an exception (if option.value is Exception subclass)
         or return option.value.
 
-        Additional behavior can be specified with default_key,
-        allow_abort and abort_suffix options in the function call.
+        Additional behavior can be specified with default_key and
+        allow_abort options in the function call.
 
         options : option definitions iterable: (MenuItem1, MenuItem2...),
 
@@ -270,11 +262,7 @@ class ClickUI(object):
         allow_abort : raise Abort if Esc, Ctrl-C or Ctrl-Z is pressed,
                       otherwise stay in the menu. If any of these keycombos
                       is used as a key for a menu option,
-                      it will select that option rather than aborting,
-
-        abort_suffix : string to display at the end, informing the user
-                       about available abort/exit key combinations
-                       displayed only if allow_abort is True.
+                      it will select that option rather than aborting.
 
         After choice is made, try to raise the corresponding option
         or return it.
@@ -286,28 +274,27 @@ class ClickUI(object):
             # accept functions for dynamic content generation as well
             _header = assess(header)
             _footer = assess(footer)
-            header_string = '\n{}\n'.format(_header) if _header else ''
-            footer_string = '\n{}\n'.format(_footer) if _footer else '\n'
-            debug_string = (('\nThe program is now in debugging mode. '
-                             'Verbosity: {}\n')
-                            .format(self.verbosity)
-                            if self.verbosity else '')
+            header_text = '\n{}\n'.format(_header) if _header else ''
+            footer_text = '\n{}\n'.format(_footer) if _footer else '\n'
+            debug = ('\nThe program is now in debugging mode. Verbosity: {}\n'
+                     .format(self.verbosity) if self.verbosity else '')
             # additional info if abort is allowed
-            abort_keys = sorted(key.name for key in DEFAULT_ABORT_KEYS
-                                if allow_abort and key.getchar not in rets)
-            abort_string = (abort_suffix
-                            .format(keys=', '.join(abort_keys))
-                            if abort_keys else '')
+            keys = sorted(key.name for key in DEFAULT_ABORT_KEYS
+                          if allow_abort and key.getchar not in rets)
+            key_text = click.style('[{}]'.format(', '.join(keys)),
+                                   fg='cyan', bold=True)
+            abort_text = 'Press {} to exit.'.format(key_text) if keys else ''
             # add default key combo if it was specified
             if default_retval == NONSENSE:
                 prompt = 'Your choice? :\n'
             else:
-                prompt = 'Your choice? [{}] :\n'.format(def_key.name)
+                def_text = click.style(def_key.name, fg='cyan', bold=True)
+                prompt = 'Your choice? [default: {}] :\n'.format(def_text)
             # generate menu entries for options
             entries = (build_entry(o) for o in valid_options)
             # return the newly constructed menu list
-            return [header_string, debug_string, *entries,
-                    footer_string, abort_string, prompt]
+            return [header_text, debug, *entries,
+                    footer_text, abort_text, prompt]
 
         # generate a list of valid options
         valid_options = get_sorted_valid_options(options)
@@ -351,6 +338,27 @@ class ClickUI(object):
 
         allow_abort : allow aborting with ctrl-C, ctrl-Z and/or Esc.
         """
+        def make_menu():
+            """builds the menu"""
+            # which keys abort the menu?
+            keys = sorted(key.name for key in abort_keys)
+            # additional info if abort is allowed
+            key_text = click.style('[{}]'.format(', '.join(keys)),
+                                   fg='cyan', bold=True)
+            abort_s = 'Press {} to exit.'.format(key_text) if keys else ''
+
+            # add default key combo if it was specified
+            if default_retval == NONSENSE:
+                prompt = 'Your choice? :'
+            else:
+                def_text = click.style(def_key.name, fg='cyan', bold=True)
+                prompt = 'Your choice? [default: {}] :\n'.format(def_text)
+
+            # make menu entries
+            entries = (build_entry(option, trailing_newline=0)
+                       for option in valid_options)
+            return '\n'.join(['', message, '', *entries, '', abort_s, prompt])
+
         # generate a list of valid options
         valid_options = get_sorted_valid_options(options)
         # dictionary of key: return value pairs
@@ -367,18 +375,8 @@ class ClickUI(object):
         abort_keys = [key for key in DEFAULT_ABORT_KEYS
                       if allow_abort and key.getchar not in rets]
         abort_getchars = [key.getchar for key in abort_keys]
-        # abort prompt
-        abort_s = ('[{}: abort]'
-                   .format(', '.join(key.name for key in abort_keys))
-                   if abort_keys else '')
-        # add default key combo if it was specified
-        if default_retval == NONSENSE:
-            prompt = 'Your choice? :'
-        else:
-            prompt = 'Your choice? [{}] :'.format(def_key.name)
         # display the menu
-        entries = (build_entry(o, trailing_newline=0) for o in valid_options)
-        click.echo('\n'.join(['', message, '', *entries, '', abort_s, prompt]))
+        click.echo(make_menu())
         # Wait for user input
         while True:
             getchar = click.getchar()
@@ -463,14 +461,12 @@ class ClickUI(object):
     def edit(text=''):
         """Use click to call a text editor for editing a text"""
         try:
-            edited_text = click.edit(text,
-                                     editor='nano -t',
-                                     require_save=False)
+            edited = click.edit(text, editor='nano -t', require_save=False)
         except click.ClickException:
-            edited_text = click.edit(text, require_save=False)
+            edited = click.edit(text, require_save=False)
         except click.Abort:
             return text
-        return edited_text
+        return edited
 
     @staticmethod
     def enter(prompt='Enter the value',
@@ -613,8 +609,11 @@ class ClickUI(object):
         readline.parse_and_bind('tab: complete')
         readline.set_completer(lambda text, state:
                                (glob.glob(text+'*')+[None])[state])
-        prompt = ('{} [Ctrl-C, Ctrl-Z or leave blank to abort] : '
-                  if allow_abort else '{} : ').format(message)
+        if allow_abort:
+            abort_text = click.style('[leave blank to abort]', fg='cyan')
+            prompt = '{} {} ?: '.format(message, abort_text)
+        else:
+            prompt = '{}  ?:'.format(message)
         # Check file parameters and catch early permission errors
         checks = {'r': {'readable': True, 'exists': True},
                   'w': {'writable': True, 'exists': True},
@@ -681,7 +680,7 @@ class ClickUI(object):
         if default is not None:
             keys[get_key('enter')] = default
             default_text = click.style(' Enter = {}'.format(names[default]),
-                                       fg='yellow')
+                                       fg='green')
 
         if allow_abort:
             keys[get_key('esc')] = Abort

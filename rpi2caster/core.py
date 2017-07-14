@@ -778,7 +778,6 @@ class Casting(TypesettingContext):
                   '\n\nCasting / Punching Menu:')
         exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
         UI.dynamic_menu(options, header, default_key='c',
-                        abort_suffix='Press [{keys}] to exit.\n',
                         catch_exceptions=exceptions)
 
     def display_details(self):
@@ -859,5 +858,4 @@ class Typesetting(TypesettingContext):
                   'Typesetting Menu:')
         exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
         UI.dynamic_menu(options, header, default_key='c',
-                        abort_suffix='Press [{keys}] to exit.\n',
                         catch_exceptions=exceptions)
