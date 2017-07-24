@@ -92,6 +92,9 @@ ACCENTS = dict(a='ąäáãâạà', c='ćĉç', e='ęëȩẽéêèẹ', g='ǵĝ'
                o='óöõôòọ', p='þṕ', r='ŗŕṛ', s='śşŝṣ', t='ţẗṭ', u='üũúûùụǘǜ',
                v='ṽṿ', w='ẅẃŵẁẉ', x='ẍ', y='ÿỹýŷỳỵ', z='żźẑẓ')
 ACCENTS.update({letter.upper(): ACCENTS[letter].upper() for letter in ACCENTS})
+REVERSE_ACCENTS = {accented_char: unaccented_char
+                   for unaccented_char, accents in ACCENTS.items()
+                   for accented_char in accents}
 
 # Typical ligatures:
 LIGATURES = ['ae', 'oe', 'AE', 'OE', 'fi', 'fl', 'ff', 'fb', 'fh', 'fk',

@@ -527,12 +527,11 @@ class UAVariant(UnitArrangement):
             raise ValueError('{} has no character unit values!'.format(self))
 
         # parse the UA
-        by_char = {c: u for c, u in arrangement.items()}
         by_units = defaultdict(list)
-        for char, units in sorted(by_char.items()):
+        for char, units in sorted(arrangement.items()):
             by_units[units].append(char)
         # store the result
-        self.by_char, self.by_units = by_char, by_units
+        self.by_char, self.by_units = arrangement, by_units
 
     def __str__(self):
         return 'Unit arrangement #{} {}'.format(self.number, self.name)
@@ -563,11 +562,12 @@ class UAVariant(UnitArrangement):
         with suppress(KeyError):
             return self.by_char[char]
         # might be an accented version
-        char_gen = (l for l, acc in d.ACCENTS.items() if char in acc)
-        for unaccented_char in char_gen:
-            with suppress(KeyError):
-                return self.by_char[unaccented_char]
-        # fell off the end of the loop
+        base_char = d.REVERSE_ACCENTS.get(char)
+        if not char:
+            return 0
+        with suppress(KeyError):
+            return self.by_char[base_char]
+        # no character in UA
         raise ValueError('Unit value for {} not found!'.format(char))
 
     def get_mat_units(self, matrix):
