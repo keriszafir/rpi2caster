@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 """Basic controller routines - elementary setters/getters.
 Depend on models. Used by higher-order controllers."""
-
 from contextlib import suppress
-from functools import wraps
+from functools import partial, wraps
 from itertools import zip_longest
-from string import ascii_lowercase, ascii_uppercase, digits
 from .rpi2caster import CFG, UI, Abort, Finish, option
-from . import basic_models as bm, definitions as d
-from .data import TYPEFACES, WEDGE_DEFINITIONS
+from . import basic_models as bm, definitions as d, views
+from .data import WEDGE_DEFINITIONS
 
 
 # Letter frequency controller routines
@@ -57,16 +55,16 @@ def edit_matrix(matrix, single=True):
     single : if True, editing only one matrix, else: more
              (adds an option to escape editing the whole series)
     """
-    def _get_char():
-        """Get a character or space information"""
-        # either a space description or mat character
-        char = d.SPACE_NAMES.get(matrix.char, matrix.char)
-        return char or 'undefined character'
-
     def _edit_char():
         """Edit the matrix character"""
-        prompt = 'Char? (" ": low / "_": high space, blank = keep)'
+        prompt = 'Character? (blank = keep current)'
         matrix.char = UI.enter(prompt, default=matrix.char or '')
+        # if this is a space, then done
+        if matrix.isspace():
+            return
+        # change styles
+        matrix.styles = choose_styles(matrix.styles,
+                                      mask=matrix.diecase.styles)
 
     def _edit_dimensions():
         """Edit the matrix size"""
@@ -83,17 +81,40 @@ def edit_matrix(matrix, single=True):
 
     def _edit_position():
         """Edit the matrix coordinates"""
-        matrix.code = UI.enter('Enter the matrix position',
-                               default=matrix.code or '')
-        # reset the unit width
-        if not matrix.char or matrix.isspace():
-            matrix.units = 0
+        def move_outside(new, current):
+            """Move the old mat to outside characters, and replace it with
+            a new mat"""
+            current.code = None
+            layout.outside_mats.append(current)
+            new.code = code
 
-    def _edit_styles():
-        """Change the matrix styles"""
-        # skip this for spaces
-        string = '' if matrix.styles.use_all else matrix.styles
-        matrix.styles = choose_styles(string)
+        def swap(new, current):
+            """Swap two matrices"""
+            new.code, current.code = current.code, new.code
+
+        code = UI.enter('New position for this matrix?',
+                        default=matrix.code or '').upper()
+        try:
+            # look for a mat in the target position
+            layout = matrix.diecase.layout
+            if not code:
+                layout.outside_mats.append(matrix)
+            current_mat = layout.select_one(code=code)
+            if current_mat:
+                UI.display('There is already a mat in the target position.')
+                question = 'What to do with {}?'.format(current_mat)
+                options = [option('s', swap, text='Swap the matrices', seq=1),
+                           option('o', move_outside, seq=1,
+                                  text='Remove the current matrix'),
+                           option('Esc', Abort, text='Cancel')]
+                UI.simple_menu(question, options)(matrix, current_mat)
+            else:
+                matrix.code = code
+        except bm.MatrixNotFound:
+            # no mat in the target position = move the mat freely
+            matrix.code = code
+        except Abort:
+            pass
 
     def _edit_units():
         """Change the matrix unit width value"""
@@ -107,74 +128,50 @@ def edit_matrix(matrix, single=True):
         curr_units = matrix.units
 
         # build a prompt with units info
-        curr_chunk = ('' if not curr_units
-                      else 'current: {}'.format(curr_units))
-        row_chunk = ('' if not row_units
-                     else 'row units: {}'.format(row_units))
-        ua_chunk = ('' if not ua_units
-                    else 'UA units: {}'.format(ua_units))
+        curr_chunk = '' if not curr_units else 'current: {}'.format(curr_units)
+        row_chunk = '' if not row_units else 'row units: {}'.format(row_units)
+        ua_chunk = '' if not ua_units else 'UA units: {}'.format(ua_units)
         chunks = [x for x in (curr_chunk, row_chunk, ua_chunk) if x]
         if chunks:
             prompt = 'Enter unit width ({})'.format(', '.join(chunks))
         else:
             prompt = 'Enter unit width'
-        new_units = UI.enter(prompt, default=curr_units, datatype=int)
+        new_units = UI.enter(prompt, default=curr_units, datatype=int,
+                             minimum=3, maximum=30)
         matrix.units = new_units or ua_units or row_units
 
     def options():
         """Generate menu options"""
         ret = [option(key='c', value=_edit_char, seq=1,
-                      text=('Change character (current: {})'
-                            .format(_get_char()))),
-               option(key='p', value=_edit_position, seq=2,
-                      text=('Change matrix position in diecase (current: {})'
-                            .format(matrix.code))),
-               option(key='s', value=_edit_styles, seq=3,
-                      cond=(matrix.char and not matrix.isspace()),
-                      text=('Assign styles (current: {})'
-                            .format(matrix.styles.names))),
-               option(key='w', value=_edit_units, seq=4,
-                      cond=not matrix.isspace(),
-                      text=('Change width (current: {} units)'
-                            .format(matrix.units))),
-               option(key='d', value=_edit_dimensions, seq=5,
-                      text=('Change matrix size (current: {}x{})'
+                      text='Set the character and assign styles'),
+               option(key='l', value=matrix.set_lowspace, seq=10,
+                      text='Set the matrix as low space'),
+               option(key='h', value=matrix.set_highspace, seq=11,
+                      text='Set the matrix as high space'),
+               option(key='p', value=_edit_position, seq=20,
+                      text='Move the matrix to a different position'),
+               option(key='w', value=_edit_units, seq=40,
+                      cond=not matrix.isspace(), text='Change the unit width'),
+               option(key='d', value=_edit_dimensions, seq=50,
+                      text=('Change the matrix size (current: {}x{} cells)'
                             .format(*matrix.size))),
                option(key='Enter', value=Abort, seq=90,
-                      text='Edit next matrix', cond=not single),
-               option(key='Enter', value=Abort, seq=90,
                       text='Finish editing the matrix', cond=single),
+               option(key='Enter', value=Abort, seq=90,
+                      text='Edit the next matrix in series', cond=not single),
                option(key='Esc', value=Finish, seq=99, cond=not single,
-                      text='Back to layout editor menu')]
+                      text='Return to the layout editor menu')]
         return ret
 
     with suppress(Abort):
         # keep displaying this menu until aborted
         while True:
             # display the menu for user to choose
-            header = ('Edit the matrix for {} at {}:'
-                      .format(_get_char(), matrix.code))
+            header = 'Edit the matrix for {}:'.format(matrix)
             choice = UI.simple_menu(header, options, allow_abort=False)
             # execute the subroutine
             choice()
     return matrix
-
-
-# Typeface controller routines
-
-def list_typefaces(*_):
-    """Show all available typefaces"""
-    template = '{num:>6}\t{name:<50}\t{styles}'
-    UI.display_header('List of known typefaces by series number:')
-    UI.display('Series\t{:<50}\tStyles'.format('Name'))
-    for number, record in sorted(TYPEFACES.items(), key=lambda x: int(x[0])):
-        name = record.get('typeface')
-        if not name:
-            continue
-        styles = bm.Styles(record.get('styles', 'r')).names
-        entry = template.format(num=number, name=name, styles=styles)
-        UI.display(entry)
-    UI.pause()
 
 
 # Measure controller routines
@@ -230,101 +227,53 @@ def temp_measure(routine):
 
 # Style controller routines
 
-def choose_styles(styles='', default=d.STYLES.roman, multiple=True):
+def choose_styles(styles='', default=None, multiple=True, mask=None):
     """Manual style choice"""
+    def select(sty):
+        """Selects a style - either one or multiple"""
+        if not multiple:
+            current.clear()
+        current.add(sty)
+
+    def deselect(sty):
+        """Remove the style from currently selected"""
+        current.discard(sty)
+
+    def header():
+        """Build a header"""
+        text = ', '.join(s.name for s in bm.Styles.definitions if s in current)
+        names = text or '{} (default)'.format(default_style.name)
+        what = 'one or more text styles' if multiple else 'a text style'
+        return 'Select {}.\nCurrently selected: {}'.format(what, names)
+
+    def options():
+        """Make menu entries for style selection menu"""
+        items = []
+        number = 1
+        for sty in bm.Styles.definitions:
+            text_on = 'Select {}'.format(sty.name)
+            st_on = option(key=sty.short, text=text_on, seq=number,
+                           value=partial(select, sty),
+                           cond=sty in _mask and sty not in current)
+            text_off = 'Deselect {}'.format(sty.name)
+            st_off = option(key=sty.short, text=text_off, seq=number,
+                            value=partial(deselect, sty),
+                            cond=multiple and sty in current)
+            items.extend([st_on, st_off])
+            number += 1
+        items.append(option(key='enter', text='Finish', value=Finish))
+        return items
+
+    # make a mask limiting the choice of styles
+    _mask = bm.Styles(mask or '*')
+    # what styles are currently chosen?
+    default_style = bm.STYLES.get(default, d.STYLES.roman)
+    current = {s for s in bm.Styles(styles, default=default_style)}
     try:
-        default_style = default.short
-    except AttributeError:
-        default_style = str(default)
-    styles_string = str(styles) if styles else default_style
-    if multiple:
-        header = 'Choose one or more text styles.'
-        all_styles = ',\na or * - all styles.\n'
-    else:
-        header = 'Choose a style.'
-        all_styles = '.\n'
-    prompt = ('{} Available options:\n'
-              'r - roman/regular, b - bold, i - italic, s - small caps,\n'
-              'l - lower index (inferior), u - upper index (superior),\n'
-              '1...5 - size 1...size 5 (titling){}'
-              'Your choice?'.format(header, all_styles))
-    result = UI.enter(prompt, default=styles_string, datatype=str)
-    if not multiple:
-        result = result[:1]
-    return bm.Styles(result, default)
-
-
-# Unit arrangement controller routines
-
-def display_ua(unit_arrangement):
-    """Show an unit arrangement by char and by units"""
-    def display_by_units():
-        """display chars grouped by unit value"""
-        UI.display('Ordered by unit value:')
-        for unit_value, chars in sorted(unit_arrangement.by_units.items()):
-            char_string = ', '.join(sorted(chars))
-            UI.display('\t{}:\t{}'.format(unit_value, char_string))
-        UI.display()
-
-    def display_letters():
-        """display unit values for all letters and ligatures"""
-        # define templates for lower+uppercase, lowercase only, uppercase only
-        template = '\t{:<4}: {:>3} units, \t\t{:<4}: {:>3} units'
-        lc_template = '\t{:<4}: {:>3} units'
-        uc_template = '\t\t\t{:<4}: {:>3} units'
-
-        UI.display('Ordered by character:')
-        for lowercase in [*ascii_lowercase, *d.LIGATURES]:
-            uppercase = lowercase.upper()
-            with suppress(bm.UnitValueNotFound):
-                # display both lower and upper
-                lower_units = unit_arrangement[lowercase]
-                upper_units = unit_arrangement[uppercase]
-                UI.display(template.format(lowercase, lower_units,
-                                           uppercase, upper_units))
-                continue
-            with suppress(bm.UnitValueNotFound):
-                # display lowercase only
-                lower_units = unit_arrangement[lowercase]
-                UI.display(lc_template.format(lowercase, lower_units))
-                continue
-            with suppress(bm.UnitValueNotFound):
-                # display uppercase only
-                lower_units = unit_arrangement[uppercase]
-                UI.display(uc_template.format(uppercase, upper_units))
-                continue
-        UI.display()
-
-    def display_numbers():
-        """display 0...9 unit values"""
-        grouped = {units: [n for n in digits if unit_arrangement[n] == units]
-                   for units in range(5, 22)}
-        numbers = [(', '.join(chars), units)
-                   for units, chars in grouped.items() if chars]
-        if numbers:
-            chunks = ('{}: {} units'.format(c, u) for c, u in numbers)
-            row = 'Digits: {}'.format(', '.join(chunks))
-            UI.display(row)
-
-    def display_others():
-        """display other characters - not letters"""
-        done = [*ascii_lowercase, *ascii_uppercase, *digits, *d.LIGATURES]
-        other_chars = {u: [c for c in sorted(set(chars).difference(done))]
-                       for u, chars in unit_arrangement.by_units.items()}
-        others = [(', '.join(chars), units)
-                  for units, chars in sorted(other_chars.items()) if chars]
-        if others:
-            chunks = ('{}: {} units'.format(c, u) for c, u in others)
-            row = 'Other: {}'.format(', '.join(chunks))
-            UI.display(row)
-
-    header = ('Unit arrangement for {ua.style.name}: '
-              '#{ua.number} {ua.variant.name}')
-    UI.display_header(header.format(ua=unit_arrangement))
-    display_by_units()
-    display_letters()
-    display_numbers()
-    display_others()
+        while True:
+            UI.simple_menu(header, options, allow_abort=True)()
+    except Finish:
+        return bm.Styles(current, default_style, _mask)
 
 
 # Wedge controller routines
@@ -333,16 +282,9 @@ def choose_wedge(wedge_name=None):
     """Choose a wedge manually"""
     def enter_name():
         """Enter the wedge's name"""
-        # Ask for wedge name and set width as it is written on the wedge
-        aliases = iter(d.WEDGE_ALIASES)
-        # Group by three
-        grouper = zip_longest(aliases, aliases, aliases, fillvalue='')
-        old_wedges = '\n'.join('\t'.join(z) for z in grouper)
-        prompt = ('\nSome old-style wedge designations:\n\n{}'
-                  '\n\nIf you have one of those, '
-                  'enter the corresponding new-style number (like S5-xx.yE).'
-                  '\n\nWedge designation?'.format(old_wedges))
-        return UI.enter(prompt, default=default_wedge)
+        # List known wedges
+        views.list_wedges()
+        return UI.enter('Wedge designation?', default=default_wedge)
 
     def enter_parameters(name):
         """Parse the wedge's name and return a list:

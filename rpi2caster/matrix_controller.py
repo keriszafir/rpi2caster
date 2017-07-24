@@ -4,11 +4,14 @@
 import csv
 from collections import OrderedDict
 from contextlib import suppress
+from copy import copy
 from functools import wraps
+
 from . import basic_models as bm, basic_controllers as bc, definitions as d
+from . import views
 from .rpi2caster import USER_DATA_DIR, UI, Abort, Finish, option
-from .data import TYPEFACES as TF, UNIT_ARRANGEMENTS as UA
 from .main_models import DB, Diecase
+from .main_models import TypefaceSize, UAVariant
 
 
 def import_csv(diecase, filename=''):
@@ -57,85 +60,101 @@ def export_csv(diecase, filename=''):
         UI.pause('File {} successfully saved.'.format(filename))
 
 
-def edit_typeface(diecase):
-    """Change parameters: diecase ID, typeface"""
-    def assign_unit_arrangement(ua_id, style):
-        """Assign an unit arrangement and variant to a style"""
-        prompt = 'Unit arrangement for {}?'.format(style.name)
-        ua_number = UI.enter(prompt, default=ua_id or '', datatype=int)
-        ua_definitions = UA.get(ua_number)
-        if not ua_definitions:
-            # no UA or no specified variant in the UA
-            ex_prompt = 'No definition found for UA #{}'.format(ua_number)
-            raise bm.UnitArrangementNotFound(ex_prompt)
-        if len(ua_definitions) == 1:
-            # get the first and only variant, if it was not specified
-            variant = ua_definitions[0]
-        else:
-            # which variants are in the arrangements? choose
-            variants = {v.short: v for v in d.VARIANTS}
-            opts = [option(key=v, value=v, text=variants.get(v).name)
-                    for v in ua_definitions]
-            variant = UI.simple_menu('Choose the UA variant', opts)
-        # assign and ask if user wants to see the unit values
-        choice = (ua_number, variant)
-        if UI.confirm('Display unit values?'):
-            # make an UA object and display it
-            arrangement = bm.UnitArrangement(*choice)
-            bc.display_ua(arrangement)
-        return choice
-
-    def edit_style(style):
-        """edit data for a given style"""
-        # look for current settings in raw data
-        raw_data = typeface.get(style.short, {})
-        current_series = raw_data.get('typeface', 0)
-        ua_id, _ = raw_data.get('ua', (0, ''))
-        # select typeface name
-        prompt = 'Typeface series for {}?'.format(style.name)
-        series = UI.enter(prompt, current_series or type_series)
-        # set the unit arrangement
-        while True:
+def edit_diecase_typeface_data(diecase):
+    """Edit the typeface data for a diecase"""
+    def set_typefaces():
+        """Assign styles to typeface. Will also look for related typefaces."""
+        ua_prompt = ('Unit arrangement variant? Possible options:\n{}'
+                     .format(UAVariant.variant_names))
+        for style in styles:
             try:
-                unit_arr = assign_unit_arrangement(ua_id, style)
-                break
-            except bm.UnitArrangementNotFound as exc:
-                UI.display('{}'.format(exc))
-                if not UI.confirm('Cannot assign UA to style. Try again?'):
-                    unit_arr = (0, '')
-                    break
+                # what was set up previously?
+                # (helpful when choosing the typeface/UA manually)
+                old_typeface, old_unit_arrangement = typeface_data[style]
+                old_typeface_series = old_typeface.series
+                old_ua_number = old_unit_arrangement.number
+            except (KeyError, ValueError, AttributeError):
+                old_ua_number, old_typeface_series = '', ''
 
-        new_data[style.short] = dict(typeface=series, size=size, ua=unit_arr)
+            try:
+                # auto-assign typeface
+                variant = main_typeface.get_variant(style)
+                if not variant:
+                    raise ValueError
+            except ValueError:
+                # assign manually
+                _num = UI.enter('Typeface number for {}?'.format(style.name),
+                                default=old_typeface_series)
+                _typeface = TypefaceSize(_num, size)
+                # choose only one style here
+                _style = bc.choose_styles(_typeface.styles.first,
+                                          multiple=False,
+                                          mask=_typeface.styles).first
+                variant = _typeface.get_variant(_style)
 
-    def generate_diecase_id():
-        """generate the new diecase ID"""
-        typeface_numbers = (s.get('typeface', 0) for s in new_data.values())
-        numbers = sorted(n for n in typeface_numbers if n)
-        series_string = '+'.join(str(n) for n in numbers)
-        diecase_id = '{}-{}'.format(series_string, size)
-        return diecase_id
+            # try to automatically select unit arrangement from typeface data
+            # if this fails, choose the unit arrangement manually
+            unit_arrangement = variant.unit_arrangement
+            if not unit_arrangement:
+                views.list_unit_arrangements()
+                UI.display('Cannot automatically choose the unit arrangement.')
+                ua_number = UI.enter('Unit arrangement number?',
+                                     default=old_ua_number)
+                ua_variant = UI.enter(ua_prompt, default='r')
+                unit_arrangement = UAVariant(ua_number, ua_variant)
+            typeface_data[style] = (variant, unit_arrangement)
 
-    # enter the main (dominant) type series
-    new_data = {}
-    typeface = diecase.typeface
+    def assign_normal_wedge():
+        """Assign a normal wedge for the diecase"""
+        diecase.wedge = bc.choose_wedge(diecase.wedge.name)
+
+    def set_diecase_id():
+        """Set the diecase ID (unique name) for this diecase."""
+        faces = [item[0] for item in typeface_data.values()]
+        size = main_typeface.size
+        numbers = '+'.join(sorted({tf.series for tf in faces}))
+        UI.display('Enter a name used for identifying your diecase.\n'
+                   'It MUST be unique and can, but does not have to, '
+                   'include the typeface series and size.\n'
+                   'Customize the name to your preference.')
+        suggested = '{}-{}-'.format(numbers, size)
+        diecase.diecase_id = UI.enter('Diecase ID?', default=suggested)
+
+    typeface_data = diecase.typeface_data
+    # get the styles currently assigned to the diecase
+    styles = bm.Styles(typeface_data)
+    # get the main typeface, most often but not always roman
+    # if this fails, get the variant for the Times New Roman 12D roman
+    try:
+        # changing the data already configured
+        main_typeface = typeface_data.get(styles.first)[0]
+        if not main_typeface:
+            raise ValueError
+    except (IndexError, ValueError):
+        # no data entered yet
+        main_typeface = TypefaceSize()
+    UI.display('Diecase: {}'.format(diecase.description))
+    UI.display('Editing the typeface information:\n'
+               'First choose the typeface series and size.\n'
+               'New diecases have 327-12D roman prefilled by default, '
+               'change the number and size to your need.\n')
     while True:
-        type_series = UI.enter('Typeface # for diecase?', datatype=int)
-        typeface_name = TF.get(type_series, {}).get('typeface', 'unknown')
-        if UI.confirm('Typeface name: {} - OK?'.format(typeface_name)):
+        # edit series and size
+        series = UI.enter('Type series?', main_typeface.series).upper()
+        size = UI.enter('Type size?', main_typeface.size).upper()
+        main_typeface = TypefaceSize(series, size)
+        # edit or update styles
+        styles = bc.choose_styles(styles, mask=main_typeface.combined_styles)
+        # choose typeface per style, automatically or manually
+        # choose unit arrangements for each style, and normal wedge for diecase
+        set_typefaces()
+        assign_normal_wedge()
+        if UI.confirm('All OK? If not, start again.', allow_abort=True):
             break
-    # enter size
-    size = UI.enter('Type size?', default=12.0)
-    # choose styles
-    styles = bc.choose_styles(typeface.styles or diecase.layout.styles)
-    for style in styles:
-        edit_style(style)
-    # edit diecase ID
-    default_diecase_id = diecase.diecase_id or generate_diecase_id()
-    diecase_id = UI.enter('Diecase ID (unique)?', default_diecase_id)
-    # ask for confirmation
-    if new_data != typeface.raw and UI.confirm('Save changes'):
-        diecase.typeface = new_data
-        diecase.diecase_id = diecase_id
+
+    diecase.typeface_data = typeface_data
+    if not diecase.diecase_id:
+        set_diecase_id()
 
 
 @DB
@@ -173,21 +192,6 @@ def check_persistence(diecase_id):
         return 0
 
 
-def list_diecases(data=get_all_diecases()):
-    """Display all diecases in a dictionary, plus an empty new one"""
-    UI.display('\nAvailable diecases:\n')
-    UI.display_header('|{:<5}  {:<25} {:<12} {:<50}|'
-                      .format('Index', 'Diecase ID', 'Wedge', 'Typeface'),
-                      trailing_newline=0)
-    # show the rest of the table
-    template = ('|{index:>5}  {d.diecase_id:<25} '
-                '{d.wedge.name:<12} {d.typeface.text:<50}|')
-    entries = (template.format(d=diecase, index=index)
-               for index, diecase in data.items())
-    UI.display(*entries, sep='\n')
-    return data
-
-
 def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
     """Select diecases from database and let the user choose one of them.
     If no diecases are found, return None and let the calling logic
@@ -197,7 +201,7 @@ def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
     if not data:
         return fallback()
     UI.display('Choose a matrix case:', end='\n\n')
-    list_diecases(data)
+    views.list_diecases(data)
     qty = len(data)
     # let the user choose the diecase
     choice = UI.enter(prompt, default=0, datatype=int, minimum=0, maximum=qty)
@@ -239,115 +243,6 @@ def temp_diecase(routine):
 
 # Diecase layout controller routines
 
-def display_layout(layout):
-    """Display the diecase layout, unit values, styles."""
-    def get_formatted_text(text, styles, length='^3'):
-        """format a text with formatting string in styles definitions"""
-        field = '{{:{}}}'.format(length) if length else '{}'
-        collection = bm.Styles(styles)
-        if text in d.SPACE_NAMES:
-            # got a space = display symbol instead
-            return field.format(d.SPACE_SYMBOLS.get(text[0]))
-        elif collection.use_all:
-            return field.format(text)
-        else:
-            ansi_codes = ';'.join(str(s.ansi) for s in collection if s.ansi)
-            template = '\x1b[{codes}m{text}\x1b[0m'
-            return template.format(codes=ansi_codes, text=field.format(text))
-
-    def get_column_widths():
-        """calculate column widths to adjust the content"""
-        # 3 characters to start is reasonable enough
-        columns = layout.size.column_numbers
-        column_widths = OrderedDict((name, 3) for name in columns)
-
-        # get the maximum width of characters in every column
-        # if it's larger than header field width, update the column width
-        for column, initial_width in column_widths.items():
-            widths_gen = (len(mat) for mat in layout.select_column(column))
-            column_widths[column] = max(initial_width, *widths_gen)
-        return column_widths
-
-    def build_row(row_number):
-        """make a diecase layout table row - actually, 3 rows:
-            empty row - separator; main row - characters,
-            units row - unit values, if not matching the row units.
-        """
-        row = layout.select_row(row_number)
-        units = layout.diecase.wedge.units[row_number]
-        # initialize the row value dictionaries
-        empty_row = dict(row='', units='')
-        main_row = dict(row=row_number, units=units)
-        units_row = dict(row='', units='')
-        # fill all mat character fields
-        for mat in row:
-            column = mat.position.column
-            empty_row[column] = ''
-            # display unit width if it differs from row width
-            m_units = '' if mat.units == units else mat.units
-            units_row[column] = m_units
-            # format character for display
-            fmt = '^{}'.format(widths.get(column, 3))
-            main_row[column] = get_formatted_text(mat.char, mat.styles, fmt)
-
-        # format and concatenate two table rows
-        empty_str = template.format(**empty_row)
-        main_str = template.format(**main_row)
-        units_str = template.format(**units_row)
-        return '{}\n{}\n{}'.format(empty_str, main_str, units_str)
-
-    def build_description():
-        """diecase description: ID, typeface, wedge name and set width"""
-        table_width = len(header)
-        # diecase ID, typeface, wedge used
-        row1_left = ('{d.diecase_id} ({d.typeface.text})'
-                     .format(d=layout.diecase))
-        row1_right = 'wedge: {}'.format(layout.diecase.wedge.name)
-        row1_filled_width = len(row1_left) + len(row1_right) + 4
-        row1_center = ' ' * (table_width - row1_filled_width)
-        # available styles
-        row2_left = ', '.join(get_formatted_text(s.name, s)
-                              for s in layout.styles)
-        # warning: ANSI-formatting the strings affects their length!
-        # calculate the correct length of formatted style names
-        styles_length = len(', '.join(s.name for s in layout.styles))
-        # space symbols
-        spaces = [(d.SPACE_NAMES.get(space), symbol)
-                  for space, symbol in d.SPACE_SYMBOLS.items()]
-        row2_right = ', '.join('{} = {}'.format(*item)
-                               for item in sorted(spaces))
-        # calculate the length of occupied space
-        row2_filled_width = styles_length + len(row2_right) + 4
-        row2_center = ' ' * (table_width - row2_filled_width)
-        # table border template
-        line = '═' * (table_width - 2)
-        upper_border = '╔{}╗'.format(line)
-        lower_border = '╠{}╣'.format(line)
-        row_tmpl = '║ {}{}{} ║'
-        return '\n'.join((upper_border,
-                          row_tmpl.format(row1_left, row1_center, row1_right),
-                          row_tmpl.format(row2_left, row2_center, row2_right),
-                          lower_border))
-
-    # table row template
-    widths = get_column_widths()
-    fields = ' '.join(' {{{col}:^{width}}} '.format(col=col, width=width)
-                      for col, width in widths.items())
-    template = '║ {{row:>3}} │{fields}│ {{units:>5}} ║'.format(fields=fields)
-    # header row template
-    header = dict(units='Units', row='Row')
-    header.update({col: col for col in widths})
-    header = template.format(**header)
-    # proper layout
-    contents = (build_row(num) for num in layout.size.row_numbers)
-    # table description
-    desc = build_description()
-    # put the thing together
-    table = (desc, header, '╟{}╢'.format('─' * (len(header) - 2)),
-             *contents, '╚{}╝'.format('═' * (len(header) - 2)))
-    # finally display it
-    UI.display('\n'.join(table))
-
 
 def resize_layout(layout):
     """Change the diecase layout size"""
@@ -375,7 +270,7 @@ def edit_layout(layout):
 
     def edit(mat, single=False):
         """Edit a matrix"""
-        display_layout(layout)
+        views.display_layout(layout)
         mat = bc.edit_matrix(mat, single=single)
 
     def all_rows():
@@ -415,7 +310,7 @@ def edit_layout(layout):
     def show_layout():
         """Shows diecase layout and pauses"""
         UI.display('\nCurrent diecase layout:\n')
-        display_layout(layout)
+        views.display_layout(layout)
         UI.pause()
 
     def options():
@@ -745,7 +640,7 @@ class DiecaseMixin:
 
     def display_diecase_layout(self, layout=None):
         """Display the diecase layout, unit values, styles."""
-        display_layout(layout or self.diecase.layout)
+        views.display_layout(layout or self.diecase.layout)
         UI.pause()
 
     def test_diecase_charset(self):
@@ -764,6 +659,15 @@ class DiecaseMixin:
             UI.pause('Data saved.')
 
         @DB
+        def _save_as():
+            """Stores the diecase in database with a different diecase ID"""
+            diecase = copy(self.diecase)
+            while check_persistence(diecase.diecase_id):
+                prompt = 'New diecase ID (must be unique)?'
+                diecase.diecase_id = UI.enter(prompt, default=diecase)
+            diecase.save(force_insert=True)
+
+        @DB
         def _delete():
             """Deletes a diecase from database"""
             prompt = 'Are you sure?'
@@ -778,18 +682,14 @@ class DiecaseMixin:
 
         def _edit_typeface():
             """Edit diecase's typeface info"""
-            # edit_typeface(self.diecase)
-            current_diecase_id = self.diecase.diecase_id
-            diecase_id = UI.enter('Diecase ID?', default=current_diecase_id)
-            self.diecase.diecase_id = diecase_id
-            self.diecase.typeface = "Not implemented yet"
+            edit_diecase_typeface_data(self.diecase)
             if UI.confirm('Save the diecase in database?'):
                 _save()
 
         def _display_arrangements():
             """Display all unit arrangements for this diecase"""
             for unit_arrangement in self.diecase.unit_arrangements.values():
-                bc.display_ua(unit_arrangement)
+                views.display_ua(unit_arrangement)
                 UI.pause()
 
         def _edit_layout():
@@ -822,19 +722,19 @@ class DiecaseMixin:
                         'The diecase is not yet stored in the database.\n'
                         'You have to save it first before you can edit it.'
                         .format(self.diecase.diecase_id))
-            return ('Diecase manipulation menu - current diecase ID: {}'
-                    .format(self.diecase.diecase_id))
+            return ('Diecase manipulation menu:\n\nWorking on {} ({})'
+                    .format(self.diecase.diecase_id, self.diecase.description))
 
         def options():
             """Generate menu options"""
             is_stored = check_persistence(self.diecase.diecase_id)
+            diecases_present = count_diecases()
             ret = [option(key='l', value=self.display_diecase_layout, seq=1,
                           text='Display diecase layout', cond=is_stored),
                    option(key='e', value=_edit_layout, cond=is_stored,
                           text='Edit diecase layout', seq=2),
-                   option(key='u', value=_display_arrangements,
-                          text='Display unit arrangements', seq=4,
-                          cond=self.diecase.typeface.uas),
+                   option(key='u', value=_display_arrangements, seq=4,
+                          text='Display unit arrangements for this diecase'),
                    option(key='i', value=_edit_typeface, seq=11,
                           text='Edit the diecase information'),
                    option(key='t', value=self.test_diecase_charset, seq=15,
@@ -850,22 +750,22 @@ class DiecaseMixin:
                           desc='Current: {}'.format(self.diecase.layout.size)),
                    option(key='n', value=_clear_layout, cond=is_stored,
                           text='Clear the diecase layout', seq=90),
-                   option(key='ins', value=_save, seq=91,
-                          text='Save diecase to database',
+                   option(key='ctrl_s', value=_save, seq=91,
+                          text='Store the diecase in database',
                           cond=self.diecase.diecase_id),
-                   option(key='delete', value=_delete, seq=92, cond=is_stored,
+                   option(key='ctrl_n', value=_save_as, seq=92,
+                          text='Store the diecase under a different name',
+                          cond=is_stored),
+                   option(key='delete', value=_delete, seq=93, cond=is_stored,
                           text='Delete diecase from database'),
-                   option(key='F2', value=bc.list_typefaces, seq=95,
-                          text='List typefaces'),
-                   option(key='F3', value=_change_diecase, seq=96,
-                          text='Change diecase', cond=count_diecases())]
+                   option(key='F2', value=_change_diecase, seq=94,
+                          text='Change diecase', cond=diecases_present),
+                   option(key='F3', seq=95, text='List typefaces',
+                          value=UI.paused(views.list_typefaces)),
+                   option(key='F4', seq=96, text='List unit arrangements',
+                          value=UI.paused(views.list_unit_arrangements)),
+                   option(key='F5', seq=97, text='List normal wedges',
+                          value=UI.paused(views.list_wedges))]
             return ret
 
         UI.dynamic_menu(options, header=header)
-
-
-class MatrixEngine(DiecaseMixin):
-    """Allows to look up characters in diecases"""
-    def __init__(self, diecase_id=None):
-        self.diecase = get_diecase(diecase_id)
-        self.wedge = self.diecase.wedge

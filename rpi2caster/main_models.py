@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """main_models - all big/database-dependent models for rpi2caster"""
 
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from contextlib import suppress
 from itertools import chain
+from functools import singledispatch
 import json
 
 import peewee as pw
 
 from .rpi2caster import DB
-from .data import TYPEFACES as TF
-from . import basic_models as bm, definitions as d, parsing as p
+from . import basic_models as bm, definitions as d, parsing as p, data
 
 
 class BaseModel(pw.Model):
@@ -47,8 +47,8 @@ class Diecase(BaseModel):
         return iter(self.matrices)
 
     def __repr__(self):
-        return ('<Diecase: diecase_id: {} typeface: {}>'
-                .format(self.diecase_id, self.typeface.text))
+        return ('<Diecase: {} - {}>'
+                .format(self.diecase_id, self.description))
 
     def __str__(self):
         return self.diecase_id
@@ -65,11 +65,21 @@ class Diecase(BaseModel):
         return (mat for mat in self.layout)
 
     @property
+    def description(self):
+        """Get the diecase description"""
+        if not self.typeface_data:
+            return self._typeface
+        faces = [face for (face, _) in self.typeface_data.values()]
+        series = '+'.join(sorted({tf.series for tf in faces}))
+        names = ', '.join(sorted({tf.name for tf in faces}))
+        return '{} - {}'.format(series, names)
+
+    @property
     def parameters(self):
         """Gets a list of parameters"""
         parameters = OrderedDict()
         parameters['Diecase ID'] = self.diecase_id
-        parameters['Typeface'] = self.typeface.text
+        parameters['Typeface'] = self.description
         parameters['Assigned wedge'] = self.wedge.name
         return parameters
 
@@ -77,51 +87,63 @@ class Diecase(BaseModel):
     def styles(self):
         """Get declared styles from typeface metadata
         or look them up in layout"""
-        return self.typeface.styles or self.layout.styles
+        typeface_styles = bm.Styles(self.typeface_data)
+        return typeface_styles or self.layout.styles
 
     @property
-    def typeface(self):
+    def typeface_data(self):
         """Typeface data"""
-        def get_name(number):
-            """find a typeface name in defined typefaces"""
-            return TF.get(number, {}).get('typeface', '')
+        _cached = self.__dict__.get('_typeface_data')
+        if _cached:
+            # early return = don't calculate it again
+            return _cached
 
         try:
-            # new-style typeface data
-            raw = json.loads(self._typeface)
-            styles = bm.Styles(raw)
-            raw_numbers = {st.get('typeface', '') for st in raw.values()}
-            # sort strings as if they were integers
-            ids = [*sorted(raw_numbers, key=lambda x: (len(x), x))]
-            # typefaces (num, name) -> num name + num2 name2...
-            typefaces = [(num, get_name(num)) for num in ids if num]
-            text = ' + '.join('{} {}'.format(*face) for face in typefaces)
-            # unit arrangements
-            uas = {s: data.get('ua') for s, data in raw.items()}
+            source = json.loads(self._typeface)
+        except (json.JSONDecodeError, TypeError):
+            # revert to default 327-12
+            typeface = TypefaceVariant()
+            typeface_tuple = (typeface, typeface.unit_arrangement)
+            _typeface_data = OrderedDict({typeface.style: typeface_tuple})
+            self.__dict__['_typeface_data'] = _typeface_data
+            return _typeface_data
 
-        except (json.JSONDecodeError, TypeError, KeyError, AttributeError):
-            # old typeface data (should be OK after reconfiguring)
-            styles, text = bm.Styles('rbi'), self._typeface
-            raw, ids, uas = {}, [], {}
+        # each style (roman, bold, italic) has a typeface and UA assigned
+        # e.g. {'r': ('327', '12D', 'r', '325', 'r'),
+        #       'i': ('327', '12D', 'i', '324', 'r')}
+        _typeface_data = OrderedDict()
+        for style in bm.Styles(source.keys()):
+            type_id, size, style_id, ua_id, ua_variant = source[style.short]
+            typeface_variant = TypefaceVariant(type_id, size, style_id)
+            try:
+                unit_arrangement = UAVariant(ua_id, ua_variant)
+            except ValueError:
+                try:
+                    unit_arrangement = UAVariant(ua_id, style.short)
+                except ValueError:
+                    unit_arrangement = typeface_variant.unit_arrangement
+            # update the data
+            _typeface_data[style] = (typeface_variant, unit_arrangement)
 
-        return d.Typeface(styles=styles, ids=ids, raw=raw, text=text, uas=uas)
+        # data ready to ship (cache to avoid recalculating)
+        self.__dict__['_typeface_data'] = _typeface_data
+        return _typeface_data
 
-    @typeface.setter
-    def typeface(self, metadata):
+    @typeface_data.setter
+    def typeface_data(self, typeface_data):
         """Set the typeface metadata"""
-        try:
-            # typeface namedtuple
-            self._typeface = json.dumps(metadata.raw)
-        except AttributeError:
-            # raw typeface dict
-            self._typeface = json.dumps(metadata)
+        # prepare the output data
+        output = OrderedDict()
+        for style, (tface, arrangement) in typeface_data.items():
+            output[style.short] = (tface.series, tface.size, tface.style.short,
+                                   arrangement.number, arrangement.short)
+        self._typeface = json.dumps(output)
+        self.__dict__['_typeface_data'] = typeface_data
 
     @property
     def unit_arrangements(self):
-        """Return a mapping of UnitArrangement objects to styles."""
-        # mappings: canonical dict: {'r': ('121', 'r'), 'b': ('150', 'r')}
-        uas = self.typeface.uas or {}
-        return {bm.Styles(s): bm.UnitArrangement(*ua) for s, ua in uas.items()}
+        """Return a mapping of UAVariant objects to styles."""
+        return {s: ua for s, (_, ua) in self.typeface_data.items()}
 
     @property
     def wedge(self):
@@ -376,7 +398,12 @@ class DiecaseLayout:
         def mismatch(checked_space):
             """Calculate the unit difference between space's width
             and desired unit width"""
-            wdg = wedge or self.diecase.wedge
+            if wedge:
+                wdg = wedge
+            elif self.diecase:
+                wdg = self.diecase.wedge
+            else:
+                wdg = bm.Wedge()
             # how much adjustment would be needed? single or double mat?
             difference = units - wdg[checked_space.position.row]
             low = checked_space.islowspace()
@@ -414,6 +441,320 @@ class DiecaseLayout:
     def by_columns(self):
         """Get all matrices column by column"""
         return [self.select_column(col) for col in self.size.column_numbers]
+
+
+class UnitArrangement:
+    """Unit arrangement definition.
+    Can contain one or more variants for different type styles.
+    """
+    variant_sequence = ('r', 'i', 's', 'ar', 'ai', 'as', 'br', 'g'
+                        's1', 's2', 's3', 's4', 's5')
+    variant_definitions = dict(r=('regular', 'roman or the only style'),
+                               i=('italic', ''),
+                               s=('small caps', ''),
+                               g=('Gaelic accents', ''),
+                               ar=('regular A', 'modified char widths'),
+                               ai=('italic A', 'modified char widths'),
+                               br=('regular B', 'modified char widths'),
+                               s1=('size 1', 'titling'),
+                               s2=('size 2', 'titling'),
+                               s3=('size 3', 'titling'),
+                               s4=('size 4', 'titling'),
+                               s5=('size 5', 'titling'))
+    variant_definitions['as'] = ('small caps A', 'modified char widths')
+
+    def __init__(self, number=0):
+        # store the number (string in case int was supplied)
+        self.number = str(number)
+
+        # look up the unit arrangement data
+        arrangement_data = data.UNIT_ARRANGEMENTS.get(self.number, {})
+        if not arrangement_data:
+            raise ValueError('Unit arrangement {} not found!'.format(number))
+
+        # store the underlying data
+        self._raw_data = OrderedDict([(variant, arrangement_data[variant])
+                                      for variant in self.variant_sequence
+                                      if arrangement_data.get(variant)])
+
+    def __str__(self):
+        return 'UA #{}'.format(self.number)
+
+    def __repr__(self):
+        return '<UnitArrangement #{}>'.format(self.number)
+
+    def __getitem__(self, item):
+        return self(item)
+
+    def __call__(self, variant):
+        return self.get_variant(variant)
+
+    def get_variant(self, variant):
+        """Make a UAVariant instance for a specified variant"""
+        return UAVariant(self.number, variant)
+
+    @property
+    def variants(self):
+        """Get all variants for this unit arrangement"""
+        return [self.get_variant(var) for var in self._raw_data]
+
+    @property
+    def variant_names(self):
+        """Get a string with UA variant names and letters"""
+        return ', '.join('{}: {}'.format(s, self.variant_definitions[s][0])
+                         for s in self.variant_sequence)
+
+
+class UAVariant(UnitArrangement):
+    """Unit arrangement variant class. Stores unit values for characters.
+    Each unit arrangement has one or more variants
+    (for example: roman, italic, small caps, Gaelic accents,
+    size 1, 2, 3, 4, 5 - mostly for titling,
+    modifications with different units for some characters)."""
+    def __init__(self, number, variant='r'):
+        super().__init__(number)
+        self.short = variant
+
+        # is this the valid unit arrangement variant?
+        variant_definition = self.variant_definitions.get(variant)
+        if not variant_definition:
+            raise ValueError('Incorrect variant: {}'.format(variant))
+        self.name, self.alternatives = variant_definition
+
+        # get the unit values for this variant
+        arrangement = self._raw_data.get(self.short, {})
+        if not arrangement:
+            raise ValueError('{} has no character unit values!'.format(self))
+
+        # parse the UA
+        by_char = {c: u for c, u in arrangement.items()}
+        by_units = defaultdict(list)
+        for char, units in sorted(by_char.items()):
+            by_units[units].append(char)
+        # store the result
+        self.by_char, self.by_units = by_char, by_units
+
+    def __str__(self):
+        return 'Unit arrangement #{} {}'.format(self.number, self.name)
+
+    def __repr__(self):
+        return '<UAVariant: #{} {}>'.format(self.number, self.name)
+
+    def __call__(self, item):
+        """Get a unit arrangement for a given style"""
+        @singledispatch
+        def getter(_):
+            """dispatch on type, accept only strings or numeric values"""
+            raise TypeError('Unknown type')
+
+        getter.register(int, self.get_chars)
+        getter.register(float, self.get_chars)
+        getter.register(str, self.get_units)
+        return getter(item)
+
+    def get_chars(self, unit_value):
+        """Get the characters list for a given unit value"""
+        value = int(unit_value)
+        return sorted(self.by_units.get(value))
+
+    def get_units(self, char):
+        """Get unit value from an arrangement"""
+        # first try to look it up in arrangement
+        with suppress(KeyError):
+            return self.by_char[char]
+        # might be an accented version
+        char_gen = (l for l, acc in d.ACCENTS.items() if char in acc)
+        for unaccented_char in char_gen:
+            with suppress(KeyError):
+                return self.by_char[unaccented_char]
+        # fell off the end of the loop
+        raise ValueError('Unit value for {} not found!'.format(char))
+
+    def get_mat_units(self, matrix):
+        """Get unit value for a Matrix object"""
+        return self.get_units(matrix.char)
+
+
+class Typeface:
+    """Typeface definition. Gets all data for the given typeface number.
+
+    Typeface data is stored in data/typefaces.json as a dictionary:
+        {"262": {"name": "Gill Sans",
+                 "scripts": ["Latin", "Cyrillic"],
+                 "tags": ["sans serif", "modern", "humanist", "Eric Gill"],
+                 "related": {"b": (275, "r"), "q": (275, "i")},
+                 "sizes": {"6": [6.5, .1220],
+                           "8": [8.25, .1285] etc.},
+                 "uas": {"r": (82, "r"), "i": (82, "i")}},
+        "327": {"name": "Times New Roman"...}}
+    Keys in the main dictionary are typeface series numbers.
+    Values are the typeface data:
+        name - typeface name,
+        scripts - a list of scripts/alphabets the typeface was designed for,
+        tags - a list of tags describing the typeface (e.g. Vox-ATypI classes),
+        related - a dictionary of related typefaces by style,
+        sizes - size-specific data: [set_width, calibration_line, ua_overrides]
+            where calibration_line is the "M line" parameter from the
+            type specimen book, and ua_overrides are optional corrections
+            to the unit arrangement mappings for some sizes or styles,
+        uas - unit arrangement mapping for each of the styles.
+    """
+    def __init__(self, series='327'):
+        self.series = str(series)
+        raw_data = data.TYPEFACES.get(self.series, {})
+        self._raw_data = raw_data
+        self.name = raw_data.get('name', 'unknown typeface')
+        self.classification = ', '.join(raw_data.get('tags', ['']))
+        self.script = ', '.join(raw_data.get('scripts', ['Latin']))
+        uas = raw_data.get('uas', {})
+        self.sizes = self._raw_data.get('sizes', {})
+        self.unit_arrangements = {bm.STYLES.get(st): UAVariant(ua_id, ua_v)
+                                  for st, (ua_id, ua_v) in uas.items()}
+
+    def __call__(self, size):
+        return self.get_size(size)
+
+    def __getitem__(self, item):
+        return self(item)
+
+    def __repr__(self):
+        return '<Typeface: {t.series} {t.name}>'.format(t=self)
+
+    def __str__(self):
+        return ('{t.series} {t.name} ({t.script} {stylenames})'
+                .format(t=self, stylenames=self.styles.names))
+
+    def get_size(self, size):
+        """Get a variant in a specified size"""
+        return TypefaceSize(self.series, size)
+
+    @property
+    def related(self):
+        """Get related (combinable in diecase) typefaces for this typeface,
+        e.g. 334 Times Bold for 327 Times New Roman"""
+        related = self._raw_data.get('related', {})
+        roman = bm.Styles.definitions.roman
+        retval = {}
+        # related styles are defined similar to unit arrangements:
+        # {rel_style: (typeface_number, style_in_typeface)}
+        for raw_style, (rel_tface, rel_style) in related.items():
+            style = bm.STYLES.get(raw_style)
+            if not style:
+                continue
+            related_style = bm.STYLES.get(rel_style) or roman
+            tface = Typeface(rel_tface)
+            retval[style] = (tface, related_style)
+
+        return retval
+
+    @property
+    def styles(self):
+        """Get the styles for this typeface."""
+        # DEPRECATED: styles will be stored in unit arrangement mappigns only!
+        # use the "styles" as a fallback only
+        typeface_styles = self._raw_data.get('styles', '')
+        return bm.Styles(self.unit_arrangements or typeface_styles)
+
+    @property
+    def related_styles(self):
+        """Get all related styles. These are combinable in the same diecase."""
+        return bm.Styles(self.related)
+
+    @property
+    def combined_styles(self):
+        """Get all styles for this typeface and related typefaces combined."""
+        return self.styles + self.related_styles
+
+
+class TypefaceSize(Typeface):
+    """A typeface in a specified size."""
+    def __init__(self, series='327', size='12D'):
+        def get_size_data(_size):
+            """Get the size data from typeface data"""
+            size_data = self.sizes.get(_size)
+            with suppress(TypeError, AttributeError):
+                # first try getting a reference to another size
+                # it's a string so it should be convertible to uppercase
+                return get_size_data(size_data.upper().strip())
+            # check if we have a tuple/list of 3 or 2 items
+            with suppress(TypeError, ValueError):
+                # 3 values: set width, M-line, unit arrangement overrides
+                set_width, calibration_line, raw_ua_data = size_data
+                ua_overrides = {bm.STYLES.get(st): UAVariant(ua_id, ua_v)
+                                for st, (ua_id, ua_v) in raw_ua_data.items()}
+                self.unit_arrangements.update(ua_overrides)
+                return set_width, calibration_line
+            with suppress(TypeError, ValueError):
+                # check if it's a 2-item tuple or list
+                set_width, calibration_line = size_data
+                return set_width, calibration_line
+            # nothing above is correct? (for example, lookup returned None)
+            return 0, 0
+
+        super().__init__(series)
+        converted_size = str(size).upper().strip()
+        # strip all non-numeric characters
+        if converted_size not in self.sizes:
+            converted_size = ''.join(x for x in converted_size if x.isdigit())
+        self.size = converted_size
+        self.set_width, self.calibration_line = get_size_data(self.size)
+
+    def __repr__(self):
+        return '<TypefaceSize: {t.series}-{t.size} {t.name}>'.format(t=self)
+
+    def __str__(self):
+        return ('{t.series}-{t.size} {t.name} ({t.script} {stylenames})'
+                .format(stylenames=self.styles.names, t=self))
+
+    def __call__(self, style):
+        return self.get_variant(style)
+
+    @property
+    def related(self):
+        """Get related (combinable in diecase) TypefaceSize objects,
+        e.g. 334 Times Bold for 327 Times New Roman"""
+        related = super().related
+        return {style: tface(self.size)(rel_style)
+                for style, (tface, rel_style) in related.items()}
+
+    def get_variant(self, style):
+        """Get a typeface variant for a given style"""
+        _style = bm.STYLES.get(style)
+        if not _style:
+            raise ValueError('Incorrect style: {}'.format(style))
+        try:
+            return TypefaceVariant(self.series, self.size, _style)
+        except ValueError:
+            # look it up in related typefaces
+            with suppress(KeyError):
+                return self.related[_style]
+            msg = ('{} not present in {}-{} {} or any of its related typefaces'
+                   .format(_style.name, self.series, self.size, self.name))
+            raise ValueError(msg)
+
+
+class TypefaceVariant(TypefaceSize):
+    """A concrete typeface/size/style combination."""
+    def __init__(self, series='327', size='12D', style=None):
+        super().__init__(series, size)
+        _style = (bm.STYLES.get(style) or
+                  (self.styles.first if style is None else None))
+        if not _style:
+            raise ValueError('Incorrect style: {}'.format(style))
+        elif _style not in self.styles:
+            msg = ('{} not present in {}-{} {}'
+                   .format(_style.name, self.series, self.size, self.name))
+            raise ValueError(msg)
+        self.style = _style
+        self.unit_arrangement = self.unit_arrangements.get(_style, {})
+
+    def __repr__(self):
+        stylename = self.style.name if self.style else self.style
+        return ('<TypefaceVariant: {t.series}-{t.size} {t.name} {style}>'
+                .format(t=self, style=stylename))
+
+    def __str__(self):
+        return '{t.series}-{t.size} {t.name} {t.style.name}'.format(t=self)
 
 
 class Ribbon(BaseModel):

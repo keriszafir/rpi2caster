@@ -227,7 +227,7 @@ def cast_diecase_proof(casting):
 @click.pass_obj
 def test_machine(casting):
     """Monotype caster testing and diagnostics."""
-    casting.machine.diagnostics()
+    casting.machine.diagnostics_menu()
 
 
 @cli.command(options_metavar='[-ahlmMw] [--src textfile] [--out ribbonfile]')
@@ -285,23 +285,44 @@ def edit_diecase(diecase):
     editor.diecase_manipulation()
 
 
-@inventory.command('list', options_metavar='[-h]')
+@inventory.command('diecases', options_metavar='[-h]')
 def list_diecases():
     """List all available diecases and exit."""
-    from . import matrix_controller as mc
-    mc.list_diecases()
+    from . import views, matrix_controller as mc
+    views.list_diecases(mc.get_all_diecases())
 
 
-@inventory.command('display', options_metavar='[-h]')
+@inventory.command('wedges', options_metavar='[-h]')
+def list_wedges():
+    """List all known wedge definitions, and exit."""
+    from . import views
+    views.list_wedges()
+
+
+@inventory.command('typefaces', options_metavar='[-h]')
+def list_typefaces():
+    """List all known typefaces and exit."""
+    from . import views
+    views.list_typefaces()
+
+
+@inventory.command('uas', options_metavar='[-h]')
+def list_uas():
+    """List all known unit arrangements and exit."""
+    from . import views
+    views.list_unit_arrangements()
+
+
+@inventory.command('layout', options_metavar='[-h]')
 @click.argument('diecase', required=False, default=None,
                 metavar='[diecase_id]')
 def display_layout(diecase):
     """Display a diecase layout.
 
     If diecase_id is not specified, choose a diecase from the database."""
-    from . import matrix_controller as mc
+    from . import views, matrix_controller as mc
     case = mc.get_diecase(diecase)
-    mc.display_layout(case.layout)
+    views.display_layout(case.layout)
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,

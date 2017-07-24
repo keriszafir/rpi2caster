@@ -10,13 +10,12 @@ MatrixRecord = namedtuple('MatrixRecord', 'char styles code units')
 WedgePositions = namedtuple('WedgePositions', 'pos_0075 pos_0005')
 WedgeLimits = namedtuple('WedgeLimits', 'shrink stretch')
 QueueItem = namedtuple('QueueItem', 'matrix units qty')
-Typeface = namedtuple('Typeface', 'raw ids uas styles text')
 
 # Style definitions
 Style = namedtuple('Style', 'name alternatives short codes ansi')
 SD = namedtuple('StyleDefinitions',
-                ('roman bold italic smallcaps inferior superior fraktur '
-                 'size1 size2 size3 size4 size5'))
+                ('roman bold italic bolditalic smallcaps fraktur '
+                 'inferior superior size1 size2 size3 size4 size5'))
 STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='regular, antiqua',
                         codes=('^rr', '^RR', '^00'), ansi=0),
@@ -24,6 +23,9 @@ STYLES = SD(roman=Style(name='roman', short='r',
                          codes=('^ii', '^II', '^01'), ansi='3;31'),
             bold=Style(name='bold', short='b', alternatives='',
                        codes=('^bb', '^BB', '^03'), ansi='1;33'),
+            bolditalic=Style(name='bold italic', short='q', ansi='1;31',
+                             alternatives='',
+                             codes=('^bi', '^ib', '^BI', '^IB', '^07')),
             smallcaps=Style(name='small caps', short='s', alternatives='',
                             codes=('^sc', '^ss', '^SC', '^SS', '^02'),
                             ansi='4;32'),
@@ -46,26 +48,6 @@ STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='', codes=('^s4')),
             size5=Style(name='size 5', short='5', ansi=0,
                         alternatives='', codes=('^s5')))
-
-# Unit arrangement variants
-Variant = namedtuple('UAVariant', 'name short alternatives')
-VD = namedtuple('VariantDefinition',
-                'regular italic smallcaps accented '
-                'size1 size2 size3 size4 size5 '
-                'a_regular a_italic a_smallcaps b_regular')
-VARIANTS = VD(regular=Variant('regular', 'r', 'roman or bold'),
-              italic=Variant('italic', 'i', ''),
-              smallcaps=Variant('small caps', 's', ''),
-              accented=Variant('accents', 'a', 'Gaelic'),
-              size1=Variant('size 1', 's1', 'titling'),
-              size2=Variant('size 2', 's2', 'titling'),
-              size3=Variant('size 3', 's3', 'titling'),
-              size4=Variant('size 4', 's4', 'titling'),
-              size5=Variant('size 5', 's5', 'titling'),
-              a_regular=Variant('regular A', 'ar', 'special variant'),
-              a_italic=Variant('italic A', 'ai', 'special variant'),
-              a_smallcaps=Variant('small caps A', 'as', 'special variant'),
-              b_regular=Variant('regular B', 'br', 'special variant'))
 
 # Text alignments
 Alignments = namedtuple('Alignments', ('left', 'center', 'right', 'both'))
@@ -101,20 +83,6 @@ TYPOGRAPHIC_UNITS['in'] = TYPOGRAPHIC_UNITS['"'] = 72.0
 
 # S5 wedge unit values; wedge name aliases
 S5 = [5, 6, 7, 8, 9, 9, 9, 10, 10, 11, 12, 13, 14, 15, 18]
-WEDGE_ALIASES = ('10E: UK S527', '10L: UK S536', '11Q: UK S574',
-                 '14E: UK S1406', '1A: UK S207', '1B: UK S209',
-                 '1C: UK S210', '1O: UK S221', '1R: UK S223',
-                 '1Q: UK S224', '2A: UK S233', '2Z: UK S261',
-                 '3O: UK S275', '3Q: UK S277', '3Y: UK S286',
-                 '4A: UK S295', '4G: UK S300', '5P: UK S327',
-                 '5V: UK S371', '7J: UK S422', '7Z: UK S449',
-                 '8A: UK S450', '8U: UK S409', 'TW: S535 typewriter',
-                 'AK: EU S5', 'BO: EU S221', 'CZ: EU S336',
-                 'A: UK S5', 'D: UK S46', 'E: UK S92',
-                 'F: UK S94', 'G: UK S93', 'J: UK S101',
-                 'K: UK S87', 'L: UK S96', 'M: UK S45',
-                 'N: UK S88', 'O: UK S111', 'Q: UK S50',
-                 'S: UK S197', 'V: UK S202', 'W: UK S205', 'X: UK S47')
 
 
 # Accented letters will use the same unit arrangement value as their

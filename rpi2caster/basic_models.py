@@ -4,10 +4,14 @@ Classes-only module. All constants come from definitions."""
 
 from collections import defaultdict, OrderedDict
 from contextlib import suppress
-from functools import singledispatch
 from itertools import chain, product
 from math import ceil
 from . import data, definitions as d
+
+# Style and variant definitions for lookup
+STYLES = {s.short: s for s in d.STYLES}
+STYLES.update({s: s for s in d.STYLES})
+STYLES.update({s.name: s for s in d.STYLES})
 
 
 class Stats:
@@ -229,7 +233,8 @@ class Matrix:
         elif self.islowspace():
             tmpl = 'low space at {pos.column}{pos.row}'
         else:
-            tmpl = '{m.char} ({m.styles.names}) at {pos.column}{pos.row}'
+            tmpl = ('{m.char} ({m.styles.names}) at {pos.column}{pos.row}, '
+                    '{m.units} wide')
         return tmpl.format(m=self, pos=self.position)
 
     @property
@@ -245,8 +250,11 @@ class Matrix:
         """Gets the specific or default number of units"""
         # If units are assigned to the matrix, return the value
         # Otherwise, wedge default
-        return (self._units or self.get_units_from_arrangement() or
-                self.get_units_from_row())
+        if self.isspace() or not self.char:
+            return self.get_units_from_row()
+        else:
+            return (self._units or self.get_units_from_arrangement() or
+                    self.get_units_from_row())
 
     @units.setter
     def units(self, units):
@@ -292,8 +300,7 @@ class Matrix:
             yield None
 
         # needs to work with strings and iterables
-        codes = codes or ''
-        sigs = ''.join(str(l) for l in codes).upper()
+        sigs = ''.join(str(l) for l in codes or '').upper()
 
         # get a first possible row (caveat: recognize double-digit numbers)
         all_rows = [x for x in row_generator()]
@@ -367,8 +374,7 @@ class Matrix:
         """Try getting the unit width value from diecase's unit arrangement,
         if that fails, return 0"""
         for style in self.styles:
-            with suppress(UnitValueNotFound, UnitArrangementNotFound,
-                          AttributeError):
+            with suppress(ValueError, KeyError, AttributeError):
                 arrangement = self.diecase.unit_arrangements.get(style)
                 if not arrangement:
                     continue
@@ -426,19 +432,44 @@ class VariableSpace(Matrix):
 
 class Styles:
     """Styles collection grouping styles and allowing for edit.
-    styles: any iterable containing styles to parse,
-            valid options: r, b, i, s, l, u; (add. sizes: 1, 2, 3, 4, 5)
-            a or * denotes all styles.
+    styles: a) string, b) iterable of Style namedtuples, c) Styles object
+    default: single Style namedtuple, or style short
+    mask: input same as styles; this limits the choice of styles present
+          to what is contained in the mask.
     """
     definitions = d.STYLES
-    __slots__ = ('_styles', 'default')
+    __slots__ = ('_styles', 'default', 'mask')
 
-    def __init__(self, styles='*', default=d.STYLES.roman):
-        self._styles = ()
-        self._parse(styles, default)
+    def __init__(self, styles='*', default=None, mask=None):
+        # which style is default, in case nothing is given?
+        self.default = STYLES.get(default, d.STYLES.roman)
+        # get a limiting mask: iterable, styles, single style
+        try:
+            style_mask = {STYLES.get(s) for s in mask}
+            style_mask.discard(None)
+        except TypeError:
+            style_mask = {STYLES.get(mask)}
+            style_mask.discard(None)
+        self.mask = tuple(style_mask or self.definitions)
+
+        # get styles from source and filter only the non-None ones
+        try:
+            source = (set(self.definitions) if styles == '*'
+                      else {STYLES.get(s) for s in styles})
+        except TypeError:
+            source = {STYLES.get(styles)}
+        # allow only non-None items, and if nothing is found, use default
+        source.discard(None)
+        source = source or {self.default}
+
+        self._styles = tuple(s for s in self.definitions
+                             if s in source and s in self.mask)
 
     def __iter__(self):
         return (x for x in self._styles)
+
+    def __bool__(self):
+        return True if self._styles else False
 
     def __str__(self):
         return self.string
@@ -463,7 +494,8 @@ class Styles:
             return Styles(self.string)
 
     def __contains__(self, what):
-        return what in self._styles or what in self.string
+        _style = STYLES.get(what)
+        return _style in self._styles
 
     def __eq__(self, other):
         try:
@@ -474,10 +506,14 @@ class Styles:
         except (TypeError, ValueError, AttributeError):
             return False
 
+    def __getitem__(self, index):
+        return self._styles[index]
+
     @property
     def string(self):
         """Return the string of all style short names"""
-        return ''.join(style.short for style in self._styles)
+        return ('*' if self.use_all
+                else ''.join(style.short for style in self._styles))
 
     @property
     def names(self):
@@ -496,7 +532,7 @@ class Styles:
     @property
     def use_all(self):
         """Check if the collection has every style"""
-        return set(self) == set(Styles.definitions)
+        return set(self) == set(self.mask)
 
     @property
     def is_single(self):
@@ -529,120 +565,10 @@ class Styles:
             start, end = '\033[', '\033[0m'
             return ''.join([start, par_string, 'm', formatted_string, end])
 
-    def _parse(self, raw_data, default=d.STYLES.roman):
-        """Parse the source (any iterable) for valid styles
-        and update the styles set"""
-        def s_collection():
-            """Parse all styles in a Styles object or an iterable of styles"""
-            with suppress(TypeError, AttributeError):
-                return [x.short for x in raw_data]
-
-        def style():
-            """A single style is supplied."""
-            with suppress(AttributeError):
-                return raw_data.short
-
-        def iterable():
-            """A string, dict, list, set, tuple, generator etc. is supplied"""
-            with suppress(TypeError):
-                defs = [style.short for style in self.definitions]
-                if '*' in raw_data or 'a' in raw_data:
-                    return defs
-                return [short for short in defs if short in raw_data]
-
-        source = s_collection() or style() or iterable() or default.short
-        # Got the styles string, now make the set
-        found = tuple(s for s in self.definitions if s.short in source)
-        self._styles, self.default = found, default
-
-
-class UnitArrangement:
-    """Unit arrangement for a diecase.
-
-    haracterized by UA ID and variant (regular, small caps, italic etc.)
-
-    Has two dictionaries:
-    {unit_value1: [char1, char2...]...} for getting all chars of given units,
-    {char1: unit_value1, char2: unit_value2...} for char unit value lookups.
-    """
-    __slots__ = ('by_units', 'by_char', 'number', 'variant')
-
-    def __init__(self, number=0, variant=None):
-        # store the number (string in case int was supplied)
-        self.number = str(number)
-        # variant: should work with short or full definition (namedtuple)
-        variant_definitions = {v.short: v for v in d.VARIANTS}
-        self.variant = variant_definitions.get(variant) or variant
-        # look the arrangement up
-        mappings = data.UNIT_ARRANGEMENTS.get(self.number, {})
-        arrangement = mappings.get(self.variant.short)
-        if not arrangement:
-            raise UnitArrangementNotFound
-        # parse the UA
-        by_char = {c: int(u) for c, u in arrangement.items() if c and u}
-        by_units = defaultdict(list)
-        for char, units in sorted(by_char.items()):
-            by_units[units].append(char)
-        # store the result
-        self.by_char, self.by_units = by_char, by_units
-
-    def __str__(self):
-        template = '{ua.number} {ua.variant.name}'
-        return template.format(ua=self)
-
-    def __repr__(self):
-        return '<UnitArrangement {}>'.format(self)
-
-    def __getitem__(self, item):
-        """Get a unit arrangement for a given style"""
-        @singledispatch
-        def getter(_):
-            """dispatch on type, accept only strings or numeric values"""
-            raise TypeError('Unknown type')
-
-        getter.register(int, self.get_chars)
-        getter.register(float, self.get_chars)
-        getter.register(str, self.get_units)
-        return getter(item)
-
-    def get_chars(self, unit_value):
-        """Get the characters list for a given unit value"""
-        value = int(unit_value)
-        return sorted(self.by_units.get(value))
-
-    def get_units(self, char):
-        """Get unit value from an arrangement"""
-        # first try to look it up in arrangement
-        with suppress(KeyError):
-            return self.by_char[char]
-        # might be an accented version
-        char_gen = (l for l, acc in d.ACCENTS.items() if char in acc)
-        for unaccented_char in char_gen:
-            with suppress(KeyError):
-                return self.by_char[unaccented_char]
-        # fell off the end of the loop
-        raise UnitValueNotFound
-
-    def get_mat_units(self, matrix):
-        """Get unit value for a Matrix object"""
-        return self.get_units(matrix.char)
-
-
-class Typeface:
-    """Typeface definition. Gets all data for the given typeface number."""
-    def __init__(self, number, size):
-        self.number, self.size = str(number), str(size).upper()
-        raw_data = data.TYPEFACES.get(self.number)
-
 
 class LayoutSize:
     """Layout size class, used for accessing row and column number iterators.
-
-    Layout size structure. Monotype matrix cases come in three sizes:
-    15x15 (oldest), 15x17 (introduced in 1925, very common)
-    and 16x17 (introduced in 1950s/60s, newest and largest).
-    Monophoto and Monomatic systems were even larger, but they're rare
-    and not supported by this software.
+    Three sizes were used: 15x15 (oldest), 15x17, 16x17.
     """
     __slots__ = ('rows', 'columns')
 
@@ -698,7 +624,7 @@ class LayoutSize:
         new_layout = OrderedDict().fromkeys(self.positions)
         # fill it with new empty matrices and define low/high spaces
         for position in new_layout:
-            mat = Matrix(char='', styles='*', diecase=diecase)
+            mat = Matrix(char='', styles='*', diecase=diecase, units=0)
             mat.position = position
             # preset spaces
             mat.set_lowspace(position in d.DEFAULT_LOW_SPACE_POSITIONS)
@@ -950,14 +876,6 @@ class CharFreqs:
 
 class MatrixNotFound(Exception):
     """Cannot find matrix in diecase layout."""
-
-
-class UnitArrangementNotFound(Exception):
-    """Cannot find an unit arrangement for a given style."""
-
-
-class UnitValueNotFound(Exception):
-    """Cannot find an unit value in an arrangement for a given character."""
 
 
 class TypesettingError(Exception):

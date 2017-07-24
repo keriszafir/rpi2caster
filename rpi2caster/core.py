@@ -8,11 +8,7 @@ from functools import wraps
 
 # common definitions
 import librpi2caster
-# QR code generating backend
-try:
-    import qrcode
-except ImportError:
-    qrcode = None
+import qrcode
 
 from .rpi2caster import UI, Abort, Finish, option, find_casters
 from . import basic_models as bm, basic_controllers as bc, definitions as d
@@ -58,6 +54,8 @@ class Casting(TypesettingContext):
         def make_menu_entry(number, caster, url):
             """build a menu entry"""
             if caster:
+                if number:
+                    nums.append(number)
                 modes = ', '.join(caster.supported_operation_modes)
                 row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
                 text = ('{} - modes: {} - row 16 addressing modes: {}'
@@ -74,9 +72,12 @@ class Casting(TypesettingContext):
                 raise ValueError
         except (KeyError, IndexError, TypeError, ValueError):
             # choose caster from menu
+            # nums stores menu entry numbers for useful casters
+            nums = []
             menu_options = [make_menu_entry(number, caster, url)
                             for number, (caster, url) in casters.items()]
-            caster = UI.simple_menu('Choose the caster:', menu_options)
+            caster = UI.simple_menu('Choose the caster:', menu_options,
+                                    default_key=nums[0] if nums else 0)
             if not caster:
                 UI.pause('Tried to use the unavailable caster.')
                 raise Abort
@@ -229,8 +230,7 @@ class Casting(TypesettingContext):
         # check if the row 16 addressing will be used;
         # connect with the interface
         row16_in_use = any(record.uses_row_16 for record in ribbon)
-        self.machine.choose_row16_mode(row16_in_use)
-        with self.machine:
+        with self.machine(row16_needed=row16_in_use):
             while stats.get_runs_left():
                 # Prepare the ribbon ad hoc
                 queue = skip_lines(ribbon)
@@ -308,7 +308,8 @@ class Casting(TypesettingContext):
             """generates a sequence of items for characters in a language"""
             lookup_table = self.diecase.layout.get_lookup_table()
             # which styles interest us
-            styles = bc.choose_styles(self.diecase.styles)
+            styles = bc.choose_styles(self.diecase.styles,
+                                      mask=self.diecase.styles)
             # what to cast?
             freqs = bc.get_letter_frequencies()
             bc.define_scale(freqs)
@@ -707,7 +708,17 @@ class Casting(TypesettingContext):
 
             got_ribbon, got_diecase = bool(self.ribbon), bool(self.diecase)
 
-            ret = [option(key='c', value=self.cast_composition, seq=10,
+            ret = [option(key='r', value=self.choose_ribbon,
+                          seq=5 if not got_ribbon else 81,
+                          text=('Select ribbon' if not got_ribbon
+                                else 'Change ribbon'),
+                          desc='Select a ribbon from database or file'),
+
+                   option(key='m', value=machine.calibrate_machine, seq=5,
+                          cond=is_casting, text='Calibrate the matrix case',
+                          desc='Adjust matrix case, mould blade and bridge'),
+
+                   option(key='c', value=self.cast_composition, seq=10,
                           cond=is_casting and got_ribbon,
                           text='Cast composition',
                           desc='Cast type from a selected ribbon'),
@@ -716,10 +727,6 @@ class Casting(TypesettingContext):
                           cond=is_punching and got_ribbon,
                           text='Punch ribbon',
                           desc='Punch a paper ribbon for casting'),
-
-                   option(key='r', value=self.choose_ribbon, seq=30,
-                          text='Select ribbon',
-                          desc='Select a ribbon from database or file'),
 
                    option(key='d', value=self.choose_diecase, seq=30,
                           text='Select diecase{}'.format(diecase_str),
@@ -743,7 +750,7 @@ class Casting(TypesettingContext):
                           desc='Cast sorts, spaces and typecases'),
 
                    option(key='q', value=self.cast_qr_code, seq=70,
-                          cond=qrcode, text='Cast QR codes',
+                          text='Cast QR codes',
                           desc='Cast QR codes from high and low spaces'),
 
                    option(key='F3', value=self.choose_machine, seq=90,
@@ -769,7 +776,7 @@ class Casting(TypesettingContext):
                    option(key='F7', value=self.diecase_manipulation, seq=94,
                           text='Matrix manipulation...'),
 
-                   option(key='F8', value=machine.diagnostics, seq=95,
+                   option(key='F8', value=machine.diagnostics_menu, seq=95,
                           text='Diagnostics menu...',
                           desc='Interface and machine diagnostic functions')]
             return ret
@@ -780,8 +787,8 @@ class Casting(TypesettingContext):
                   'and casts the type on a composition caster.'
                   '\n\nCasting / Punching Menu:')
         exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
-        UI.dynamic_menu(options, header, default_key='c',
-                        catch_exceptions=exceptions)
+        UI.dynamic_menu(options, header, catch_exceptions=exceptions,
+                        default_key='c')
 
     def display_details(self):
         """Collect ribbon, diecase and wedge data here"""

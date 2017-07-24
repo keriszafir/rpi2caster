@@ -17,6 +17,21 @@ UNIT_ARRANGEMENTS = get_data('unit_arrangements')
 LETTER_FREQUENCIES = get_data('char_freqs')
 # Wedge definitions: {WEDGE_SERIES: [row1_units, row2_units...]...}
 WEDGE_DEFINITIONS = get_data('wedge_units')
+WEDGE_ALIASES = ('10E: UK S527', '10L: UK S536', '11Q: UK S574',
+                 '14E: UK S1406', '1A: UK S207', '1B: UK S209',
+                 '1C: UK S210', '1O: UK S221', '1R: UK S223',
+                 '1Q: UK S224', '2A: UK S233', '2Z: UK S261',
+                 '3O: UK S275', '3Q: UK S277', '3Y: UK S286',
+                 '4A: UK S295', '4G: UK S300', '5P: UK S327',
+                 '5V: UK S371', '7J: UK S422', '7Z: UK S449',
+                 '8A: UK S450', '8U: UK S409', 'TW: S535 typewriter',
+                 'AK: EU S5', 'BO: EU S221', 'CZ: EU S336',
+                 'A: UK S5', 'D: UK S46', 'E: UK S92',
+                 'F: UK S94', 'G: UK S93', 'J: UK S101',
+                 'K: UK S87', 'L: UK S96', 'M: UK S45',
+                 'N: UK S88', 'O: UK S111', 'Q: UK S50',
+                 'S: UK S197', 'V: UK S202', 'W: UK S205', 'X: UK S47')
+
 # Typefaces by series - their names, styles
 TYPEFACES = get_data('typefaces')
 # Help and documentation

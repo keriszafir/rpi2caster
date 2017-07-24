@@ -28,6 +28,7 @@ KEYS = dict(
     pgup=Key('\x1b[5~', 'PgUp'), pgdn=Key('\x1b[6~', 'PgDn'),
     # ctrl combinations
     ctrl_c=Key('\x03', 'Ctrl-C'), ctrl_z=Key('\x1a', 'Ctrl-Z'),
+    ctrl_s=Key('\x13', 'Ctrl-S'), ctrl_n=Key('\x0e', 'Ctrl-N'),
     # function keys
     f1=Key('\x1bOP', 'F1'), f2=Key('\x1bOQ', 'F2'),
     f3=Key('\x1bOR', 'F3'), f4=Key('\x1bOS', 'F4'),
@@ -136,6 +137,36 @@ def build_entry(opt, trailing_newline=1):
         return short_entry.format(key=key_name, text=opt.text)
 
 
+def build_menu_prompt(menu_actions, default_retval, default_key, abort_keys):
+    """Make a menu prompt displaying default option and exit keys."""
+    enter_key = get_key('enter')
+    # add default key combo if it was specified
+    if menu_actions.get(enter_key.getchar) == default_retval != NONSENSE:
+        chunks = [click.style('[Enter]', fg='cyan', bold=True),
+                  click.style(' chooses option for key [', fg='cyan'),
+                  click.style(default_key.name, fg='cyan', bold=True),
+                  click.style('].', fg='cyan')]
+        def_text = ''.join(chunks)
+    else:
+        def_text = ''
+
+    # which keys abort the menu?
+    keys = sorted(key.name for key in abort_keys)
+    if keys:
+        # additional info if abort is allowed
+        chunks = [click.style('Press ', fg='cyan'),
+                  click.style('[', fg='cyan', bold=True),
+                  click.style(', '.join(keys), fg='cyan', bold=True),
+                  click.style(']', fg='cyan', bold=True),
+                  click.style(' to exit.', fg='cyan')]
+        abort_s = ''.join(chunks)
+    else:
+        abort_s = ''
+
+    prompt = click.style('\nYour choice? :', fg='yellow', bold=True)
+    return ' '.join(t for t in [def_text, abort_s, prompt] if t)
+
+
 class Abort(click.Abort):
     """Exception - abort the current action"""
     def __str__(self):
@@ -196,10 +227,10 @@ class ClickUI(object):
 
         header, footer : will be displayed above and below menu options list,
 
-        default_key : if defined and valid, wrong keypress will choose
+        default_key : if defined and valid, pressing Enter will choose
                       an option defined for this key,
 
-        allow_abort : lets Esc, Ctrl-C and Ctrl-Z keystrokes raise Abort,
+        allow_abort : lets Esc or Ctrl-C raise Abort,
 
         func_args=(), func_kwargs={} : positional and keyword arguments
                                        passed to the function call,
@@ -255,11 +286,11 @@ class ClickUI(object):
 
         footer : string to be displayed below option entries,
 
-        default_key : if unknown key is pressed, option for this key
+        default_key : if Enter is pressed, option for this key
                       will be selected instead (provided that option
                       is defined, valid and condition is met),
 
-        allow_abort : raise Abort if Esc, Ctrl-C or Ctrl-Z is pressed,
+        allow_abort : raise Abort if Esc or Ctrl-C is pressed,
                       otherwise stay in the menu. If any of these keycombos
                       is used as a key for a menu option,
                       it will select that option rather than aborting.
@@ -278,23 +309,11 @@ class ClickUI(object):
             footer_text = '\n{}\n'.format(_footer) if _footer else '\n'
             debug = ('\nThe program is now in debugging mode. Verbosity: {}\n'
                      .format(self.verbosity) if self.verbosity else '')
-            # additional info if abort is allowed
-            keys = sorted(key.name for key in DEFAULT_ABORT_KEYS
-                          if allow_abort and key.getchar not in rets)
-            key_text = click.style('[{}]'.format(', '.join(keys)),
-                                   fg='cyan', bold=True)
-            abort_text = 'Press {} to exit.'.format(key_text) if keys else ''
-            # add default key combo if it was specified
-            if default_retval == NONSENSE:
-                prompt = 'Your choice? :\n'
-            else:
-                def_text = click.style(def_key.name, fg='cyan', bold=True)
-                prompt = 'Your choice? [default: {}] :\n'.format(def_text)
+
             # generate menu entries for options
             entries = (build_entry(o) for o in valid_options)
             # return the newly constructed menu list
-            return [header_text, debug, *entries,
-                    footer_text, abort_text, prompt]
+            return [header_text, debug, *entries, footer_text]
 
         # generate a list of valid options
         valid_options = get_sorted_valid_options(options)
@@ -304,24 +323,26 @@ class ClickUI(object):
         # get default return value for wrong keypress if we have default_key
         # default to some nonsensical string for wrong dict hits
         # this will make it possible to have None as an option
-        def_key = get_key(default_key)
-        default_retval = rets.get(def_key.getchar, NONSENSE)
+        def_key, enter_key = get_key(default_key), get_key('enter')
+        def_rv = rets.get(def_key.getchar, NONSENSE)
+        if enter_key.getchar not in rets:
+            rets[enter_key.getchar] = def_rv
         # check which keys can be used for aborting the menu
         # pressing one of them would raise Abort, if two conditions are met:
         # aborting is enabled (allow_abort=True) and key is not in options
-        abort_getchars = [key.getchar
-                          for key in DEFAULT_ABORT_KEYS
-                          if allow_abort and key.getchar not in rets]
+        abort_keys = [key for key in DEFAULT_ABORT_KEYS
+                      if allow_abort and key.getchar not in rets]
         # display the menu
         # clear the screen, display the header, options, footer
         click.clear()
         click.echo('\n'.join(build_menu()))
+        click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
         # wait for user input
         while True:
             getchar = click.getchar()
-            if getchar in abort_getchars:
+            if getchar in [key.getchar for key in abort_keys]:
                 raise Abort
-            retval = rets.get(getchar, default_retval)
+            retval = rets.get(getchar, NONSENSE)
             if retval != NONSENSE:
                 return dt.try_raising(retval)
 
@@ -334,55 +355,38 @@ class ClickUI(object):
 
         options : a list of MenuItem namedtuples,
 
-        default_key : default key for wrong hits,
+        default_key : default key if Enter is pressed,
 
-        allow_abort : allow aborting with ctrl-C, ctrl-Z and/or Esc.
+        allow_abort : allow aborting with ctrl-C or Esc.
         """
-        def make_menu():
-            """builds the menu"""
-            # which keys abort the menu?
-            keys = sorted(key.name for key in abort_keys)
-            # additional info if abort is allowed
-            key_text = click.style('[{}]'.format(', '.join(keys)),
-                                   fg='cyan', bold=True)
-            abort_s = 'Press {} to exit.'.format(key_text) if keys else ''
-
-            # add default key combo if it was specified
-            if default_retval == NONSENSE:
-                prompt = 'Your choice? :'
-            else:
-                def_text = click.style(def_key.name, fg='cyan', bold=True)
-                prompt = 'Your choice? [default: {}] :\n'.format(def_text)
-
-            # make menu entries
-            entries = (build_entry(option, trailing_newline=0)
-                       for option in valid_options)
-            return '\n'.join(['', message, '', *entries, '', abort_s, prompt])
-
         # generate a list of valid options
         valid_options = get_sorted_valid_options(options)
+        entries = (build_entry(option, trailing_newline=0)
+                   for option in valid_options)
         # dictionary of key: return value pairs
         rets = {option.key.getchar: option.value
                 for option in valid_options}
         # get default return value for wrong keypress if we have default_key
         # default to some nonsensical string for wrong dict hits
         # this will make it possible to have None as an option
-        def_key = get_key(default_key)
-        default_retval = rets.get(def_key.getchar, NONSENSE)
+        def_key, enter_key = get_key(default_key), get_key('enter')
+        def_rv = rets.get(def_key.getchar, NONSENSE)
+        if enter_key.getchar not in rets:
+            rets[enter_key.getchar] = def_rv
         # check which keys can be used for aborting the menu
         # pressing one of them would raise Abort, if two conditions are met:
         # aborting is enabled (allow_abort=True) and key is not in options
         abort_keys = [key for key in DEFAULT_ABORT_KEYS
                       if allow_abort and key.getchar not in rets]
-        abort_getchars = [key.getchar for key in abort_keys]
         # display the menu
-        click.echo(make_menu())
+        click.echo('\n'.join(['', assess(message), '', *entries, '']))
+        click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
         # Wait for user input
         while True:
             getchar = click.getchar()
-            if getchar in abort_getchars:
+            if getchar in [key.getchar for key in abort_keys]:
                 raise Abort
-            retval = rets.get(getchar, default_retval)
+            retval = rets.get(getchar, NONSENSE)
             if retval != NONSENSE:
                 return dt.try_raising(retval)
 
@@ -507,7 +511,7 @@ class ClickUI(object):
         condition: any additional condition check the value needs to
                    pass in validation.
 
-        allow_abort : if ctrl-C or ctrl-Z is pressed, the function will
+        allow_abort : if ctrl-C is pressed, the function will
                       raise Abort to be handled elsewhere.
 
         type_prompt : info for user about what to enter; if None, use default
@@ -553,7 +557,7 @@ class ClickUI(object):
 
             # get value from user
             readline.set_startup_hook(prefill_callback)
-            que = '[Ctrl-C, Ctrl-Z = abort] ?: ' if allow_abort else '> ?: '
+            que = '[Ctrl-C = abort] ?: ' if allow_abort else '> ?: '
             value = input(click.style(que, fg='cyan'))
             return value
 
@@ -634,7 +638,7 @@ class ClickUI(object):
                 # permission denied and wrong file exception handler
                 click.secho(exc.message, fg='red')
             except (KeyboardInterrupt, EOFError):
-                # ctrl-C, ctrl-Z exception handler
+                # ctrl-C exception handler
                 if allow_abort:
                     raise Abort
             finally:
@@ -665,7 +669,7 @@ class ClickUI(object):
         abort_answer : if True or False, yes / no answer raises Abort;
                        if None, the outcome is returned for both answers.
 
-        allow_abort : allows aborting by ctrl-C, ctrl-Z or Esc
+        allow_abort : allows aborting by ctrl-C or Esc
         """
         # key definitions and their meanings
         keys = OrderedDict()
@@ -677,6 +681,7 @@ class ClickUI(object):
 
         default_text, abort_text = '', ''
         prompt = click.style('Choice?', fg='yellow', bold=True)
+        yn_text = click.style('Y = yes, N = no', fg='cyan', bold=True)
 
         # default and abort answer
         if default is not None:
@@ -696,7 +701,8 @@ class ClickUI(object):
 
         while True:
             # get the user input
-            click.echo('{} [Y/N{}{}]'.format(prompt, default_text, abort_text))
+            click.echo('{} [{}{}{}]'
+                       .format(prompt, yn_text, default_text, abort_text))
             getchar = click.getchar()
             answer = answers.get(getchar)
             if answer == abort_answer:
@@ -708,3 +714,13 @@ class ClickUI(object):
 
             # return answer, or raise it (if it was Abort)
             return dt.try_raising(answer)
+
+    def paused(self, routine):
+        """Execute a routine and pause after it's done"""
+        def wrapper(*args, **kwargs):
+            """wrapper function"""
+            retval = routine(*args, **kwargs)
+            self.pause()
+            return retval
+
+        return wrapper
