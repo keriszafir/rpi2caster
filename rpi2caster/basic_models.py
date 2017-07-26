@@ -349,8 +349,8 @@ class Matrix:
 
     def get_units_from_row(self, wedge_used=None):
         """Gets a number of units for characters in the diecase row"""
-        wedge = wedge_used or self.diecase.wedge
         try:
+            wedge = wedge_used or self.diecase.wedge
             return wedge.units[self.position.row]
         except (AttributeError, TypeError, IndexError):
             return 0
