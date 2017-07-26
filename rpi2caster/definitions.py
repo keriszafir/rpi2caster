@@ -14,56 +14,56 @@ QueueItem = namedtuple('QueueItem', 'matrix units qty')
 # Style definitions
 Style = namedtuple('Style', 'name alternatives short codes ansi')
 SD = namedtuple('StyleDefinitions',
-                ('roman bold italic bolditalic smallcaps fraktur '
-                 'inferior superior size1 size2 size3 size4 size5'))
+                ('roman bold semibold italic altitalic bolditalic '
+                 'smallcaps fraktur inferior superior '
+                 'size1 size2 size3 size4 size5'))
 STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='regular, antiqua',
-                        codes=('^rr', '^RR', '^00'), ansi=0),
+                        codes=('^rr', '^00'), ansi=0),
             italic=Style(name='italic', short='i', alternatives='',
-                         codes=('^ii', '^II', '^01'), ansi='3;31'),
+                         codes=('^ii', '^01'), ansi='3;31'),
+            altitalic=Style(name='alternative italic', short='a', ansi='3;31',
+                            codes=('^ai', '^08'), alternatives=''),
+            semibold=Style(name='semi-bold', short='h', ansi='1;33',
+                           codes=('^sb', '^09'), alternatives=''),
             bold=Style(name='bold', short='b', alternatives='',
-                       codes=('^bb', '^BB', '^03'), ansi='1;33'),
+                       codes=('^bb', '^03'), ansi='1;33'),
             bolditalic=Style(name='bold italic', short='q', ansi='1;31',
                              alternatives='',
-                             codes=('^bi', '^ib', '^BI', '^IB', '^07')),
+                             codes=('^bi', '^ib', '^07')),
             smallcaps=Style(name='small caps', short='s', alternatives='',
-                            codes=('^sc', '^ss', '^SC', '^SS', '^02'),
+                            codes=('^sc', '^ss', '^02'),
                             ansi='4;32'),
             inferior=Style(name='inferior', short='l',
                            alternatives='lower index, subscript',
-                           codes=('^ll', '^LL', '^05'), ansi=34),
+                           codes=('^ll', '^05'), ansi=34),
             superior=Style(name='superior', short='u',
                            alternatives='upper index, superscript',
-                           codes=('^uu', '^UU', '^04'), ansi=35),
+                           codes=('^uu', '^04'), ansi=35),
             fraktur=Style(name='Fraktur', short='f',
                           alternatives='Schwabacher, German',
-                          codes=('^ff', '^FF', '^06'), ansi=36),
+                          codes=('^ff', '^06'), ansi=36),
             size1=Style(name='size 1', short='1', ansi=0,
-                        alternatives='', codes=('^s1')),
+                        alternatives='', codes=('^s1',)),
             size2=Style(name='size 2', short='2', ansi=0,
-                        alternatives='', codes=('^s2')),
+                        alternatives='', codes=('^s2',)),
             size3=Style(name='size 3', short='3', ansi=0,
-                        alternatives='', codes=('^s3')),
+                        alternatives='', codes=('^s3',)),
             size4=Style(name='size 4', short='4', ansi=0,
-                        alternatives='', codes=('^s4')),
+                        alternatives='', codes=('^s4',)),
             size5=Style(name='size 5', short='5', ansi=0,
-                        alternatives='', codes=('^s5')))
+                        alternatives='', codes=('^s5',)))
+# Style control commands for typesetting - generate automatically
+STYLE_COMMANDS = {code: style for style in STYLES for code in style.codes}
+# add uppercase as well
+STYLE_COMMANDS.update({c.upper(): STYLE_COMMANDS[c] for c in STYLE_COMMANDS})
 
 # Text alignments
 Alignments = namedtuple('Alignments', ('left', 'center', 'right', 'both'))
 ALIGNMENTS = Alignments('left', 'center', 'right', 'both')
-# Control codes for typesetting
+# Alignment control codes for typesetting
 ALIGN_COMMANDS = {'^CR': ALIGNMENTS.left, '^CC': ALIGNMENTS.center,
                   '^CL': ALIGNMENTS.right, '^CF': ALIGNMENTS.both}
-STYLE_COMMANDS = {'^00': STYLES.roman, '^rr': STYLES.roman,
-                  '^01': STYLES.italic, '^ii': STYLES.italic,
-                  '^02': STYLES.bold, '^bb': STYLES.bold,
-                  '^03': STYLES.smallcaps, '^ss': STYLES.smallcaps,
-                  '^04': STYLES.inferior, '^ll': STYLES.inferior,
-                  '^05': STYLES.superior, '^uu': STYLES.superior,
-                  '^s1': STYLES.size1, '^s2': STYLES.size2,
-                  '^s3': STYLES.size3, '^s4': STYLES.size4,
-                  '^s5': STYLES.size5}
 
 # Default space positions
 DEFAULT_LOW_SPACE_POSITIONS = (('G', 1), ('G', 2), ('G', 5), ('O', 15))

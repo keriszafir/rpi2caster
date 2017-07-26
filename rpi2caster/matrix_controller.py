@@ -106,7 +106,12 @@ def edit_diecase_typeface_data(diecase):
 
     def assign_normal_wedge():
         """Assign a normal wedge for the diecase"""
-        diecase.wedge = bc.choose_wedge(diecase.wedge.name)
+        wedge = diecase.wedge
+        series = wedge.series
+        set_width = main_typeface.set_width
+        suffix = 'E' if wedge.is_brit_pica else ''
+        designation = 'S{}-{}{}'.format(series, set_width, suffix)
+        diecase.wedge = bc.choose_wedge(designation)
 
     def set_diecase_id():
         """Set the diecase ID (unique name) for this diecase."""

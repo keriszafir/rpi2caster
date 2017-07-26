@@ -27,7 +27,7 @@ import os
 import click
 import librpi2caster
 
-from . import global_state
+from . import data, global_state
 from .ui import Abort, Finish, option
 
 # get singleton instances for user interface, database and configuration
@@ -376,8 +376,7 @@ def update(testing):
 def meow():
     "Easter egg."
     try:
-        from .data import EASTER_EGG
         UI.display('\nOh, this was meowsome.\n')
-        UI.display(EASTER_EGG)
+        UI.display(data.EASTER_EGG)
     except (OSError, ImportError, FileNotFoundError):
         print('There are no Easter Eggs in this program.')
