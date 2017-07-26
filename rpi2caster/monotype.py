@@ -183,7 +183,7 @@ class CasterDiagnosticsMixin:
         chars = [('half-quad', 'G5', 9), ('quad', 'O15', 18),
                  ('n/h', None, None), ('dash', None, None)]
         codes = (code for what in chars for code in get_codes(*what))
-        sequence = [*codes, line_out, pump_stop]
+        sequence = [line_out, *codes, line_out, pump_stop]
         self.cast(sequence)
 
     def calibrate_machine(self):
