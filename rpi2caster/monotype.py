@@ -188,10 +188,10 @@ class CasterDiagnosticsMixin:
 
     def calibrate_machine(self):
         """Groups the draw rod and mould/diecase calibration."""
-        UI.display('First calibrate the matrix case draw rods, '
-                   'then the type body width and character position.')
-        self.calibrate_draw_rods()
+        UI.display('First calibrate the type body width and character position'
+                   ', then the matrix case draw rods.')
         self.calibrate_mould_and_diecase()
+        self.calibrate_draw_rods()
 
     def test_row_16(self):
         """Tests the row 16 addressing attachment (HMN, KMN, unit-shift).
