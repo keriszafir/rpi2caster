@@ -75,9 +75,8 @@ def find_casters(operation_mode=None):
         if something bad happens, just return None"""
         try:
             return MonotypeCaster(url, operation_mode)
-        except (librpi2caster.CommunicationError,
-                librpi2caster.UnsupportedMode):
-            return None
+        except librpi2caster.InterfaceException as exc:
+            return str(exc)
 
     # get the interface URLs
     # the first interface is a simulation interface numbered 0
