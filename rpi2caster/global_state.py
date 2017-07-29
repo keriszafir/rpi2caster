@@ -87,7 +87,11 @@ DEFAULTS = dict(database='sqlite:////{}/rpi2caster.db'.format(USER_DATA_DIR),
                 interfaces='''http://localhost:23017,
                               http://localhost:23017/interfaces/0,
                               http://monotype:23017/interfaces/0''',
-                default_measure='25cc', measurement_unit='cc')
+                default_measure='25cc', measurement_unit='cc',
+                extra_typefaces='extra_typefaces.json',
+                extra_unit_arrangements='extra_unit_arrangements.json',
+                extra_wedges='extra_wedges.json',
+                extra_languages='extra_languages.json')
 
 UI = UIProxy()
 CFG = ConfigParser(defaults=DEFAULTS)

@@ -23,9 +23,11 @@
 """
 from collections import OrderedDict
 from functools import partial
+import json
 import os
 import click
 import librpi2caster
+from pathlib import Path
 
 from . import data, global_state
 from .ui import Abort, Finish, option
@@ -90,10 +92,27 @@ def find_casters(operation_mode=None):
     return casters
 
 
+def add_extra(raw_path, target):
+    """Read the JSON file from path; decode the data; update the target."""
+    path = Path(raw_path)
+    source = path if path.is_absolute() else Path(USER_DATA_DIR).joinpath(path)
+    try:
+        file = source.resolve()
+        with file.open('r') as jsonfile:
+            extra_data = json.load(jsonfile)
+            target.update(extra_data)
+    except FileNotFoundError:
+        UI.display('File {} cannot be found, skipping.'.format(source),
+                   min_verbosity=1)
+    except (IOError, json.JSONDecodeError):
+        UI.display('Cannot read file {}, skipping.'.format(source),
+                   min_verbosity=1)
+
+
 @click.group(invoke_without_command=True, cls=CommandGroup, help=__doc__,
              context_settings=dict(help_option_names=['-h', '--help']))
-@click.version_option(None, '--version', '-v')
-@click.option('verbosity', '-V', count=True, default=0,
+@click.version_option(None, '--version', '-V')
+@click.option('verbosity', '-v', count=True, default=0,
               help='verbose mode (count, default=0)')
 @click.option('--conffile', '-c', help='config file to use', metavar='[PATH]',
               default=os.path.join(USER_DATA_DIR, 'rpi2caster.conf'))
@@ -129,6 +148,13 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
     database_url = database or CFG['System']['database']
     DB.load(database_url)
     UI.load(ui_impl, verbosity)
+
+    # read the additional typeface/wedge/unit_arrangement data
+    add_extra(CFG['System']['extra_typefaces'], data.TYPEFACES)
+    add_extra(CFG['System']['extra_unit_arrangements'], data.UNIT_ARRANGEMENTS)
+    add_extra(CFG['System']['extra_wedges'], data.WEDGE_DEFINITIONS)
+    add_extra(CFG['System']['extra_languages'], data.LETTER_FREQUENCIES)
+
     # main menu
     header = ('rpi2caster - computer aided typesetting software '
               'for Monotype composition casters.'
