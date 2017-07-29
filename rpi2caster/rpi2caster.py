@@ -76,19 +76,20 @@ def find_casters(operation_mode=None):
         """caster factory method: make a real or simulation caster;
         if something bad happens, just return None"""
         try:
-            return MonotypeCaster(url, operation_mode)
+            caster = MonotypeCaster(url, operation_mode)
+            return (caster, caster.name)
         except librpi2caster.InterfaceException as exc:
-            return str(exc)
+            return (None, str(exc))
 
     # get the interface URLs
     # the first interface is a simulation interface numbered 0
     config_urls = CFG['System']['interfaces']
     caster_urls = [*(x.strip() for x in config_urls.split(','))]
     # make a dictionary of casters starting with 0 for a simulation caster
-    casters = {0: (SimulationCaster(), 'No URL')}
+    casters = {0: ('', SimulationCaster(), 'Simulation mode - no hardware')}
     for number, url in enumerate(caster_urls, start=1):
-        caster = make_caster(url)
-        casters[number] = (caster, url)
+        caster, name = make_caster(url)
+        casters[number] = (url, caster, name)
     return casters
 
 
@@ -173,12 +174,18 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
 def list_casters(operation_mode):
     """List all configured casters and show the available ones."""
     data = find_casters(operation_mode)
-    unavailable = click.style('currently unavailable', fg='red')
     UI.display('\nList of configured interfaces:\n')
-    for number, (caster, url) in data.items():
-        name = caster if caster else unavailable
-        caster_url = '[{}]'.format(url)
-        UI.display('{:^4}{:<50}: {}'.format(number, caster_url, name))
+    for number, (url, caster, name) in data.items():
+        if not url:
+            # don't list the simulation interface - it's always available
+            continue
+        url_string = ('{}'.format(url) if caster
+                      else '{}: unavailable'.format(url))
+        if len(str(name)) > 30:
+            template = '{}\n{}\n'
+        else:
+            template = '{} :\t{}\n'
+        UI.display(template.format(url_string, name))
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,

@@ -51,37 +51,40 @@ class Casting(TypesettingContext):
 
     def choose_machine(self, interface_id=None, operation_mode=None):
         """Choose a machine from the available interfaces."""
-        def make_menu_entry(number, caster, url):
+        def make_menu_entry(number, caster, url, name):
             """build a menu entry"""
-            try:
+            if caster:
                 if number:
                     nums.append(number)
                 modes = ', '.join(caster.supported_operation_modes)
                 row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
                 text = ('{} - modes: {} - row 16 addressing modes: {}'
                         .format(caster, modes, row16_modes))
-            except AttributeError:
-                text = '[Unavailable] {}\n\t\t\t{}'.format(url, caster)
-                caster = None
+            else:
+                text = '[Unavailable] {}\n\t\t\t{}'.format(url, name)
             return option(key=number, seq=number, value=caster, text=text)
 
         casters = find_casters(operation_mode)
         # look a caster up by the index
         try:
-            caster = casters[interface_id][0]
+            url, caster, name = casters[interface_id]
             if not caster:
                 raise ValueError
+            UI.display('Using caster {} at {}'.format(name, url),
+                       min_verbosity=1)
         except (KeyError, IndexError, TypeError, ValueError):
             # choose caster from menu
             # nums stores menu entry numbers for useful casters
             nums = []
-            menu_options = [make_menu_entry(number, caster, url)
-                            for number, (caster, url) in casters.items()]
-            caster = UI.simple_menu('Choose the caster:', menu_options,
-                                    default_key=nums[0] if nums else 0)
-            if not caster:
-                UI.pause('Tried to use the unavailable caster.')
-                raise Abort
+            menu_options = [make_menu_entry(number, caster, url, name)
+                            for number, (url, caster, name) in casters.items()]
+            while True:
+                caster = UI.simple_menu('Choose the caster:', menu_options,
+                                        default_key=nums[0] if nums else 0)
+                if not caster:
+                    UI.pause('Tried to use the unavailable caster.')
+                else:
+                    break
         self.machine = caster
 
     def punch_ribbon(self, ribbon):
