@@ -53,15 +53,16 @@ class Casting(TypesettingContext):
         """Choose a machine from the available interfaces."""
         def make_menu_entry(number, caster, url):
             """build a menu entry"""
-            if caster:
+            try:
                 if number:
                     nums.append(number)
                 modes = ', '.join(caster.supported_operation_modes)
                 row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
                 text = ('{} - modes: {} - row 16 addressing modes: {}'
                         .format(caster, modes, row16_modes))
-            else:
-                text = '\t[Unavailable] {}'.format(url)
+            except AttributeError:
+                text = '[Unavailable] {}\n\t\t\t{}'.format(url, caster)
+                caster = None
             return option(key=number, seq=number, value=caster, text=text)
 
         casters = find_casters(operation_mode)
