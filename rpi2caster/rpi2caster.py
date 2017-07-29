@@ -77,7 +77,7 @@ def find_casters(operation_mode=None):
         if something bad happens, just return None"""
         try:
             caster = MonotypeCaster(url, operation_mode)
-            return (caster, caster.name)
+            return (caster, str(caster))
         except librpi2caster.InterfaceException as exc:
             return (None, str(exc))
 
