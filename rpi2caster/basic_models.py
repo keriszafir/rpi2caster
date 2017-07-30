@@ -4,7 +4,7 @@ Classes-only module. All constants come from definitions."""
 
 from collections import defaultdict, OrderedDict
 from contextlib import suppress
-from itertools import chain, product
+from itertools import chain
 from math import ceil
 from . import data, definitions as d
 
@@ -564,69 +564,6 @@ class Styles:
         else:
             start, end = '\033[', '\033[0m'
             return ''.join([start, par_string, 'm', formatted_string, end])
-
-
-class LayoutSize:
-    """Layout size class, used for accessing row and column number iterators.
-    Three sizes were used: 15x15 (oldest), 15x17, 16x17.
-    """
-    rows, columns = 15, 17
-
-    def __iter__(self):
-        return self.positions
-
-    def __repr__(self):
-        return '<LayoutSize: {s.rows}x{s.columns}>'.format(s=self)
-
-    def __str__(self):
-        name = ('HMN, KMN or unit-shift' if self.rows == 16
-                else 'extended: NI, NL' if self.columns == 17 else 'small')
-        return '{}x{} - {}'.format(self.rows, self.columns, name)
-
-    @property
-    def row_numbers(self):
-        """A tuple of row numbers"""
-        return tuple(range(1, self.rows + 1))
-
-    @row_numbers.setter
-    def row_numbers(self, row_numbers):
-        """Row numbers setter"""
-        with suppress(TypeError):
-            self.rows = 16 if len(row_numbers) > 15 else 15
-
-    @property
-    def column_numbers(self):
-        """A tuple of column numbers."""
-        if self.columns > 15 or self.rows > 15:
-            return ['NI', 'NL', *'ABCDEFGHIJKLMNO']
-        else:
-            return [*'ABCDEFGHIJKLMNO']
-
-    @column_numbers.setter
-    def column_numbers(self, column_numbers):
-        """Column numbers setter."""
-        with suppress(TypeError):
-            self.columns = 17 if len(column_numbers) > 15 else 15
-
-    @property
-    def positions(self):
-        """Gets all matrix positions for this layout"""
-        by_row = product(self.row_numbers, self.column_numbers)
-        return [d.Coordinates(column=col, row=row) for (row, col) in by_row]
-
-    def clean_layout(self, diecase=None):
-        """Generate an empty layout of a given size."""
-        # get coordinates to iterate over and build dict keys
-        new_layout = OrderedDict().fromkeys(self.positions)
-        # fill it with new empty matrices and define low/high spaces
-        for position in new_layout:
-            mat = Matrix(char='', styles='*', diecase=diecase, units=0)
-            mat.position = position
-            # preset spaces
-            mat.set_lowspace(position in d.DEFAULT_LOW_SPACE_POSITIONS)
-            mat.set_highspace(position in d.DEFAULT_HIGH_SPACE_POSITIONS)
-            new_layout[position] = mat
-        return new_layout
 
 
 class Measure:

@@ -175,7 +175,7 @@ def list_diecases(data):
     return data
 
 
-def display_layout(layout):
+def display_layout(diecase):
     """Display the diecase layout, unit values, styles."""
     def get_formatted_text(text, styles, length='^3'):
         """format a text with formatting string in styles definitions"""
@@ -194,13 +194,13 @@ def display_layout(layout):
     def get_column_widths():
         """calculate column widths to adjust the content"""
         # 3 characters to start is reasonable enough
-        columns = layout.column_numbers
+        columns = diecase.column_numbers
         column_widths = OrderedDict((name, 3) for name in columns)
 
         # get the maximum width of characters in every column
         # if it's larger than header field width, update the column width
         for column, initial_width in column_widths.items():
-            widths_gen = (len(mat) for mat in layout.select_column(column))
+            widths_gen = (len(mat) for mat in diecase.select_column(column))
             column_widths[column] = max(initial_width, *widths_gen)
         return column_widths
 
@@ -209,8 +209,8 @@ def display_layout(layout):
             empty row - separator; main row - characters,
             units row - unit values, if not matching the row units.
         """
-        row = layout.select_row(row_number)
-        units = layout.diecase.wedge.units[row_number]
+        row = diecase.select_row(row_number)
+        units = wedge.units[row_number]
         # initialize the row value dictionaries
         empty_row = dict(row='', units='')
         main_row = dict(row=row_number, units=units)
@@ -235,17 +235,21 @@ def display_layout(layout):
     def build_description():
         """diecase description: ID, typeface, wedge name and set width"""
         table_width = len(header)
-        # diecase ID, typeface, wedge used
-        row1_left = '{d.diecase_id} ({d.description})'.format(d=layout.diecase)
-        row1_right = 'wedge: {}'.format(layout.diecase.wedge.name)
+        try:
+            # diecase ID, typeface, wedge used
+            row1_left = '{d.diecase_id} ({d.description})'.format(d=diecase)
+            row1_right = 'wedge: {}'.format(wedge.name)
+        except AttributeError:
+            row1_left = 'Unknown diecase ID.'
+            row1_right = 'Unknown wedge. Assuming S5.'
         row1_filled_width = len(row1_left) + len(row1_right) + 4
         row1_center = ' ' * (table_width - row1_filled_width)
         # available styles
         row2_left = ', '.join(get_formatted_text(s.name, s)
-                              for s in layout.styles)
+                              for s in diecase.styles)
         # warning: ANSI-formatting the strings affects their length!
         # calculate the correct length of formatted style names
-        styles_length = len(', '.join(s.name for s in layout.styles))
+        styles_length = len(', '.join(s.name for s in diecase.styles))
         # space symbols
         spaces = [(d.SPACE_NAMES.get(space), symbol)
                   for space, symbol in d.SPACE_SYMBOLS.items()]
@@ -264,6 +268,11 @@ def display_layout(layout):
                           row_tmpl.format(row2_left, row2_center, row2_right),
                           lower_border))
 
+    # what wedge does the diecase use?
+    try:
+        wedge = diecase.wedge
+    except AttributeError:
+        wedge = bm.Wedge()
     # table row template
     widths = get_column_widths()
     fields = ' '.join(' {{{col}:^{width}}} '.format(col=col, width=width)
@@ -274,7 +283,7 @@ def display_layout(layout):
     header.update({col: col for col in widths})
     header = template.format(**header)
     # proper layout
-    contents = (build_row(num) for num in layout.row_numbers)
+    contents = (build_row(num) for num in diecase.row_numbers)
     # table description
     desc = build_description()
     # put the thing together
