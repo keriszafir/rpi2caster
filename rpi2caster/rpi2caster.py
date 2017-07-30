@@ -354,7 +354,7 @@ def display_layout(diecase):
     If diecase_id is not specified, choose a diecase from the database."""
     from . import views, matrix_controller as mc
     case = mc.get_diecase(diecase)
-    views.display_layout(case.layout)
+    views.display_layout(case)
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,

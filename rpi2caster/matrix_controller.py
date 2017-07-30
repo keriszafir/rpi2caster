@@ -56,7 +56,7 @@ def export_csv(diecase, filename=''):
                                     quotechar='"', quoting=csv.QUOTE_ALL)
             csv_writer.writerow(['Char', 'Styles', 'Position', 'Units'])
             # store mats with no position info as well
-            csv_writer.writerows(diecase.layout.raw)
+            csv_writer.writerows(diecase.get_raw_layout())
         UI.pause('File {} successfully saved.'.format(filename))
 
 
@@ -191,7 +191,8 @@ def count_diecases():
 def check_persistence(diecase_id):
     """Check if the diecase is stored in the database"""
     try:
-        return Diecase.select().where(Diecase.diecase_id == diecase_id).count()
+        query = Diecase.select().where(Diecase.diecase_id == diecase_id)
+        return query.count()
     except DB.OperationalError:
         Diecase.create_table(fail_silently=True)
         return 0
@@ -204,13 +205,13 @@ def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
     prompt = 'Your choice? (0 = {})'.format(fallback_description)
     data = get_all_diecases()
     if not data:
-        return fallback()
+        return fallback().load()
     UI.display('Choose a matrix case:', end='\n\n')
     views.list_diecases(data)
     qty = len(data)
     # let the user choose the diecase
     choice = UI.enter(prompt, default=0, datatype=int, minimum=0, maximum=qty)
-    return data.get(choice) or fallback()
+    return data.get(choice).load() or fallback().load()
 
 
 @DB
@@ -218,12 +219,12 @@ def get_diecase(diecase_id=None, fallback=choose_diecase):
     """Get a diecase with given parameters"""
     if diecase_id:
         try:
-            return Diecase.get(Diecase.diecase_id == diecase_id)
+            return Diecase.get(Diecase.diecase_id == diecase_id).load()
         except Diecase.DoesNotExist:
             UI.display('Diecase {} not found in database!'.format(diecase_id))
         except DB.OperationalError:
             Diecase.create_table(fail_silently=True)
-    return fallback()
+    return fallback().load()
 
 
 def temp_diecase(routine):
@@ -249,7 +250,7 @@ def temp_diecase(routine):
 # Diecase layout controller routines
 
 
-def resize_layout(layout):
+def resize_layout(diecase):
     """Change the diecase layout size"""
     # select one of 3 sizes used by Monotype
     sizes = [(15, 15), (15, 17), (16, 17)]
@@ -258,7 +259,7 @@ def resize_layout(layout):
     selected_size = UI.simple_menu(message='Matrix case size:',
                                    options=options,
                                    default_key=2, allow_abort=True)
-    layout.resize(*selected_size)
+    diecase.resize(*selected_size)
 
 
 def edit_layout(layout):
@@ -345,7 +346,7 @@ def edit_layout(layout):
             opt()
 
 
-def test_layout_charset(layout):
+def test_layout_charset(diecase):
     """Tests completeness for a chosen language or text."""
     def get_lang_chars(lang):
         """Get an ordered set of characters in a language"""
@@ -382,8 +383,8 @@ def test_layout_charset(layout):
                 missing.append(char)
         return missing
 
-    lookup_table = layout.get_lookup_table()
-    styles = bc.choose_styles(layout.styles)
+    lookup_table = diecase.get_lookup_table()
+    styles = bc.choose_styles(diecase.styles)
     charset = make_charset()
     # which characters we don't have, grouped by style
     checks = {style: find_missing_mats(style) for style in styles}
@@ -412,7 +413,7 @@ def test_layout_charset(layout):
     return False
 
 
-def find_matrix(layout, choose=True, **kwargs):
+def find_matrix(diecase, choose=True, **kwargs):
     """Search the diecase layout and get a matching mat.
 
     char, styles, position, units: search criteria,
@@ -424,7 +425,7 @@ def find_matrix(layout, choose=True, **kwargs):
         if not position:
             raise bm.MatrixNotFound('No coordinates entered')
         mat = bm.Matrix(char=char, styles=styles, code=position,
-                        diecase=layout.diecase)
+                        diecase=diecase)
         return mat
 
     def choose_from_menu():
@@ -459,7 +460,7 @@ def find_matrix(layout, choose=True, **kwargs):
 
     char = kwargs.get('char', '')
     styles = bm.Styles(kwargs.get('styles', '*'))
-    mats = layout.select_many(**kwargs)
+    mats = diecase.select_many(**kwargs)
     if len(mats) == 1:
         # only one match: return it
         return mats[0]
@@ -601,7 +602,7 @@ class DiecaseMixin:
     @property
     def charset(self):
         """Get a {style: {char: Matrix object}} charset from the diecase"""
-        return self.diecase.layout.get_charset()
+        return self.diecase.get_charset()
 
     @property
     def space(self):
@@ -627,7 +628,7 @@ class DiecaseMixin:
                                    set_width=self.wedge.set_width)
             units = width.units
 
-        return self.diecase.layout.get_space(units, low, wedge=self.wedge)
+        return self.diecase.get_space(units, low, wedge=self.wedge)
 
     def find_matrix(self, choose=True, **kwargs):
         """Search the diecase layout and get a matching mat.
@@ -636,22 +637,22 @@ class DiecaseMixin:
         temporary: if True, copies the matrix (if it is edited temporarily),
 
         kwargs: char, styles, position, units: search criteria."""
-        return find_matrix(self.diecase.layout, choose, **kwargs)
+        return find_matrix(self.diecase, choose, **kwargs)
 
     def resize_layout(self):
         """Resize the layout of currently used diecase"""
-        resize_layout(self.diecase.layout)
+        resize_layout(self.diecase)
         self.diecase.store_layout()
 
-    def display_diecase_layout(self, layout=None):
+    def display_diecase_layout(self, diecase=None):
         """Display the diecase layout, unit values, styles."""
-        views.display_layout(layout or self.diecase.layout)
+        views.display_layout(diecase or self.diecase)
         UI.pause()
 
     def test_diecase_charset(self):
         """Test whether the diecase layout has all required characters,
         either for a text or language's character set."""
-        test_layout_charset(self.diecase.layout)
+        test_layout_charset(self.diecase)
 
     def diecase_manipulation(self):
         """A menu with all operations on a diecase"""
@@ -659,7 +660,7 @@ class DiecaseMixin:
         def _save():
             """Stores the matrix case definition/layout in database"""
             is_stored = check_persistence(self.diecase.diecase_id)
-            self.diecase.store_layout()
+            self.diecase.store()
             self.diecase.save(force_insert=not is_stored)
             UI.pause('Data saved.')
 
@@ -700,12 +701,12 @@ class DiecaseMixin:
         def _edit_layout():
             """Edits a matrix case layout, row by row, matrix by matrix.
             Allows to enter a position to be edited. """
-            edit_layout(self.diecase.layout)
+            edit_layout(self.diecase)
 
         def _clear_layout():
             """Generates a new layout for the diecase"""
             if UI.confirm('Are you sure?', default=False, abort_answer=False):
-                self.diecase.layout.purge()
+                self.diecase.purge()
 
         def _import():
             """Import diecase layout from CSV"""
@@ -753,8 +754,8 @@ class DiecaseMixin:
                           cond=is_stored,
                           text='Change the diecase layout size',
                           desc=('Current: {} x {}'
-                                .format(self.diecase.layout.rows,
-                                        self.diecase.layout.columns))),
+                                .format(self.diecase.rows,
+                                        self.diecase.columns))),
                    option(key='n', value=_clear_layout, cond=is_stored,
                           text='Clear the diecase layout', seq=90),
                    option(key='ctrl_s', value=_save, seq=91,

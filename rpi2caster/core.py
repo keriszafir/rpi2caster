@@ -287,7 +287,7 @@ class Casting(TypesettingContext):
 
         def spaces():
             """generates a sequence of spaces"""
-            found = self.diecase.layout.spaces
+            found = self.diecase.spaces
             options = [option(value=sp, text=str(sp), seq=1) for sp in found]
             options.append(option(key='c', value=None, text='custom', seq=2))
             options.append(option(key='Enter', value=StopIteration, seq=3,
@@ -310,7 +310,7 @@ class Casting(TypesettingContext):
 
         def typecases():
             """generates a sequence of items for characters in a language"""
-            lookup_table = self.diecase.layout.get_lookup_table()
+            lookup_table = self.diecase.get_lookup_table()
             # which styles interest us
             styles = bc.choose_styles(self.diecase.styles,
                                       mask=self.diecase.styles)
@@ -685,7 +685,7 @@ class Casting(TypesettingContext):
         pos_0075, pos_0005 = 3, 8
         leftover_units = 0
         # build the layout one by one
-        for number, row in enumerate(self.diecase.layout.by_rows(), start=1):
+        for number, row in enumerate(self.diecase.by_rows(), start=1):
             UI.display('Processing row {}'.format(number))
             queue.append(quad)
             for mat in row:

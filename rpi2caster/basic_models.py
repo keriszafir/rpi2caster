@@ -413,9 +413,8 @@ class VariableSpace(Matrix):
 
     def match(self):
         """locate the best suitable space for the given number of units"""
-        matrix = self.diecase.layout.get_space(units=self.units,
-                                               low=self.islowspace())
-        self.position = matrix.position
+        mat = self.diecase.get_space(units=self.units, low=self.islowspace())
+        self.position = mat.position
 
     @property
     def units(self):

@@ -32,19 +32,287 @@ class BaseModel(pw.Model):
             return tables.get(model_name) or '{}s'.format(model_name.lower())
 
 
-class Diecase(BaseModel):
+class LayoutBase:
+    """Layout base class, used for accessing row and column number iterators.
+    Three sizes were used: 15x15 (oldest), 15x17, 16x17.
+    """
+    rows, columns = 15, 17
+
+    def __iter__(self):
+        return self.positions
+
+    def __repr__(self):
+        return '<LayoutSize: {s.rows}x{s.columns}>'.format(s=self)
+
+    def __str__(self):
+        name = ('HMN, KMN or unit-shift' if self.rows == 16
+                else 'extended: NI, NL' if self.columns == 17 else 'small')
+        return '{}x{} - {}'.format(self.rows, self.columns, name)
+
+    @property
+    def row_numbers(self):
+        """A tuple of row numbers"""
+        return tuple(range(1, self.rows + 1))
+
+    @row_numbers.setter
+    def row_numbers(self, row_numbers):
+        """Row numbers setter"""
+        with suppress(TypeError):
+            self.rows = 16 if len(row_numbers) > 15 else 15
+
+    @property
+    def column_numbers(self):
+        """A tuple of column numbers."""
+        if self.columns > 15 or self.rows > 15:
+            return ['NI', 'NL', *'ABCDEFGHIJKLMNO']
+        else:
+            return [*'ABCDEFGHIJKLMNO']
+
+    @column_numbers.setter
+    def column_numbers(self, column_numbers):
+        """Column numbers setter."""
+        with suppress(TypeError):
+            self.columns = 17 if len(column_numbers) > 15 else 15
+
+    @property
+    def positions(self):
+        """Gets all matrix positions for this layout"""
+        by_row = product(self.row_numbers, self.column_numbers)
+        return [d.Coordinates(column=col, row=row) for (row, col) in by_row]
+
+    def clean_layout(self):
+        """Generate an empty layout of a given size."""
+        # get coordinates to iterate over and build dict keys
+        new_layout = OrderedDict().fromkeys(self.positions)
+        # fill it with new empty matrices and define low/high spaces
+        for position in new_layout:
+            mat = bm.Matrix(char='', styles='*', diecase=self, units=0)
+            mat.position = position
+            # preset spaces
+            mat.set_lowspace(position in d.DEFAULT_LOW_SPACE_POSITIONS)
+            mat.set_highspace(position in d.DEFAULT_HIGH_SPACE_POSITIONS)
+            new_layout[position] = mat
+        return new_layout
+
+
+class Layout(LayoutBase):
+    """Matrix case layout and outside characters data structure.
+    layout : a tuple/list of tuples/lists denoting matrices:
+              [(char, styles_string, position, units),...]
+    diecase : a Diecase() class object
+
+    Mats without position (None or empty string) will end up in the
+    outside characters collection."""
+    used_mats, outside_mats = {}, []
+    wedge = bm.Wedge()
+
+    def __repr__(self):
+        return ('<Layout ({} rows, {} columns)>'
+                .format(self.rows, self.columns))
+
+    def __iter__(self):
+        return (mat for mat in self.used_mats.values())
+
+    def __contains__(self, obj):
+        return obj in self.used_mats.values()
+
+    @property
+    def all_mats(self):
+        """A list of all matrices - both used and outside"""
+        return list(chain(self.used_mats.values(), self.outside_mats))
+
+    @property
+    def styles(self):
+        """Get all available character styles from the diecase layout."""
+        return sum(mat.styles for mat in self.all_mats
+                   if not mat.styles.use_all) or bm.Styles(None)
+
+    def get_charset(self, diecase_chars=True, outside_chars=False):
+        """Diecase character set"""
+        charset = {}
+        used = self.used_mats.values() if diecase_chars else []
+        unused = self.outside_mats if outside_chars else []
+        for mat in chain(used, unused):
+            if not mat.char or mat.isspace():
+                continue
+            for style in mat.styles:
+                charset.setdefault(style, {})[mat.char] = mat
+        return charset
+
+    def get_lookup_table(self, diecase_chars=True, outside_chars=False):
+        """Return a structure of {(mat char, style): mat}"""
+        used = self.used_mats.values() if diecase_chars else []
+        unused = self.outside_mats if outside_chars else []
+        return {(mat.char, style): mat for mat in chain(used, unused)
+                for style in mat.styles}
+
+    def get_raw_layout(self):
+        """Raw layout i.e. list of tuples with matrix parameters"""
+        all_mats = chain(self.used_mats.values(), self.outside_mats)
+        in_diecase = (mat.get_layout_record() for mat in all_mats)
+        outside = (mat.get_layout_record(pos='') for mat in self.outside_mats)
+        return [*in_diecase, *outside]
+
+    def load_layout(self, source):
+        """Parse an iterable or JSON-encoded array to read a layout.
+        Sort the layout into matrices in diecase and outside chars.
+        Accepts any iterator of (char, style_string, position, units)"""
+        try:
+            raw_data = json.loads(source)
+        except (TypeError, json.JSONDecodeError):
+            raw_data = source
+
+        try:
+            # Get matrices from supplied layout's canonical form
+            recs = (d.MatrixRecord(*record) for record in raw_data)
+            mats = [bm.Matrix(char=rec.char, styles=rec.styles, code=rec.code,
+                              units=rec.units, diecase=self) for rec in recs]
+            # parse the source layout to get its size,
+            # reversing the order increases the chance of finding row 16 faster
+            for matrix in reversed(mats):
+                if matrix.position.row == 16:
+                    # finish here as the only 16-row diecases were 16x17
+                    self.rows, self.columns = 16, 17
+                    break
+                if matrix.position.column in ('NI', 'NL'):
+                    # update the columns number
+                    # iterate further because we can still find 16th row
+                    self.columns = 17
+        except (TypeError, ValueError):
+            # Layout supplied is incorrect; use a default size of 15x17
+            mats, self.rows, self.columns = [], 15, 17
+        # Build empty layout determining its size
+        used_mats = self.clean_layout()
+        # Fill it with matrices for existing positions
+        for mat in mats[:]:
+            position = mat.position
+            if used_mats.get(position):
+                used_mats[position] = mat
+                mats.remove(mat)
+        # The remaining mats will be stored in outside layout
+        self.used_mats, self.outside_mats = used_mats, mats
+
+    @property
+    def spaces(self):
+        """Get all available spaces"""
+        return [mat for mat in self.used_mats.values() if mat.isspace()]
+
+    def purge(self):
+        """Resets the layout to an empty one of the same size"""
+        self.outside_mats = []
+        self.used_mats = self.clean_layout()
+
+    def resize(self, rows=15, columns=17):
+        """Rebuild the layout to adjust it to the new diecase format"""
+        # manipulate data structures locally
+        old_layout, old_extras = self.used_mats, self.outside_mats
+        new_extras = []
+        # resize
+        self.rows, self.columns = rows, columns
+        new_layout = self.clean_layout()
+        # preserve mats as outside characters when downsizing the layout
+        for position, mat in old_layout.items():
+            if new_layout.get(position):
+                # the new layout has a position for this matrix
+                new_layout[position] = mat
+            else:
+                # no place for it = put it in outside chars
+                new_extras.append(mat)
+        # pull the mats from outside layout to diecase automatically
+        # if so, remove them from outside layout
+        for mat in old_extras[:]:
+            position = mat.position
+            if new_layout.get(position) is not None:
+                # there is something at this position
+                new_layout[position] = mat
+                old_extras.remove(mat)
+        # finally update the instance attributes
+        self.used_mats = new_layout
+        self.outside_mats = old_extras + new_extras
+
+    def select_many(self, char=None, styles=None, code=None, units=None,
+                    islowspace=None, ishighspace=None):
+        """Get all matrices with matching parameters"""
+        def match(matrix):
+            """Test the matrix for conditions unless they evaluate to False"""
+            # guard against returning True if no conditions are valid
+            # end right away
+            wants = (char, styles, code, units, islowspace, ishighspace)
+            if not any(wants):
+                return False
+            finds = (matrix.char, matrix.styles, matrix.code, matrix.units,
+                     matrix.islowspace(), matrix.ishighspace())
+            # check all that apply and break on first mismatch
+            for wanted, found in zip(wants, finds):
+                if wanted and wanted != found:
+                    return False
+            # all conditions match
+            return True
+
+        results = [mat for mat in self.used_mats.values() if match(mat)]
+        return results
+
+    def select_one(self, *args, **kwargs):
+        """Get a matrix with denoted parameters"""
+        with suppress(IndexError):
+            search_results = self.select_many(*args, **kwargs)
+            return search_results[0]
+        raise bm.MatrixNotFound
+
+    def get_space(self, units=0, low=True, wedge=None):
+        """Find a suitable space in the diecase layout"""
+        def mismatch(checked_space):
+            """Calculate the unit difference between space's width
+            and desired unit width"""
+            wdg = wedge if wedge else self.wedge
+            # how much adjustment would be needed? single or double mat?
+            difference = units - wdg[checked_space.position.row]
+            low = checked_space.islowspace()
+            cells = checked_space.size.horizontal
+            # calculate minimum and maximum
+            limits = wdg.get_adjustment_limits(low_space=low, cell_width=cells)
+            shrink, stretch = limits.shrink, limits.stretch
+            return abs(difference) if -shrink < difference < stretch else -1
+
+        spaces = [mat for mat in self.spaces if mismatch(mat) >= 0 and
+                  mat.islowspace() == low and mat.ishighspace() != low]
+        matches = sorted(spaces, key=mismatch)
+        try:
+            return matches[0]
+        except IndexError:
+            # can't match a space no matter how we try
+            exc_message = 'Cannot find a {} space close enough to {} units.'
+            high_or_low = 'low' if low else 'high'
+            raise bm.MatrixNotFound(exc_message.format(high_or_low, units))
+
+    def select_row(self, row_number):
+        """Get all matrices from a given row"""
+        row_num = int(row_number)
+        return [mat for (_, r), mat in self.used_mats.items() if r == row_num]
+
+    def select_column(self, column):
+        """Get all matrices from a given column"""
+        col_num = column.upper()
+        return [mat for (c, _), mat in self.used_mats.items() if c == col_num]
+
+    def by_rows(self):
+        """Get all matrices row by row"""
+        return [self.select_row(row) for row in self.row_numbers]
+
+    def by_columns(self):
+        """Get all matrices column by column"""
+        return [self.select_column(col) for col in self.column_numbers]
+
+
+class Diecase(Layout, BaseModel):
     """Diecase: matrix case attributes and operations"""
     diecase_id = pw.TextField(db_column='diecase_id', primary_key=True)
     _typeface = pw.TextField(db_column='typeface', null=True,
                              help_text='JSON-encoded typeface metadata')
-    _wedge_name = pw.TextField(db_column='wedge_name', default='S5-12E',
-                               help_text='wedge series and set width')
-    _layout_json = pw.TextField(db_column='layout',
-                                help_text='JSON-encoded diecase layout')
-    _wedge, _layout = None, None
-
-    def __iter__(self):
-        return iter(self.matrices)
+    _wedge = pw.TextField(db_column='wedge_name', default='S5-12E',
+                          help_text='wedge series and set width')
+    _layout = pw.TextField(db_column='layout',
+                           help_text='JSON-encoded diecase layout')
 
     def __repr__(self):
         return ('<Diecase: {} - {}>'
@@ -58,11 +326,6 @@ class Diecase(BaseModel):
 
     def __call__(self):
         return self
-
-    @property
-    def matrices(self):
-        """Gets an iterator of mats, read-only, immutable"""
-        return (mat for mat in self.layout)
 
     @property
     def description(self):
@@ -88,7 +351,7 @@ class Diecase(BaseModel):
         """Get declared styles from typeface metadata
         or look them up in layout"""
         typeface_styles = bm.Styles(self.typeface_data)
-        return typeface_styles or self.layout.styles
+        return typeface_styles or super().styles
 
     @property
     def typeface_data(self):
@@ -145,352 +408,21 @@ class Diecase(BaseModel):
         """Return a mapping of UAVariant objects to styles."""
         return {s: ua for s, (_, ua) in self.typeface_data.items()}
 
-    @property
-    def wedge(self):
-        """Get a wedge based on wedge name stored in database"""
-        cached_wedge = self._wedge
-        if cached_wedge:
-            return cached_wedge
-        else:
-            # instantiate and store in cache until changed
-            wedge = bm.Wedge(wedge_name=self._wedge_name)
-            self._wedge = wedge
-            return wedge
+    def load(self):
+        """Loads all data - required when creating a new instance,
+        or reading one from database"""
+        self.load_layout(self._layout)
+        self.wedge = bm.Wedge(wedge_name=self._wedge)
+        return self
 
-    @wedge.setter
-    def wedge(self, wedge):
-        """Set a different wedge"""
-        with suppress(AttributeError, TypeError):
-            self._wedge = wedge
-            self._wedge_name = wedge.name
-
-    @property
-    def layout(self):
-        """Diecase layout model based on _layout_json.
-        If needed, lazily initialize the empty layout."""
-        layout = self._layout
-        if not layout:
-            layout = DiecaseLayout(self._layout_json, diecase=self)
-            self._layout = layout
-        return layout
-
-    @layout.setter
-    def layout(self, layout_object):
-        """Set the diecase layout object"""
-        self._layout = layout_object
-
-    def load_layout(self, layout=None):
-        """Build a DiecaseLayout() and store it on init"""
-        new_layout = layout or self._layout_json
-        self.layout = DiecaseLayout(layout=new_layout, diecase=self)
+    def store(self):
+        """Store information for saving in database"""
+        self.store_layout()
+        self._wedge = self.wedge.name
 
     def store_layout(self):
         """Save the layout canonical form to ORM"""
-        self._layout_json = self.layout.json_encoded
-
-
-class LayoutSize:
-    """Layout size class, used for accessing row and column number iterators.
-    Three sizes were used: 15x15 (oldest), 15x17, 16x17.
-    """
-    rows, columns = 15, 17
-
-    def __iter__(self):
-        return self.positions
-
-    def __repr__(self):
-        return '<LayoutSize: {s.rows}x{s.columns}>'.format(s=self)
-
-    def __str__(self):
-        name = ('HMN, KMN or unit-shift' if self.rows == 16
-                else 'extended: NI, NL' if self.columns == 17 else 'small')
-        return '{}x{} - {}'.format(self.rows, self.columns, name)
-
-    @property
-    def row_numbers(self):
-        """A tuple of row numbers"""
-        return tuple(range(1, self.rows + 1))
-
-    @row_numbers.setter
-    def row_numbers(self, row_numbers):
-        """Row numbers setter"""
-        with suppress(TypeError):
-            self.rows = 16 if len(row_numbers) > 15 else 15
-
-    @property
-    def column_numbers(self):
-        """A tuple of column numbers."""
-        if self.columns > 15 or self.rows > 15:
-            return ['NI', 'NL', *'ABCDEFGHIJKLMNO']
-        else:
-            return [*'ABCDEFGHIJKLMNO']
-
-    @column_numbers.setter
-    def column_numbers(self, column_numbers):
-        """Column numbers setter."""
-        with suppress(TypeError):
-            self.columns = 17 if len(column_numbers) > 15 else 15
-
-    @property
-    def positions(self):
-        """Gets all matrix positions for this layout"""
-        by_row = product(self.row_numbers, self.column_numbers)
-        return [d.Coordinates(column=col, row=row) for (row, col) in by_row]
-
-    def clean_layout(self, diecase=None):
-        """Generate an empty layout of a given size."""
-        # get coordinates to iterate over and build dict keys
-        new_layout = OrderedDict().fromkeys(self.positions)
-        # fill it with new empty matrices and define low/high spaces
-        for position in new_layout:
-            mat = bm.Matrix(char='', styles='*', diecase=diecase, units=0)
-            mat.position = position
-            # preset spaces
-            mat.set_lowspace(position in d.DEFAULT_LOW_SPACE_POSITIONS)
-            mat.set_highspace(position in d.DEFAULT_HIGH_SPACE_POSITIONS)
-            new_layout[position] = mat
-        return new_layout
-
-
-class DiecaseLayout(LayoutSize):
-    """Matrix case layout and outside characters data structure.
-    layout : a tuple/list of tuples/lists denoting matrices:
-              [(char, styles_string, position, units),...]
-    diecase : a Diecase() class object
-
-    Mats without position (None or empty string) will end up in the
-    outside characters collection."""
-    __slots__ = ('used_mats', 'outside_mats', '_diecase')
-    wedge = bm.Wedge()
-
-    def __init__(self, layout=None, diecase=None):
-        self.used_mats, self.outside_mats = {}, []
-        self._diecase = diecase
-        try:
-            self.json_encoded = layout
-        except (TypeError, json.JSONDecodeError):
-            self.raw = layout
-
-    def __repr__(self):
-        return ('<DiecaseLayout ({} rows, {} columns)>'
-                .format(self.rows, self.columns))
-
-    def __iter__(self):
-        return (mat for mat in self.used_mats.values())
-
-    def __contains__(self, obj):
-        return obj in self.used_mats.values()
-
-    @property
-    def diecase(self):
-        """Diecase class object associated with this layout"""
-        return self._diecase
-
-    @diecase.setter
-    def diecase(self, diecase):
-        """Diecase to use this layout with"""
-        self._diecase = diecase
-        for mat in self.all_mats:
-            mat.diecase = diecase
-
-    @property
-    def all_mats(self):
-        """A list of all matrices - both used and outside"""
-        return list(chain(self.used_mats.values(), self.outside_mats))
-
-    @property
-    def styles(self):
-        """Get all available character styles from the diecase layout."""
-        return sum(mat.styles for mat in self.all_mats
-                   if not mat.styles.use_all) or bm.Styles(None)
-
-    def get_charset(self, diecase_chars=True, outside_chars=False):
-        """Diecase character set"""
-        charset = {}
-        used = self.used_mats.values() if diecase_chars else []
-        unused = self.outside_mats if outside_chars else []
-        for mat in chain(used, unused):
-            if not mat.char or mat.isspace():
-                continue
-            for style in mat.styles:
-                charset.setdefault(style, {})[mat.char] = mat
-        return charset
-
-    def get_lookup_table(self, diecase_chars=True, outside_chars=False):
-        """Return a structure of {(mat char, style): mat}"""
-        used = self.used_mats.values() if diecase_chars else []
-        unused = self.outside_mats if outside_chars else []
-        return {(mat.char, style): mat for mat in chain(used, unused)
-                for style in mat.styles}
-
-    @property
-    def raw(self):
-        """Raw layout i.e. list of tuples with matrix parameters"""
-        all_mats = chain(self.used_mats.values(), self.outside_mats)
-        in_diecase = (mat.get_layout_record() for mat in all_mats)
-        outside = (mat.get_layout_record(pos='') for mat in self.outside_mats)
-        return [*in_diecase, *outside]
-
-    @raw.setter
-    def raw(self, raw_layout):
-        """Sort the raw layout into matrices in diecase and outside chars.
-        Accepts any iterator of (char, style_string, position, units)"""
-        try:
-            # Get matrices from supplied layout's canonical form
-            raw_records = (d.MatrixRecord(*record) for record in raw_layout)
-            mats = [bm.Matrix(char=rec.char, styles=rec.styles, code=rec.code,
-                              units=rec.units, diecase=self.diecase)
-                    for rec in raw_records]
-            # parse the source layout to get its size,
-            # reversing the order increases the chance of finding row 16 faster
-            for matrix in reversed(mats):
-                if matrix.position.row == 16:
-                    # finish here as the only 16-row diecases were 16x17
-                    self.rows, self.columns = 16, 17
-                    break
-                if matrix.position.column in ('NI', 'NL'):
-                    # update the columns number
-                    # iterate further because we can still find 16th row
-                    self.columns = 17
-        except (TypeError, ValueError):
-            # Layout supplied is incorrect; use a default size of 15x17
-            mats, self.rows, self.columns = [], 15, 17
-        # Build empty layout determining its size
-        used_mats = self.clean_layout(diecase=self.diecase)
-        # Fill it with matrices for existing positions
-        for mat in mats[:]:
-            position = mat.position
-            if used_mats.get(position):
-                used_mats[position] = mat
-                mats.remove(mat)
-        # The remaining mats will be stored in outside layout
-        self.used_mats, self.outside_mats = used_mats, mats
-
-    @property
-    def json_encoded(self):
-        """JSON-encoded list of tuples denoting matrices in the diecase."""
-        return json.dumps(self.raw)
-
-    @json_encoded.setter
-    def json_encoded(self, layout_json):
-        """Parse a JSON-encoded list to read a layout"""
-        self.raw = json.loads(layout_json)
-
-    @property
-    def spaces(self):
-        """Get all available spaces"""
-        return [mat for mat in self.used_mats.values() if mat.isspace()]
-
-    def purge(self):
-        """Resets the layout to an empty one of the same size"""
-        self.outside_mats = []
-        self.used_mats = self.clean_layout(diecase=self.diecase)
-
-    def resize(self, rows=15, columns=17):
-        """Rebuild the layout to adjust it to the new diecase format"""
-        # manipulate data structures locally
-        old_layout, old_extras = self.used_mats, self.outside_mats
-        new_extras = []
-        # resize
-        self.rows, self.columns = rows, columns
-        new_layout = self.clean_layout(diecase=self.diecase)
-        # preserve mats as outside characters when downsizing the layout
-        for position, mat in old_layout.items():
-            if new_layout.get(position):
-                # the new layout has a position for this matrix
-                new_layout[position] = mat
-            else:
-                # no place for it = put it in outside chars
-                new_extras.append(mat)
-        # pull the mats from outside layout to diecase automatically
-        # if so, remove them from outside layout
-        for mat in old_extras[:]:
-            position = mat.position
-            if new_layout.get(position) is not None:
-                # there is something at this position
-                new_layout[position] = mat
-                old_extras.remove(mat)
-        # finally update the instance attributes
-        self.used_mats = new_layout
-        self.outside_mats = old_extras + new_extras
-
-    def select_many(self, char=None, styles=None, code=None, units=None,
-                    islowspace=None, ishighspace=None):
-        """Get all matrices with matching parameters"""
-        def match(matrix):
-            """Test the matrix for conditions unless they evaluate to False"""
-            # guard against returning True if no conditions are valid
-            # end right away
-            wants = (char, styles, code, units, islowspace, ishighspace)
-            if not any(wants):
-                return False
-            finds = (matrix.char, matrix.styles, matrix.code, matrix.units,
-                     matrix.islowspace(), matrix.ishighspace())
-            # check all that apply and break on first mismatch
-            for wanted, found in zip(wants, finds):
-                if wanted and wanted != found:
-                    return False
-            # all conditions match
-            return True
-
-        results = [mat for mat in self.used_mats.values() if match(mat)]
-        return results
-
-    def select_one(self, *args, **kwargs):
-        """Get a matrix with denoted parameters"""
-        with suppress(IndexError):
-            search_results = self.select_many(*args, **kwargs)
-            return search_results[0]
-        raise bm.MatrixNotFound
-
-    def get_space(self, units=0, low=True, wedge=None):
-        """Find a suitable space in the diecase layout"""
-        def mismatch(checked_space):
-            """Calculate the unit difference between space's width
-            and desired unit width"""
-            if wedge:
-                wdg = wedge
-            elif self.diecase:
-                wdg = self.diecase.wedge
-            else:
-                wdg = bm.Wedge()
-            # how much adjustment would be needed? single or double mat?
-            difference = units - wdg[checked_space.position.row]
-            low = checked_space.islowspace()
-            cells = checked_space.size.horizontal
-            # calculate minimum and maximum
-            limits = wdg.get_adjustment_limits(low_space=low, cell_width=cells)
-            shrink, stretch = limits.shrink, limits.stretch
-            return abs(difference) if -shrink < difference < stretch else -1
-
-        spaces = [mat for mat in self.spaces if mismatch(mat) >= 0 and
-                  mat.islowspace() == low and mat.ishighspace() != low]
-        matches = sorted(spaces, key=mismatch)
-        try:
-            return matches[0]
-        except IndexError:
-            # can't match a space no matter how we try
-            exc_message = 'Cannot find a {} space close enough to {} units.'
-            high_or_low = 'low' if low else 'high'
-            raise bm.MatrixNotFound(exc_message.format(high_or_low, units))
-
-    def select_row(self, row_number):
-        """Get all matrices from a given row"""
-        row_num = int(row_number)
-        return [mat for (_, r), mat in self.used_mats.items() if r == row_num]
-
-    def select_column(self, column):
-        """Get all matrices from a given column"""
-        col_num = column.upper()
-        return [mat for (c, _), mat in self.used_mats.items() if c == col_num]
-
-    def by_rows(self):
-        """Get all matrices row by row"""
-        return [self.select_row(row) for row in self.row_numbers]
-
-    def by_columns(self):
-        """Get all matrices column by column"""
-        return [self.select_column(col) for col in self.column_numbers]
+        self._layout = json.dumps(self.get_raw_layout())
 
 
 class UnitArrangement:

@@ -85,7 +85,7 @@ def edit_matrix(matrix, single=True):
             """Move the old mat to outside characters, and replace it with
             a new mat"""
             current.code = None
-            layout.outside_mats.append(current)
+            diecase.outside_mats.append(current)
             new.code = code
 
         def swap(new, current):
@@ -96,10 +96,10 @@ def edit_matrix(matrix, single=True):
                         default=matrix.code or '').upper()
         try:
             # look for a mat in the target position
-            layout = matrix.diecase.layout
+            diecase = matrix.diecase
             if not code:
-                layout.outside_mats.append(matrix)
-            current_mat = layout.select_one(code=code)
+                diecase.outside_mats.append(matrix)
+            current_mat = diecase.select_one(code=code)
             if current_mat:
                 UI.display('There is already a mat in the target position.')
                 question = 'What to do with {}?'.format(current_mat)
