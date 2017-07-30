@@ -189,7 +189,7 @@ class Diecase(BaseModel):
         self._layout_json = self.layout.json_encoded
 
 
-class DiecaseLayout:
+class DiecaseLayout(bm.LayoutSize):
     """Matrix case layout and outside characters data structure.
     layout : a tuple/list of tuples/lists denoting matrices:
               [(char, styles_string, position, units),...]
@@ -209,7 +209,7 @@ class DiecaseLayout:
 
     def __repr__(self):
         return ('<DiecaseLayout ({} rows, {} columns)>'
-                .format(self.size.rows, self.size.columns))
+                .format(self.rows, self.columns))
 
     def __iter__(self):
         return (mat for mat in self.used_mats.values())
@@ -228,18 +228,6 @@ class DiecaseLayout:
         self._diecase = diecase
         for mat in self.all_mats:
             mat.diecase = diecase
-
-    @property
-    def size(self):
-        """Get the LayoutSize for this diecase layout."""
-        rows = len({row for (_, row) in self.used_mats})
-        columns = len({column for (column, _) in self.used_mats})
-        return bm.LayoutSize(rows=rows, columns=columns)
-
-    @size.setter
-    def size(self, size):
-        """Resize the diecase layout"""
-        self.resize(*size)
 
     @property
     def all_mats(self):
@@ -283,7 +271,6 @@ class DiecaseLayout:
     def raw(self, raw_layout):
         """Sort the raw layout into matrices in diecase and outside chars.
         Accepts any iterator of (char, style_string, position, units)"""
-        size = bm.LayoutSize(15, 15)
         try:
             # Get matrices from supplied layout's canonical form
             raw_records = (d.MatrixRecord(*record) for record in raw_layout)
@@ -295,17 +282,17 @@ class DiecaseLayout:
             for matrix in reversed(mats):
                 if matrix.position.row == 16:
                     # finish here as the only 16-row diecases were 16x17
-                    size.rows, size.columns = 16, 17
+                    self.rows, self.columns = 16, 17
                     break
                 if matrix.position.column in ('NI', 'NL'):
                     # update the columns number
                     # iterate further because we can still find 16th row
-                    size.columns = 17
+                    self.columns = 17
         except (TypeError, ValueError):
             # Layout supplied is incorrect; use a default size of 15x17
-            mats, size.rows, size.columns = [], 15, 17
+            mats, self.rows, self.columns = [], 15, 17
         # Build empty layout determining its size
-        used_mats = size.clean_layout(diecase=self.diecase)
+        used_mats = self.clean_layout(diecase=self.diecase)
         # Fill it with matrices for existing positions
         for mat in mats[:]:
             position = mat.position
@@ -333,17 +320,16 @@ class DiecaseLayout:
     def purge(self):
         """Resets the layout to an empty one of the same size"""
         self.outside_mats = []
-        self.used_mats = self.size.clean_layout(diecase=self.diecase)
+        self.used_mats = self.clean_layout(diecase=self.diecase)
 
     def resize(self, rows=15, columns=17):
         """Rebuild the layout to adjust it to the new diecase format"""
         # manipulate data structures locally
-        old_layout = self.used_mats
-        new_size = bm.LayoutSize(rows, columns)
-        new_layout = new_size.clean_layout(diecase=self.diecase)
-        # new list of outside characters
-        old_extras = self.outside_mats
+        old_layout, old_extras = self.used_mats, self.outside_mats
         new_extras = []
+        # resize
+        self.rows, self.columns = rows, columns
+        new_layout = self.clean_layout(diecase=self.diecase)
         # preserve mats as outside characters when downsizing the layout
         for position, mat in old_layout.items():
             if new_layout.get(position):
@@ -356,7 +342,7 @@ class DiecaseLayout:
         # if so, remove them from outside layout
         for mat in old_extras[:]:
             position = mat.position
-            if new_layout.get(position):
+            if new_layout.get(position) is not None:
                 # there is something at this position
                 new_layout[position] = mat
                 old_extras.remove(mat)
@@ -436,11 +422,11 @@ class DiecaseLayout:
 
     def by_rows(self):
         """Get all matrices row by row"""
-        return [self.select_row(row) for row in self.size.row_numbers]
+        return [self.select_row(row) for row in self.row_numbers]
 
     def by_columns(self):
         """Get all matrices column by column"""
-        return [self.select_column(col) for col in self.size.column_numbers]
+        return [self.select_column(col) for col in self.column_numbers]
 
 
 class UnitArrangement:

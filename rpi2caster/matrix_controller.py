@@ -291,7 +291,7 @@ def edit_layout(layout):
     def single_row():
         """Edits matrices found in a single row"""
         row = UI.enter('Row?', datatype=int, default='',
-                       minimum=1, maximum=layout.size.rows)
+                       minimum=1, maximum=layout.rows)
         for mat in layout.select_row(row):
             edit(mat)
 
@@ -299,9 +299,9 @@ def edit_layout(layout):
         """Edits matrices found in a single column"""
         def condition(col_num):
             """Validation condition for column number"""
-            return col_num.upper() in layout.size.column_numbers
+            return col_num.upper() in layout.column_numbers
 
-        prompt = 'Column? [{}]'.format(', '.join(layout.size.column_numbers))
+        prompt = 'Column? [{}]'.format(', '.join(layout.column_numbers))
         column = UI.enter(prompt, default='', condition=condition).upper()
         for mat in layout.select_column(column):
             edit(mat)
@@ -752,7 +752,9 @@ class DiecaseMixin:
                    option(key='r', value=self.resize_layout, seq=89,
                           cond=is_stored,
                           text='Change the diecase layout size',
-                          desc='Current: {}'.format(self.diecase.layout.size)),
+                          desc=('Current: {} x {}'
+                                .format(self.diecase.layout.rows,
+                                        self.diecase.layout.columns))),
                    option(key='n', value=_clear_layout, cond=is_stored,
                           text='Clear the diecase layout', seq=90),
                    option(key='ctrl_s', value=_save, seq=91,

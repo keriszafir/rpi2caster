@@ -570,11 +570,7 @@ class LayoutSize:
     """Layout size class, used for accessing row and column number iterators.
     Three sizes were used: 15x15 (oldest), 15x17, 16x17.
     """
-    __slots__ = ('rows', 'columns')
-
-    def __init__(self, rows=15, columns=17, *_):
-        self.rows = 16 if rows > 15 else 15
-        self.columns = 17 if rows >= 16 or columns > 15 else 15
+    rows, columns = 15, 17
 
     def __iter__(self):
         return self.positions

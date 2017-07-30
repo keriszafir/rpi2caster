@@ -194,7 +194,7 @@ def display_layout(layout):
     def get_column_widths():
         """calculate column widths to adjust the content"""
         # 3 characters to start is reasonable enough
-        columns = layout.size.column_numbers
+        columns = layout.column_numbers
         column_widths = OrderedDict((name, 3) for name in columns)
 
         # get the maximum width of characters in every column
@@ -274,7 +274,7 @@ def display_layout(layout):
     header.update({col: col for col in widths})
     header = template.format(**header)
     # proper layout
-    contents = (build_row(num) for num in layout.size.row_numbers)
+    contents = (build_row(num) for num in layout.row_numbers)
     # table description
     desc = build_description()
     # put the thing together
