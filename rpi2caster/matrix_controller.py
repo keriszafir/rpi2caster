@@ -262,61 +262,61 @@ def resize_layout(diecase):
     diecase.resize(*selected_size)
 
 
-def edit_layout(layout):
+def edit_layout(diecase):
     """Edits a matrix case layout, row by row, matrix by matrix.
     Allows to enter a position to be edited. """
     def swap():
         """Swap two matrices based on command"""
         mat1_code = UI.enter('Matrix position to replace?')
-        mat1 = layout.select_one(code=mat1_code)
+        mat1 = diecase.select_one(code=mat1_code)
         mat2_code = UI.enter('Other matrix position?')
-        mat2 = layout.select_one(code=mat2_code)
+        mat2 = diecase.select_one(code=mat2_code)
         # no exceptions? then swap
         mat1.code, mat2.code = mat2.code, mat1.code
 
     def edit(mat, single=False):
         """Edit a matrix"""
-        views.display_layout(layout)
+        views.display_layout(diecase)
         mat = bc.edit_matrix(mat, single=single)
 
     def all_rows():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
-        for mat in sum(layout.by_rows(), []):
+        for mat in sum(diecase.by_rows(), []):
             edit(mat)
 
     def all_columns():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
-        for mat in sum(layout.by_columns(), []):
+        for mat in sum(diecase.by_columns(), []):
             edit(mat)
 
     def single_row():
         """Edits matrices found in a single row"""
         row = UI.enter('Row?', datatype=int, default='',
-                       minimum=1, maximum=layout.rows)
-        for mat in layout.select_row(row):
+                       minimum=1, maximum=diecase.rows)
+        for mat in diecase.select_row(row):
             edit(mat)
 
     def single_column():
         """Edits matrices found in a single column"""
         def condition(col_num):
             """Validation condition for column number"""
-            return col_num.upper() in layout.column_numbers
+            return col_num.upper() in diecase.column_numbers
 
-        prompt = 'Column? [{}]'.format(', '.join(layout.column_numbers))
+        prompt = 'Column? [{}]'.format(', '.join(diecase.column_numbers))
         column = UI.enter(prompt, default='', condition=condition).upper()
-        for mat in layout.select_column(column):
+        for mat in diecase.select_column(column):
             edit(mat)
 
     def single_matrix():
         """Edits a single matrix with specified coordinates"""
         position = UI.enter('Coordinates?', default='')
-        mat = layout.select_one(code=position.upper())
+        mat = diecase.select_one(code=position.upper())
         edit(mat, single=True)
 
     def show_layout():
         """Shows diecase layout and pauses"""
         UI.display('\nCurrent diecase layout:\n')
-        views.display_layout(layout)
+        views.display_layout(diecase)
         UI.pause()
 
     def options():
@@ -333,7 +333,7 @@ def edit_layout(layout):
                option(key='s', value=swap, text='Swap two matrices', seq=60),
                option(key='l', value=show_layout,
                       text='View current layout', seq=70),
-               option(key='Ins', value=layout.diecase.store_layout,
+               option(key='Ins', value=diecase.store_layout,
                       text='Save the changes in diecase layout', seq=80),
                option(key='Esc', value=Finish, text='Finish editing', seq=99)]
         return ret
