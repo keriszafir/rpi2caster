@@ -13,9 +13,8 @@ from librpi2caster import ON, OFF, CASTING, PUNCHING, HMN, KMN, UNITSHIFT
 # Intra-package imports
 from .rpi2caster import UI, Abort, option
 from .parsing import parse_record
-from .basic_controllers import choose_wedge
 from .basic_models import Matrix
-from .matrix_controller import get_wedge_positions
+from .matrix_controller import get_wedge_positions, choose_wedge
 
 
 def handle_communication_error(routine):

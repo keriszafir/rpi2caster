@@ -10,7 +10,7 @@ from . import basic_models as bm, definitions as d
 from .rpi2caster import UI
 from .data import TYPEFACES, UNIT_ARRANGEMENTS
 from .data import WEDGE_ALIASES, WEDGE_DEFINITIONS
-from .main_models import Typeface, UnitArrangement
+from .main_models import Typeface, UnitArrangement, Wedge
 
 
 # Wedge views
@@ -272,7 +272,7 @@ def display_layout(diecase):
     try:
         wedge = diecase.wedge
     except AttributeError:
-        wedge = bm.Wedge()
+        wedge = Wedge()
     # table row template
     widths = get_column_widths()
     fields = ' '.join(' {{{col}:^{width}}} '.format(col=col, width=width)

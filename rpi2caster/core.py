@@ -12,7 +12,7 @@ import qrcode
 
 from .rpi2caster import UI, Abort, Finish, option, find_casters
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .matrix_controller import count_diecases, temp_diecase
+from .matrix_controller import count_diecases, temp_diecase, temp_wedge
 from .parsing import parse_record
 from .typesetting import TypesettingContext
 
@@ -270,7 +270,7 @@ class Casting(TypesettingContext):
 
     @cast_this
     @temp_diecase
-    @bc.temp_wedge
+    @temp_wedge
     @bc.temp_measure
     def cast_material(self):
         """Cast typesetting material: typecases, specified sorts, spaces"""
@@ -495,7 +495,7 @@ class Casting(TypesettingContext):
         return ribbon
 
     @cast_this
-    @bc.temp_wedge
+    @temp_wedge
     def cast_qr_code(self):
         """Set up and cast a QR code which can be printed and then scanned
         with a mobile device."""
@@ -590,7 +590,7 @@ class Casting(TypesettingContext):
 
     @cast_this
     @temp_diecase
-    @bc.temp_wedge
+    @temp_wedge
     @bc.temp_measure
     def quick_typesetting(self):
         """Allows us to use caster for casting single lines.
@@ -614,62 +614,32 @@ class Casting(TypesettingContext):
 
     @cast_this
     @temp_diecase
-    @bc.temp_wedge
+    @temp_wedge
     def diecase_proof(self):
         """Tests the whole diecase, casting from each matrix.
         Casts spaces between characters to be sure that the resulting
         type will be of equal width."""
-        def get_codes(matrix, wedges):
-            """add codes with single justification if necessary"""
-            combinations = []
-            wedges_needed = wedges != (3, 8)
-            code = matrix.get_ribbon_record(s_needle=wedges_needed)
-            combinations.append(code)
-            if wedges_needed:
-                combinations.append('NKS 0075 {}'.format(wedges.pos_0075))
-                combinations.append('NJS 0005 {}'.format(wedges.pos_0005))
-            return combinations
-
-        def add_matrix(matrix):
-            """a matrix and a space"""
-            # keep track of spaces too narrow to cast
-            nonlocal leftover_units
-            mat_units = self.get_units(matrix)
-            space_units = 22 + leftover_units - mat_units
-            leftover_units = 0
-            try:
-                mat_wedges = self.get_wedge_positions(matrix, mat_units)
-            except bm.TypesettingError:
-                # adjust char width as far as possible,
-                # take away or add the rest to the space instead
-                limits = self.wedge.get_adjustment_limits()
-                row_units = matrix.get_units_from_row(wedge_used=self.wedge)
-                if mat_units < row_units - limits.shrink:
-                    # character too narrow for its row
-                    space_units -= (row_units - mat_units - limits.shrink)
-                    mat_units = row_units - limits.shrink
-                elif mat_units > row_units + limits.stretch:
-                    # character too wide for its row
-                    space_units += (mat_units - row_units - limits.stretch)
-                    mat_units = row_units + limits.stretch
-                mat_wedges = self.get_wedge_positions(matrix, mat_units)
-            # get these signals
-            mat_codes = get_codes(matrix, mat_wedges)
-            # omit spaces not wide enough
-            if space_units >= 3:
+        def make_space(row_number):
+            """Calculate the width, number and wedge positions of a space"""
+            char_width = self.wedge[row_number]
+            fill_width = column_width - char_width
+            for num_spaces in range(1, 6):
+                # look for a number of spaces to fill the missing units
+                space_width = fill_width / num_spaces
                 try:
-                    # high spaces are preferred
-                    space = self.find_space(space_units, low=False)
-                except bm.MatrixNotFound:
-                    # then we have to do with a low one...
-                    space = self.find_space(space_units, low=True)
-                sp_wedges = self.get_wedge_positions(space, space_units)
-                space_codes = get_codes(space, sp_wedges)
-            else:
-                space_codes = []
-                leftover_units += space_units
-            # characters should be separated by at least one space
-            return space_codes + mat_codes
+                    space = self.find_space(space_width, low=True)
+                    sp_wedges = self.get_wedge_positions(space, space_width)
+                    use_s_needle = sp_wedges != (3, 8)
+                    space_code = space.get_ribbon_record(s_needle=use_s_needle)
+                    return ([space_code] * num_spaces, sp_wedges)
+                except (bm.MatrixNotFound, bm.TypesettingError):
+                    # try more
+                    continue
+
+        def build(row_number, spaces):
+            """Build a row of matrices and spaces"""
+            return sum(([*spaces, matrix.get_ribbon_record()]
+                        for matrix in self.diecase.select_row(row_number)), [])
 
         if self.diecase:
             self.display_diecase_layout()
@@ -680,18 +650,20 @@ class Casting(TypesettingContext):
         if not UI.confirm('Proceed?', default=True, abort_answer=False):
             return
 
+        # start with finishing galley trip and line out
         queue = ['NJS 0005', 'NKJS 0075 0005']
         quad = self.quad.get_ribbon_record()
-        pos_0075, pos_0005 = 3, 8
-        leftover_units = 0
+        # how wide will each column be?
+        min_space_width = self.diecase.get_min_space_width()
+        column_width = max(self.wedge[15] + min_space_width, 25)
         # build the layout one by one
-        for number, row in enumerate(self.diecase.by_rows(), start=1):
-            UI.display('Processing row {}'.format(number))
+        for row_number in self.diecase.row_numbers:
+            # starting quad
             queue.append(quad)
-            for mat in row:
-                queue.extend(add_matrix(mat))
-            leftover_units = 0
-            # single justification for line start
+            # codes for spaces; wedge positions
+            spaces, (pos_0075, pos_0005) = make_space(row_number)
+            queue.extend(build(row_number, spaces))
+            # ending quad
             queue.append(quad)
             queue.append('NKS 0075 {}'.format(pos_0075))
             queue.append('NKJS 0075 0005 {}'.format(pos_0005))

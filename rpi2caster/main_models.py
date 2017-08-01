@@ -32,70 +32,150 @@ class BaseModel(pw.Model):
             return tables.get(model_name) or '{}s'.format(model_name.lower())
 
 
-class LayoutBase:
-    """Layout base class, used for accessing row and column number iterators.
-    Three sizes were used: 15x15 (oldest), 15x17, 16x17.
-    """
-    rows, columns = 15, 17
+class Wedge:
+    """Default S5-12E wedge, unless otherwise specified"""
+    __slots__ = ('series', 'set_width', 'is_brit_pica', '_units')
 
-    def __iter__(self):
-        return self.positions
-
-    def __repr__(self):
-        return '<LayoutSize: {s.rows}x{s.columns}>'.format(s=self)
+    def __init__(self, wedge_name='', wedge_data=None):
+        w_data = wedge_data or {}
+        if wedge_name:
+            self.name = wedge_name
+        else:
+            self.series = w_data.get('series', '5')
+            self.set_width = w_data.get('set_width', 12.0)
+            self.is_brit_pica = w_data.get('is_brit_pica', True)
+            self._units = w_data.get('units', d.S5)
 
     def __str__(self):
-        name = ('HMN, KMN or unit-shift' if self.rows == 16
-                else 'extended: NI, NL' if self.columns == 17 else 'small')
-        return '{}x{} - {}'.format(self.rows, self.columns, name)
+        return self.name
+
+    def __repr__(self):
+        return '<Wedge: {}>'.format(self.name)
+
+    def __getitem__(self, row):
+        return self.units[row]
+
+    def __bool__(self):
+        return True
 
     @property
-    def row_numbers(self):
-        """A tuple of row numbers"""
-        return tuple(range(1, self.rows + 1))
-
-    @row_numbers.setter
-    def row_numbers(self, row_numbers):
-        """Row numbers setter"""
-        with suppress(TypeError):
-            self.rows = 16 if len(row_numbers) > 15 else 15
+    def pica(self):
+        """Get the pica base of the wedge. Two values were used:
+            .1667" (old British pica, European wedges), also: DTP pica,
+            .1660" (new British, American), also: TeX pica."""
+        return 0.1667 if self.is_brit_pica else 0.166
 
     @property
-    def column_numbers(self):
-        """A tuple of column numbers."""
-        if self.columns > 15 or self.rows > 15:
-            return ['NI', 'NL', *'ABCDEFGHIJKLMNO']
-        else:
-            return [*'ABCDEFGHIJKLMNO']
+    def name(self):
+        """Gets a wedge name - for example S5-12.25E.
+        S (for stopbar) is prepended by convention.
+        E is appended whenever the wedge is based on pica = .1667".
+        """
+        # Truncate the fractional part of the set width if it's an integer
+        set_w = self.set_width if self.set_width % 1 else int(self.set_width)
 
-    @column_numbers.setter
-    def column_numbers(self, column_numbers):
-        """Column numbers setter."""
-        with suppress(TypeError):
-            self.columns = 17 if len(column_numbers) > 15 else 15
+        name = 'S{series}-{set_width}{european_suffix}'
+        return name.format(series=self.series, set_width=set_w,
+                           european_suffix=self.is_brit_pica * 'E')
+
+    @name.setter
+    def name(self, wedge_name):
+        """Parse the wedge name to get series, set width, unit values
+        and whether the wedge is British pica."""
+        if not wedge_name:
+            # use default S5
+            return
+        try:
+            # For countries that use comma as decimal delimiter,
+            # convert to point:
+            wedge_name = str(wedge_name).replace(',', '.').upper().strip()
+            # Check if this is an European wedge
+            # (these were based on pica = .1667" )
+            is_brit_pica = wedge_name.endswith('E')
+            # Away with the initial S, final E and any spaces before and after
+            # Make it work with space or dash as delimiter
+            wedge = wedge_name.strip('SE ').replace('-', ' ').split(' ')
+            series, raw_set_w = wedge
+            # get the set width i.e. float approximated to .25
+            set_w_str = ''.join(x for x in raw_set_w
+                                if x.isnumeric() or x is '.')
+            set_width = float(set_w_str) // 0.25 * 0.25
+            # try to get the unit values, otherwise S5
+            units = data.WEDGE_DEFINITIONS.get(series, d.S5)
+            # update the attributes
+            self.series, self.set_width = series, set_width
+            self.is_brit_pica, self.units = is_brit_pica, units
+        except (TypeError, AttributeError, ValueError):
+            # In case parsing goes wrong
+            raise ValueError('Cannot parse wedge name {}'.format(wedge_name))
 
     @property
-    def positions(self):
-        """Gets all matrix positions for this layout"""
-        by_row = product(self.row_numbers, self.column_numbers)
-        return [d.Coordinates(column=col, row=row) for (row, col) in by_row]
+    def parameters(self):
+        """Gets a list of parameters"""
+        em_inches = round(self.pica * self.set_width / 12, 5)
+        parameters = OrderedDict()
+        parameters['Wedge designation'] = self.name
+        parameters['Inch width of 18 units [1em]'] = em_inches
+        parameters['Units per row'] = ' '.join(str(x) for x in self.units if x)
+        return parameters
 
-    def clean_layout(self):
-        """Generate an empty layout of a given size."""
-        # get coordinates to iterate over and build dict keys
-        new_layout = OrderedDict().fromkeys(self.positions)
-        # fill it with new empty matrices and define low/high spaces
-        for position in new_layout:
-            mat = bm.Matrix(char='', styles='*', diecase=self, units=0)
-            mat.position = position
-            # preset spaces
-            mat.set_lowspace(position in d.DEFAULT_LOW_SPACE_POSITIONS)
-            mat.set_highspace(position in d.DEFAULT_HIGH_SPACE_POSITIONS)
-            new_layout[position] = mat
-        return new_layout
+    @property
+    def units(self):
+        """Gets the unit values for the wedge's rows"""
+        units = self._units or d.S5
+        # Add 0 at the beginning so that the list can be indexed with
+        # row numbers - i.e. units[1] for row 1
+        if units[0] is not 0:
+            units = [0] + units
+        # Ensure that wedge has 0 + 16 steps - i.e. length is 17
+        # Keep adding the last value until we have enough
+        while len(units) < 17:
+            units.append(units[-1])
+        return units
+
+    @units.setter
+    def units(self, units):
+        """Sets the wedge unit values"""
+        self._units = units
+
+    def units_to_inches(self, units=1):
+        """Convert units to inches, based on wedge's set width and pica def"""
+        return round(units * self.set_width * self.pica / 216, 2)
+
+    def get_adjustment_limits(self, low_space=False, cell_width=1):
+        """Get the unit adjustment limits for this wedge.
+        Without adjustment, the character has the same width as if the
+        wedges were at 3/8.
+
+        lower limit is reached at 1/1 0075 and 0005 wedge positions,
+        max shrink is 3/8 - 1/1 = 2/7 => 2 * 0.0075 + 7 * 0.0005 = 0.0185"
+
+        upper limit is reached at 15/15,
+        max stretch is 15/15 - 3/8 = 12/7 => 12 * 0.0075 + 7 * 0.0005 = 0.0935"
+
+        Constraints:
+            Single-cell matrices have max .18" width for safety.
+            Double-cell (large composition, wide characters) are .38"
+            Otherwise the mould opening would not be covered by the matrix,
+            leading to lead splashing over the diecase.
+
+            Low spaces don't have this constraint as the upper mould blade
+            prevents the lead from even reaching the diecase.
+
+        Calculate this to wedge set units.
+        Return positive integers.
+        """
+        # upper limit based on parameters
+        stretch_inches = 0.0935
+        cap = 0.18 + (cell_width - 1) * 0.2
+        maximum = stretch_inches if low_space else min(stretch_inches, cap)
+        # calculate adjustment range in units
+        shrink = int(18 * 12 * 0.0185 / self.pica / self.set_width)
+        stretch = int(18 * 12 * maximum / self.pica / self.set_width)
+        return d.WedgeLimits(shrink, stretch)
 
 
-class Layout(LayoutBase):
+class Layout:
     """Matrix case layout and outside characters data structure.
     layout : a tuple/list of tuples/lists denoting matrices:
               [(char, styles_string, position, units),...]
@@ -103,8 +183,9 @@ class Layout(LayoutBase):
 
     Mats without position (None or empty string) will end up in the
     outside characters collection."""
+    rows, columns = 15, 17
     used_mats, outside_mats = {}, []
-    wedge = bm.Wedge()
+    wedge = Wedge()
 
     def __repr__(self):
         return ('<Layout ({} rows, {} columns)>'
@@ -122,10 +203,47 @@ class Layout(LayoutBase):
         return list(chain(self.used_mats.values(), self.outside_mats))
 
     @property
-    def styles(self):
-        """Get all available character styles from the diecase layout."""
-        return sum(mat.styles for mat in self.all_mats
-                   if not mat.styles.use_all) or bm.Styles(None)
+    def positions(self):
+        """Gets all matrix positions for this layout"""
+        by_row = product(self.row_numbers, self.column_numbers)
+        return [d.Coordinates(column=col, row=row) for (row, col) in by_row]
+
+    @property
+    def row_numbers(self):
+        """A tuple of row numbers"""
+        return tuple(range(1, self.rows + 1))
+
+    @property
+    def column_numbers(self):
+        """A tuple of column numbers."""
+        if self.columns > 15 or self.rows > 15:
+            return ['NI', 'NL', *'ABCDEFGHIJKLMNO']
+        else:
+            return [*'ABCDEFGHIJKLMNO']
+
+    def select_row(self, row_number):
+        """Get all matrices from a given row"""
+        row_num = int(row_number)
+        return [mat for (_, r), mat in self.used_mats.items() if r == row_num]
+
+    def select_column(self, column):
+        """Get all matrices from a given column"""
+        col_num = column.upper()
+        return [mat for (c, _), mat in self.used_mats.items() if c == col_num]
+
+    def clean_layout(self):
+        """Generate an empty layout of a given size."""
+        # get coordinates to iterate over and build dict keys
+        new_layout = OrderedDict().fromkeys(self.positions)
+        # fill it with new empty matrices and define low/high spaces
+        for position in new_layout:
+            mat = bm.Matrix(char='', styles='*', diecase=self, units=0)
+            mat.position = position
+            # preset spaces
+            mat.set_lowspace(position in d.DEFAULT_LOW_SPACE_POSITIONS)
+            mat.set_highspace(position in d.DEFAULT_HIGH_SPACE_POSITIONS)
+            new_layout[position] = mat
+        return new_layout
 
     def get_charset(self, diecase_chars=True, outside_chars=False):
         """Diecase character set"""
@@ -192,11 +310,6 @@ class Layout(LayoutBase):
         # The remaining mats will be stored in outside layout
         self.used_mats, self.outside_mats = used_mats, mats
 
-    @property
-    def spaces(self):
-        """Get all available spaces"""
-        return [mat for mat in self.used_mats.values() if mat.isspace()]
-
     def purge(self):
         """Resets the layout to an empty one of the same size"""
         self.outside_mats = []
@@ -259,6 +372,11 @@ class Layout(LayoutBase):
             return search_results[0]
         raise bm.MatrixNotFound
 
+    @property
+    def spaces(self):
+        """Get all available spaces"""
+        return [mat for mat in self.used_mats.values() if mat.isspace()]
+
     def get_space(self, units=0, low=True, wedge=None):
         """Find a suitable space in the diecase layout"""
         def mismatch(checked_space):
@@ -285,23 +403,15 @@ class Layout(LayoutBase):
             high_or_low = 'low' if low else 'high'
             raise bm.MatrixNotFound(exc_message.format(high_or_low, units))
 
-    def select_row(self, row_number):
-        """Get all matrices from a given row"""
-        row_num = int(row_number)
-        return [mat for (_, r), mat in self.used_mats.items() if r == row_num]
+    def get_min_space_width(self, high_space=False):
+        """Find the minimum space width for the diecase"""
+        return min(space.get_min_units() for space in self.spaces
+                   if space.ishighspace() == high_space)
 
-    def select_column(self, column):
-        """Get all matrices from a given column"""
-        col_num = column.upper()
-        return [mat for (c, _), mat in self.used_mats.items() if c == col_num]
-
-    def by_rows(self):
-        """Get all matrices row by row"""
-        return [self.select_row(row) for row in self.row_numbers]
-
-    def by_columns(self):
-        """Get all matrices column by column"""
-        return [self.select_column(col) for col in self.column_numbers]
+    def get_max_space_width(self, high_space=False):
+        """Find the maximum space width for the diecase"""
+        return max(space.get_max_units() for space in self.spaces
+                   if space.ishighspace() == high_space)
 
 
 class Diecase(Layout, BaseModel):
@@ -347,11 +457,20 @@ class Diecase(Layout, BaseModel):
         return parameters
 
     @property
+    def layout_styles(self):
+        """Get all available character styles from the diecase layout."""
+        return sum(mat.styles for mat in self.all_mats
+                   if not mat.styles.use_all) or bm.Styles(None)
+
+    @property
+    def typeface_styles(self):
+        """Get the typeface styles for this diecase"""
+        return bm.Styles(self.typeface_data)
+
+    @property
     def styles(self):
-        """Get declared styles from typeface metadata
-        or look them up in layout"""
-        typeface_styles = bm.Styles(self.typeface_data)
-        return typeface_styles or super().styles
+        """Get all styles, both defined for typeface and for layout"""
+        return self.typeface_styles + self.layout_styles
 
     @property
     def typeface_data(self):
@@ -412,7 +531,7 @@ class Diecase(Layout, BaseModel):
         """Loads all data - required when creating a new instance,
         or reading one from database"""
         self.load_layout(self._layout)
-        self.wedge = bm.Wedge(wedge_name=self._wedge)
+        self.wedge = Wedge(wedge_name=self._wedge)
         return self
 
     def store(self):
@@ -429,7 +548,7 @@ class UnitArrangement:
     """Unit arrangement definition.
     Can contain one or more variants for different type styles.
     """
-    variant_sequence = ('r', 'i', 's', 'ar', 'ai', 'as', 'br', 'g'
+    variant_sequence = ('r', 'i', 's', 'ar', 'ai', 'as', 'br', 'g',
                         's1', 's2', 's3', 's4', 's5')
     variant_definitions = dict(r=('regular', 'roman or the only style'),
                                i=('italic', ''),
@@ -483,8 +602,8 @@ class UnitArrangement:
     @property
     def variant_names(self):
         """Get a string with UA variant names and letters"""
-        return ', '.join('{}: {}'.format(s, self.variant_definitions[s][0])
-                         for s in self.variant_sequence)
+        return ',\n'.join('{}: {}'.format(s, self.variant_definitions[s][0])
+                          for s in self.variant_sequence)
 
 
 class UAVariant(UnitArrangement):

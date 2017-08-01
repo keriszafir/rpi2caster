@@ -10,8 +10,8 @@ from functools import wraps
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from . import views
 from .rpi2caster import USER_DATA_DIR, UI, Abort, Finish, option
-from .main_models import DB, Diecase
-from .main_models import TypefaceSize, UAVariant
+from .data import WEDGE_DEFINITIONS
+from .main_models import DB, Diecase, Wedge, TypefaceSize, UnitArrangement
 
 
 def import_csv(diecase, filename=''):
@@ -64,8 +64,7 @@ def edit_diecase_typeface_data(diecase):
     """Edit the typeface data for a diecase"""
     def set_typefaces():
         """Assign styles to typeface. Will also look for related typefaces."""
-        ua_prompt = ('Unit arrangement variant? Possible options:\n{}'
-                     .format(UAVariant.variant_names))
+        ua_prompt = 'Unit arrangement variant? Possible options:\n{}'
         for style in styles:
             try:
                 # what was set up previously?
@@ -100,8 +99,10 @@ def edit_diecase_typeface_data(diecase):
                 UI.display('Cannot automatically choose the unit arrangement.')
                 ua_number = UI.enter('Unit arrangement number?',
                                      default=old_ua_number)
-                ua_variant = UI.enter(ua_prompt, default='r')
-                unit_arrangement = UAVariant(ua_number, ua_variant)
+                uarr = UnitArrangement(ua_number)
+                ua_variant = UI.enter(ua_prompt.format(uarr.variant_names),
+                                      default='r')
+                unit_arrangement = uarr.get_variant(ua_variant)
             typeface_data[style] = (variant, unit_arrangement)
 
     def assign_normal_wedge():
@@ -111,7 +112,7 @@ def edit_diecase_typeface_data(diecase):
         set_width = main_typeface.set_width
         suffix = 'E' if wedge.is_brit_pica else ''
         designation = 'S{}-{}{}'.format(series, set_width, suffix)
-        diecase.wedge = bc.choose_wedge(designation)
+        diecase.wedge = choose_wedge(designation)
 
     def set_diecase_id():
         """Set the diecase ID (unique name) for this diecase."""
@@ -211,7 +212,8 @@ def choose_diecase(fallback=Diecase, fallback_description='new empty diecase'):
     qty = len(data)
     # let the user choose the diecase
     choice = UI.enter(prompt, default=0, datatype=int, minimum=0, maximum=qty)
-    return data.get(choice).load() or fallback().load()
+    diecase = data.get(choice) or fallback()
+    return diecase.load()
 
 
 @DB
@@ -281,12 +283,16 @@ def edit_layout(diecase):
 
     def all_rows():
         """Row-by-row editing - all cells in row 1, then 2 etc."""
-        for mat in sum(diecase.by_rows(), []):
+        sequence = [mat for column_number in diecase.column_numbers
+                    for mat in diecase.select_column(column_number)]
+        for mat in sequence:
             edit(mat)
 
     def all_columns():
         """Column-by-column editing - all cells in column NI, NL, A...O"""
-        for mat in sum(diecase.by_columns(), []):
+        sequence = [mat for row_number in diecase.row_numbers
+                    for mat in diecase.select_row(row_number)]
+        for mat in sequence:
             edit(mat)
 
     def single_row():
@@ -474,6 +480,83 @@ def find_matrix(diecase, choose=True, **kwargs):
         raise bm.MatrixNotFound('Automatic matrix lookup failed')
 
 
+# Wedge controller routines
+
+def choose_wedge(wedge_name=None):
+    """Choose a wedge manually"""
+    def enter_name():
+        """Enter the wedge's name"""
+        # List known wedges
+        views.list_wedges()
+        return UI.enter('Wedge designation?', default=default_wedge)
+
+    def enter_parameters(name):
+        """Parse the wedge's name and return a list:
+        [series, set_width, is_brit_pica, units]"""
+        def divisible_by_quarter(value):
+            """Check if a value is divisible by 0.25:
+            1, 3.0, 1.25, 2.5, 5.75 etc. -> True
+            2.2, 6.4 etc. -> False"""
+            return not value % 0.25
+
+        # For countries that use comma as decimal delimiter, convert to point:
+        w_name = name.replace(',', '.').upper().strip()
+        # Check if this is an European wedge
+        # (these were based on pica = .1667" )
+        is_brit_pica = w_name.endswith('E')
+        # Away with the initial S, final E and any spaces before and after
+        # Make it work with space or dash as delimiter
+        # ("S5-12" and "S5 12" should work the same)
+        wedge = w_name.strip('SE ').replace('-', ' ').split(' ')
+        try:
+            series, set_width = wedge
+        except ValueError:
+            series, set_width = wedge, 0
+        # Now get the set width - ensure that it is float divisible by 0.25
+        # no smaller than 5 (narrowest type), no wider than 20 (large comp)
+        prompt = ('Enter the set width as a decimal fraction '
+                  'divisible by 0.25 - e.g. 12.25: ')
+        set_width = UI.enter(prompt, datatype=float)
+
+        set_width = UI.enter(prompt, default=set_width, datatype=float,
+                             minimum=5, maximum=20,
+                             condition=divisible_by_quarter)
+        # We have the wedge name, so we can look the wedge up in known wedges
+        # (no need to enter the unit values manually)
+        current_units = WEDGE_DEFINITIONS.get(series, d.S5)
+        prompt = ('Enter the wedge unit values for rows 1...15 '
+                  'or 1...16, separated by commas.\n')
+        units = UI.enter(prompt, default=current_units, minimum=15, maximum=16)
+        # Now we have the data...
+        return {'series': series, 'set_width': set_width,
+                'is_brit_pica': is_brit_pica, 'units': units}
+
+    default_wedge = str(wedge_name) if wedge_name else 'S5-12E'
+    w_name = enter_name()
+    try:
+        return Wedge(wedge_name=w_name)
+    except ValueError:
+        data = enter_parameters(w_name)
+        return Wedge(wedge_data=data)
+
+
+def temp_wedge(routine):
+    """Decorator for typesetting and casting routines.
+    Assign a temporary alternative wedge for casting"""
+    @wraps(routine)
+    def wrapper(self, *args, **kwargs):
+        """Wrapper function"""
+        # Assign a temporary wedge
+        old_wedge, self.wedge = self.wedge, choose_wedge(self.wedge.name)
+        UI.display_parameters(self.wedge.parameters)
+        UI.display('\n\n')
+        retval = routine(self, *args, **kwargs)
+        # Restore the former wedge and exit
+        self.wedge = old_wedge
+        return retval
+    return wrapper
+
+
 def get_wedge_positions(matrix, normal_wedge, units, correction=0):
     """Calculate the 0075 and 0005 wedge positions for this matrix
     based on the current wedge used.
@@ -531,7 +614,7 @@ class DiecaseMixin:
     def wedge(self):
         """Get the temporary wedge, or the diecase's assigned wedge"""
         selected, fallback = self._wedge, self.diecase.wedge
-        return selected if selected else fallback if fallback else bm.Wedge()
+        return selected if selected else fallback if fallback else Wedge()
 
     @wedge.setter
     def wedge(self, wedge):
@@ -544,14 +627,14 @@ class DiecaseMixin:
         if not wedge_name:
             return
         try:
-            self.wedge = bm.Wedge(wedge_name=wedge_name)
+            self.wedge = Wedge(wedge_name=wedge_name)
         except ValueError:
             # parsing failed
-            self.wedge = bc.choose_wedge(wedge_name)
+            self.wedge = choose_wedge(wedge_name)
 
     def choose_wedge(self):
         """Chooses a new wedge"""
-        self.wedge = bc.choose_wedge(self.wedge)
+        self.wedge = choose_wedge(self.wedge)
         return self.wedge
 
     def get_units(self, matrix):
@@ -577,9 +660,9 @@ class DiecaseMixin:
         """Get a diecase or empty diecase, lazily instantiating a new one
         if none was chosen before"""
         diecase = self._diecase
-        if not diecase:
+        if diecase is None:
             # instantiate a new one and cache it
-            diecase = Diecase()
+            diecase = Diecase().load()
             self._diecase = diecase
         return diecase
 
@@ -588,7 +671,12 @@ class DiecaseMixin:
         """Set a diecase; keep the wedge"""
         self._diecase = diecase
 
-    @diecase.setter
+    @property
+    def diecase_id(self):
+        """Get the diecase ID"""
+        return self.diecase.diecase_id
+
+    @diecase_id.setter
     def diecase_id(self, diecase_id):
         """Set a diecase with a given diecase ID, or a current/default one"""
         self.diecase = get_diecase(diecase_id, fallback=self.diecase)
@@ -644,10 +732,10 @@ class DiecaseMixin:
         resize_layout(self.diecase)
         self.diecase.store_layout()
 
-    def display_diecase_layout(self, diecase=None):
+    @UI.paused
+    def display_diecase_layout(self):
         """Display the diecase layout, unit values, styles."""
-        views.display_layout(diecase or self.diecase)
-        UI.pause()
+        views.display_layout(self.diecase)
 
     def test_diecase_charset(self):
         """Test whether the diecase layout has all required characters,
@@ -736,27 +824,25 @@ class DiecaseMixin:
             is_stored = check_persistence(self.diecase.diecase_id)
             diecases_present = count_diecases()
             ret = [option(key='l', value=self.display_diecase_layout, seq=1,
-                          text='Display diecase layout', cond=is_stored),
-                   option(key='e', value=_edit_layout, cond=is_stored,
+                          text='Display diecase layout'),
+                   option(key='e', value=_edit_layout,
                           text='Edit diecase layout', seq=2),
                    option(key='u', value=_display_arrangements, seq=4,
                           text='Display unit arrangements for this diecase'),
                    option(key='i', value=_edit_typeface, seq=11,
                           text='Edit the diecase information'),
                    option(key='t', value=self.test_diecase_charset, seq=15,
-                          cond=is_stored,
                           text='Test if diecase contains required characters'),
-                   option(key='f', value=_import, seq=30, cond=is_stored,
+                   option(key='f', value=_import, seq=30,
                           text='Import layout from file'),
-                   option(key='x', value=_export, seq=31, cond=is_stored,
+                   option(key='x', value=_export, seq=31,
                           text='Export layout to file'),
                    option(key='r', value=self.resize_layout, seq=89,
-                          cond=is_stored,
                           text='Change the diecase layout size',
                           desc=('Current: {} x {}'
                                 .format(self.diecase.rows,
                                         self.diecase.columns))),
-                   option(key='n', value=_clear_layout, cond=is_stored,
+                   option(key='n', value=_clear_layout,
                           text='Clear the diecase layout', seq=90),
                    option(key='ctrl_s', value=_save, seq=91,
                           text='Store the diecase in database',

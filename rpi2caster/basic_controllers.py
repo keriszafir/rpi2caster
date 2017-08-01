@@ -5,8 +5,7 @@ from contextlib import suppress
 from functools import partial, wraps
 from itertools import zip_longest
 from .rpi2caster import CFG, UI, Abort, Finish, option
-from . import basic_models as bm, definitions as d, views
-from .data import WEDGE_DEFINITIONS
+from . import basic_models as bm, definitions as d
 
 
 # Letter frequency controller routines
@@ -274,80 +273,3 @@ def choose_styles(styles='', default=None, multiple=True, mask=None):
             UI.simple_menu(header, options, allow_abort=True)()
     except Finish:
         return bm.Styles(current, default_style, _mask)
-
-
-# Wedge controller routines
-
-def choose_wedge(wedge_name=None):
-    """Choose a wedge manually"""
-    def enter_name():
-        """Enter the wedge's name"""
-        # List known wedges
-        views.list_wedges()
-        return UI.enter('Wedge designation?', default=default_wedge)
-
-    def enter_parameters(name):
-        """Parse the wedge's name and return a list:
-        [series, set_width, is_brit_pica, units]"""
-        def divisible_by_quarter(value):
-            """Check if a value is divisible by 0.25:
-            1, 3.0, 1.25, 2.5, 5.75 etc. -> True
-            2.2, 6.4 etc. -> False"""
-            return not value % 0.25
-
-        # For countries that use comma as decimal delimiter, convert to point:
-        w_name = name.replace(',', '.').upper().strip()
-        # Check if this is an European wedge
-        # (these were based on pica = .1667" )
-        is_brit_pica = w_name.endswith('E')
-        # Away with the initial S, final E and any spaces before and after
-        # Make it work with space or dash as delimiter
-        # ("S5-12" and "S5 12" should work the same)
-        wedge = w_name.strip('SE ').replace('-', ' ').split(' ')
-        try:
-            series, set_width = wedge
-        except ValueError:
-            series, set_width = wedge, 0
-        # Now get the set width - ensure that it is float divisible by 0.25
-        # no smaller than 5 (narrowest type), no wider than 20 (large comp)
-        prompt = ('Enter the set width as a decimal fraction '
-                  'divisible by 0.25 - e.g. 12.25: ')
-        set_width = UI.enter(prompt, datatype=float)
-
-        set_width = UI.enter(prompt, default=set_width, datatype=float,
-                             minimum=5, maximum=20,
-                             condition=divisible_by_quarter)
-        # We have the wedge name, so we can look the wedge up in known wedges
-        # (no need to enter the unit values manually)
-        current_units = WEDGE_DEFINITIONS.get(series, d.S5)
-        prompt = ('Enter the wedge unit values for rows 1...15 '
-                  'or 1...16, separated by commas.\n')
-        units = UI.enter(prompt, default=current_units, minimum=15, maximum=16)
-        # Now we have the data...
-        return {'series': series, 'set_width': set_width,
-                'is_brit_pica': is_brit_pica, 'units': units}
-
-    default_wedge = str(wedge_name) if wedge_name else 'S5-12E'
-    w_name = enter_name()
-    try:
-        return bm.Wedge(wedge_name=w_name)
-    except ValueError:
-        data = enter_parameters(w_name)
-        return bm.Wedge(wedge_data=data)
-
-
-def temp_wedge(routine):
-    """Decorator for typesetting and casting routines.
-    Assign a temporary alternative wedge for casting"""
-    @wraps(routine)
-    def wrapper(self, *args, **kwargs):
-        """Wrapper function"""
-        # Assign a temporary wedge
-        old_wedge, self.wedge = self.wedge, choose_wedge(self.wedge.name)
-        UI.display_parameters(self.wedge.parameters)
-        UI.display('\n\n')
-        retval = routine(self, *args, **kwargs)
-        # Restore the former wedge and exit
-        self.wedge = old_wedge
-        return retval
-    return wrapper
