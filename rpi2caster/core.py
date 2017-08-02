@@ -12,7 +12,7 @@ import qrcode
 
 from .rpi2caster import UI, Abort, Finish, option, find_casters
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .matrix_controller import count_diecases, temp_diecase, temp_wedge
+from .main_controllers import count_diecases, temp_diecase, temp_wedge
 from .parsing import parse_record
 from .typesetting import TypesettingContext
 

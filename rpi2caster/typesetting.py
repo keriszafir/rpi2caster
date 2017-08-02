@@ -6,7 +6,7 @@ from contextlib import suppress
 from .rpi2caster import CFG, DB, UI, Abort, option as opt
 from . import basic_models as bm, basic_controllers as bc, definitions as d
 from .main_models import Ribbon
-from .matrix_controller import DiecaseMixin
+from .main_controllers import DiecaseMixin
 from .parsing import token_parser
 
 

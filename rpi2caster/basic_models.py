@@ -240,10 +240,11 @@ class Matrix:
     @property
     def comment(self):
         """Generate a comment based on matrix character and style."""
-        retval = ('low space {mat.ems:.2f} ems' if self.islowspace()
-                  else 'high space {mat.ems:.2f} ems' if self.ishighspace()
-                  else '{mat.char} ({mat.styles.names})')
-        return retval.format(mat=self)
+        desc = ('low space {mat.ems:.2f} ems' if self.islowspace()
+                else 'high space {mat.ems:.2f} ems' if self.ishighspace()
+                else '{mat.char} ({mat.styles.names})' if self.char
+                else 'unknown character')
+        return ''.join((desc, ' at {mat.code}')).format(mat=self)
 
     @property
     def units(self):
@@ -401,32 +402,6 @@ class Matrix:
                 .format(pos=self.position, es='S' * s_needle))
         commented = '{:<20} // {}'
         return commented.format(code, _comment) if _comment else code
-
-
-class VariableSpace(Matrix):
-    """Simplified matrix-like object: variable space for justifying"""
-    __slots__ = ['matrix', '_units', 'position', 'diecase', 'char']
-
-    def __init__(self, diecase, units=0, low=True):
-        super().__init__(diecase=diecase, char=' ' if low else '_',
-                         units=units)
-
-    def match(self):
-        """locate the best suitable space for the given number of units"""
-        mat = self.diecase.get_space(units=self.units, low=self.islowspace())
-        self.position = mat.position
-
-    @property
-    def units(self):
-        """get space's unit width"""
-        return self._units
-
-    @units.setter
-    def units(self, units):
-        """set units and find a most suitable space"""
-        with suppress(TypeError):
-            self._units = float(units)
-            self.match()
 
 
 class Styles:

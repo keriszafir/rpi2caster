@@ -311,7 +311,7 @@ def inventory(ctx):
                 metavar='[diecase_id]')
 def edit_diecase(diecase):
     """Load and edit a matrix case."""
-    from . import matrix_controller as mc
+    from . import main_controllers as mc
     editor = mc.DiecaseMixin()
     editor.diecase_id = diecase
     editor.diecase_manipulation()
@@ -320,7 +320,7 @@ def edit_diecase(diecase):
 @inventory.command('diecases', options_metavar='[-h]')
 def list_diecases():
     """List all available diecases and exit."""
-    from . import views, matrix_controller as mc
+    from . import views, main_controllers as mc
     views.list_diecases(mc.get_all_diecases())
 
 
@@ -352,7 +352,7 @@ def display_layout(diecase):
     """Display a diecase layout.
 
     If diecase_id is not specified, choose a diecase from the database."""
-    from . import views, matrix_controller as mc
+    from . import views, main_controllers as mc
     case = mc.get_diecase(diecase)
     views.display_layout(case)
 
