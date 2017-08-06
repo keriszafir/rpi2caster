@@ -247,40 +247,6 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
         """Changes the manual/automatic typesetting mode"""
         self.manual_mode = not self.manual_mode
 
-    def get_paragraphs(self):
-        """Parse a text into paragraphs with justification modes."""
-        # Get a dict of alignment codes
-        # Add a default alignment for double line break i.e. new paragraph
-        alignments = d.ALIGN_COMMANDS.copy()
-        alignments['\n\n'] = self.default_alignment
-        # Make a generator function and loop over it
-        paragraph_generator = token_parser(self.source, alignments,
-                                           skip_unknown=False)
-        paragraphs, tokens = [], []
-        finished = False
-        while not finished:
-            try:
-                token = next(paragraph_generator)
-            except StopIteration:
-                # Processed the whole text; any non-whitespace remaining part
-                # must be also cast! (will be left-justified)
-                end_text = ''.join(tokens).strip()
-                if end_text:
-                    last = Paragraph(end_text, self.default_alignment)
-                    paragraphs.append(last)
-                finished = True
-            try:
-                # Justification token detected - end paragrapgh
-                justification = d.ALIGN_COMMANDS[token]
-                current_text = ''.join(tokens)
-                # Reset the tokens on line currently worked on
-                tokens = []
-                paragraphs.append(Paragraph(current_text, justification))
-            except KeyError:
-                # No justification detected = keep adding more characters
-                tokens.append(token)
-        return paragraphs
-
     @property
     def compose(self):
         """Bridge for automatic/manual typesetting.
@@ -295,13 +261,52 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
         """Automatic typesetting with hyphenation and justification"""
 
 
+class Document:
+    """A document represents a whole page of text to be cast in one run.
+    It may and probably will consist of multiple paragraphs,
+    separated by double newlines ('\n\n')."""
+    def __init__(self, text, context):
+        self.text = str(text)
+        self.context = context
+        self.paragraphs = [Paragraph(frag, self.context)
+                           for frag in self.text.split('\n\n')]
+
+    def compose(self):
+        """Typeset the document. The context is a TypesettingContext
+        and stores information such as line length, alignments etc."""
+        for paragraph in self.paragraphs:
+            paragraph.compose()
+
+    def translate(self):
+        """Translate the document into Monotype codes"""
+        return sum((par.translate() for par in self.paragraphs), [])
+
+    def make_ribbon(self):
+        """Make a ribbon i.e. signals sequence out of the document"""
+        sequence = (obj.get_ribbon_record() for obj in self.translate())
+        contents = '\n'.join(sequence)
+        ribbon = mm.Ribbon()
+        ribbon.contents = contents
+        self.contxt.ribbon = ribbon
+
+
 class Paragraph(object):
     """A page is broken into a series of paragraphs."""
-    def __init__(self, text, alignment):
+    def __init__(self, text, context):
         self.text = text
-        self.alignment = alignment
+        self.context = context
+        alignment_tokens = []
+        self.alignment = alignment_tokens[-1]
         self.lines = []
+        self.context = None
 
     def display_text(self):
         """Prints the text"""
         UI.display(self.text)
+
+    def compose(self, context):
+        """Typeset the paragraph's text"""
+        self.context = context
+
+    def translate(self):
+        """Translate the characters into a series of Monotype codes"""

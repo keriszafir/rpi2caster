@@ -136,7 +136,7 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
                       desc=('Cast composition, sorts, typecases or spaces;'
                             ' test the machine')),
 
-               option(key='d', value=partial(ctx.invoke, inventory), seq=30,
+               option(key='d', value=partial(ctx.invoke, edit_diecase), seq=30,
                       text='Diecase manipulation...',
                       desc='Manage the matrix case collection'),
 
@@ -164,28 +164,6 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
     if not ctx.invoked_subcommand:
         UI.dynamic_menu(options, header, allow_abort=True,
                         catch_exceptions=exceptions)
-
-
-@cli.command('machines', options_metavar='[-h]')
-@click.option('--punching', '-p', 'operation_mode', flag_value='punching',
-              help='punch ribbon with a perforator (if supported)')
-@click.option('--casting', '-c', 'operation_mode', flag_value='casting',
-              help='cast type on a composition caster (if supported)')
-def list_casters(operation_mode):
-    """List all configured casters and show the available ones."""
-    data = find_casters(operation_mode)
-    UI.display('\nList of configured interfaces:\n')
-    for number, (url, caster, name) in data.items():
-        if not url:
-            # don't list the simulation interface - it's always available
-            continue
-        url_string = ('{}'.format(url) if caster
-                      else '{}: unavailable'.format(url))
-        if len(str(name)) > 30:
-            template = '{}\n{}\n'
-        else:
-            template = '{} :\t{}\n'
-        UI.display(template.format(url_string, name))
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
@@ -276,9 +254,9 @@ def test_machine(casting):
 @click.option('--manual', '-M', is_flag=True, flag_value=True,
               help='leave end-of-line decisions to the operator')
 def translate(src, out, align, manual, **kwargs):
-    """Translate text to a sequence of Monotype codes.
+    """Typesetting program.
 
-    Set and justify a text with control codes.
+    Set and justify a text, using control codes for styles, alignment etc.
 
     The output is a sequence of codes which can control the
     Monotype composition caster.
@@ -297,16 +275,7 @@ def translate(src, out, align, manual, **kwargs):
     typesetting.main_menu()
 
 
-@cli.group(invoke_without_command=True, cls=CommandGroup,
-           options_metavar='[-h]', subcommand_metavar='[d|e|l] [-h]')
-@click.pass_context
-def inventory(ctx):
-    """Diecase definition and layout management."""
-    if not ctx.invoked_subcommand:
-        ctx.invoke(edit_diecase)
-
-
-@inventory.command('edit', options_metavar='[-h]')
+@cli.command('edit', options_metavar='[-h]')
 @click.argument('diecase', required=False, default=None,
                 metavar='[diecase_id]')
 def edit_diecase(diecase):
@@ -317,44 +286,107 @@ def edit_diecase(diecase):
     editor.diecase_manipulation()
 
 
-@inventory.command('diecases', options_metavar='[-h]')
+@cli.group('list', invoke_without_command=True, cls=CommandGroup,
+           options_metavar='[-h]', subcommand_metavar='[d|r|t|u|w] [-h]')
+@click.pass_context
+def _list(ctx):
+    """List items found in database or definitions"""
+    if not ctx.invoked_subcommand:
+        ctx.invoke(list_diecases)
+
+
+@_list.command('diecases', options_metavar='[-h]')
 def list_diecases():
     """List all available diecases and exit."""
     from . import views, main_controllers as mc
     views.list_diecases(mc.get_all_diecases())
 
 
-@inventory.command('wedges', options_metavar='[-h]')
+@_list.command('wedges', options_metavar='[-h]')
 def list_wedges():
     """List all known wedge definitions, and exit."""
     from . import views
     views.list_wedges()
 
 
-@inventory.command('typefaces', options_metavar='[-h]')
+@_list.command('typefaces', options_metavar='[-h]')
 def list_typefaces():
     """List all known typefaces and exit."""
     from . import views
     views.list_typefaces()
 
 
-@inventory.command('uas', options_metavar='[-h]')
+@_list.command('uas', options_metavar='[-h]')
 def list_uas():
     """List all known unit arrangements and exit."""
     from . import views
     views.list_unit_arrangements()
 
 
-@inventory.command('layout', options_metavar='[-h]')
+@_list.command('machines', options_metavar='[-h]')
+@click.option('--punching', '-p', 'mode', flag_value='punching',
+              help='punch ribbon with a perforator (if supported)')
+@click.option('--casting', '-c', 'mode', flag_value='casting',
+              help='cast type on a composition caster (if supported)')
+def list_machines(mode):
+    """List all configured casters and show the available ones."""
+    data = find_casters(mode)
+    UI.display('\nList of configured interfaces for {}:\n'
+               .format(mode or 'casting or punching'))
+    for number, (url, caster, name) in data.items():
+        if not url:
+            # don't list the simulation interface - it's always available
+            continue
+        url_string = ('{}'.format(url) if caster
+                      else '{}: unavailable'.format(url))
+        if len(str(name)) > 30:
+            template = '{}\n{}\n'
+        else:
+            template = '{} :\t{}\n'
+        UI.display(template.format(url_string, name))
+
+
+@cli.group(invoke_without_command=True, cls=CommandGroup,
+           options_metavar='[-h]', subcommand_metavar='[d|r|t|u|w] [-h]')
+def show():
+    """Show an item (diecase, layout, UA etc.)"""
+    pass
+
+
+@show.command('layout', options_metavar='[-h]')
 @click.argument('diecase', required=False, default=None,
                 metavar='[diecase_id]')
-def display_layout(diecase):
-    """Display a diecase layout.
-
-    If diecase_id is not specified, choose a diecase from the database."""
+def show_layout(diecase):
+    """Display a diecase layout for a specified diecase ID."""
     from . import views, main_controllers as mc
     case = mc.get_diecase(diecase)
     views.display_layout(case)
+
+
+@show.command('diecase', options_metavar='[-h]')
+@click.argument('diecase', required=False, default=None,
+                metavar='[diecase_id]')
+def show_diecase_data(diecase):
+    """Display diecase data."""
+    from . import views, main_controllers as mc
+    case = mc.get_diecase(diecase)
+    views.display_diecase_data(case)
+
+
+@show.command('ua', options_metavar='[-h]')
+@click.argument('number', metavar='[UA number]')
+def show_unit_arrangement(number):
+    """Shows the UA data for the given UA ID."""
+    from . import views
+    views.display_ua(number)
+
+
+@show.command('wedge', options_metavar='[-h]')
+@click.argument('designation', metavar='[wedge name]')
+def show_wedge(designation):
+    """Shows the wedge parameters."""
+    from . import views
+    views.display_wedge(designation)
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,

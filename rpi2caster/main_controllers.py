@@ -783,7 +783,7 @@ class DiecaseMixin:
         def _display_arrangements():
             """Display all unit arrangements for this diecase"""
             for unit_arrangement in self.diecase.unit_arrangements.values():
-                views.display_ua(unit_arrangement)
+                views.display_ua_variant(unit_arrangement)
                 UI.pause()
 
         def _edit_layout():

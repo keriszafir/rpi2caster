@@ -701,6 +701,35 @@ class Typeface:
         uas - unit arrangement mapping for each of the styles.
     """
     def __init__(self, series='327'):
+        def get_size_data(size):
+            """Get the size data from typeface data"""
+            size_data = raw_sizes.get(size)
+            with suppress(TypeError, AttributeError):
+                # first try getting a reference to another size
+                # it's a string so it should be convertible to uppercase
+                return get_size_data(size_data.upper().strip())
+            # check if we have a tuple/list of 3 or 2 items
+            with suppress(TypeError, ValueError):
+                # 3 values: set width, M-line, unit arrangement overrides
+                set_width, calibration_line, raw_ua_data = size_data
+                return set_width, calibration_line, raw_ua_data
+            with suppress(TypeError, ValueError):
+                # check if it's a 2-item tuple or list
+                set_width, calibration_line = size_data
+                return set_width, calibration_line, {}
+            # nothing above is correct? (for example, lookup returned None)
+            return 0, 0, {}
+
+        def sort_key(size):
+            """Sorting key for sizes: get the number at the front"""
+            chars = []
+            for char in size:
+                if char.isdigit():
+                    chars.append(char)
+                else:
+                    break
+            return int(''.join(chars) or '0')
+
         self.series = str(series)
         raw_data = data.TYPEFACES.get(self.series, {})
         self._raw_data = raw_data
@@ -708,7 +737,9 @@ class Typeface:
         self.classification = ', '.join(raw_data.get('tags', ['']))
         self.script = ', '.join(raw_data.get('scripts', ['Latin']))
         uas = raw_data.get('uas', {})
-        self.sizes = self._raw_data.get('sizes', {})
+        raw_sizes = self._raw_data.get('sizes', {})
+        self.sizes = OrderedDict((size, get_size_data(size))
+                                 for size in sorted(raw_sizes, key=sort_key))
         self.unit_arrangements = {bm.STYLES.get(st): UAVariant(ua_id, ua_v)
                                   for st, (ua_id, ua_v) in uas.items()}
 
@@ -770,35 +801,18 @@ class Typeface:
 class TypefaceSize(Typeface):
     """A typeface in a specified size."""
     def __init__(self, series='327', size='12D'):
-        def get_size_data(_size):
-            """Get the size data from typeface data"""
-            size_data = self.sizes.get(_size)
-            with suppress(TypeError, AttributeError):
-                # first try getting a reference to another size
-                # it's a string so it should be convertible to uppercase
-                return get_size_data(size_data.upper().strip())
-            # check if we have a tuple/list of 3 or 2 items
-            with suppress(TypeError, ValueError):
-                # 3 values: set width, M-line, unit arrangement overrides
-                set_width, calibration_line, raw_ua_data = size_data
-                ua_overrides = {bm.STYLES.get(st): UAVariant(ua_id, ua_v)
-                                for st, (ua_id, ua_v) in raw_ua_data.items()}
-                self.unit_arrangements.update(ua_overrides)
-                return set_width, calibration_line
-            with suppress(TypeError, ValueError):
-                # check if it's a 2-item tuple or list
-                set_width, calibration_line = size_data
-                return set_width, calibration_line
-            # nothing above is correct? (for example, lookup returned None)
-            return 0, 0
-
         super().__init__(series)
         converted_size = str(size).upper().strip()
         # strip all non-numeric characters
         if converted_size not in self.sizes:
             converted_size = ''.join(x for x in converted_size if x.isdigit())
         self.size = converted_size
-        self.set_width, self.calibration_line = get_size_data(self.size)
+        set_width, m_line, raw_ua_data = self.sizes.get(self.size, (0, 0, {}))
+        # unit arrangement override (mostly for larger sizes)
+        ua_overrides = {bm.STYLES.get(st): UAVariant(ua_id, ua_v)
+                        for st, (ua_id, ua_v) in raw_ua_data.items()}
+        self.unit_arrangements.update(ua_overrides)
+        self.set_width, self.calibration_line = set_width, m_line
 
     def __repr__(self):
         return '<TypefaceSize: {t.series}-{t.size} {t.name}>'.format(t=self)

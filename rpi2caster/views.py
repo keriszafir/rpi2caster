@@ -10,7 +10,7 @@ from . import basic_models as bm, definitions as d
 from .rpi2caster import UI
 from .data import TYPEFACES, UNIT_ARRANGEMENTS
 from .data import WEDGE_ALIASES, WEDGE_DEFINITIONS
-from .main_models import Typeface, UnitArrangement, Wedge
+from .main_models import Typeface, UnitArrangement, UAVariant, Wedge
 
 
 # Wedge views
@@ -55,6 +55,15 @@ def list_wedges():
     UI.display('\n\nScroll your terminal up to see more.')
 
 
+def display_wedge(wedge_name):
+    """Display wedge's parameters"""
+    wedge = Wedge(wedge_name)
+    parameters = OrderedDict({False: 'Wedge {}'.format(wedge_name)})
+    for key, value in wedge.parameters.items():
+        parameters[key] = value
+    UI.display_parameters(parameters)
+
+
 # Unit arrangement views
 
 
@@ -77,7 +86,7 @@ def list_unit_arrangements():
                .format(len(UNIT_ARRANGEMENTS), len(missing)))
 
 
-def display_ua(ua_variant):
+def display_ua_variant(ua_variant):
     """Show an unit arrangement by char and by units"""
     def display_by_units():
         """display chars grouped by unit value"""
@@ -90,9 +99,9 @@ def display_ua(ua_variant):
     def display_letters():
         """display unit values for all letters and ligatures"""
         # define templates for lower+uppercase, lowercase only, uppercase only
-        template = '\t{:<4}: {:>3} units, \t\t{:<4}: {:>3} units'
-        lc_tmpl = '\t{:<4}: {:>3} units'
-        uc_tmpl = '\t\t\t{:<4}: {:>3} units'
+        template = '\t{:<4}: {:>3}, \t\t{:<4}: {:>3}'
+        lc_tmpl = '\t{:<4}: {:>3}'
+        uc_tmpl = '\t\t\t{:<4}: {:>3}'
 
         UI.display('Ordered by character:')
         for lowercase in [*ascii_lowercase, *d.LIGATURES]:
@@ -111,7 +120,7 @@ def display_ua(ua_variant):
                 continue
             with suppress(ValueError, IndexError):
                 # display uppercase only
-                lower_units = ua_variant[uppercase]
+                upper_units = ua_variant[uppercase]
                 UI.display(uc_tmpl.format(uppercase, upper_units or 'absent'))
                 continue
         UI.display()
@@ -155,6 +164,15 @@ def display_ua(ua_variant):
     display_letters()
     display_numbers()
     display_others()
+
+
+def display_ua(ua_number):
+    """Displays all variants in the unit arrangement."""
+    arrangement = UnitArrangement(ua_number)
+    for variant in arrangement.variants:
+        display_ua_variant(variant)
+        UI.display('\n')
+    UI.display('Scroll your terminal up to see more.')
 
 
 # Diecase views
@@ -294,6 +312,33 @@ def display_layout(diecase):
     UI.display('\n\nScroll your terminal up to see more.')
 
 
+def display_diecase_data(diecase):
+    """Show the diecase data, including typeface data"""
+    typeface_data = diecase.typeface_data
+    diecase_typefaces = [i for (i, _) in typeface_data.values()]
+    for face in diecase_typefaces:
+        calibration_line = '{:.4f}'.format(face.calibration_line)
+        size = face.size
+        if face and size:
+            break
+    else:
+        face, size = 'unknown', 'unknown'
+
+    header = 'Diecase {d.diecase_id} : {d.description}'.format(d=diecase)
+    parameters = OrderedDict({False: header})
+    parameters['Wedge'] = diecase.wedge
+    parameters['Size'] = size
+    parameters['Calibration line M'] = calibration_line
+
+    UI.display_parameters(parameters)
+
+    # display UAs typeface(s)
+    arrangements = OrderedDict({False: 'Unit arrangements'})
+    for style, (_, u_a) in typeface_data.items():
+        arrangements[style.name] = '{ua.number} {ua.name}'.format(ua=u_a)
+    UI.display_parameters(arrangements)
+
+
 # Typeface views
 
 
@@ -324,3 +369,49 @@ def list_typefaces(*_):
                '{} seem to be missing - it is unclear if they ever existed.'
                '\n\nScroll your terminal up to see more.'
                .format(len(TYPEFACES), len(missing)))
+
+
+def display_typeface(typeface_id):
+    """Get a typeface from the data and display its details:
+    available styles, wedge set width, alignment M-line, classifiers
+    """
+    typeface = Typeface(typeface_id)
+    related = ('{}-> {} {}'.format(style.name, face.series, face_style.name)
+               for style, (face, face_style) in typeface.related.items())
+    uas = ('{style.name}-> {ua.number} {ua.name}'.format(style=style, ua=ua)
+           for style, ua in typeface.unit_arrangements.items())
+    sizes = typeface.sizes
+
+    # display general typeface data
+    header = '{t.series} - {t.name}'.format(t=typeface)
+    parameters = OrderedDict({False: header})
+    parameters.update({'Classification': typeface.classification or 'unknown'})
+    parameters.update({'Script': typeface.script or 'unknown'})
+    parameters.update({'Related typefaces': ', '.join(related) or 'unknown'})
+    parameters.update({'Unit arrangements': ', '.join(uas) or 'unknown'})
+    UI.display_parameters(parameters)
+
+    # display size-specific data if applicable
+    if not sizes:
+        return
+    UI.display('\nTypeface size data:\n')
+    template = '{size:<10} {sw:<10} {mline:<10} {uas}'
+    UI.display(template.format(size='Size', sw='Set width', mline='M-line',
+                               uas='Unit arrangement overrides'))
+    for size, (set_width, m_line, uas) in sizes.items():
+        size_arrangements = {bm.STYLES.get(st): UAVariant(ua_id, ua_v)
+                             for st, (ua_id, ua_v) in uas.items()}
+        arrs = ('{st.name}-> {ua.number} {ua.name}'.format(st=style, ua=ua)
+                for style, ua in size_arrangements.items())
+        UI.display(template.format(size=size, sw=set_width, mline=m_line,
+                                   uas=', '.join(arrs)))
+    # some explanation
+    UI.display('\nWherever "@" appears in size, this means the matrices '
+               'are cast on a different type body size\n'
+               '(for example, 6D@7 means casting 6D mat on 7 point mould).\n\n'
+               'M-line is a calibration line measured from the matrix '
+               'upper edge.\n\n'
+               'Some sizes (typically: large composition) can have '
+               'different unit arrangements than general UAs\n'
+               'for the typeface - they are listed as UA overrides.\n\n'
+               'Scroll up your terminal to see more data.')
