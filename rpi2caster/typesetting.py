@@ -3,11 +3,12 @@
 
 from collections import OrderedDict
 from contextlib import suppress
+
 from .rpi2caster import CFG, DB, UI, Abort, option as opt
 from . import basic_models as bm, basic_controllers as bc, definitions as d
+from . import parsing as p
 from .main_models import Ribbon
 from .main_controllers import DiecaseMixin
-from .parsing import token_parser
 
 
 # Ribbon control routines
@@ -215,13 +216,12 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     @default_alignment.setter
     def default_alignment(self, alignment):
         """Default alignment setter"""
-        options = {'cr': d.ALIGNMENTS.left, 'cc': d.ALIGNMENTS.center,
-                   'cl': d.ALIGNMENTS.right, 'cf': d.ALIGNMENTS.both,
-                   'left': d.ALIGNMENTS.left, 'center': d.ALIGNMENTS.center,
-                   'right': d.ALIGNMENTS.right, 'flat': d.ALIGNMENTS.both,
-                   'both': d.ALIGNMENTS.both, 'f': d.ALIGNMENTS.both,
-                   'l': d.ALIGNMENTS.left, 'c': d.ALIGNMENTS.center,
-                   'r': d.ALIGNMENTS.right, 'b': d.ALIGNMENTS.both}
+        options = {}
+        for alignment in d.ALIGNMENTS:
+            shorts = [alignment.name, alignment.name[0],
+                      *(code.strip('^') for code in alignment.codes)]
+            options.update({s: alignment for s in shorts})
+
         string = alignment.strip().replace('^', '').lower()
         value = options.get(string)
         if value:
@@ -268,8 +268,9 @@ class Document:
     def __init__(self, text, context):
         self.text = str(text)
         self.context = context
-        self.paragraphs = [Paragraph(frag, self.context)
-                           for frag in self.text.split('\n\n')]
+        # split the text into paragraphs with text and alignment
+        parsed = p.cut_to_paragraphs(self.text)
+        self.paragraphs = [Paragraph(t, a, self.context) for t, a in parsed]
 
     def compose(self):
         """Typeset the document. The context is a TypesettingContext
@@ -285,20 +286,18 @@ class Document:
         """Make a ribbon i.e. signals sequence out of the document"""
         sequence = (obj.get_ribbon_record() for obj in self.translate())
         contents = '\n'.join(sequence)
-        ribbon = mm.Ribbon()
+        ribbon = Ribbon()
         ribbon.contents = contents
         self.contxt.ribbon = ribbon
 
 
 class Paragraph(object):
     """A page is broken into a series of paragraphs."""
-    def __init__(self, text, context):
+    def __init__(self, text, alignment, context):
         self.text = text
         self.context = context
-        alignment_tokens = []
-        self.alignment = alignment_tokens[-1]
+        self.alignment = alignment or context.default_alignment
         self.lines = []
-        self.context = None
 
     def display_text(self):
         """Prints the text"""

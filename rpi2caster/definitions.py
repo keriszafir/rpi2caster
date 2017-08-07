@@ -59,11 +59,18 @@ STYLE_COMMANDS = {code: style for style in STYLES for code in style.codes}
 STYLE_COMMANDS.update({c.upper(): STYLE_COMMANDS[c] for c in STYLE_COMMANDS})
 
 # Text alignments
-Alignments = namedtuple('Alignments', ('left', 'center', 'right', 'both'))
-ALIGNMENTS = Alignments('left', 'center', 'right', 'both')
-# Alignment control codes for typesetting
-ALIGN_COMMANDS = {'^CR': ALIGNMENTS.left, '^CC': ALIGNMENTS.center,
-                  '^CL': ALIGNMENTS.right, '^CF': ALIGNMENTS.both}
+Alignment = namedtuple('Alignment', 'name alternatives codes')
+AD = namedtuple('AlignmentDefinitions', 'left center right both')
+ALIGNMENTS = AD(left=Alignment(name='left', codes=('^cr',),
+                               alternatives='flush left, rag right'),
+                center=Alignment(name='center', codes=('^cc',),
+                                 alternatives='rag left and right'),
+                right=Alignment(name='right', codes=('^cl',),
+                                alternatives='flush right, rag left'),
+                both=Alignment(name='both', codes=('^cf', '^cb'),
+                               alternatives='justified, flat, flush both'))
+ALIGN_COMMANDS = {code: algmt for algmt in ALIGNMENTS for code in algmt.codes}
+ALIGN_COMMANDS.update({c.upper(): ALIGN_COMMANDS[c] for c in ALIGN_COMMANDS})
 
 # Default space positions
 DEFAULT_LOW_SPACE_POSITIONS = (('G', 1), ('G', 2), ('G', 5), ('O', 15))

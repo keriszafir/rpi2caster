@@ -3,6 +3,10 @@
 from collections import namedtuple
 from contextlib import suppress
 from functools import lru_cache
+from itertools import zip_longest
+import re
+
+from .definitions import ALIGN_COMMANDS
 
 # parsing delimiters
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
@@ -122,6 +126,21 @@ def parse_ribbon(ribbon):
     # We need to add contents too
     metadata['contents'] = contents
     return metadata
+
+
+def cut_to_paragraphs(text):
+    """Cut a source text into paragraphs."""
+    # split on all control codes for alignment/justification,
+    # as well as a double newline
+    commands = ['\n\n', *ALIGN_COMMANDS.keys()]
+    tokens = '({})'.format('|'.join(re.escape(cmd) for cmd in commands))
+    regex = re.compile(tokens)
+    chunks = regex.split(text)
+    # group the chunks by two to get (text, justification_code) pairs
+    # if chunks has odd length, use '\n\n' (default justification)
+    # as the alignment code for the last item
+    return [(t, ALIGN_COMMANDS.get(c))
+            for t, c in zip_longest(*[iter(chunks)] * 2, fillvalue='\n\n')]
 
 
 def token_parser(source, *token_sources, skip_unknown=True):

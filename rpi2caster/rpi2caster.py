@@ -25,9 +25,10 @@ from collections import OrderedDict
 from functools import partial
 import json
 import os
+from pathlib import Path
+
 import click
 import librpi2caster
-from pathlib import Path
 
 from . import data, global_state
 from .ui import Abort, Finish, option
@@ -125,7 +126,7 @@ def add_extra(raw_path, target):
 @click.pass_context
 def cli(ctx, conffile, database, ui_impl, verbosity):
     """decide whether to go to a subcommand or enter main menu"""
-    def options():
+    def menu_options():
         """Dynamically generate options"""
         ret = [option(key='t', value=partial(ctx.invoke, translate), seq=10,
                       text='Typesetting...',
@@ -162,7 +163,7 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
               '\n\nMain menu:\n')
     exceptions = (Abort, Finish, click.Abort)
     if not ctx.invoked_subcommand:
-        UI.dynamic_menu(options, header, allow_abort=True,
+        UI.dynamic_menu(menu_options, header, allow_abort=True,
                         catch_exceptions=exceptions)
 
 
@@ -330,10 +331,10 @@ def list_uas():
               help='cast type on a composition caster (if supported)')
 def list_machines(mode):
     """List all configured casters and show the available ones."""
-    data = find_casters(mode)
+    machines = find_casters(mode)
     UI.display('\nList of configured interfaces for {}:\n'
                .format(mode or 'casting or punching'))
-    for number, (url, caster, name) in data.items():
+    for url, caster, name in machines.values():
         if not url:
             # don't list the simulation interface - it's always available
             continue
@@ -346,11 +347,10 @@ def list_machines(mode):
         UI.display(template.format(url_string, name))
 
 
-@cli.group(invoke_without_command=True, cls=CommandGroup,
-           options_metavar='[-h]', subcommand_metavar='[d|r|t|u|w] [-h]')
+@cli.group(cls=CommandGroup, options_metavar='[-h]',
+           subcommand_metavar='[d|l|r|t|u|w] [-h]')
 def show():
     """Show an item (diecase, layout, UA etc.)"""
-    pass
 
 
 @show.command('layout', options_metavar='[-h]')
@@ -373,6 +373,14 @@ def show_diecase_data(diecase):
     views.display_diecase_data(case)
 
 
+@show.command('typeface', options_metavar='[-h]')
+@click.argument('typeface', metavar='[number or name]')
+def show_typeface(typeface):
+    """Find a typeface and show its data."""
+    from . import views
+    views.display_typeface(typeface)
+
+
 @show.command('ua', options_metavar='[-h]')
 @click.argument('number', metavar='[UA number]')
 def show_unit_arrangement(number):
@@ -392,16 +400,16 @@ def show_wedge(designation):
 @cli.group(invoke_without_command=True, cls=CommandGroup,
            options_metavar='[-h]', subcommand_metavar='[d|r] [-h]')
 @click.pass_context
-def settings(ctx):
+def options(ctx):
     """Display the local and global configuration for rpi2caster."""
     if not ctx.invoked_subcommand:
-        ctx.invoke(settings_dump)
+        ctx.invoke(options_dump)
 
 
-@settings.command('dump', options_metavar='[-h]')
+@options.command('dump', options_metavar='[-h]')
 @click.argument('output', required=False, type=click.File('w+'),
                 default=click.open_file('-', 'w'), metavar='[path]')
-def settings_dump(output):
+def options_dump(output):
     """Write all settings to a file or stdout.
 
     Dumps all current configuration settings, both user-specific and global.
@@ -410,9 +418,9 @@ def settings_dump(output):
     CFG.write(output)
 
 
-@settings.command('read', options_metavar='[-h]')
+@options.command('read', options_metavar='[-h]')
 @click.argument('cfg_option')
-def settings_read(cfg_option):
+def options_read(cfg_option):
     """Read a specified option from configuration.
 
     If option is not found, display error message."""
@@ -420,7 +428,8 @@ def settings_read(cfg_option):
         section = CFG[section_name]
         for option_name, option_value in section.items():
             if option_name.lower() == cfg_option.lower():
-                click.echo('{}: {}'.format(section_name, option_value))
+                UI.display_header(section)
+                UI.display(option_value)
 
 
 @cli.command(options_metavar='[-ht]')
