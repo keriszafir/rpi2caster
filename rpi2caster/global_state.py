@@ -83,19 +83,20 @@ USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
 with suppress(FileExistsError):
     os.mkdir(USER_DATA_DIR, mode=0o775)
 
-DEF = OrderedDict({'System': {}, 'Typesetting': {}})
-DEF['System']['interfaces'] = ('http://localhost:23017, '
-                               'http://localhost:23017/interfaces/0, '
-                               'http://monotype:23017/interfaces/0')
-DEF['System']['database'] = 'sqlite:////{}/rpi2caster.db'.format(USER_DATA_DIR)
-DEF['System']['extra_wedges'] = 'extra_wedges.json'
-DEF['System']['extra_languages'] = 'extra_languages.json'
-DEF['System']['extra_unit_arrangements'] = 'extra_unit_arrangements.json'
-DEF['System']['extra_typefaces'] = 'extra_typefaces.json'
-DEF['Typesetting']['default_measure'] = '25cc'
-DEF['Typesetting']['measurement_unit'] = 'cc'
+DEFAULTS = OrderedDict({'System': {}, 'Typesetting': {}})
+DEFAULTS['System']['interfaces'] = ('http://localhost:23017, '
+                                    'http://localhost:23017/interfaces/0, '
+                                    'http://monotype:23017/interfaces/0')
+DEFAULTS['System']['database'] = ('sqlite:////{}/rpi2caster.db'
+                                  .format(USER_DATA_DIR))
+DEFAULTS['System']['extra_wedges'] = 'extra_wedges.json'
+DEFAULTS['System']['extra_languages'] = 'extra_languages.json'
+DEFAULTS['System']['extra_unit_arrangements'] = 'extra_unit_arrangements.json'
+DEFAULTS['System']['extra_typefaces'] = 'extra_typefaces.json'
+DEFAULTS['Typesetting']['DEFAULTSault_measure'] = '25cc'
+DEFAULTS['Typesetting']['measurement_unit'] = 'cc'
 
 UI = UIProxy()
 CFG = ConfigParser()
-CFG.read_dict(DEF)
+CFG.read_dict(DEFAULTS)
 DB = DBProxy(CFG['System']['database'])

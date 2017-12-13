@@ -57,11 +57,14 @@ def list_wedges():
 
 def display_wedge(wedge_name):
     """Display wedge's parameters"""
-    wedge = Wedge(wedge_name)
-    parameters = OrderedDict({False: 'Wedge {}'.format(wedge_name)})
-    for key, value in wedge.parameters.items():
-        parameters[key] = value
-    UI.display_parameters(parameters)
+    try:
+        wedge = Wedge(wedge_name)
+        parameters = OrderedDict({False: 'Wedge {}'.format(wedge_name)})
+        for key, value in wedge.parameters.items():
+            parameters[key] = value
+        UI.display_parameters(parameters)
+    except ValueError:
+        UI.display('Unknown wedge: {}'.format(wedge_name))
 
 
 # Unit arrangement views

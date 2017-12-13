@@ -3,6 +3,8 @@
 
 from collections import OrderedDict
 from contextlib import suppress
+import itertools as it
+import re
 
 from .rpi2caster import CFG, DB, UI, Abort, option as opt
 from . import basic_models as bm, basic_controllers as bc, definitions as d
@@ -179,7 +181,9 @@ class SourceMixin(object):
 
 class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
     """Mixin for setting diecase, wedge and measure"""
-    _measure, _default_alignment = None, 'left'
+    _measure, _default_alignment = None, d.ALIGNMENTS.left
+    # markup format used for source text
+    markup_language = 'enkiduml'
     manual_mode = False
 
     @property
@@ -247,19 +251,6 @@ class TypesettingContext(SourceMixin, DiecaseMixin, RibbonMixin):
         """Changes the manual/automatic typesetting mode"""
         self.manual_mode = not self.manual_mode
 
-    @property
-    def compose(self):
-        """Bridge for automatic/manual typesetting.
-        Choice is made by manual_mode flag."""
-        return self._manual_compose if self.manual_mode else self._auto_compose
-
-    def _manual_compose(self, source=''):
-        """Manual composition, where the user makes end-of-line decisions"""
-        text = source or self.source
-
-    def _auto_compose(self, source=''):
-        """Automatic typesetting with hyphenation and justification"""
-
 
 class Document:
     """A document represents a whole page of text to be cast in one run.
@@ -269,8 +260,8 @@ class Document:
         self.text = str(text)
         self.context = context
         # split the text into paragraphs with text and alignment
-        parsed = p.cut_to_paragraphs(self.text)
-        self.paragraphs = [Paragraph(t, a, self.context) for t, a in parsed]
+        parsed = self.make_paragraphs(self.text)
+        self.paragraphs = [Paragraph(t, self.context, a) for t, a in parsed]
 
     def compose(self):
         """Typeset the document. The context is a TypesettingContext
@@ -290,22 +281,111 @@ class Document:
         ribbon.contents = contents
         self.contxt.ribbon = ribbon
 
+    def make_paragraphs(self, text):
+        """Cut a text into paragraphs and add them to self.paragraphs"""
+        def_alignment = self.context.default_alignment
+        align_codes = {code: jc for jc in d.ALIGNMENTS for code in jc.codes}
+        # regex to catch and handle it
+        codes_regex = r'(?<=\^)({})'.format('|'.join(align_codes.keys()))
+        # double newline acts as a paragraph break with default justification
+        align_codes['\n\n'] = def_alignment
+        # triple newline means "stop parsing, discard everything further"
+        align_codes['\n\n\n'] = def_alignment
+        # partial regular expression to catch the newlines
+        newlines_regex = r'\n{2, 3}'
+        # regex to catch both codes and newlines
+        regex = re.compile('({})|({})'.format(newlines_regex, codes_regex),
+                           flags=re.IGNORECASE)
+        # split the string with regex, discard empty strings
+        parts = [align_codes.get(s, s) for s in regex.split(text) if s]
+        ret = list(it.zip_longest(*[iter(parts)] * 2, fillvalue=def_alignment))
+        print(ret)
+        return ret
+
+    def _cut_to_paragraphs(self, text):
+        """Cut the incoming input string into paragraphs.
+        A paragraph delimiter can be:
+            -a justification control code,
+            -a double newline.
+        Only the part of text before "end of file" control code,
+        or triple newline, is processed."""
+        default_alignment = self.context.default_alignment
+        da_token = ('DefaultAlignment', '\n{2}', default_alignment)
+        # code capturing group
+        capture_group = r'(?<=\^){}'
+
+        # token definitions: end-of-file, double newline -> default alignment
+        tds = [('EOF', r'(\n{3}|(?<=\^)ef)', default_alignment), da_token]
+        # justification code token definitions
+        tds.extend([(a.name, capture_group.format('|'.join(a.codes)), a)
+                    for a in d.ALIGNMENTS])
+        tds.append(('Break', re.escape('^cr')))
+        tds.append(('Text', r'.+'))
+
+        # get a stream of tokens in the text
+        valid_tokens = []
+        tokens = p.tokenize(text, tds)
+        for token in tokens:
+            valid_tokens.append(token)
+            if token.name == 'EOF':
+                break
+        zipped = it.zip_longest(*[iter(valid_tokens)] * 2, fillvalue=da_token)
+        ret = [(t.value, c.routine) for (t, c) in zipped]
+        print(ret)
+        return ret
+
 
 class Paragraph(object):
     """A page is broken into a series of paragraphs."""
-    def __init__(self, text, alignment, context):
+    def __init__(self, text, context, alignment=None):
         self.text = text
         self.context = context
         self.alignment = alignment or context.default_alignment
+        # markup parsing routine
+        parsers = {'enkiduml': self.parse_enkiduml}
+        parser = parsers.get(self.context.markup_language)
+        self.tokens = parser(text)
         self.lines = []
 
     def display_text(self):
         """Prints the text"""
         UI.display(self.text)
 
-    def compose(self, context):
-        """Typeset the paragraph's text"""
-        self.context = context
+    def parse_enkiduml(self, text):
+        """Typeset the paragraph's text.
+        Input: text with EnkiduML codes,
+        output: tuples [(char, style, unit_correction), ...]"""
+        def add_units(pattern):
+            """Adds a specified number of units to a character"""
+            nonlocal unit_correction
+            unit_correction += p.get_number(pattern)
+
+        def subtract_units(pattern):
+            """Takes away a specified number of quarters of a unit
+            from a character"""
+            nonlocal unit_correction
+            unit_correction -= p.get_number(pattern) / 4.0
+
+        def add_quads(pattern):
+            """Add some quads to the composition"""
+            self.current_line.extend(['1em'] * p.get_number(pattern))
+
+        def add_enquads(pattern):
+            """Add some half-quads to the composition"""
+            self.current_line.extend(['0.5em'] * p.get_number(pattern))
+
+        def change_style(pattern):
+            """Change the current style"""
+            self.context.current_style = d.STYLE_COMMANDS.get(pattern)
+
+        codes = [p.make_number_pattern('#=', 1, 3),
+                 p.make_number_pattern('+-', 1, 2),
+                 *d.STYLE_COMMANDS.keys()]
+
+        unit_correction = 0
+        # tokens = p.split_on_matches(text, codes=codes)
+        # print(tokens)
+
 
     def translate(self):
         """Translate the characters into a series of Monotype codes"""

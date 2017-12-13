@@ -3,16 +3,14 @@
 from collections import namedtuple
 from contextlib import suppress
 from functools import lru_cache
-from itertools import zip_longest
 import re
-
-from .definitions import ALIGN_COMMANDS
 
 # parsing delimiters
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
 
 # definitions
+Token = namedtuple('Token', 'name value routine')
 ParsedRecord = namedtuple('ParsedRecord',
                           ('raw signals comment column row has_signals is_char'
                            ' uses_row_16 has_0005 has_0075 has_s_needle '
@@ -128,19 +126,54 @@ def parse_ribbon(ribbon):
     return metadata
 
 
-def cut_to_paragraphs(text):
-    """Cut a source text into paragraphs."""
-    # split on all control codes for alignment/justification,
-    # as well as a double newline
-    commands = ['\n\n', *ALIGN_COMMANDS.keys()]
-    tokens = '({})'.format('|'.join(re.escape(cmd) for cmd in commands))
-    regex = re.compile(tokens)
-    chunks = regex.split(text)
-    # group the chunks by two to get (text, justification_code) pairs
-    # if chunks has odd length, use '\n\n' (default justification)
-    # as the alignment code for the last item
-    return [(t, ALIGN_COMMANDS.get(c))
-            for t, c in zip_longest(*[iter(chunks)] * 2, fillvalue='\n\n')]
+def tokenize(text, token_specification, ignore_case=False):
+    """Get tokens from text"""
+    routines = {}
+    regexes = []
+    for item in token_specification:
+        try:
+            name, regex, routine = item
+            routines[name] = routine
+        except ValueError:
+            name, regex = item
+            routines[name] = name
+        regexes.append('(?P<{}>{})'.format(name, regex))
+
+    flags = re.IGNORECASE if ignore_case else 0
+    for match in re.finditer('|'.join(regexes), text, flags):
+        name = match.lastgroup
+        value = match.group(name)
+        routine = routines.get(name)
+        yield Token(name, value, routine)
+
+
+def get_code_and_number(pattern):
+    """Parse a regex string to get a number"""
+    regex = re.compile(r'([0-9]+)')
+    print(regex.split(pattern.strip('^')))
+    return int(''.join((x for x in pattern if x.isdigit())) or 0)
+
+
+def make_number_pattern(codes, min_digits=1, max_digits=2):
+    """Make a regular expression pattern matching code and number
+    from min_digits to max_digits, e.g.
+    code: "#", min_digits: 1, max_digits: 3 -> "(#[0-9]{1, 3})"
+    """
+    return (r'(\^[{c}][0-9]{lb}{minimum},{maximum}{rb})'
+            .format(c=re.escape(codes), lb='{', rb='}',
+                    minimum=min_digits, maximum=max_digits))
+
+
+def split_on_matches(text, regex_pattern, ignore_case=True):
+    """Split a string on codes. Return a list of chunks:
+        text -> [str1, code1, str2, code2...]
+
+        regex_pattern: a custom regular expression pattern to split on,
+        ignore_case: no distinction between lowercase and uppercase codes
+    """
+    flags = re.IGNORECASE if ignore_case else 0
+    regex = re.compile(regex_pattern, flags=flags)
+    return regex.split(text)
 
 
 def token_parser(source, *token_sources, skip_unknown=True):

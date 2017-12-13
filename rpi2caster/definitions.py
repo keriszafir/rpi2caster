@@ -19,58 +19,55 @@ SD = namedtuple('StyleDefinitions',
                  'size1 size2 size3 size4 size5'))
 STYLES = SD(roman=Style(name='roman', short='r',
                         alternatives='regular, antiqua',
-                        codes=('^rr', '^00'), ansi=0),
+                        codes=('rr', '00'), ansi=0),
             italic=Style(name='italic', short='i', alternatives='',
-                         codes=('^ii', '^01'), ansi='3;31'),
+                         codes=('ii', '01'), ansi='3;31'),
             altitalic=Style(name='alternative italic', short='a', ansi='3;31',
-                            codes=('^ai', '^08'), alternatives=''),
+                            codes=('ai', '08'), alternatives=''),
             semibold=Style(name='semi-bold', short='h', ansi='1;33',
-                           codes=('^sb', '^09'), alternatives=''),
+                           codes=('sb', '09'), alternatives=''),
             bold=Style(name='bold', short='b', alternatives='',
-                       codes=('^bb', '^03'), ansi='1;33'),
+                       codes=('bb', '03'), ansi='1;33'),
             bolditalic=Style(name='bold italic', short='q', ansi='1;31',
                              alternatives='',
-                             codes=('^bi', '^ib', '^07')),
+                             codes=('bi', 'ib', '07')),
             smallcaps=Style(name='small caps', short='s', alternatives='',
-                            codes=('^sc', '^ss', '^02'),
+                            codes=('sc', 'ss', '02'),
                             ansi='4;32'),
             inferior=Style(name='inferior', short='l',
                            alternatives='lower index, subscript',
-                           codes=('^ll', '^05'), ansi=34),
+                           codes=('ll', '05'), ansi=34),
             superior=Style(name='superior', short='u',
                            alternatives='upper index, superscript',
-                           codes=('^uu', '^04'), ansi=35),
+                           codes=('uu', '04'), ansi=35),
             fraktur=Style(name='Fraktur', short='f',
                           alternatives='Schwabacher, German',
-                          codes=('^ff', '^06'), ansi=36),
+                          codes=('ff', '06'), ansi=36),
             size1=Style(name='size 1', short='1', ansi=0,
-                        alternatives='', codes=('^s1',)),
+                        alternatives='', codes=('s1',)),
             size2=Style(name='size 2', short='2', ansi=0,
-                        alternatives='', codes=('^s2',)),
+                        alternatives='', codes=('s2',)),
             size3=Style(name='size 3', short='3', ansi=0,
-                        alternatives='', codes=('^s3',)),
+                        alternatives='', codes=('s3',)),
             size4=Style(name='size 4', short='4', ansi=0,
-                        alternatives='', codes=('^s4',)),
+                        alternatives='', codes=('s4',)),
             size5=Style(name='size 5', short='5', ansi=0,
-                        alternatives='', codes=('^s5',)))
+                        alternatives='', codes=('s5',)))
 # Style control commands for typesetting - generate automatically
 STYLE_COMMANDS = {code: style for style in STYLES for code in style.codes}
-# add uppercase as well
-STYLE_COMMANDS.update({c.upper(): STYLE_COMMANDS[c] for c in STYLE_COMMANDS})
 
 # Text alignments
 Alignment = namedtuple('Alignment', 'name alternatives codes')
 AD = namedtuple('AlignmentDefinitions', 'left center right both')
-ALIGNMENTS = AD(left=Alignment(name='left', codes=('^cr',),
+ALIGNMENTS = AD(left=Alignment(name='left', codes=('cr',),
                                alternatives='flush left, rag right'),
-                center=Alignment(name='center', codes=('^cc',),
+                center=Alignment(name='center', codes=('cc',),
                                  alternatives='rag left and right'),
-                right=Alignment(name='right', codes=('^cl',),
+                right=Alignment(name='right', codes=('cl',),
                                 alternatives='flush right, rag left'),
-                both=Alignment(name='both', codes=('^cf', '^cb'),
+                both=Alignment(name='both', codes=('cf', 'cb'),
                                alternatives='justified, flat, flush both'))
 ALIGN_COMMANDS = {code: algmt for algmt in ALIGNMENTS for code in algmt.codes}
-ALIGN_COMMANDS.update({c.upper(): ALIGN_COMMANDS[c] for c in ALIGN_COMMANDS})
 
 # Default space positions
 DEFAULT_LOW_SPACE_POSITIONS = (('G', 1), ('G', 2), ('G', 5), ('O', 15))
