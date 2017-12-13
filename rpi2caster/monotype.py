@@ -276,6 +276,7 @@ class SimulationCaster(CasterDiagnosticsMixin):
         self.config = dict(supported_operation_modes=[CASTING, PUNCHING],
                            supported_row16_modes=[HMN, KMN, UNITSHIFT],
                            default_operation_mode=CASTING,
+                           has_motor_control=False,
                            punching_on_time=0.2, punching_off_time=0.3,
                            sensor_timeout=5, pump_stop_timeout=20,
                            startup_timeout=20, name='Simulation interface')
@@ -732,14 +733,20 @@ class MonotypeCaster(SimulationCaster):
         In other modes (testing, punching, manual punching):
             The interface will just turn on the compressed air supply.
         """
+        # can the interface start the motor by itself?
+        has_motor_control = self.config.get('has_motor_control', False)
         if self.testing_mode:
             request_timeout = 5
-        elif self.is_casting():
-            info = ('Starting the composition caster...\n'
-                    'Turn on the motor if necessary, and engage the clutch.\n'
+        elif self.is_casting() and has_motor_control:
+            info = ('Starting the motor...\n'
+                    'Push the operating lever.\n'
                     'Casting will begin after detecting the machine rotation.')
             UI.display(info)
             request_timeout = 3 * self.config['startup_timeout'] + 2
+        elif self.is_casting():
+            info = ('Start the motor and then push the operating lever.\n'
+                    'Casting will begin after detecting the machine rotation.')
+            UI.display(info)
         else:
             UI.pause('Waiting for you to start punching...')
             request_timeout = 5
@@ -758,7 +765,7 @@ class MonotypeCaster(SimulationCaster):
             if UI.confirm('Do you want to try again?', abort_answer=False):
                 return self.start()
         if self.is_casting():
-            UI.display('OK, the machine is running...')
+            UI.display('The machine is running. Proceeding with casting...')
 
     @handle_communication_error
     def stop(self):
@@ -770,10 +777,16 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
+        # can the interface start the motor by itself?
+        has_motor_control = self.config.get('has_motor_control', False)
         if self.testing_mode:
             request_timeout = 3
+        elif self.is_casting() and has_motor_control:
+            UI.pause('Disengage the operating lever. When done, continue.\n'
+                     'The interface will stop the motor.')
+            request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         elif self.is_casting():
-            UI.display('Turning the machine off...')
+            UI.pause('Disengage the operating lever and stop the motor.')
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         else:
             request_timeout = 3
