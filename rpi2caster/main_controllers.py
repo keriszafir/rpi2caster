@@ -721,8 +721,7 @@ class DiecaseMixin:
     def find_matrix(self, choose=True, **kwargs):
         """Search the diecase layout and get a matching mat.
 
-        choose: manual choice menu or new mat definition,
-        temporary: if True, copies the matrix (if it is edited temporarily),
+        choose: manual choice menu or new mat definition
 
         kwargs: char, styles, position, units: search criteria."""
         return find_matrix(self.diecase, choose, **kwargs)

@@ -782,8 +782,8 @@ class MonotypeCaster(SimulationCaster):
         if self.testing_mode:
             request_timeout = 3
         elif self.is_casting() and has_motor_control:
-            UI.pause('Disengage the operating lever. When done, continue.\n'
-                     'The interface will stop the motor.')
+            UI.pause('Disengage the operating lever.\n'
+                     'The interface will stop the motor after you continue...')
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         elif self.is_casting():
             UI.pause('Disengage the operating lever and stop the motor.')

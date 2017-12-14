@@ -268,6 +268,54 @@ class Casting(TypesettingContext):
                     skip_successful = stats.get_lines_done() >= 2
                     set_lines_skipped(run=skip_successful, session=False)
 
+    @temp_wedge
+    def cast_sorts(self):
+        """Cast sorts from matrix coordinates."""
+        @cast_this
+        def cast(mat, units):
+            """Cast from the matrix 15 times."""
+            # 0075 and 0005 justifying wedge positions
+            coarse, fine = self.get_wedge_positions(mat, units)
+            # use the S signal only if corrections are needed
+            use_s_needle = (coarse, fine) != (3, 8)
+            record = mat.get_ribbon_record(s_needle=use_s_needle)
+
+            # add spaces in between?
+            if units < 9:
+                line = [record] * 15
+            elif units >= 18:
+                # space after every character
+                line = [record, 'G2'] * 15
+            else:
+                # every 5 characters
+                line = [[record] * 5, 'G2'] * 3
+
+            # add 0075+x combination or not?
+            if coarse == fine or not use_s_needle:
+                start = ['NKJS 0075 0005 {}'.format(coarse)]
+            else:
+                start = ['NKS 0075 {}'.format(coarse),
+                         'NKJS 0075 0005 {}'.format(fine)]
+
+            end = ['NJS 0005', 'NJS 0005', 'NKJS 0075 0005']
+            # casting will take place in reverse
+            return (self, [*end, *line, *start])
+
+        info = ('Sorts and spaces casting:\n'
+                'Give the matrix coordinates for your character, '
+                'then specify its width (units). ')
+        UI.display(info)
+        while True:
+            if not UI.confirm('Continue?'):
+                # early exit
+                break
+
+            # ask for matrix coordinates and units, pecify number of lines
+            mat = self.find_matrix(char='unspecified')
+            width = UI.enter('Unit width?', datatype=int, default=mat.units)
+            if UI.confirm('Confirm casting?'):
+                cast(mat, width)
+
     @cast_this
     @temp_diecase
     @temp_wedge
