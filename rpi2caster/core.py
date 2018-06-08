@@ -252,6 +252,8 @@ class Casting(TypesettingContext):
                     # offer to skip lines for re-casting the failed run
                     skip_successful = stats.get_lines_done() >= 2
                     set_lines_skipped(run=skip_successful, session=False)
+                    # restart the machine after emergency stop
+                    self.machine.start()
 
     @cast_this
     @mc.temp_wedge
@@ -617,7 +619,7 @@ class Casting(TypesettingContext):
         # G-8 calibration
         UI.display('\n\nCalibration done. Now adjust the matrix case draw rods'
                    '\nso that the diecase is not wobbling anymore.\n')
-        with self.machine: #(testing_mode=True):
+        with self.machine:
             self.machine.test_one('G8')
             UI.pause('Sending G8, press any key to stop...')
 
@@ -691,8 +693,7 @@ class Casting(TypesettingContext):
                   'and casts the type on a composition caster.'
                   '\n\nCasting / Punching Menu:')
         exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
-        UI.dynamic_menu(options, header, default_key='c',
-                        catch_exceptions=exceptions)
+        UI.dynamic_menu(options, header, catch_exceptions=exceptions)
 
     def display_details(self):
         """Collect ribbon, diecase and wedge data here"""

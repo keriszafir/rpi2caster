@@ -13,8 +13,6 @@ from librpi2caster import ON, OFF, CASTING, PUNCHING, HMN, KMN, UNITSHIFT
 # Intra-package imports
 from .rpi2caster import UI, Abort, option
 from .parsing import parse_record
-from .basic_models import Matrix
-from .main_controllers import get_wedge_positions, choose_wedge
 
 
 def handle_communication_error(routine):
@@ -322,8 +320,10 @@ class SimulationCaster:
                     repetitions -= 1
                 except librpi2caster.MachineStopped:
                     # repetition failed
-                    UI.confirm('Machine stopped: continue casting?',
-                               abort_answer=False)
+                    if UI.confirm('Machine stopped: continue casting?',
+                                  abort_answer=False):
+                        # restart the machine
+                        self.start()
                 if ask and not repetitions and UI.confirm('Repeat?'):
                     repetitions += 1
 
@@ -421,20 +421,6 @@ class SimulationCaster:
                      '0075 S', '0005 O 15']
             self.test(queue, duration=0.3)
 
-        def calibrate_draw_rods(*_):
-            """Keeps the diecase at G8 so that the operator can adjust
-            the diecase draw rods until the diecase stops moving sideways
-            when the centering pin is descending."""
-            UI.display('Draw rods calibration:\n'
-                       'The diecase will be moved to the central position '
-                       '(G8).\n Turn on the machine and adjust the diecase '
-                       'draw rods until the diecase stops wobbling.\n')
-            if not UI.confirm('Proceed?', default=True, abort_answer=False):
-                return
-            with self(testing_mode=ON):
-                self.test_one('G8')
-                UI.pause('Sending G8, waiting for you to stop...')
-
         def calibrate_wedges(*_):
             """Allows to calibrate the justification wedges so that when you're
             casting a 9-unit character with the S-needle at 0075:3 and 0005:8
@@ -460,56 +446,6 @@ class SimulationCaster:
             # start - 7 x G5 - line out - start - 7 x GS5 - line out - stop
             sequence = [pump_start, *[record] * 7, line_out, pump_start,
                         *[justified_record] * 7, line_out, pump_stop]
-            self.cast(sequence)
-
-        def calibrate_mould_and_diecase(*_):
-            """Casts the "en dash" characters for calibrating the character X-Y
-            relative to type body."""
-            def get_codes(char, default_position, comment):
-                """Gets two mats for a given char and adjusts its parameters"""
-                code = UI.enter('Where is the {}?'.format(char),
-                                default=default_position)
-                matrix = Matrix(' ', code=code.upper())
-                # try again recursively if wrong value
-                if not matrix.position.row or not matrix.position.column:
-                    return get_codes(char, default_position, comment)
-                # ask for unit width
-                row_units = wedge[matrix.position.row]
-                units = UI.enter('Unit width?', default=row_units)
-                matrix.units = units
-                # calculate the character width for measurement
-                width = wedge.set_width / 12 * units / 18 * wedge.pica
-                description = '{}, {:4f} inches wide'.format(comment, width)
-                # calculate justifying wedge positions
-                positions = get_wedge_positions(matrix, wedge, units)
-                pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005
-                use_s_needle = (pos_0075, pos_0005) != (3, 8)
-                codes = matrix.get_ribbon_record(s_needle=use_s_needle,
-                                                 comment=description)
-                sjust = ['NJS 0005 {}'.format(pos_0005),
-                         'NKS 0075 {}'.format(pos_0075)]
-                # use single justification to adjust character width, if needed
-                return ([*sjust, codes, codes] if use_s_needle
-                        else [codes, codes])
-
-            UI.display('Mould blade opening and X-Y character calibration:\n'
-                       'Cast G5, adjust the sort width to the value shown.\n'
-                       '\nThen cast some lowercase "n" letters and n-dashes,\n'
-                       'check the position of the character relative to the\n'
-                       'type body and adjust the bridge X-Y.\n'
-                       'Repeat if needed.\n')
-
-            wedge = choose_wedge()
-            # build a casting queue and cast it repeatedly
-            line_out = 'NKJS 0005 0075'
-            pump_stop = 'NJS 0005'
-            # use half-quad, quad, "n" and en-dash
-            chars = [('half-quad', 'G5', 'full square'),
-                     ('quad', 'O15', 'half square'),
-                     ('n/h', None, 'serif overhanging test'),
-                     ('dash or calibration mark', None, 'X-Y alignment test')]
-            codes = (code for what in chars for code in get_codes(*what))
-            sequence = [line_out, *codes, line_out, pump_stop]
             self.cast(sequence)
 
         def test_row_16(*_):
@@ -557,16 +493,6 @@ class SimulationCaster:
                           text='Calibrate the 52D wedge',
                           desc=('Calibrate the space transfer wedge '
                                 'for correct width')),
-                   option(key='d', value=calibrate_mould_and_diecase, seq=4,
-                          cond=self.is_casting,
-                          text='Calibrate mould blade and diecase',
-                          desc=('Set the type body width and '
-                                'character-to-body position')),
-                   option(key='m', value=calibrate_draw_rods, seq=3,
-                          cond=self.is_casting,
-                          text='Calibrate matrix case draw rods',
-                          desc=('Keep the matrix case at G8 '
-                                'and adjust the draw rods')),
                    option(key='l', value=test_row_16, seq=5,
                           cond=self.is_casting,
                           text='Test the extended 16x17 diecase system',
