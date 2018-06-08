@@ -16,7 +16,7 @@ except ImportError:
 
 from .rpi2caster import UI, Abort, Finish, option, find_casters
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .matrix_controller import count_diecases, temp_diecase
+from . import main_controllers as mc
 from .parsing import parse_record
 from .typesetting import TypesettingContext
 
@@ -55,31 +55,40 @@ class Casting(TypesettingContext):
 
     def choose_machine(self, interface_id=None, operation_mode=None):
         """Choose a machine from the available interfaces."""
-        def make_menu_entry(number, caster, url):
+        def make_menu_entry(number, caster, url, name):
             """build a menu entry"""
             if caster:
+                if number:
+                    nums.append(number)
                 modes = ', '.join(caster.supported_operation_modes)
                 row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
                 text = ('{} - modes: {} - row 16 addressing modes: {}'
                         .format(caster, modes, row16_modes))
             else:
-                text = '\t[Unavailable] {}'.format(url)
+                text = '[Unavailable] {}\n\t\t\t{}'.format(url, name)
             return option(key=number, seq=number, value=caster, text=text)
 
         casters = find_casters(operation_mode)
         # look a caster up by the index
         try:
-            caster = casters[interface_id][0]
+            url, caster, name = casters[interface_id]
             if not caster:
                 raise ValueError
+            UI.display('Using caster {} at {}'.format(name, url),
+                       min_verbosity=1)
         except (KeyError, IndexError, TypeError, ValueError):
             # choose caster from menu
-            menu_options = [make_menu_entry(number, caster, url)
-                            for number, (caster, url) in casters.items()]
-            caster = UI.simple_menu('Choose the caster:', menu_options)
-            if not caster:
-                UI.pause('Tried to use the unavailable caster.')
-                raise Abort
+            # nums stores menu entry numbers for useful casters
+            nums = []
+            menu_options = [make_menu_entry(number, caster, url, name)
+                            for number, (url, caster, name) in casters.items()]
+            while True:
+                caster = UI.simple_menu('Choose the caster:', menu_options,
+                                        default_key=nums[0] if nums else 0)
+                if not caster:
+                    UI.pause('Tried to use the unavailable caster.')
+                else:
+                    break
         self.machine = caster
 
     def punch_ribbon(self, ribbon):
@@ -245,7 +254,7 @@ class Casting(TypesettingContext):
                     set_lines_skipped(run=skip_successful, session=False)
 
     @cast_this
-    @bc.temp_wedge
+    @mc.temp_wedge
     @bc.temp_measure
     def cast_material(self):
         """Cast typesetting material: typecases, specified sorts, spaces"""
@@ -377,7 +386,7 @@ class Casting(TypesettingContext):
         return ribbon
 
     @cast_this
-    @bc.temp_wedge
+    @mc.temp_wedge
     def cast_qr_code(self):
         """Set up and cast a QR code which can be printed and then scanned
         with a mobile device."""
@@ -471,8 +480,8 @@ class Casting(TypesettingContext):
         return self.ribbon.contents
 
     @cast_this
-    @temp_diecase
-    @bc.temp_wedge
+    @mc.temp_diecase
+    @mc.temp_wedge
     def diecase_proof(self):
         """Tests the whole diecase, casting from each matrix.
         Casts spaces between characters to be sure that the resulting
@@ -556,6 +565,62 @@ class Casting(TypesettingContext):
 
         return queue
 
+    @mc.temp_wedge
+    def calibrate_machine(self):
+        """Casts the "en dash" characters for calibrating the character X-Y
+        relative to type body."""
+        def get_codes(char, default_position, comment):
+            """Gets two mats for a given char and adjusts its parameters"""
+            code = UI.enter('Where is the {}?'.format(char),
+                            default=default_position)
+            matrix = bm.Matrix(' ', code=code.upper())
+            # try again recursively if wrong value
+            if not matrix.position.row or not matrix.position.column:
+                return get_codes(char, default_position, comment)
+            # ask for unit width
+            row_units = self.wedge[matrix.position.row]
+            units = UI.enter('Unit width?', default=row_units)
+            matrix.units = units
+            # calculate the character width for measurement
+            width = self.wedge.set_width / 12 * units / 18 * self.wedge.pica
+            description = '{}, {:4f} inches wide'.format(comment, width)
+            # calculate justifying wedge positions
+            positions = mc.get_wedge_positions(matrix, self.wedge, units)
+            pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005
+            use_s_needle = (pos_0075, pos_0005) != (3, 8)
+            codes = matrix.get_ribbon_record(s_needle=use_s_needle,
+                                             comment=description)
+            sjust = ['NJS 0005 {}'.format(pos_0005),
+                     'NKS 0075 {}'.format(pos_0075)]
+            # use single justification to adjust character width, if needed
+            return ([*sjust, codes, codes] if use_s_needle
+                    else [codes, codes])
+
+        UI.display('Mould blade opening and X-Y character calibration:\n'
+                   'Cast G5, adjust the sort width to the value shown.\n'
+                   '\nThen cast some lowercase "n" letters and n-dashes,\n'
+                   'check the position of the character relative to the\n'
+                   'type body and adjust the bridge X-Y.\n'
+                   'Repeat if needed.\n')
+
+        # build a casting queue and cast it repeatedly
+        line_out = 'NKJS 0005 0075'
+        pump_stop = 'NJS 0005'
+        # use half-quad, quad, "n" and en-dash
+        chars = [('half-quad', 'G5', 'full square'),
+                 ('quad', 'O15', 'half square'),
+                 ('n/h', None, 'serif overhanging test'),
+                 ('dash or calibration mark', None, 'X-Y alignment test')]
+        codes = (code for what in chars for code in get_codes(*what))
+        sequence = [line_out, *codes, line_out, pump_stop]
+        self.machine.cast(sequence)
+        # G-8 calibration
+        UI.display('\n\nCalibration done. Now adjust the matrix case draw rods'
+                   '\nso that the diecase is not wobbling anymore.\n')
+        with self.machine: #(testing_mode=True):
+            self.machine.test_one('G8')
+            UI.pause('Sending G8, press any key to stop...')
+
     def main_menu(self):
         """Main menu for the type casting utility."""
         def options():
@@ -564,25 +629,27 @@ class Casting(TypesettingContext):
             is_casting = self.machine.is_casting()
             is_punching = not is_casting
             multiple_modes = len(self.machine.supported_operation_modes) >= 2
-            diecase_str = (' (current diecase ID: {})'
-                           .format(self.diecase.diecase_id)
-                           if bool(self.diecase) else '')
 
-            got_ribbon, got_diecase = bool(self.ribbon), bool(self.diecase)
+            got_ribbon = bool(self.ribbon)
 
-            ret = [option(key='c', value=self.cast_composition, seq=10,
+            ret = [option(key='m', value=self.calibrate_machine, seq=5,
+                          cond=is_casting,
+                          text='Calibrate machine',
+                          desc='Align the character width, then diecase'),
+
+                   option(key='c', value=self.cast_composition, seq=10,
                           cond=is_casting and got_ribbon,
                           text='Cast composition',
                           desc='Cast type from a selected ribbon'),
 
-                   option(key='p', value=self.cast_composition, seq=10,
+                   option(key='r', value=self.choose_ribbon, seq=10,
+                          text='Select ribbon',
+                          desc='Select a ribbon from database or file'),
+
+                   option(key='p', value=self.cast_composition, seq=30,
                           cond=is_punching and got_ribbon,
                           text='Punch ribbon',
                           desc='Punch a paper ribbon for casting'),
-
-                   option(key='r', value=self.choose_ribbon, seq=30,
-                          text='Select ribbon',
-                          desc='Select a ribbon from database or file'),
 
                    option(key='v', value=self.display_ribbon_contents, seq=80,
                           text='View codes', cond=got_ribbon,
@@ -629,79 +696,7 @@ class Casting(TypesettingContext):
 
     def display_details(self):
         """Collect ribbon, diecase and wedge data here"""
-        ribbon, diecase, wedge = self.ribbon, self.diecase, self.wedge
-        data = [ribbon.parameters if ribbon else {},
+        data = [ribbon.parameters if self.ribbon else {},
                 self.machine.parameters]
         UI.display_parameters(*data)
         UI.pause()
-
-
-class Typesetting(TypesettingContext):
-    """Typesetting session - choose and translate text with control codes
-    into a sequence of Monotype control codes, which can be sent to
-    the machine to cast composed and justified type.
-    """
-    def main_menu(self):
-        """Main menu for the typesetting utility."""
-        def options():
-            """Generate menu options"""
-            diecase, source = self.diecase, self.source
-            manual_mode = self.manual_mode
-            diecase_str = (' (current: {})'.format(self.diecase.diecase_id)
-                           if self.diecase else '')
-
-            ret = [option(key='e', value=self.edit_text, seq=1,
-                          text='Edit source text'),
-                   option(key='c', value=self.compose, seq=2,
-                          text='Compose the text',
-                          cond=diecase and source and manual_mode,
-                          desc='User makes end-of-line decisions'),
-
-                   option(key='c', value=self.compose, seq=2,
-                          text='Compose the text',
-                          cond=diecase and source and not manual_mode,
-                          desc='Automatic typesetting'),
-
-                   option(key='m', value=self.change_measure, seq=5,
-                          text=('Change measure (current: {})'
-                                .format(self.measure)),
-                          desc='Set the new line length for composed text'),
-
-                   option(key='d', value=self.choose_diecase, seq=30,
-                          text='Select diecase{}'.format(diecase_str),
-                          cond=count_diecases(),
-                          desc='Select a matrix case from database'),
-
-                   option(key='w', value=self.choose_wedge, seq=35,
-                          text=('Select a normal wedge (current: {})'
-                                .format(self.wedge)), cond=self.diecase),
-
-                   option(key='a', value=self.change_alignment, seq=40,
-                          text=('Change default alignment (current: {})'
-                                .format(self.default_alignment))),
-
-                   option(key='t', value=self.toggle_manual_mode,
-                          text='Switch to automatic typesetting mode',
-                          cond=manual_mode),
-
-                   option(key='t', value=self.toggle_manual_mode,
-                          text='Switch to manual typesetting mode',
-                          cond=not manual_mode),
-
-                   option(key='v', value=self.display_ribbon_contents, seq=80,
-                          cond=self.ribbon, text='View codes',
-                          desc='Display all codes in the selected ribbon'),
-
-                   option(key='l', value=self.display_diecase_layout, seq=80,
-                          cond=self.diecase,
-                          text='View the diecase layout'),
-                   option(key='F7', value=self.diecase_manipulation, seq=90,
-                          text='Matrix manipulation...')]
-            return ret
-
-        header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
-                  'for Monotype Composition or Type and Rule casters.\n\n'
-                  'Typesetting Menu:')
-        exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
-        UI.dynamic_menu(options, header, default_key='c',
-                        catch_exceptions=exceptions)
