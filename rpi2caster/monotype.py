@@ -748,7 +748,7 @@ class MonotypeCaster(SimulationCaster):
                     'Casting will begin after detecting the machine rotation.')
             UI.display(info)
         else:
-            UI.pause('Waiting for you to start punching...')
+            UI.pause('Continue to start punching...')
             request_timeout = 5
         # send the request and handle any exceptions
         try:
@@ -777,7 +777,11 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
-        # can the interface start the motor by itself?
+        # is the machine working at all? maybe there is no need to stop
+        if not self.status.get('working'):
+            return
+
+        # can the interface control the motor by itself? (caster only)
         has_motor_control = self.config.get('has_motor_control', False)
         if self.testing_mode:
             request_timeout = 3

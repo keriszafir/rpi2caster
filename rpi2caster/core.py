@@ -299,7 +299,7 @@ class Casting(TypesettingContext):
 
             end = ['NJS 0005', 'NJS 0005', 'NKJS 0075 0005']
             # casting will take place in reverse
-            return (self, [*end, *line, *start])
+            return [*end, *line, *start]
 
         info = ('Sorts and spaces casting:\n'
                 'Give the matrix coordinates for your character, '
