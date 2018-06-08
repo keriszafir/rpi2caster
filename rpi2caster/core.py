@@ -8,11 +8,15 @@ from functools import wraps
 
 # common definitions
 import librpi2caster
-import qrcode
+# QR code generating backend
+try:
+    import qrcode
+except ImportError:
+    qrcode = None
 
 from .rpi2caster import UI, Abort, Finish, option, find_casters
 from . import basic_models as bm, basic_controllers as bc, definitions as d
-from .main_controllers import count_diecases, temp_diecase, temp_wedge
+from .matrix_controller import count_diecases, temp_diecase
 from .parsing import parse_record
 from .typesetting import TypesettingContext
 
@@ -51,40 +55,31 @@ class Casting(TypesettingContext):
 
     def choose_machine(self, interface_id=None, operation_mode=None):
         """Choose a machine from the available interfaces."""
-        def make_menu_entry(number, caster, url, name):
+        def make_menu_entry(number, caster, url):
             """build a menu entry"""
             if caster:
-                if number:
-                    nums.append(number)
                 modes = ', '.join(caster.supported_operation_modes)
                 row16_modes = ', '.join(caster.supported_row16_modes) or 'none'
                 text = ('{} - modes: {} - row 16 addressing modes: {}'
                         .format(caster, modes, row16_modes))
             else:
-                text = '[Unavailable] {}\n\t\t\t{}'.format(url, name)
+                text = '\t[Unavailable] {}'.format(url)
             return option(key=number, seq=number, value=caster, text=text)
 
         casters = find_casters(operation_mode)
         # look a caster up by the index
         try:
-            url, caster, name = casters[interface_id]
+            caster = casters[interface_id][0]
             if not caster:
                 raise ValueError
-            UI.display('Using caster {} at {}'.format(name, url),
-                       min_verbosity=1)
         except (KeyError, IndexError, TypeError, ValueError):
             # choose caster from menu
-            # nums stores menu entry numbers for useful casters
-            nums = []
-            menu_options = [make_menu_entry(number, caster, url, name)
-                            for number, (url, caster, name) in casters.items()]
-            while True:
-                caster = UI.simple_menu('Choose the caster:', menu_options,
-                                        default_key=nums[0] if nums else 0)
-                if not caster:
-                    UI.pause('Tried to use the unavailable caster.')
-                else:
-                    break
+            menu_options = [make_menu_entry(number, caster, url)
+                            for number, (caster, url) in casters.items()]
+            caster = UI.simple_menu('Choose the caster:', menu_options)
+            if not caster:
+                UI.pause('Tried to use the unavailable caster.')
+                raise Abort
         self.machine = caster
 
     def punch_ribbon(self, ribbon):
@@ -172,21 +167,6 @@ class Casting(TypesettingContext):
                                       default=0, minimum=0, maximum=limit)
                     stats.update(session_line_skip=s_skip)
 
-        def preheat_if_needed():
-            """Things to do only once during the whole casting session"""
-            prompt = 'Cast two lines of quads to heat up the mould?'
-            if not UI.confirm(prompt, default=False):
-                return []
-            measure = bc.set_measure(self.measure)
-            qty = int(measure.units // self.quad.units)
-            text = 'Casting 2 lines of {} quads for mould heatup'.format(qty)
-            galley_trip = 'NKJS 0005 0075 // {}'.format(text)
-            quad = self.quad.get_ribbon_record()
-            # casting queue
-            queue = [galley_trip, *[quad] * qty] * 2
-            # make a generator object - it needs to be single-use only
-            return (parse_record(x) for x in queue)
-
         def cast_queue(queue):
             """Casts the sequence of codes in given sequence.
             This function is executed until the sequence is exhausted
@@ -229,21 +209,17 @@ class Casting(TypesettingContext):
         # initial line skipping
         set_lines_skipped(run=True, session=True)
         UI.display_parameters(stats.session_parameters)
-        # mould heatup to stabilize the temperature
-        extra_quads = preheat_if_needed()
         # check if the row 16 addressing will be used;
         # connect with the interface
         row16_in_use = any(record.uses_row_16 for record in ribbon)
-        with self.machine(row16_needed=row16_in_use):
+        self.machine.choose_row16_mode(row16_in_use)
+        with self.machine:
             while stats.get_runs_left():
                 # Prepare the ribbon ad hoc
                 queue = skip_lines(ribbon)
                 stats.update(queue=queue)
                 # Cast the run and check if it was successful
                 try:
-                    # this part will be cast only once
-                    cast_queue(extra_quads)
-                    # proper queue with characters
                     cast_queue(queue)
                     stats.update(casting_success=True)
                     if not stats.get_runs_left():
@@ -268,166 +244,25 @@ class Casting(TypesettingContext):
                     skip_successful = stats.get_lines_done() >= 2
                     set_lines_skipped(run=skip_successful, session=False)
 
-    @temp_wedge
-    def cast_sorts(self):
-        """Cast sorts from matrix coordinates."""
-        @cast_this
-        def cast(mat, units):
-            """Cast from the matrix 15 times."""
-            # 0075 and 0005 justifying wedge positions
-            coarse, fine = self.get_wedge_positions(mat, units)
-            # use the S signal only if corrections are needed
-            use_s_needle = (coarse, fine) != (3, 8)
-            record = mat.get_ribbon_record(s_needle=use_s_needle)
-
-            # add spaces in between?
-            if units < 9:
-                line = [record] * 15
-            elif units >= 18:
-                # space after every character
-                line = [record, 'G2'] * 15
-            else:
-                # every 5 characters
-                line = [[record] * 5, 'G2'] * 3
-
-            # add 0075+x combination or not?
-            if coarse == fine or not use_s_needle:
-                start = ['NKJS 0075 0005 {}'.format(coarse)]
-            else:
-                start = ['NKS 0075 {}'.format(coarse),
-                         'NKJS 0075 0005 {}'.format(fine)]
-
-            end = ['NJS 0005', 'NJS 0005', 'NKJS 0075 0005']
-            # casting will take place in reverse
-            return [*end, *line, *start]
-
-        info = ('Sorts and spaces casting:\n'
-                'Give the matrix coordinates for your character, '
-                'then specify its width (units). ')
-        UI.display(info)
-        while True:
-            if not UI.confirm('Continue?'):
-                # early exit
-                break
-
-            # ask for matrix coordinates and units, pecify number of lines
-            mat = self.find_matrix(char='unspecified')
-            width = UI.enter('Unit width?', datatype=int, default=mat.units)
-            if UI.confirm('Confirm casting?'):
-                cast(mat, width)
-
     @cast_this
-    @temp_diecase
-    @temp_wedge
+    @bc.temp_wedge
     @bc.temp_measure
     def cast_material(self):
         """Cast typesetting material: typecases, specified sorts, spaces"""
-        def matrix_lookup(character=''):
-            """finds a matrix in the layout or defines a new one if failed"""
-            if self.diecase and character is not None:
-                # try to look the mat up by character
-                # available if we have a diecase layout
-                prompt = 'Character to look for?'
-                char = character or UI.enter(prompt, default='')
-            else:
-                char = ''
-            return self.find_matrix(char=char)
-
-        def spaces():
-            """generates a sequence of spaces"""
-            found = self.diecase.spaces
-            options = [option(value=sp, text=str(sp), seq=1) for sp in found]
-            options.append(option(key='c', value=None, text='custom', seq=2))
-            options.append(option(key='Enter', value=StopIteration, seq=3,
-                                  text='done defining spaces'))
-            msg = 'Next space?'
-            while True:
-                # choose from menu or enter coordinates
-                space = (UI.simple_menu(msg, options, allow_abort=False) or
-                         matrix_lookup(None))
-                units = space.get_units_from_row(wedge_used=self.wedge)
-                # how wide should it be?
-                width = bc.set_measure(input_value=units, unit='u',
-                                       what='space width',
-                                       set_width=self.wedge.set_width).units
-                # how many?
-                UI.display('By default cast a line filled with spaces.')
-                galley_units = self.measure.units - 2 * self.quad.units
-                qty = UI.enter('How many spaces?', int(galley_units // width))
-                yield d.QueueItem(space, round(width, 2), qty)
-
-        def typecases():
-            """generates a sequence of items for characters in a language"""
-            lookup_table = self.diecase.get_lookup_table()
-            # which styles interest us
-            styles = bc.choose_styles(self.diecase.styles,
-                                      mask=self.diecase.styles)
-            # what to cast?
-            freqs = bc.get_letter_frequencies()
-            bc.define_scale(freqs)
-            # a not-so-endless stream of mats...
-            for style in styles:
-                UI.display_header(style.name.capitalize())
-                prompt = 'Scale for {}?'.format(style.name)
-                scale = (1.0 if styles.is_single or styles.is_default
-                         else UI.enter(prompt, default=100, minimum=1) / 100.0)
-                for char, chars_qty in freqs.get_type_bill():
-                    qty = int(scale * chars_qty)
-                    UI.display('{}: {}'.format(char, qty))
-                    try:
-                        # find a mat
-                        matrix = lookup_table[(char, style)]
-                    except KeyError:
-                        # not found; allow defining it manually
-                        UI.display('Matrix lookup failed for {} {}'
-                                   .format(style.name, char))
-                        matrix = matrix_lookup(char)
-                    # at this point we have a matrix
-                    mat_units = self.get_units(matrix)
-                    units = round(mat_units, 2)
-                    yield d.QueueItem(matrix, units, qty)
-
-        def sorts():
-            """define sorts (character, width) manually
-            or semi-automatically (look them up in the layout)"""
-            while True:
-                matrix = matrix_lookup()
-                char_width = round(self.get_units(matrix))
-                units = bc.set_measure(char_width, 'u', what='character width',
-                                       set_width=self.wedge.set_width).units
-                qty = UI.enter('How many sorts?', default=10, minimum=0)
-                # ready to deliver
-                yield d.QueueItem(matrix, round(units, 2), qty)
-
-        def choose_source():
-            """choose a character generator"""
-            options = (option(key='s', value=spaces, text='spaces', seq=1),
-                       option(key='c', value=sorts, text='characters', seq=2),
-                       option(key='f', value=typecases, cond=self.diecase,
-                              text='typecases - based on language', seq=3),
-                       option(key='Enter', value=Abort, seq=10, text='done'),
-                       option(key='Esc', value=Finish, seq=11,
-                              text='abort and go back to menu'))
-
-            UI.display_header('Cast material for hand typesetting')
-            UI.display('You can abort any time when defining your order.')
-            UI.display('When ready, choose "Finish and start casting".')
-            return UI.simple_menu('What to cast?', options, allow_abort=False)
-
         def make_queue():
             """generate a sequence of items for casting"""
             while True:
-                # display menu
                 try:
-                    source_routine = choose_source()
-                    generator = source_routine()
-                    for item in generator:
-                        yield item
+                    UI.display('Specify characters to cast.\n'
+                               'When done, press Enter to start casting.')
+                    matrix = self.find_matrix(char='')
+                    units = UI.enter('How many units?', datatype=int,
+                                     default=round(self.get_units(matrix)))
+                    qty = UI.enter('How many sorts?', default=10, minimum=0)
+                    # ready to deliver
+                    yield d.QueueItem(matrix, round(units, 2), qty)
                 except (StopIteration, bm.MatrixNotFound):
-                    continue
-                except Abort:
-                    # finish and fill the last line
-                    raise StopIteration
+                    break
 
         def make_ribbon(queue):
             """Take items from queue and adds them as long as there is
@@ -441,8 +276,9 @@ class Casting(TypesettingContext):
                 sorts_left = queue_item.qty
                 matrix, units = queue_item.matrix, queue_item.units
                 # some info for the user
-                UI.display('{} × {} at {} units'
-                           .format(sorts_left, matrix, units))
+                UI.display('{} × {}, {} units {} set'
+                           .format(sorts_left, matrix.code, units,
+                                   self.wedge.set_width))
                 # get code and wedge positions for the item
                 positions = self.get_wedge_positions(matrix, units)
                 record = matrix.get_ribbon_record(s_needle=positions != (3, 8))
@@ -538,12 +374,10 @@ class Casting(TypesettingContext):
 
         source = make_queue()
         ribbon = [code for chunk in make_ribbon(source) for code in chunk]
-        if ribbon and UI.confirm('Review ribbon?'):
-            self.display_ribbon_contents(ribbon)
         return ribbon
 
     @cast_this
-    @temp_wedge
+    @bc.temp_wedge
     def cast_qr_code(self):
         """Set up and cast a QR code which can be printed and then scanned
         with a mobile device."""
@@ -638,56 +472,62 @@ class Casting(TypesettingContext):
 
     @cast_this
     @temp_diecase
-    @temp_wedge
-    @bc.temp_measure
-    def quick_typesetting(self):
-        """Allows us to use caster for casting single lines.
-        This means that the user enters a text to be cast,
-        gives the line length, chooses alignment and diecase.
-        Then, the program composes the line, justifies it, translates it
-        to Monotype code combinations.
-
-        This allows for quick typesetting of short texts, like names etc.
-        """
-        # Safeguard against trying to use this feature from commandline
-        # without selecting a diecase
-        # TODO: not implemented!
-        if not self.diecase:
-            raise Abort
-        # use manual composition engine
-        self.manual_mode = True
-        text = self.edit_text()
-        ribbon = self.compose(text)
-        return ribbon
-
-    @cast_this
-    @temp_diecase
-    @temp_wedge
+    @bc.temp_wedge
     def diecase_proof(self):
         """Tests the whole diecase, casting from each matrix.
         Casts spaces between characters to be sure that the resulting
         type will be of equal width."""
-        def make_space(row_number):
-            """Calculate the width, number and wedge positions of a space"""
-            char_width = self.wedge[row_number]
-            fill_width = column_width - char_width
-            for num_spaces in range(1, 6):
-                # look for a number of spaces to fill the missing units
-                space_width = fill_width / num_spaces
-                try:
-                    space = self.find_space(space_width, low=True)
-                    sp_wedges = self.get_wedge_positions(space, space_width)
-                    use_s_needle = sp_wedges != (3, 8)
-                    space_code = space.get_ribbon_record(s_needle=use_s_needle)
-                    return ([space_code] * num_spaces, sp_wedges)
-                except (bm.MatrixNotFound, bm.TypesettingError):
-                    # try more
-                    continue
+        def get_codes(matrix, wedges):
+            """add codes with single justification if necessary"""
+            combinations = []
+            wedges_needed = wedges != (3, 8)
+            code = matrix.get_ribbon_record(s_needle=wedges_needed)
+            combinations.append(code)
+            if wedges_needed:
+                combinations.append('NKS 0075 {}'.format(wedges.pos_0075))
+                combinations.append('NJS 0005 {}'.format(wedges.pos_0005))
+            return combinations
 
-        def build(row_number, spaces):
-            """Build a row of matrices and spaces"""
-            return sum(([*spaces, matrix.get_ribbon_record()]
-                        for matrix in self.diecase.select_row(row_number)), [])
+        def add_matrix(matrix):
+            """a matrix and a space"""
+            # keep track of spaces too narrow to cast
+            nonlocal leftover_units
+            mat_units = self.get_units(matrix)
+            space_units = 22 + leftover_units - mat_units
+            leftover_units = 0
+            try:
+                mat_wedges = self.get_wedge_positions(matrix, mat_units)
+            except bm.TypesettingError:
+                # adjust char width as far as possible,
+                # take away or add the rest to the space instead
+                limits = self.wedge.get_adjustment_limits()
+                row_units = matrix.get_units_from_row(wedge_used=self.wedge)
+                if mat_units < row_units - limits.shrink:
+                    # character too narrow for its row
+                    space_units -= (row_units - mat_units - limits.shrink)
+                    mat_units = row_units - limits.shrink
+                elif mat_units > row_units + limits.stretch:
+                    # character too wide for its row
+                    space_units += (mat_units - row_units - limits.stretch)
+                    mat_units = row_units + limits.stretch
+                mat_wedges = self.get_wedge_positions(matrix, mat_units)
+            # get these signals
+            mat_codes = get_codes(matrix, mat_wedges)
+            # omit spaces not wide enough
+            if space_units >= 3:
+                try:
+                    # high spaces are preferred
+                    space = self.find_space(space_units, low=False)
+                except bm.MatrixNotFound:
+                    # then we have to do with a low one...
+                    space = self.find_space(space_units, low=True)
+                sp_wedges = self.get_wedge_positions(space, space_units)
+                space_codes = get_codes(space, sp_wedges)
+            else:
+                space_codes = []
+                leftover_units += space_units
+            # characters should be separated by at least one space
+            return space_codes + mat_codes
 
         if self.diecase:
             self.display_diecase_layout()
@@ -698,20 +538,18 @@ class Casting(TypesettingContext):
         if not UI.confirm('Proceed?', default=True, abort_answer=False):
             return
 
-        # start with finishing galley trip and line out
         queue = ['NJS 0005', 'NKJS 0075 0005']
         quad = self.quad.get_ribbon_record()
-        # how wide will each column be?
-        min_space_width = self.diecase.get_min_space_width()
-        column_width = max(self.wedge[15] + min_space_width, 25)
+        pos_0075, pos_0005 = 3, 8
+        leftover_units = 0
         # build the layout one by one
-        for row_number in self.diecase.row_numbers:
-            # starting quad
+        for number, row in enumerate(self.diecase.layout.by_rows(), start=1):
+            UI.display('Processing row {}'.format(number))
             queue.append(quad)
-            # codes for spaces; wedge positions
-            spaces, (pos_0075, pos_0005) = make_space(row_number)
-            queue.extend(build(row_number, spaces))
-            # ending quad
+            for mat in row:
+                queue.extend(add_matrix(mat))
+            leftover_units = 0
+            # single justification for line start
             queue.append(quad)
             queue.append('NKS 0075 {}'.format(pos_0075))
             queue.append('NKJS 0075 0005 {}'.format(pos_0005))
@@ -732,17 +570,7 @@ class Casting(TypesettingContext):
 
             got_ribbon, got_diecase = bool(self.ribbon), bool(self.diecase)
 
-            ret = [option(key='r', value=self.choose_ribbon,
-                          seq=5 if not got_ribbon else 81,
-                          text=('Select ribbon' if not got_ribbon
-                                else 'Change ribbon'),
-                          desc='Select a ribbon from database or file'),
-
-                   option(key='m', value=machine.calibrate_machine, seq=5,
-                          cond=is_casting, text='Calibrate the matrix case',
-                          desc='Adjust matrix case, mould blade and bridge'),
-
-                   option(key='c', value=self.cast_composition, seq=10,
+            ret = [option(key='c', value=self.cast_composition, seq=10,
                           cond=is_casting and got_ribbon,
                           text='Cast composition',
                           desc='Cast type from a selected ribbon'),
@@ -752,29 +580,20 @@ class Casting(TypesettingContext):
                           text='Punch ribbon',
                           desc='Punch a paper ribbon for casting'),
 
-                   option(key='d', value=self.choose_diecase, seq=30,
-                          text='Select diecase{}'.format(diecase_str),
-                          cond=count_diecases(),
-                          desc='Select a matrix case from database'),
+                   option(key='r', value=self.choose_ribbon, seq=30,
+                          text='Select ribbon',
+                          desc='Select a ribbon from database or file'),
 
                    option(key='v', value=self.display_ribbon_contents, seq=80,
                           text='View codes', cond=got_ribbon,
                           desc='Display all codes in the selected ribbon'),
 
-                   option(key='l', value=self.display_diecase_layout, seq=80,
-                          text='Show diecase layout', cond=got_diecase,
-                          desc='View the matrix case layout'),
-
-                   option(key='t', value=self.quick_typesetting, seq=20,
-                          text='Quick typesetting',
-                          desc='Compose and cast a line of text'),
-
                    option(key='h', value=self.cast_material, seq=60,
-                          cond=is_casting, text='Cast handsetting material',
-                          desc='Cast sorts, spaces and typecases'),
+                          cond=is_casting, text='Cast sorts or spaces',
+                          desc='Cast characters from specified mats'),
 
                    option(key='q', value=self.cast_qr_code, seq=70,
-                          text='Cast QR codes',
+                          cond=qrcode, text='Cast QR codes',
                           desc='Cast QR codes from high and low spaces'),
 
                    option(key='F3', value=self.choose_machine, seq=90,
@@ -787,20 +606,14 @@ class Casting(TypesettingContext):
                                 .format(machine.operation_mode))),
 
                    option(key='F5', value=self.display_details, seq=92,
-                          text='Show details...', cond=is_casting,
-                          desc='Display ribbon, diecase and wedge info'),
-                   option(key='F5', value=self.display_details, seq=92,
-                          text='Show details...', cond=is_punching,
-                          desc='Display ribbon and interface details'),
+                          text='Show details...',
+                          desc='Display ribbon and interface information'),
 
                    option(key='F6', value=self.diecase_proof, seq=93,
                           text='Diecase proof',
                           desc='Cast every character from the diecase'),
 
-                   option(key='F7', value=self.diecase_manipulation, seq=94,
-                          text='Matrix manipulation...'),
-
-                   option(key='F8', value=machine.diagnostics_menu, seq=95,
+                   option(key='F8', value=machine.diagnostics, seq=95,
                           text='Diagnostics menu...',
                           desc='Interface and machine diagnostic functions')]
             return ret
@@ -811,15 +624,13 @@ class Casting(TypesettingContext):
                   'and casts the type on a composition caster.'
                   '\n\nCasting / Punching Menu:')
         exceptions = (Finish, Abort, KeyboardInterrupt, EOFError)
-        UI.dynamic_menu(options, header, catch_exceptions=exceptions,
-                        default_key='c')
+        UI.dynamic_menu(options, header, default_key='c',
+                        catch_exceptions=exceptions)
 
     def display_details(self):
         """Collect ribbon, diecase and wedge data here"""
         ribbon, diecase, wedge = self.ribbon, self.diecase, self.wedge
         data = [ribbon.parameters if ribbon else {},
-                diecase.parameters if diecase else {},
-                wedge.parameters if wedge else {},
                 self.machine.parameters]
         UI.display_parameters(*data)
         UI.pause()

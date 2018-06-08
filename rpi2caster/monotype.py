@@ -13,8 +13,9 @@ from librpi2caster import ON, OFF, CASTING, PUNCHING, HMN, KMN, UNITSHIFT
 # Intra-package imports
 from .rpi2caster import UI, Abort, option
 from .parsing import parse_record
+from .basic_controllers import choose_wedge
 from .basic_models import Matrix
-from .main_controllers import get_wedge_positions, choose_wedge
+from .matrix_controller import get_wedge_positions
 
 
 def handle_communication_error(routine):
@@ -25,8 +26,7 @@ def handle_communication_error(routine):
         try:
             return routine(*args, **kwargs)
         except librpi2caster.CommunicationError as error:
-            message = ('Connection to the interface lost. '
-                       'Check the network link.\n'
+            message = ('Connection to the interface lost. Check your link.\n'
                        'Original error message:\n{}\n'
                        'Do you want to try again, or abort?')
             if UI.confirm(message.format(error), abort_answer=False):
@@ -34,236 +34,7 @@ def handle_communication_error(routine):
     return wrapper
 
 
-class CasterDiagnosticsMixin:
-    """Offers diagnostic routines to check and calibrate the machine."""
-    def __call__(self, operation_mode=None, testing_mode=None,
-                 row16_needed=False):
-        UI.display('mode: ', operation_mode, ', testing mode: ', testing_mode,
-                   ' row16 is needed? : ', row16_needed)
-        return self
-
-    def test_front_pinblock(self):
-        """Sends signals 1...14, one by one"""
-        info = 'Testing the front pinblock - signals 1...14.'
-        UI.pause(info, allow_abort=True)
-        self.test([str(n) for n in range(1, 15)])
-
-    def test_rear_pinblock(self):
-        """Sends NI, NL, A...N"""
-        info = 'This will test the rear pinblock - NI, NL, A...N. '
-        UI.pause(info, allow_abort=True)
-        self.test(['NI', 'NL', *'ABCDEFGHIJKLMN'])
-
-    def test_all(self):
-        """Tests all valves and composition caster's inputs in original
-        Monotype order:
-        NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
-        """
-        info = ('This will test all the air lines in the same order '
-                'as the holes on the paper tower: \n{}\n'
-                'MAKE SURE THE PUMP IS DISENGAGED.')
-        signals = [*'ONMLKJIHGFSED', '0075', *'CBA',
-                   *(str(x) for x in range(1, 15)), '0005', '15']
-        UI.pause(info.format(' '.join(signals)), allow_abort=True)
-        self.test(signals)
-
-    def test_justification(self):
-        """Tests the 0075-S-0005"""
-        info = 'This will test the justification pinblock: 0075, S, 0005.'
-        UI.pause(info, allow_abort=True)
-        self.test(['0075', 'S', '0005'])
-
-    def test_any_code(self):
-        """Tests a user-specified combination of signals"""
-        with self(testing_mode=ON):
-            while True:
-                UI.display('Enter the signals to send to the caster, '
-                           'or leave empty to return to menu: ')
-                signals = UI.enter('Signals?', default=Abort)
-                output_signals = self.test_one(signals).get('signals', [])
-                UI.display('Sending {}'.format(' '.join(output_signals)))
-
-    def blow_all(self):
-        """Blow all signals for a short time; add NI, NL also"""
-        info = 'Blowing air through all air pins on both pinblocks...'
-        UI.pause(info, allow_abort=True)
-        queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
-                 'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14',
-                 '0075 S', '0005 O 15']
-        self.test(queue, duration=0.3)
-
-    def calibrate_draw_rods(self):
-        """Keeps the diecase at G8 so that the operator can adjust
-        the diecase draw rods until the diecase stops moving sideways
-        when the centering pin is descending."""
-        UI.display('Draw rods calibration:\n'
-                   'The diecase will be moved to the central position '
-                   '(G8).\n Turn on the machine and adjust the diecase '
-                   'draw rods until the diecase stops wobbling.\n')
-        if not UI.confirm('Proceed?', default=True, abort_answer=False):
-            return
-        with self(testing_mode=ON):
-            self.test_one('G8')
-            UI.pause('Sending G8, waiting for you to stop...')
-
-    def calibrate_wedges(self):
-        """Allows to calibrate the justification wedges so that when you're
-        casting a 9-unit character with the S-needle at 0075:3 and 0005:8
-        (neutral position), the    width is the same.
-
-        It works like this:
-        1. 0075 - turn the pump on,
-        2. cast 7 spaces from the specified matrix (default: G5),
-        3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
-        4. cast 7 spaces with the S-needle from the same matrix,
-        5. put the line to the galley, then 0005 to turn the pump off.
-        """
-        UI.display('Transfer wedge calibration:\n\n'
-                   'This function will cast two lines of 5 spaces: '
-                   'first: G5, second: GS5 with wedges at 3/8. \n'
-                   'Adjust the 52D space transfer wedge '
-                   'until the lengths are the same.\n')
-        UI.confirm('Proceed?', default=True, abort_answer=False)
-        # prepare casting sequence
-        record, justified_record = 'G7', 'GS7'
-        pump_start, pump_stop = 'NKS 0075 3', 'NJS 0005 8'
-        line_out = 'NKJS 0005 0075 8'
-        # start - 7 x G5 - line out - start - 7 x GS5 - line out - stop
-        sequence = [pump_start, *[record] * 7, line_out, pump_start,
-                    *[justified_record] * 7, line_out, pump_stop]
-        self.cast(sequence)
-
-    def calibrate_mould_and_diecase(self):
-        """Casts the "en dash" characters for calibrating the character X-Y
-        relative to type body."""
-        def get_codes(char, default_position, units=None):
-            """Gets two mats for a given char and adjusts its parameters"""
-            code = UI.enter('Where is the {}?'.format(char),
-                            default=default_position)
-            matrix = Matrix(' ', code=code.upper())
-            # try again recursively if wrong value
-            if not matrix.position.row or not matrix.position.column:
-                return get_codes(char, default_position)
-            # ask for unit width
-            if not units:
-                row_units = wedge[matrix.position.row]
-                prompt = 'How wide (in units) is the character?'
-                units = UI.enter(prompt, default=row_units,
-                                 datatype=int, minimum=4, maximum=25)
-            matrix.units = units
-            # calculate justifying wedge positions
-            positions = get_wedge_positions(matrix, wedge, units)
-            pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005
-            use_s_needle = (pos_0075, pos_0005) != (3, 8)
-            codes = matrix.get_ribbon_record(s_needle=use_s_needle)
-            sjust = ['NJS 0005 {}'.format(pos_0005),
-                     'NKS 0075 {}'.format(pos_0075)]
-            # use single justification to adjust character width, if needed
-            return ([*sjust, codes, codes] if use_s_needle
-                    else [codes, codes])
-
-        UI.display('Mould blade opening and X-Y character calibration:\n'
-                   'Cast G5 and O15, adjust the sort width to the value shown.'
-                   '\n\nThen cast some lowercase "n" or "h" letters and '
-                   'n-dashes,\ncheck the position of the character relative '
-                   'to the\ntype body and adjust the bridge X-Y.\n'
-                   'Repeat if needed.\n')
-
-        wedge = choose_wedge()
-        # operator needs to know how wide (in inches) the sorts should be
-        template = '{u} units (1{n}) is {i:.4f}" wide'
-        quad_width = wedge.set_width / 12 * wedge.pica
-        UI.display(template.format(u=9, n='en', i=0.5 * quad_width))
-        UI.display(template.format(u=18, n='em', i=quad_width))
-        # build a casting queue and cast it repeatedly
-        line_out = 'NKJS 0005 0075'
-        pump_stop = 'NJS 0005'
-        # use half-quad, quad, "n" and en-dash
-        chars = [('half-quad', 'G5', 9), ('quad', 'O15', 18),
-                 ('n/h', None, None), ('dash', None, None)]
-        codes = (code for what in chars for code in get_codes(*what))
-        sequence = [line_out, *codes, line_out, pump_stop]
-        self.cast(sequence)
-
-    def calibrate_machine(self):
-        """Groups the draw rod and mould/diecase calibration."""
-        UI.display('First calibrate the type body width and character position'
-                   ', then the matrix case draw rods.')
-        self.calibrate_mould_and_diecase()
-        self.calibrate_draw_rods()
-
-    def test_row_16(self):
-        """Tests the row 16 addressing attachment (HMN, KMN, unit-shift).
-        Casts from all matrices in 16th row.
-        """
-        UI.display('This will test the 16th row addressing.\n'
-                   'If your caster has HMN, KMN or unit-shift attachment, '
-                   'turn it on.\n')
-        # build casting queue
-        pump_start, pump_stop = 'NKS 0075', 'NJS 0005'
-        line_out = 'NKJS 0005 0075'
-        row = ['{}16'.format(col)
-               for col in ('NI', 'NL', *'ABCDEFGHIJKLMNO')]
-        # test with actual casting or not?
-        if UI.confirm('Use the pump? Y = cast the row, N = test codes.'):
-            sequence = [pump_start, *row, line_out, pump_stop]
-            self.cast(sequence)
-        else:
-            self.test(row)
-
-    def diagnostics_menu(self):
-        """Groups all options related to machine testing and calibration"""
-        def options():
-            """Generate the menu options"""
-            ret = [option(key='a', value=self.test_all, seq=1,
-                          text='Test outputs',
-                          desc='Test all the air outputs N...O15, one by one'),
-                   option(key='f', value=self.test_front_pinblock, seq=2,
-                          text='Test the front pin block',
-                          desc='Test the pins 1...14'),
-                   option(key='r', value=self.test_rear_pinblock, seq=2,
-                          text='Test the rear pin block',
-                          desc='Test the pins NI, NL, A...N, one by one'),
-                   option(key='b', value=self.blow_all, seq=2,
-                          text='Blow all air pins',
-                          desc='Blow air into every pin for a short time'),
-                   option(key='j', value=self.test_justification, seq=2,
-                          text='Test the justification block',
-                          desc='Test the pins for 0075, S and 0005'),
-                   option(key='c', value=self.test_any_code, seq=1,
-                          text='Send specified signal combination',
-                          desc='Send the specified signals to the machine'),
-                   option(key='w', value=self.calibrate_wedges, seq=4,
-                          cond=self.is_casting,
-                          text='Calibrate the 52D wedge',
-                          desc=('Calibrate the space transfer wedge '
-                                'for correct width')),
-                   option(key='d', value=self.calibrate_mould_and_diecase,
-                          cond=self.is_casting, seq=4,
-                          text='Calibrate mould blade and diecase',
-                          desc=('Set the type body width and '
-                                'character-to-body position')),
-                   option(key='m', value=self.calibrate_draw_rods, seq=3,
-                          cond=self.is_casting,
-                          text='Calibrate matrix case draw rods',
-                          desc=('Keep the matrix case at G8 '
-                                'and adjust the draw rods')),
-                   option(key='l', value=self.test_row_16, seq=5,
-                          cond=self.is_casting,
-                          text='Test the extended 16x17 diecase system',
-                          desc=('Cast type from row 16 '
-                                'with HMN, KMN or unit-shift'))]
-            return ret
-
-        header = 'Diagnostics and machine calibration menu:'
-        catch_exceptions = (Abort, KeyboardInterrupt, EOFError,
-                            librpi2caster.MachineStopped)
-        # Keep displaying the menu and go back here after any method ends
-        UI.dynamic_menu(options=options, header=header,
-                        catch_exceptions=catch_exceptions)
-
-
-class SimulationCaster(CasterDiagnosticsMixin):
+class SimulationCaster:
     """Common methods for a caster class."""
     def __init__(self, url=None, operation_mode=None):
         self.url = url
@@ -276,7 +47,6 @@ class SimulationCaster(CasterDiagnosticsMixin):
         self.config = dict(supported_operation_modes=[CASTING, PUNCHING],
                            supported_row16_modes=[HMN, KMN, UNITSHIFT],
                            default_operation_mode=CASTING,
-                           has_motor_control=False,
                            punching_on_time=0.2, punching_off_time=0.3,
                            sensor_timeout=5, pump_stop_timeout=20,
                            startup_timeout=20, name='Simulation interface')
@@ -289,14 +59,11 @@ class SimulationCaster(CasterDiagnosticsMixin):
     def __str__(self):
         return self.config['name']
 
-    def __call__(self, operation_mode=None, testing_mode=None,
-                 row16_needed=None):
+    def __call__(self, operation_mode=None, testing_mode=None):
         if operation_mode is not None:
             self.operation_mode = operation_mode
         if testing_mode is not None:
             self.testing_mode = testing_mode
-        if row16_needed is not None:
-            self.choose_row16_mode(row16_needed)
         return self
 
     def __enter__(self):
@@ -540,10 +307,10 @@ class SimulationCaster(CasterDiagnosticsMixin):
         source = [parse_record(item) for item in input_sequence]
         # do we need to cast from row 16 and choose an attachment?
         row16_in_use = any(record.uses_row_16 for record in source)
-        # start casting
+        self.choose_row16_mode(row16_in_use)
         # use caster context to check machine rotation and ensure
         # that no valves stay open after we're done
-        with self(operation_mode=CASTING, row16_needed=row16_in_use):
+        with self(operation_mode=CASTING):
             # cast as many as initially ordered and ask to continue
             while repetitions > 0:
                 try:
@@ -563,11 +330,12 @@ class SimulationCaster(CasterDiagnosticsMixin):
 
     def punch(self, signals_sequence):
         """Punching sequence: valves on - wait - valves off- wait"""
-        source = [parse_record(item) for item in signals_sequence]
         # do we need to use any row16 addressing attachment?
+        source = [parse_record(item) for item in signals_sequence]
         row16_in_use = any(record.uses_row_16 for record in source)
+        self.choose_row16_mode(row16_in_use)
         # start punching
-        with self(operation_mode=PUNCHING, row16_needed=row16_in_use):
+        with self(operation_mode=PUNCHING):
             for record in source:
                 try:
                     UI.display('{r.signals:<20}{r.comment}'.format(r=record))
@@ -587,9 +355,7 @@ class SimulationCaster(CasterDiagnosticsMixin):
     def test(self, signals_sequence, duration=None):
         """Testing: advance manually or automatically"""
         source = [parse_record(item) for item in signals_sequence]
-        # do we need to test the row 16 addressing attachment?
-        row16_in_use = any(record.uses_row_16 for record in source)
-        with self(testing_mode=ON, row16_needed=row16_in_use):
+        with self(testing_mode=ON):
             while True:
                 try:
                     for record in source:
@@ -603,6 +369,217 @@ class SimulationCaster(CasterDiagnosticsMixin):
                 except librpi2caster.MachineStopped:
                     UI.display('Testing stopped.')
                 UI.confirm('Repeat?', abort_answer=False)
+
+    def diagnostics(self):
+        """Settings and alignment menu for servicing the caster"""
+        def test_front_pinblock(*_):
+            """Sends signals 1...14, one by one"""
+            info = 'Testing the front pinblock - signals 1...14.'
+            UI.pause(info, allow_abort=True)
+            self.test([str(n) for n in range(1, 15)])
+
+        def test_rear_pinblock(*_):
+            """Sends NI, NL, A...N"""
+            info = 'This will test the rear pinblock - NI, NL, A...N. '
+            UI.pause(info, allow_abort=True)
+            self.test(['NI', 'NL', *'ABCDEFGHIJKLMN'])
+
+        def test_all(*_):
+            """Tests all valves and composition caster's inputs in original
+            Monotype order:
+            NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
+            """
+            info = ('This will test all the air lines in the same order '
+                    'as the holes on the paper tower: \n{}\n'
+                    'MAKE SURE THE PUMP IS DISENGAGED.')
+            signals = [*'ONMLKJIHGFSED', '0075', *'CBA',
+                       *(str(x) for x in range(1, 15)), '0005', '15']
+            UI.pause(info.format(' '.join(signals)), allow_abort=True)
+            self.test(signals)
+
+        def test_justification(*_):
+            """Tests the 0075-S-0005"""
+            info = 'This will test the justification pinblock: 0075, S, 0005.'
+            UI.pause(info, allow_abort=True)
+            self.test(['0075', 'S', '0005'])
+
+        def test_any_code(*_):
+            """Tests a user-specified combination of signals"""
+            with self(testing_mode=ON):
+                while True:
+                    UI.display('Enter the signals to send to the caster, '
+                               'or leave empty to return to menu: ')
+                    signals = UI.enter('Signals?', default=Abort)
+                    output_signals = self.test_one(signals).get('signals', [])
+                    UI.display('Sending {}'.format(' '.join(output_signals)))
+
+        def blow_all(*_):
+            """Blow all signals for a short time; add NI, NL also"""
+            info = 'Blowing air through all air pins on both pinblocks...'
+            UI.pause(info, allow_abort=True)
+            queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
+                     'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14',
+                     '0075 S', '0005 O 15']
+            self.test(queue, duration=0.3)
+
+        def calibrate_draw_rods(*_):
+            """Keeps the diecase at G8 so that the operator can adjust
+            the diecase draw rods until the diecase stops moving sideways
+            when the centering pin is descending."""
+            UI.display('Draw rods calibration:\n'
+                       'The diecase will be moved to the central position '
+                       '(G8).\n Turn on the machine and adjust the diecase '
+                       'draw rods until the diecase stops wobbling.\n')
+            if not UI.confirm('Proceed?', default=True, abort_answer=False):
+                return
+            with self(testing_mode=ON):
+                self.test_one('G8')
+                UI.pause('Sending G8, waiting for you to stop...')
+
+        def calibrate_wedges(*_):
+            """Allows to calibrate the justification wedges so that when you're
+            casting a 9-unit character with the S-needle at 0075:3 and 0005:8
+            (neutral position), the    width is the same.
+
+            It works like this:
+            1. 0075 - turn the pump on,
+            2. cast 7 spaces from the specified matrix (default: G5),
+            3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
+            4. cast 7 spaces with the S-needle from the same matrix,
+            5. put the line to the galley, then 0005 to turn the pump off.
+            """
+            UI.display('Transfer wedge calibration:\n\n'
+                       'This function will cast two lines of 5 spaces: '
+                       'first: G5, second: GS5 with wedges at 3/8. \n'
+                       'Adjust the 52D space transfer wedge '
+                       'until the lengths are the same.\n')
+            UI.confirm('Proceed?', default=True, abort_answer=False)
+            # prepare casting sequence
+            record, justified_record = 'G7', 'GS7'
+            pump_start, pump_stop = 'NKS 0075 3', 'NJS 0005 8'
+            line_out = 'NKJS 0005 0075 8'
+            # start - 7 x G5 - line out - start - 7 x GS5 - line out - stop
+            sequence = [pump_start, *[record] * 7, line_out, pump_start,
+                        *[justified_record] * 7, line_out, pump_stop]
+            self.cast(sequence)
+
+        def calibrate_mould_and_diecase(*_):
+            """Casts the "en dash" characters for calibrating the character X-Y
+            relative to type body."""
+            def get_codes(char, default_position):
+                """Gets two mats for a given char and adjusts its parameters"""
+                code = UI.enter('Where is the {}?'.format(char),
+                                default=default_position)
+                matrix = Matrix(' ', code=code.upper())
+                # try again recursively if wrong value
+                if not matrix.position.row or not matrix.position.column:
+                    return get_codes(char, default_position)
+                # ask for unit width
+                row_units = wedge[matrix.position.row]
+                units = UI.enter('Unit width?', default=row_units)
+                matrix.units = units
+                # calculate justifying wedge positions
+                positions = get_wedge_positions(matrix, wedge, units)
+                pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005
+                use_s_needle = (pos_0075, pos_0005) != (3, 8)
+                codes = matrix.get_ribbon_record(s_needle=use_s_needle)
+                sjust = ['NJS 0005 {}'.format(pos_0005),
+                         'NKS 0075 {}'.format(pos_0075)]
+                # use single justification to adjust character width, if needed
+                return ([*sjust, codes, codes] if use_s_needle
+                        else [codes, codes])
+
+            UI.display('Mould blade opening and X-Y character calibration:\n'
+                       'Cast G5, adjust the sort width to the value shown.\n'
+                       '\nThen cast some lowercase "n" letters and n-dashes,\n'
+                       'check the position of the character relative to the\n'
+                       'type body and adjust the bridge X-Y.\n'
+                       'Repeat if needed.\n')
+
+            wedge = choose_wedge()
+            # operator needs to know how wide (in inches) the sorts should be
+            template = '{u} units (1{n}) is {i}" wide'
+            quad_width = wedge.set_width / 12 * wedge.pica
+            UI.display(template.format(u=9, n='en', i=0.5 * quad_width))
+            UI.display(template.format(u=18, n='em', i=quad_width))
+            # build a casting queue and cast it repeatedly
+            line_out = 'NKJS 0005 0075'
+            pump_stop = 'NJS 0005'
+            # use half-quad, quad, "n" and en-dash
+            chars = [('en quad', 'G5'), ('em quad', 'O15'),
+                     ('n/h', None), ('dash', None)]
+            codes = (code for what in chars for code in get_codes(*what))
+            sequence = [line_out, *codes, line_out, pump_stop]
+            self.cast(sequence)
+
+        def test_row_16(*_):
+            """Tests the row 16 addressing attachment (HMN, KMN, unit-shift).
+            Casts from all matrices in 16th row.
+            """
+            UI.display('This will test the 16th row addressing.\n'
+                       'If your caster has HMN, KMN or unit-shift attachment, '
+                       'turn it on.\n')
+            # build casting queue
+            pump_start, pump_stop = 'NKS 0075', 'NJS 0005'
+            line_out = 'NKJS 0005 0075'
+            row = ['{}16'.format(col)
+                   for col in ('NI', 'NL', *'ABCDEFGHIJKLMNO')]
+            # test with actual casting or not?
+            if UI.confirm('Use the pump? Y = cast the row, N = test codes.'):
+                sequence = [pump_start, *row, line_out, pump_stop]
+                self.cast(sequence)
+            else:
+                self.choose_row16_mode(row16_needed=True)
+                self.test(row)
+
+        def options():
+            """Generate the menu options"""
+            ret = [option(key='a', value=test_all, seq=1,
+                          text='Test outputs',
+                          desc='Test all the air outputs N...O15, one by one'),
+                   option(key='f', value=test_front_pinblock, seq=2,
+                          text='Test the front pin block',
+                          desc='Test the pins 1...14'),
+                   option(key='r', value=test_rear_pinblock, seq=2,
+                          text='Test the rear pin block',
+                          desc='Test the pins NI, NL, A...N, one by one'),
+                   option(key='b', value=blow_all, seq=2,
+                          text='Blow all air pins',
+                          desc='Blow air into every pin for a short time'),
+                   option(key='j', value=test_justification, seq=2,
+                          text='Test the justification block',
+                          desc='Test the pins for 0075, S and 0005'),
+                   option(key='c', value=test_any_code, seq=1,
+                          text='Send specified signal combination',
+                          desc='Send the specified signals to the machine'),
+                   option(key='w', value=calibrate_wedges, seq=4,
+                          cond=self.is_casting,
+                          text='Calibrate the 52D wedge',
+                          desc=('Calibrate the space transfer wedge '
+                                'for correct width')),
+                   option(key='d', value=calibrate_mould_and_diecase, seq=4,
+                          cond=self.is_casting,
+                          text='Calibrate mould blade and diecase',
+                          desc=('Set the type body width and '
+                                'character-to-body position')),
+                   option(key='m', value=calibrate_draw_rods, seq=3,
+                          cond=self.is_casting,
+                          text='Calibrate matrix case draw rods',
+                          desc=('Keep the matrix case at G8 '
+                                'and adjust the draw rods')),
+                   option(key='l', value=test_row_16, seq=5,
+                          cond=self.is_casting,
+                          text='Test the extended 16x17 diecase system',
+                          desc=('Cast type from row 16 '
+                                'with HMN, KMN or unit-shift'))]
+            return ret
+
+        header = 'Diagnostics and machine calibration menu:'
+        catch_exceptions = (Abort, KeyboardInterrupt, EOFError,
+                            librpi2caster.MachineStopped)
+        # Keep displaying the menu and go back here after any method ends
+        UI.dynamic_menu(options=options, header=header, func_args=(self,),
+                        catch_exceptions=catch_exceptions)
 
 
 class MonotypeCaster(SimulationCaster):
@@ -733,39 +710,28 @@ class MonotypeCaster(SimulationCaster):
         In other modes (testing, punching, manual punching):
             The interface will just turn on the compressed air supply.
         """
-        # can the interface start the motor by itself?
-        has_motor_control = self.config.get('has_motor_control', False)
         if self.testing_mode:
             request_timeout = 5
-        elif self.is_casting() and has_motor_control:
-            info = ('Starting the motor...\n'
-                    'Push the operating lever.\n'
-                    'Casting will begin after detecting the machine rotation.')
-            UI.display(info)
-            request_timeout = 3 * self.config['startup_timeout'] + 2
         elif self.is_casting():
-            info = ('Start the motor and then push the operating lever.\n'
-                    'Casting will begin after detecting the machine rotation.')
-            UI.display(info)
+            info = ('Starting the composition caster...\n'
+                    'Turn on the motor if necessary, and engage the clutch.\n'
+                    'Casting will begin after detecting the machine rotation.\n'
+                    '\nCommence casting? (N = abort)')
+            if not UI.confirm(info):
+                raise Abort
+            request_timeout = 3 * self.config['startup_timeout'] + 2
         else:
-            UI.pause('Continue to start punching...')
+            UI.pause('Waiting for you to start punching...')
             request_timeout = 5
         # send the request and handle any exceptions
         try:
             self._request('machine', method=requests.post,
                           request_timeout=request_timeout, machine=ON)
         except librpi2caster.InterfaceBusy:
-            UI.display('\n\nThis interface is already in use.\n\n'
-                       'If this is not the case, you may need to restart it.')
-            if UI.confirm('Do you want to try again?', abort_answer=False):
-                return self.start()
-        except librpi2caster.MachineStopped:
-            UI.display('\n\nThe machine is not running.\n'
-                       'You need to start it first.\n\n')
-            if UI.confirm('Do you want to try again?', abort_answer=False):
-                return self.start()
+            UI.pause('This interface is already working. Aborting...')
+            raise Abort
         if self.is_casting():
-            UI.display('The machine is running. Proceeding with casting...')
+            UI.display('OK, the machine is running...')
 
     @handle_communication_error
     def stop(self):
@@ -777,20 +743,10 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
-        # is the machine working at all? maybe there is no need to stop
-        if not self.status.get('working'):
-            return
-
-        # can the interface control the motor by itself? (caster only)
-        has_motor_control = self.config.get('has_motor_control', False)
         if self.testing_mode:
             request_timeout = 3
-        elif self.is_casting() and has_motor_control:
-            UI.pause('Disengage the operating lever.\n'
-                     'The interface will stop the motor after you continue...')
-            request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         elif self.is_casting():
-            UI.pause('Disengage the operating lever and stop the motor.')
+            UI.display('Turning the machine off...')
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         else:
             request_timeout = 3
