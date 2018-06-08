@@ -257,7 +257,6 @@ class Casting(TypesettingContext):
 
     @cast_this
     @mc.temp_wedge
-    @bc.temp_measure
     def cast_material(self):
         """Cast typesetting material: typecases, specified sorts, spaces"""
         def make_queue():
@@ -357,6 +356,8 @@ class Casting(TypesettingContext):
             # em-quad for filling the line
             quad = self.quad.get_ribbon_record()
             # initialize the units
+            self.measure = bc.set_measure(25, 'cc', 'galley width',
+                                          self.wedge.set_width)
             units_left = self.measure.units - 2 * self.quad.units
             # get the first matrix
             # (if StopIteration is raised, no casting)
