@@ -263,7 +263,7 @@ class Casting(TypesettingContext):
             """generate a sequence of items for casting"""
             while True:
                 try:
-                    UI.display('Specify characters to cast.\n'
+                    UI.display('\n\nSpecify characters to cast.\n'
                                'When done, press Enter to start casting.')
                     matrix = self.find_matrix(char='')
                     units = UI.enter('How many units?', datatype=int,
@@ -324,7 +324,7 @@ class Casting(TypesettingContext):
                     space_justification = ['NKS 0075 {}'.format(coarse),
                                            'NKJS 0005 0075 {}'.format(fine)]
 
-                units_left = self.measure.units - 2 * self.quad.units
+                units_left = galley_units - 2 * self.quad.units
                 # single justification (for type), fillup spaces & quads,
                 # double justification (for space), initial quad on new line
                 return [*char_justification, *var_space, *[quad] * n_quads,
@@ -589,7 +589,7 @@ class Casting(TypesettingContext):
             matrix.units = units
             # calculate the character width for measurement
             width = self.wedge.set_width / 12 * units / 18 * self.wedge.pica
-            description = '{}, {:4f} inches wide'.format(comment, width)
+            description = '{}, {:2f} inches wide'.format(comment, width)
             # calculate justifying wedge positions
             positions = mc.get_wedge_positions(matrix, self.wedge, units)
             pos_0075, pos_0005 = positions.pos_0075, positions.pos_0005

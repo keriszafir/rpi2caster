@@ -11,11 +11,7 @@
 
         * casting (composition, material etc.),
 
-        * caster/interface testing and diagnostics,
-
-        * typesetting (not ready yet),
-
-        * diecase and layout management.
+        * caster/interface testing and diagnostics
 
     Machine control utility also serves as a diagnostic program
     for calibrating and testing the machine and control interface.
@@ -156,15 +152,8 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
     add_extra(CFG['System']['extra_unit_arrangements'], data.UNIT_ARRANGEMENTS)
     add_extra(CFG['System']['extra_wedges'], data.WEDGE_DEFINITIONS)
     add_extra(CFG['System']['extra_languages'], data.LETTER_FREQUENCIES)
-
-    # main menu
-    header = ('rpi2caster - computer aided typesetting software '
-              'for Monotype composition casters.'
-              '\n\nMain menu:\n')
-    exceptions = (Abort, Finish, click.Abort)
     if not ctx.invoked_subcommand:
-        UI.dynamic_menu(menu_options, header, allow_abort=True,
-                        catch_exceptions=exceptions)
+        ctx.invoke(cast)
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
@@ -175,14 +164,8 @@ def cli(ctx, conffile, database, ui_impl, verbosity):
               help='punch ribbon with a perforator (if supported)')
 @click.option('--casting', '-c', 'operation_mode', flag_value='casting',
               help='cast type on a composition caster (if supported)')
-@click.option('--diecase', '-m', metavar='[diecase ID]',
-              help='diecase ID from the database to use')
-@click.option('--wedge', '-w', metavar='e.g. S5-12E',
-              help='series, set width, E for European wedges')
-@click.option('--measure', '-l', metavar='[value+unit]',
-              help='line length to use')
 @click.pass_context
-def cast(ctx, interface, operation_mode, diecase, wedge, measure):
+def cast(ctx, interface, operation_mode):
     """Cast type with a Monotype caster.
 
     Casts composition, material for handsetting, QR codes.
@@ -192,9 +175,6 @@ def cast(ctx, interface, operation_mode, diecase, wedge, measure):
     from .core import Casting
     # allow override if we call this from menu
     casting = Casting(interface, operation_mode)
-    casting.measure = measure
-    casting.diecase_id = diecase
-    casting.wedge_name = wedge
     # replace the context object for the subcommands to see
     ctx.obj = casting
     if not ctx.invoked_subcommand:
@@ -234,57 +214,18 @@ def cast_diecase_proof(casting):
     casting.diecase_proof()
 
 
-@cast.command('test', options_metavar='[-hps]')
+@cast.command('test', options_metavar='[-h]')
 @click.pass_obj
 def test_machine(casting):
     """Monotype caster testing and diagnostics."""
     casting.machine.diagnostics_menu()
 
 
-@cli.command(options_metavar='[-ahlmMw] [--src textfile] [--out ribbonfile]')
-@click.option('--src', type=click.File('r'))
-@click.option('--out', type=click.File('w+', atomic=True))
-@click.option('--diecase', '-m', metavar='[diecase ID]',
-              help='diecase ID from the database to use')
-@click.option('--wedge', '-w', metavar='e.g. S5-12E',
-              help='series, set width, E for European wedges')
-@click.option('--measure', '-l', metavar='[value+unit]',
-              help='line length to use')
-@click.option('--align', '-a', metavar='[ALIGNMENT]', default='left',
-              help='default text alignment')
-@click.option('--manual', '-M', is_flag=True, flag_value=True,
-              help='leave end-of-line decisions to the operator')
-def translate(src, out, align, manual, **kwargs):
-    """Typesetting program.
-
-    Set and justify a text, using control codes for styles, alignment etc.
-
-    The output is a sequence of codes which can control the
-    Monotype composition caster.
-
-    These codes are specific to a diecase and wedge used."""
-    from .core import Typesetting
-    typesetting = Typesetting()
-    typesetting.measure = kwargs.get('measure')
-    typesetting.diecase_id = kwargs.get('diecase')
-    typesetting.wedge_name = kwargs.get('wedge')
-    typesetting.manual_mode = manual
-    typesetting.default_alignment = align
-    typesetting.text_file = src
-    typesetting.ribbon.file = out
-    # Only one method here
-    typesetting.main_menu()
-
-
-@cli.command('edit', options_metavar='[-h]')
-@click.argument('diecase', required=False, default=None,
-                metavar='[diecase_id]')
-def edit_diecase(diecase):
-    """Load and edit a matrix case."""
-    from . import main_controllers as mc
-    editor = mc.DiecaseMixin()
-    editor.diecase_id = diecase
-    editor.diecase_manipulation()
+@cast.command('align', options_metavar='[-h]')
+@click.pass_obj
+def align_machine(casting):
+    """Monotype caster testing and diagnostics."""
+    casting.calibrate_machine()
 
 
 @cli.group('list', invoke_without_command=True, cls=CommandGroup,
@@ -351,26 +292,6 @@ def list_machines(mode):
            subcommand_metavar='[d|l|r|t|u|w] [-h]')
 def show():
     """Show an item (diecase, layout, UA etc.)"""
-
-
-@show.command('layout', options_metavar='[-h]')
-@click.argument('diecase', required=False, default=None,
-                metavar='[diecase_id]')
-def show_layout(diecase):
-    """Display a diecase layout for a specified diecase ID."""
-    from . import views, main_controllers as mc
-    case = mc.get_diecase(diecase)
-    views.display_layout(case)
-
-
-@show.command('diecase', options_metavar='[-h]')
-@click.argument('diecase', required=False, default=None,
-                metavar='[diecase_id]')
-def show_diecase_data(diecase):
-    """Display diecase data."""
-    from . import views, main_controllers as mc
-    case = mc.get_diecase(diecase)
-    views.display_diecase_data(case)
 
 
 @show.command('typeface', options_metavar='[-h]')
