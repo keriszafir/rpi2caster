@@ -269,8 +269,9 @@ class Casting(TypesettingContext):
                     units = UI.enter('How many units?', datatype=int,
                                      default=round(self.get_units(matrix)))
                     qty = UI.enter('How many sorts?', default=10, minimum=0)
-                    # ready to deliver
-                    yield d.QueueItem(matrix, round(units, 2), qty)
+                    # ready to deliver; confirm if it's correct
+                    if UI.confirm('Is this correct?', default=True):
+                        yield d.QueueItem(matrix, round(units, 2), qty)
                 except (StopIteration, bm.MatrixNotFound):
                     break
 
@@ -355,10 +356,12 @@ class Casting(TypesettingContext):
 
             # em-quad for filling the line
             quad = self.quad.get_ribbon_record()
-            # initialize the units
-            self.measure = bc.set_measure(25, 'cc', 'galley width',
-                                          self.wedge.set_width)
-            units_left = self.measure.units - 2 * self.quad.units
+            # initialize the units of wedge's set
+            UI.display('\nEnter the galley width in picas or ciceros.\n'
+                       'Set your machine slightly wider, adjust if needed.\n')
+            galley = UI.enter('Galley width?', default=25, datatype=int)
+            galley_units = int(18 * galley * 12 / self.wedge.set_width)
+            units_left = galley_units - 2 * self.quad.units
             # get the first matrix
             # (if StopIteration is raised, no casting)
             record, units, wedges, sorts_left = new_mat()
