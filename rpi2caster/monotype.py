@@ -56,6 +56,7 @@ class SimulationCaster:
         self.stop()
         self.testing_mode = False
 
+    @property
     def punch_mode(self):
         """Checks if the interface is in ribbon punching mode."""
         return self.config['punch_mode']
