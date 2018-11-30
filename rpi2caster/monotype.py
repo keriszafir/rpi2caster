@@ -526,25 +526,24 @@ class MonotypeCaster(SimulationCaster):
             raise librpi2caster.CommunicationError(msg.format(url))
 
     @handle_communication_error
-    def send(self, signals='', timeout=None, request_timeout=None,
-             testing_mode=False):
+    def send(self, signals='', timeout=None, request_timeout=None):
         """Send signals to the interface. Wait for an OK response."""
         try:
             codes = parse_signals(signals, self.row16_mode)
             data = dict(signals=codes, timeout=timeout,
-                        testing_mode=testing_mode)
+                        testing_mode=self.testing_mode)
             return self._request('signals', method=requests.post,
                                  request_timeout=request_timeout, **data)
         except librpi2caster.InterfaceNotStarted:
-            self.start(testing_mode)
+            self.start()
             return self._request('signals', method=requests.post,
                                  request_timeout=request_timeout, **data)
         except (KeyboardInterrupt, EOFError, librpi2caster.CommunicationError):
-            self.stop(testing_mode)
+            self.stop()
             raise librpi2caster.MachineStopped
 
     @handle_communication_error
-    def start(self, testing_mode=False):
+    def start(self):
         """Machine startup sequence.
         In the casting mode:
             The interface will start the subsystems, if possible:
@@ -556,7 +555,7 @@ class MonotypeCaster(SimulationCaster):
         In other modes (testing, punching, manual punching):
             The interface will just turn on the compressed air supply.
         """
-        if testing_mode:
+        if self.testing_mode:
             request_timeout = 5
         elif self.punch_mode:
             ui.pause('Waiting for you to start punching...')
@@ -573,15 +572,15 @@ class MonotypeCaster(SimulationCaster):
         try:
             self._request('machine', method=requests.post,
                           request_timeout=request_timeout, machine=ON,
-                          testing_mode=testing_mode)
+                          testing_mode=self.testing_mode)
         except librpi2caster.InterfaceBusy:
             ui.pause('This interface is already working. Aborting...')
             raise ui.Abort
-        if not self.punch_mode and not testing_mode:
+        if not self.punch_mode and not self.testing_mode:
             ui.display('OK, the machine is running...')
 
     @handle_communication_error
-    def stop(self, testing_mode=False):
+    def stop(self):
         """Machine stop sequence.
         The interface driver checks if the pump is active
         and turns it off if necessary.
@@ -590,7 +589,7 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
-        if testing_mode:
+        if self.testing_mode:
             request_timeout = 3
         elif self.punch_mode:
             request_timeout = 3
@@ -599,7 +598,7 @@ class MonotypeCaster(SimulationCaster):
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         self._request('machine', method=requests.delete,
                       request_timeout=request_timeout,
-                      testing_mode=testing_mode)
+                      testing_mode=self.testing_mode)
 
     @property
     def status(self):
