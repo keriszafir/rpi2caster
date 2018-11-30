@@ -4,18 +4,18 @@
 from setuptools import setup, find_packages
 
 # global package-wide declarations
-__version__ = '1.8'
-__author__ = 'Christophe Slychan'
+__version__ = '2.0.dev1'
+__author__ = 'Christophe Catherine Slychan'
 __author_email__ = 'krzysztof.slychan@gmail.com'
 __github_url__ = 'http://github.com/elegantandrogyne/rpi2caster'
 __dependencies__ = ['pip > 1.5', 'click > 6.0', 'peewee > 2.0',
                     'qrcode > 5.0', 'requests > 2.0', 
-                    'librpi2caster >= 1.1.4'],
+                    'librpi2caster >= 2.0'],
 
 with open('README.rst', 'r') as readme_file:
     long_description = readme_file.read()
 
-clas = ['Development Status :: 3 - Alpha',
+clas = ['Development Status :: 4 - Beta',
         'Intended Audience :: Manufacturing',
         ('License :: OSI Approved :: '
          'GNU General Public License v3 or later (GPLv3+)'),
@@ -26,7 +26,7 @@ clas = ['Development Status :: 3 - Alpha',
 
 setup(name='rpi2caster',
       version=__version__,
-      description='Typesetting and casting software for Monotype casters',
+      description='Machine control software for Monotype composition casters',
       long_description=long_description,
       url='http://github.com/elegantandrogyne/rpi2caster',
       author=__author__,

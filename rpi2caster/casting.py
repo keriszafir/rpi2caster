@@ -2,8 +2,6 @@
 """Casting utility: cast or punch ribbon, cast material for hand typesetting,
 make a diecase proof, quickly compose and cast text.
 """
-
-from collections import deque, OrderedDict
 from functools import wraps
 
 # common definitions
@@ -15,8 +13,7 @@ except ImportError:
     qrcode = None
 
 from . import ui
-from . import monotype, stats
-from .functions import parse_record
+from . import monotype
 from .functions import pump_stop, single_justification, double_justification
 from .models import Ribbon
 
@@ -27,9 +24,7 @@ def cast_this(ribbon_source):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         ribbon = ribbon_source(self, *args, **kwargs)
-        return (None if not ribbon
-                else self.cast_ribbon(ribbon) if self.machine.is_casting()
-                else self.punch_ribbon(ribbon))
+        return None if not ribbon else self.machine.cast_or_punch(ribbon)
     return wrapper
 
 
@@ -48,179 +43,15 @@ class Casting:
     machine = monotype.SimulationCaster()
     ribbon = Ribbon()
 
-    def __init__(self, operation_mode=None):
+    def __init__(self):
         try:
-            machine = monotype.MonotypeCaster(operation_mode)
+            machine = monotype.MonotypeCaster()
             if ui.confirm('Use real machine (N = simulation) ?'):
                 self.machine = machine
         except librpi2caster.InterfaceException:
             message = ('The hardware interface is not available. \n'
                        'Using simulation mode instead...')
             ui.pause(message)
-
-    def punch_ribbon(self, ribbon):
-        """Punch the ribbon from start to end"""
-        self.machine.punch(ribbon)
-
-    def cast_ribbon(self, input_iterable):
-        """Main casting routine.
-
-        First check if ribbon needs rewinding (when it starts with pump stop).
-
-        Ask user about number of repetitions (useful for e.g. business cards
-        or souvenir lines), number of initial lines skipped for all runs
-        and the upcoming run only.
-
-        Ask user whether to pre-heat the mould
-        to stabilize the temperature and cast good quality type.
-
-        Cast the ribbon single or multiple times, displaying the statistics
-        about current record and casting progress.
-
-        If casting multiple runs, repeat until all are done,
-        offer adding some more.
-        """
-        def rewind_if_needed():
-            """Decide whether to rewind the ribbon or not.
-            If casting and stop comes first, rewind. Otherwise not."""
-            nonlocal ribbon
-            for record in ribbon:
-                if record.is_pump_stop:
-                    # rewind
-                    ribbon = [x for x in reversed(ribbon)]
-                    return
-                if record.is_pump_start:
-                    # no need to rewind
-                    return
-
-        def skip_lines(source):
-            """Skip a definite number of lines"""
-            # Apply constraints: 0 <= lines_skipped < lines in ribbon
-            lines_skipped = stats.run_lines_skipped()
-            if lines_skipped:
-                ui.display('Skipping {} lines'.format(lines_skipped))
-            # Take away combinations until we skip the desired number of lines
-            # BEWARE: ribbon starts with galley trip!
-            # We must give it back after lines are taken away
-            record = parse_record('')
-            sequence = deque(source)
-            while lines_skipped > 0:
-                record = sequence.popleft()
-                lines_skipped -= 1 * record.is_newline
-            # give the last code back
-            sequence.appendleft(record)
-            return sequence
-
-        def set_lines_skipped(run=True, session=True):
-            """Set the number of lines skipped for run and session
-            (in case of multi-session runs)."""
-            # allow skipping only if ribbon is more than 2 lines long
-            limit = max(0, stats.ribbon_lines() - 2)
-            if not limit:
-                return
-            # how many can we skip?
-            if run or session:
-                ui.display('We can skip up to {} lines.'.format(limit))
-
-            if run:
-                # run lines skipping
-                # how many lines were successfully cast?
-                lines_done = stats.lines_done()
-                if lines_done:
-                    ui.display('{} lines were cast in the last run.'
-                               .format(lines_done))
-                # Ask user how many to skip (default: all successfully cast)
-                r_skip = ui.enter('How many lines to skip for THIS run?',
-                                  default=lines_done, minimum=0, maximum=limit)
-                stats.update(run_line_skip=r_skip)
-
-            if session:
-                # Skip lines effective for ALL runs
-                # session line skipping affects multi-run sessions only
-                # don't do it for single-run sessions
-                if stats.runs() > 1:
-                    s_skip = ui.enter('How many lines to skip for ALL runs?',
-                                      default=0, minimum=0, maximum=limit)
-                    stats.update(session_line_skip=s_skip)
-
-        def cast_queue(queue):
-            """Casts the sequence of codes in given sequence.
-            This function is executed until the sequence is exhausted
-            or casting is stopped by machine or user."""
-            # in punching mode, lack of row will trigger signal 15,
-            # lack of column will trigger signal O
-            # in punching and testing mode, signal O or 15 will be present
-            # in the output combination as O15
-            for record in queue:
-                # check if signal will be cast at all
-                if not record.has_signals:
-                    ui.display_header(record.comment)
-                    continue
-                # display some info and cast the signals
-                stats.update(record=record)
-                # cast it and get current machine status
-                status = self.machine.cast_one(record)
-                # prepare data for display
-                casting_status = OrderedDict()
-                casting_status['Signals sent'] = ' '.join(status['signals'])
-                casting_status['Pump'] = 'ON' if status['pump'] else 'OFF'
-                casting_status['Wedge 0005 at'] = status['wedge_0005']
-                casting_status['Wedge 0075 at'] = status['wedge_0075']
-                casting_status['Speed'] = status['speed']
-                # display status
-                ui.clear()
-                ui.display_parameters(stats.code_parameters(), casting_status)
-
-        # Ribbon pre-processing and casting parameters setup
-        ribbon = [parse_record(code) for code in input_iterable]
-        rewind_if_needed()
-        # initialize statistics
-        stats.reset()
-        stats.update(ribbon=ribbon)
-        # display some info for the user
-        ui.display_parameters(stats.ribbon_parameters())
-        # set the number of casting runs
-        stats.update(runs=ui.enter('How many times do you want to cast this?',
-                                   default=1, minimum=0))
-        # initial line skipping
-        set_lines_skipped(run=True, session=True)
-        ui.display_parameters(stats.session_parameters())
-        # check if the row 16 addressing will be used;
-        # connect with the interface
-        row16_in_use = any(record.uses_row_16 for record in ribbon)
-        self.machine.choose_row16_mode(row16_in_use)
-        with self.machine:
-            while stats.runs_left():
-                # Prepare the ribbon ad hoc
-                queue = skip_lines(ribbon)
-                stats.update(queue=queue)
-                # Cast the run and check if it was successful
-                try:
-                    cast_queue(queue)
-                    stats.update(casting_success=True)
-                    if not stats.runs_left():
-                        # make sure the machine will check
-                        # whether it's running next time
-                        self.machine.working = False
-                        # user might want to re-run this
-                        msg = 'Casting successfully finished. Any more runs?'
-                        stats.update(runs=ui.enter(msg, default=0, minimum=0))
-
-                except librpi2caster.MachineStopped:
-                    stats.update(casting_success=False)
-                    # aborted - ask if user wants to continue
-                    runs_left = stats.runs_left()
-                    if runs_left:
-                        ui.confirm('{} runs left, continue?'.format(runs_left),
-                                   default=True, abort_answer=False)
-                    else:
-                        ui.confirm('Retry casting?', default=True,
-                                   abort_answer=False)
-                    # offer to skip lines for re-casting the failed run
-                    skip_successful = stats.lines_done() >= 2
-                    set_lines_skipped(run=skip_successful, session=False)
-                    # restart the machine after emergency stop
-                    self.machine.start()
 
     @cast_this
     def cast_material(self):
@@ -565,9 +396,151 @@ class Casting:
         ui.display('Adjust the matrix case draw rods '
                    'so that the diecase is not wobbling anymore.\n')
         if ui.confirm('Calibrate G-8?'):
+            self.machine.testing_mode = True
             with self.machine:
                 self.machine.test_one('G8')
                 ui.pause('Sending G8, press any key to stop...')
+
+    def diagnostics(self):
+        """Settings and alignment menu for servicing the caster"""
+        def test_front_pinblock(*_):
+            """Sends signals 1...14, one by one"""
+            info = 'Testing the front pinblock - signals 1...14.'
+            ui.pause(info, allow_abort=True)
+            self.machine.test([str(n) for n in range(1, 15)])
+
+        def test_rear_pinblock(*_):
+            """Sends NI, NL, A...N"""
+            info = 'This will test the rear pinblock - NI, NL, A...N. '
+            ui.pause(info, allow_abort=True)
+            self.machine.test(['NI', 'NL', *'ABCDEFGHIJKLMN'])
+
+        def test_all(*_):
+            """Tests all valves and composition caster's inputs in original
+            Monotype order:
+            NMLKJIHGFSED 0075 CBA 123456789 10 11 12 13 14 0005.
+            """
+            info = ('This will test all the air lines in the same order '
+                    'as the holes on the paper tower: \n{}\n'
+                    'MAKE SURE THE PUMP IS DISENGAGED.')
+            signals = [*'ONMLKJIHGFSED', '0075', *'CBA',
+                       *(str(x) for x in range(1, 15)), '0005', '15']
+            ui.pause(info.format(' '.join(signals)), allow_abort=True)
+            self.machine.test(signals)
+
+        def test_justification(*_):
+            """Tests the 0075-S-0005"""
+            info = 'This will test the justification pinblock: 0075, S, 0005.'
+            ui.pause(info, allow_abort=True)
+            self.machine.test(['0075', 'S', '0005'])
+
+        def test_any_code(*_):
+            """Tests a user-specified combination of signals"""
+            self.machine.testing_mode = True
+            with self.machine:
+                while True:
+                    ui.display('Enter the signals to send to the caster, '
+                               'or leave empty to return to menu: ')
+                    signals = ui.enter('Signals?', default=ui.Abort)
+                    # signals after operation/row16 mode correction
+                    output = self.machine.test_one(signals).get('signals', [])
+                    ui.display('Sending {}'.format(' '.join(output)))
+
+        def blow_all(*_):
+            """Blow all signals for a short time; add NI, NL also"""
+            info = 'Blowing air through all air pins on both pinblocks...'
+            ui.pause(info, allow_abort=True)
+            queue = ['NI', 'NL', 'A1', 'B2', 'C3', 'D4', 'E5', 'F6', 'G7',
+                     'H8', 'I9', 'J10', 'K11', 'L12', 'M13', 'N14',
+                     '0075 S', '0005 O 15']
+            self.machine.test(queue, duration=0.3)
+
+        def calibrate_wedges(*_):
+            """Allows to calibrate the justification wedges so that when you're
+            casting a 9-unit character with the S-needle at 0075:3 and 0005:8
+            (neutral position), the    width is the same.
+
+            It works like this:
+            1. 0075 - turn the pump on,
+            2. cast 7 spaces from the specified matrix (default: G5),
+            3. put the line to the galley & set 0005 to 8, 0075 to 3, pump on,
+            4. cast 7 spaces with the S-needle from the same matrix,
+            5. put the line to the galley, then 0005 to turn the pump off.
+            """
+            ui.display('Transfer wedge calibration:\n\n'
+                       'This function will cast two lines of 5 spaces: '
+                       'first: G5, second: GS5 with wedges at 3/8. \n'
+                       'Adjust the 52D space transfer wedge '
+                       'until the lengths are the same.\n')
+            ui.confirm('Proceed?', default=True, abort_answer=False)
+            # prepare casting sequence
+            record, justified_record = 'G7', 'GS7'
+            pump_start, pump_stop = 'NKS 0075 3', 'NJS 0005 8'
+            line_out = 'NKJS 0005 0075 8'
+            # start - 7 x G5 - line out - start - 7 x GS5 - line out - stop
+            sequence = [pump_start, *[record] * 7, line_out, pump_start,
+                        *[justified_record] * 7, line_out, pump_stop]
+            self.machine.simple_cast(sequence)
+
+        def test_row_16(*_):
+            """Tests the row 16 addressing attachment (HMN, KMN, unit-shift).
+            Casts from all matrices in 16th row.
+            """
+            ui.display('This will test the 16th row addressing.\n'
+                       'If your caster has HMN, KMN or unit-shift attachment, '
+                       'turn it on.\n')
+            # build casting queue
+            pump_start, pump_stop = 'NKS 0075', 'NJS 0005'
+            line_out = 'NKJS 0005 0075'
+            row = ['{}16'.format(col)
+                   for col in ('NI', 'NL', *'ABCDEFGHIJKLMNO')]
+            # test with actual casting or not?
+            if ui.confirm('Use the pump? Y = cast the row, N = test codes.'):
+                sequence = [pump_start, *row, line_out, pump_stop]
+                self.machine.simple_cast(sequence)
+            else:
+                self.machine.choose_row16_mode(row16_needed=True)
+                self.machine.test(row)
+
+        def options():
+            """Generate the menu options"""
+            casting_mode = not self.machine.punch_mode
+            ret = [ui.option(key='a', value=test_all, seq=1,
+                             text='Test outputs',
+                             desc='Test all air outputs N...O15, one by one'),
+                   ui.option(key='f', value=test_front_pinblock, seq=2,
+                             text='Test the front pin block',
+                             desc='Test the pins 1...14'),
+                   ui.option(key='r', value=test_rear_pinblock, seq=2,
+                             text='Test the rear pin block',
+                             desc='Test the pins NI, NL, A...N, one by one'),
+                   ui.option(key='b', value=blow_all, seq=2,
+                             text='Blow all air pins',
+                             desc='Blow air into every pin for a short time'),
+                   ui.option(key='j', value=test_justification, seq=2,
+                             text='Test the justification block',
+                             desc='Test the pins for 0075, S and 0005'),
+                   ui.option(key='c', value=test_any_code, seq=1,
+                             text='Send specified signal combination',
+                             desc='Send the specified signals to the machine'),
+                   ui.option(key='w', value=calibrate_wedges, seq=4,
+                             cond=casting_mode,
+                             text='Calibrate the 52D wedge',
+                             desc=('Calibrate the space transfer wedge '
+                                   'for correct width')),
+                   ui.option(key='l', value=test_row_16, seq=5,
+                             cond=casting_mode,
+                             text='Test the extended 16x17 diecase system',
+                             desc=('Cast type from row 16 '
+                                   'with HMN, KMN or unit-shift'))]
+            return ret
+
+        header = 'Diagnostics and machine calibration menu:'
+        catch_exceptions = (ui.Abort, KeyboardInterrupt, EOFError,
+                            librpi2caster.MachineStopped)
+        # Keep displaying the menu and go back here after any method ends
+        ui.dynamic_menu(options=options, header=header, func_args=(self,),
+                        catch_exceptions=catch_exceptions)
 
     def main_menu(self):
         """Main menu for the type casting utility."""
@@ -588,9 +561,8 @@ class Casting:
 
         def options():
             """Generate options based on current state of the program."""
-            machine = self.machine
-            is_casting = self.machine.is_casting()
-            is_punching = not is_casting
+            is_punching = self.machine.punch_mode
+            is_casting = not is_punching
 
             got_ribbon = bool(self.ribbon)
 
@@ -637,7 +609,7 @@ class Casting:
                              text='Diecase proof',
                              desc='Cast every character from the diecase'),
 
-                   ui.option(key='F8', value=machine.diagnostics, seq=95,
+                   ui.option(key='F8', value=self.diagnostics, seq=95,
                              text='Diagnostics menu...',
                              desc='Interface and machine diagnostics')]
             return ret

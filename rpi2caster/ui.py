@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
 """User interface for rpi2caster. Text UI is implemented here, additional UIs
 can be added later or imported from separate modules"""
-import readline
 import glob
+import re
+import readline
 import string
+
 from collections import namedtuple, OrderedDict
 from contextlib import suppress
 from functools import partial
+from itertools import zip_longest
+
 import click
+from click import Abort
 from . import datatypes as dt
+from . import functions
+from .models import Wedge, Matrix
 
 
 # menu item namedtuple
@@ -39,6 +46,13 @@ KEYS = dict(
     )
 DEFAULT_ABORT_KEYS = [KEYS[key] for key in ('esc', 'f10')]
 NONSENSE = 'etaoin shrdlu cmfwyp'
+
+# pica definition will be overridden in the initial setup
+# pica = .1667, US pica = .166, Didot = .1776, Fournier = .1628
+PICA = 0.1667
+
+# Global variable for message verbosity level
+verbosity = 0
 
 
 def get_key(source):
@@ -167,560 +181,708 @@ def build_menu_prompt(menu_actions, default_retval, default_key, abort_keys):
     return ' '.join(t for t in [def_text, abort_s, prompt] if t)
 
 
-class Abort(click.Abort):
-    """Exception - abort the current action"""
-    def __str__(self):
-        return ''
+def dynamic_menu(options,
+                 header='', footer='',
+                 default_key=None,
+                 allow_abort=True,
+                 func_args=None, func_kwargs=None,
+                 catch_exceptions=(Abort, KeyboardInterrupt, EOFError)):
+    """dynamic_menu(options=[MenuItem1, MenuItem2...],
+                    header='', footer='',
+                    default_key=None, allow_abort=True,
+                    func_args=None, func_kwargs=None,
+                    catch_exceptions=[exceptions]):
 
+    Builds menu dynamically and executes the callback with no arguments
+    or raises an exception each time.
+    After callback is executed, builds menu again and displays
+    refreshed options.
+    Raising an exception here allows to return from menu.
 
-class Finish(click.Abort):
-    """Exception - finish the current exit to menu etc."""
-    def __str__(self):
-        return ''
+    options : option definitions iterable: (MenuItem1, MenuItem2...),
 
+              each MenuItem has following attributes/fields:
 
-class ClickUI(object):
-    """Click-based text user interface"""
-    __name__ = 'Text UI based on Click'
+              key (int or str) : key to press to choose that option,
 
-    def __init__(self, verbosity=0):
-        self.verbosity = verbosity
+              value : function or exception to be called or raised;
+                      function will be called with
+                      *func_args and **func_kwargs
 
-    def dynamic_menu(self, options,
-                     header='', footer='',
-                     default_key=None,
-                     allow_abort=True,
-                     func_args=None, func_kwargs=None,
-                     catch_exceptions=(Abort, click.Abort,
-                                       KeyboardInterrupt, EOFError)):
-        """dynamic_menu(options=[MenuItem1, MenuItem2...],
-                        header='', footer='',
-                        default_key=None, allow_abort=True,
-                        func_args=None, func_kwargs=None,
-                        catch_exceptions=[exceptions]):
+              cond : condition to check (function or value),
+                     an option is available if this evaluates to True,
 
-        Builds menu dynamically and executes the callback with no arguments
-        or raises an exception each time.
-        After callback is executed, builds menu again and displays
-        refreshed options.
-        Raising an exception here allows to return from menu.
+              text : short description of an option,
+                     optional (allows "hidden" options too),
 
-        options : option definitions iterable: (MenuItem1, MenuItem2...),
+              desc : additional help/description,
 
-                  each MenuItem has following attributes/fields:
-
-                  key (int or str) : key to press to choose that option,
-
-                  value : function or exception to be called or raised;
-                          function will be called with
-                          *func_args and **func_kwargs
-
-                  cond : condition to check (function or value),
-                         an option is available if this evaluates to True,
-
-                  text : short description of an option,
-                         optional (allows "hidden" options too),
-
-                  desc : additional help/description,
-
-                  seq : menu item sequence number for arbitrary sorting.
-
-        header, footer : will be displayed above and below menu options list,
-
-        default_key : if defined and valid, pressing Enter will choose
-                      an option defined for this key,
-
-        allow_abort : lets Esc or Ctrl-C raise Abort,
-
-        func_args=(), func_kwargs={} : positional and keyword arguments
-                                       passed to the function call,
-
-        catch_exceptions : an iterable of exceptions this menu is supposed
-                           to catch, rather than bubbling up and crashing
-                           the program
-        """
-        # no args or kwargs? use empty tuple or dict then
-        args = func_args or ()
-        kwargs = func_kwargs or {}
-        # keep displaying the menu until exception is raised
-        while True:
-            ret = self.menu(options, header, footer, default_key, allow_abort)
-            # if option value is an expression, it'll bubble up here
-            with suppress(catch_exceptions):
-                ret(*args, **kwargs)
-
-    def menu(self, options, header='', footer='',
-             default_key=None, allow_abort=True):
-        """menu(options=[MenuOption1, MenuOption2,...]
-                header='', footer='', default_key=None, allow_abort=True):
-
-        A menu displaying keys, options and descriptions (if provided).
-
-        User is asked to press a key and then the function tries to
-        raise an exception (if option.value is Exception subclass)
-        or return option.value.
-
-        Additional behavior can be specified with default_key and
-        allow_abort options in the function call.
-
-        options : option definitions iterable: (MenuItem1, MenuItem2...),
-
-                  each MenuItem has following attributes/fields:
-
-                  key (int or str) : key to press to choose that option,
-
-                  value : value to be returned;
-                          will be raised if it is an exception
-
-                  cond : condition to check (function or value),
-                         an option is available if this evaluates to True,
-
-                  text : short description of an option,
-                         optional (allows "hidden" options too)
-
-                  desc : additional help/description,
-
-                  seq : menu item sequence number for arbitrary sorting.
-
-        header : string to be displayed above option entries,
-
-        footer : string to be displayed below option entries,
-
-        default_key : if Enter is pressed, option for this key
-                      will be selected instead (provided that option
-                      is defined, valid and condition is met),
-
-        allow_abort : raise Abort if Esc or Ctrl-C is pressed,
-                      otherwise stay in the menu. If any of these keycombos
-                      is used as a key for a menu option,
-                      it will select that option rather than aborting.
-
-        After choice is made, try to raise the corresponding option
-        or return it.
-        """
-        def build_menu():
-            """Build a list of options and their descriptions"""
-            # header_string: displayed above, footer_string: displayed below
-            # debug_string: displayed only if verbosity != 0
-            # accept functions for dynamic content generation as well
-            _header = assess(header)
-            _footer = assess(footer)
-            header_text = '\n{}\n'.format(_header) if _header else ''
-            footer_text = '\n{}\n'.format(_footer) if _footer else '\n'
-            debug = ('\nThe program is now in debugging mode. Verbosity: {}\n'
-                     .format(self.verbosity) if self.verbosity else '')
-
-            # generate menu entries for options
-            entries = (build_entry(o) for o in valid_options)
-            # return the newly constructed menu list
-            return [header_text, debug, *entries, footer_text]
-
-        # generate a list of valid options
-        valid_options = get_sorted_valid_options(options)
-        # dictionary of key: return value pairs
-        rets = {option.key.getchar: option.value
-                for option in valid_options}
-        # get default return value for wrong keypress if we have default_key
-        # default to some nonsensical string for wrong dict hits
-        # this will make it possible to have None as an option
-        def_key, enter_key = get_key(default_key), get_key('enter')
-        def_rv = rets.get(def_key.getchar, NONSENSE)
-        if enter_key.getchar not in rets:
-            rets[enter_key.getchar] = def_rv
-        # check which keys can be used for aborting the menu
-        # pressing one of them would raise Abort, if two conditions are met:
-        # aborting is enabled (allow_abort=True) and key is not in options
-        abort_keys = [key for key in DEFAULT_ABORT_KEYS
-                      if allow_abort and key.getchar not in rets]
-        # display the menu
-        # clear the screen, display the header, options, footer
-        click.clear()
-        click.echo('\n'.join(build_menu()))
-        click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
-        # wait for user input
-        while True:
-            getchar = click.getchar()
-            if getchar in [key.getchar for key in abort_keys]:
-                raise Abort
-            retval = rets.get(getchar, NONSENSE)
-            if retval != NONSENSE:
-                return dt.try_raising(retval)
-
-    @staticmethod
-    def simple_menu(message, options, default_key=None, allow_abort=True):
-        """A simple menu where user is asked what to do.
-        Wrong choice points back to the menu if default_option is not defined.
-
-        message : string displayed on screen,
-
-        options : a list of MenuItem namedtuples,
-
-        default_key : default key if Enter is pressed,
-
-        allow_abort : allow aborting with ctrl-C or Esc.
-        """
-        # generate a list of valid options
-        valid_options = get_sorted_valid_options(options)
-        entries = (build_entry(option, trailing_newline=0)
-                   for option in valid_options)
-        # dictionary of key: return value pairs
-        rets = {option.key.getchar: option.value
-                for option in valid_options}
-        # get default return value for wrong keypress if we have default_key
-        # default to some nonsensical string for wrong dict hits
-        # this will make it possible to have None as an option
-        def_key, enter_key = get_key(default_key), get_key('enter')
-        def_rv = rets.get(def_key.getchar, NONSENSE)
-        if enter_key.getchar not in rets:
-            rets[enter_key.getchar] = def_rv
-        # check which keys can be used for aborting the menu
-        # pressing one of them would raise Abort, if two conditions are met:
-        # aborting is enabled (allow_abort=True) and key is not in options
-        abort_keys = [key for key in DEFAULT_ABORT_KEYS
-                      if allow_abort and key.getchar not in rets]
-        # display the menu
-        click.echo('\n'.join(['', assess(message), '', *entries, '']))
-        click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
-        # Wait for user input
-        while True:
-            getchar = click.getchar()
-            if getchar in [key.getchar for key in abort_keys]:
-                raise Abort
-            retval = rets.get(getchar, NONSENSE)
-            if retval != NONSENSE:
-                return dt.try_raising(retval)
-
-    @staticmethod
-    def clear():
-        """Clears the screen by click.clear() which is OS independent."""
-        click.clear()
-
-    @staticmethod
-    def paged_display(source, sep='\n'):
-        """Display paginated text so that the user can scroll through it;
-        works with any iterable"""
-        if not source:
-            return
-        text = sep.join(str(x) for x in source)
-        click.echo_via_pager(text)
-
-    def display(self, *args, sep=' ', end='\n', file=None, min_verbosity=0):
-        """Displays info for the user:
-        args : iterable of arguments to display,
-        sep : separation string (default: space),
-        end : termination string (default: newline),
-        file : redirect output to specified file,
-        min_verbosity=0 : display only if this verbosity is met or exceeded
-                          (useful for debug-only output)"""
-        if self.verbosity >= min_verbosity:
-            line = sep.join(str(arg) for arg in args)
-            click.echo(message='{}{}'.format(line, end), nl=False, file=file)
-
-    @staticmethod
-    def display_header(text, symbol='-', trailing_newline=1):
-        """Displays a header banner.
-
-        text : header text,
-        symbol : line symbol,
-        trailing_newline : a number of \n (newline) characters
-                           after the header.
-        """
-        header = '{line}\n{text}\n{line}' + '\n' * trailing_newline
-        click.echo(header.format(text=text, line=symbol * len(text)))
-
-    def display_parameters(self, *data):
-        """Takes any number of OrderedDict instances (for keeping the
-        item order intact) and iterates over them, displaying parameters.
-
-        data : [OrderedDict('': header, par1: val1, par2: val2)...]
-
-        If key evaluates False, display a header."""
-        for parameter_dict in data:
-            for name, value in parameter_dict.items():
-                if name:
-                    # parameter : value
-                    entry = '{name} : {value}'.format(name=name, value=value)
-                    click.echo(entry)
-                else:
-                    # parameter evaluating False: value is a header
-                    self.display_header('{}'.format(value), trailing_newline=0)
-
-    def pause(self, msg1='', msg2='Press any key to continue...',
-              min_verbosity=0, allow_abort=False):
-        """Waits until user presses a key"""
-        if self.verbosity >= min_verbosity:
-            abort_text = ''
-            abort_key_chars = []
-            if allow_abort:
-                keys = ', '.join(key.name for key in DEFAULT_ABORT_KEYS)
-                abort_text = click.style(' [{}: abort]'.format(keys),
-                                         fg='cyan')
-                abort_key_chars = [key.getchar for key in DEFAULT_ABORT_KEYS]
-            _msg2 = click.style(msg2, fg='cyan', blink=True)
-            click.echo('{}\n\t{}{}'.format(msg1, _msg2, abort_text))
-            char = click.getchar()
-            if char in abort_key_chars:
-                raise Abort
-
-    @staticmethod
-    def edit(text=''):
-        """Use click to call a text editor for editing a text"""
-        try:
-            edited = click.edit(text, editor='nano -t', require_save=False)
-        except click.ClickException:
-            edited = click.edit(text, require_save=False)
-        except click.Abort:
-            return text
-        return edited
-
-    @staticmethod
-    def enter(prompt='Enter the value',
-              default=None, datatype=None,
-              minimum=None, maximum=None,
-              condition=lambda x: True,
-              allow_abort=True, type_prompt=None):
-        """Enter data based on function arguments.
-
-        prompt :    set the custom prompt to show to the user,
-
-        default :   If a default value is given, it will be already filled
-                    in the input, and returned if nothing is entered.
-
-                    If this is an exception, empty input will raise it.
-
-                    If None, no empty value is allowed and user will be asked
-                    until a proper value is given.
-
-        datatype :  allows to override the default datatype.
-
-                    If it is specified, the function will try to convert
-                    the user input string to this datatype, and force
-                    re-entering the data if validation fails.
-
-                    Defaults to the type of default_value.
-                    If default_value is None or an exception,
-                    the function returns a string.
-
-                    If default_value is False and no datatype is specified,
-                    the function returns False.
-
-        minimum, maximum : validation limit values;
-                           applies to numeric value (float, int),
-                           or string/container's length.
-
-        condition: any additional condition check the value needs to
-                   pass in validation.
-
-        allow_abort : if ctrl-C is pressed, the function will
-                      raise Abort to be handled elsewhere.
-
-        type_prompt : info for user about what to enter; if None, use default
-        """
-        def build_prompt():
-            """Make a prompt about required datatype and limits."""
-            retval_type_handler = dt.get_handler(retval_datatype)
-
-            # what type should the input be?
-            type_name = retval_type_handler.type_name
-            if type_prompt:
-                type_text = type_prompt
-            elif type_name:
-                type_text = 'Type: {} '.format(type_name)
+              seq : menu item sequence number for arbitrary sorting.
+
+    header, footer : will be displayed above and below menu options list,
+
+    default_key : if defined and valid, pressing Enter will choose
+                  an option defined for this key,
+
+    allow_abort : lets Esc or Ctrl-C raise Abort,
+
+    func_args=(), func_kwargs={} : positional and keyword arguments
+                                   passed to the function call,
+
+    catch_exceptions : an iterable of exceptions this menu is supposed
+                       to catch, rather than bubbling up and crashing
+                       the program
+    """
+    # no args or kwargs? use empty tuple or dict then
+    args = func_args or ()
+    kwargs = func_kwargs or {}
+    # keep displaying the menu until exception is raised
+    while True:
+        ret = menu(options, header, footer, default_key, allow_abort)
+        # if option value is an expression, it'll bubble up here
+        with suppress(catch_exceptions):
+            ret(*args, **kwargs)
+
+
+def menu(options, header='', footer='',
+         default_key=None, allow_abort=True):
+    """menu(options=[MenuOption1, MenuOption2,...]
+            header='', footer='', default_key=None, allow_abort=True):
+
+    A menu displaying keys, options and descriptions (if provided).
+
+    User is asked to press a key and then the function tries to
+    raise an exception (if option.value is Exception subclass)
+    or return option.value.
+
+    Additional behavior can be specified with default_key and
+    allow_abort options in the function call.
+
+    options : option definitions iterable: (MenuItem1, MenuItem2...),
+
+              each MenuItem has following attributes/fields:
+
+              key (int or str) : key to press to choose that option,
+
+              value : value to be returned;
+                      will be raised if it is an exception
+
+              cond : condition to check (function or value),
+                     an option is available if this evaluates to True,
+
+              text : short description of an option,
+                     optional (allows "hidden" options too)
+
+              desc : additional help/description,
+
+              seq : menu item sequence number for arbitrary sorting.
+
+    header : string to be displayed above option entries,
+
+    footer : string to be displayed below option entries,
+
+    default_key : if Enter is pressed, option for this key
+                  will be selected instead (provided that option
+                  is defined, valid and condition is met),
+
+    allow_abort : raise Abort if Esc or Ctrl-C is pressed,
+                  otherwise stay in the menu. If any of these keycombos
+                  is used as a key for a menu option,
+                  it will select that option rather than aborting.
+
+    After choice is made, try to raise the corresponding option
+    or return it.
+    """
+    def build_menu():
+        """Build a list of options and their descriptions"""
+        # header_string: displayed above, footer_string: displayed below
+        # debug_string: displayed only if verbosity != 0
+        # accept functions for dynamic content generation as well
+        _header = assess(header)
+        _footer = assess(footer)
+        header_text = '\n{}\n'.format(_header) if _header else ''
+        footer_text = '\n{}\n'.format(_footer) if _footer else '\n'
+        debug = ('\nThe program is now in debugging mode. Verbosity: {}\n'
+                 .format(verbosity) if verbosity else '')
+
+        # generate menu entries for options
+        entries = (build_entry(o) for o in valid_options)
+        # return the newly constructed menu list
+        return [header_text, debug, *entries, footer_text]
+
+    # generate a list of valid options
+    valid_options = get_sorted_valid_options(options)
+    # dictionary of key: return value pairs
+    rets = {option.key.getchar: option.value
+            for option in valid_options}
+    # get default return value for wrong keypress if we have default_key
+    # default to some nonsensical string for wrong dict hits
+    # this will make it possible to have None as an option
+    def_key, enter_key = get_key(default_key), get_key('enter')
+    def_rv = rets.get(def_key.getchar, NONSENSE)
+    if enter_key.getchar not in rets:
+        rets[enter_key.getchar] = def_rv
+    # check which keys can be used for aborting the menu
+    # pressing one of them would raise Abort, if two conditions are met:
+    # aborting is enabled (allow_abort=True) and key is not in options
+    abort_keys = [key for key in DEFAULT_ABORT_KEYS
+                  if allow_abort and key.getchar not in rets]
+    # display the menu
+    # clear the screen, display the header, options, footer
+    click.clear()
+    click.echo('\n'.join(build_menu()))
+    click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
+    # wait for user input
+    while True:
+        getchar = click.getchar()
+        if getchar in [key.getchar for key in abort_keys]:
+            raise Abort
+        retval = rets.get(getchar, NONSENSE)
+        if retval != NONSENSE:
+            return dt.try_raising(retval)
+
+
+def simple_menu(message, options, default_key=None, allow_abort=True):
+    """A simple menu where user is asked what to do.
+    Wrong choice points back to the menu if default_option is not defined.
+
+    message : string displayed on screen,
+
+    options : a list of MenuItem namedtuples,
+
+    default_key : default key if Enter is pressed,
+
+    allow_abort : allow aborting with ctrl-C or Esc.
+    """
+    # generate a list of valid options
+    valid_options = get_sorted_valid_options(options)
+    entries = (build_entry(option, trailing_newline=0)
+               for option in valid_options)
+    # dictionary of key: return value pairs
+    rets = {option.key.getchar: option.value
+            for option in valid_options}
+    # get default return value for wrong keypress if we have default_key
+    # default to some nonsensical string for wrong dict hits
+    # this will make it possible to have None as an option
+    def_key, enter_key = get_key(default_key), get_key('enter')
+    def_rv = rets.get(def_key.getchar, NONSENSE)
+    if enter_key.getchar not in rets:
+        rets[enter_key.getchar] = def_rv
+    # check which keys can be used for aborting the menu
+    # pressing one of them would raise Abort, if two conditions are met:
+    # aborting is enabled (allow_abort=True) and key is not in options
+    abort_keys = [key for key in DEFAULT_ABORT_KEYS
+                  if allow_abort and key.getchar not in rets]
+    # display the menu
+    click.echo('\n'.join(['', assess(message), '', *entries, '']))
+    click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
+    # Wait for user input
+    while True:
+        getchar = click.getchar()
+        if getchar in [key.getchar for key in abort_keys]:
+            raise Abort
+        retval = rets.get(getchar, NONSENSE)
+        if retval != NONSENSE:
+            return dt.try_raising(retval)
+
+
+def clear():
+    """Clears the screen by click.clear() which is OS independent."""
+    click.clear()
+
+
+def paged_display(source, sep='\n'):
+    """Display paginated text so that the user can scroll through it;
+    works with any iterable"""
+    if not source:
+        return
+    text = sep.join(str(x) for x in source)
+    click.echo_via_pager(text)
+
+
+def display(*args, sep=' ', end='\n', file=None, min_verbosity=0):
+    """Displays info for the user:
+    args : iterable of arguments to display,
+    sep : separation string (default: space),
+    end : termination string (default: newline),
+    file : redirect output to specified file,
+    min_verbosity=0 : display only if this verbosity is met or exceeded
+                      (useful for debug-only output)"""
+    if verbosity >= min_verbosity:
+        line = sep.join(str(arg) for arg in args)
+        click.echo(message='{}{}'.format(line, end), nl=False, file=file)
+
+
+def display_header(text, symbol='-', trailing_newline=1):
+    """Displays a header banner.
+
+    text : header text,
+    symbol : line symbol,
+    trailing_newline : a number of \n (newline) characters
+                       after the header.
+    """
+    header = '{line}\n{text}\n{line}' + '\n' * trailing_newline
+    click.echo(header.format(text=text, line=symbol * len(text)))
+
+
+def display_parameters(*data):
+    """Takes any number of OrderedDict instances (for keeping the
+    item order intact) and iterates over them, displaying parameters.
+
+    data : [OrderedDict('': header, par1: val1, par2: val2)...]
+
+    If key evaluates False, display a header."""
+    for parameter_dict in data:
+        for name, value in parameter_dict.items():
+            if name:
+                # parameter : value
+                entry = '{name} : {value}'.format(name=name, value=value)
+                click.echo(entry)
             else:
-                type_text = ''
+                # parameter evaluating False: value is a header
+                display_header('{}'.format(value), trailing_newline=0)
 
-            # what limits are imposed?
-            validated_parameter = retval_type_handler.validated_parameter
-            vp_name = dt.LIMITED_PARAMETERS.get(validated_parameter)
-            min_string = 'min: {}'.format(minimum)
-            max_string = 'max: {}'.format(maximum)
-            limits_string = [min_string if minimum is not None else '',
-                             max_string if maximum is not None else '']
-            limits_str = ', '.join(x for x in limits_string if x)
-            limits_text = ('({} {}) '.format(vp_name, limits_str) if limits_str
-                           else '')
-            requirements = '{}{}'.format(type_text, limits_text)
-            # glue it all together
-            if requirements:
-                return '{}\n{}'.format(prompt, requirements)
-            else:
-                return prompt
 
-        def get_user_input():
-            """Enter the value and return it"""
-            # get a prefill value from type definition
-            # prefill takes a default and if it evaluates to False
-            def prefill_callback():
-                """A insert_text function wrapper"""
-                pf_value = dt.get_string(default, default_value_type)
-                return readline.insert_text(pf_value)
-
-            # get value from user
-            readline.set_startup_hook(prefill_callback)
-            que = '[Ctrl-C = abort] ?: ' if allow_abort else '> ?: '
-            value = input(click.style(que, fg='cyan'))
-            return value
-
-        # desired type:
-        # specified datatype -> type of default value -> string
-        default_value_type = dt.get_type(default)
-        retval_datatype = datatype or default_value_type or str
-        # configure the conversion/validation function
-        conv_validate = partial(dt.convert_and_validate,
-                                default=default,
-                                datatype=retval_datatype,
-                                minimum=minimum, maximum=maximum,
-                                condition=condition)
-
-        # tell user about the constraints
-        click.echo(build_prompt())
-
-        # loop until the function returns correct value
-        while True:
-            # get the value from wrapped function
-            # raise exceptions (if default value was an exception)
-            try:
-                value = conv_validate(get_user_input())
-                if value is None:
-                    continue
-                else:
-                    return value
-
-            except (TypeError, ValueError) as error:
-                # show the message and loop again
-                click.secho('Error: {}'.format(error), fg='red')
-            except (KeyboardInterrupt, EOFError, click.Abort):
-                if allow_abort:
-                    raise Abort
-
-            finally:
-                click.echo('\n')
-                readline.set_startup_hook()
-
-    @staticmethod
-    def open_file(default_filename='',
-                  mode='r', message='File name?',
-                  allow_abort=True):
-        """Allows to enter the input filename and checks if it is readable.
-        Repeats until proper filename or nothing is given.
-        Returns a file object.
-        Raises Abort if filename not specified."""
-        def readline_prefill():
-            """Pre-fill the input prompt for readline."""
-            return readline.insert_text(default_filename)
-
-        # Set readline parameters
-        readline.set_completer_delims(' \t\n;')
-        readline.parse_and_bind('tab: complete')
-        readline.set_completer(lambda text, state:
-                               (glob.glob(text+'*')+[None])[state])
+def pause(msg1='', msg2='Press any key to continue...',
+          min_verbosity=0, allow_abort=False):
+    """Waits until user presses a key"""
+    if verbosity >= min_verbosity:
+        abort_text = ''
+        abort_key_chars = []
         if allow_abort:
-            abort_text = click.style('[leave blank to abort]', fg='cyan')
-            prompt = '{} {} ?: '.format(message, abort_text)
+            keys = ', '.join(key.name for key in DEFAULT_ABORT_KEYS)
+            abort_text = click.style(' [{}: abort]'.format(keys),
+                                     fg='cyan')
+            abort_key_chars = [key.getchar for key in DEFAULT_ABORT_KEYS]
+        _msg2 = click.style(msg2, fg='cyan', blink=True)
+        click.echo('{}\n\t{}{}'.format(msg1, _msg2, abort_text))
+        char = click.getchar()
+        if char in abort_key_chars:
+            raise Abort
+
+
+def edit(text=''):
+    """Use click to call a text editor for editing a text"""
+    try:
+        edited = click.edit(text, editor='nano -t', require_save=False)
+    except click.ClickException:
+        edited = click.edit(text, require_save=False)
+    except Abort:
+        return text
+    return edited
+
+
+def enter(prompt='Enter the value',
+          default=None, datatype=None,
+          minimum=None, maximum=None,
+          condition=lambda x: True,
+          allow_abort=True, type_prompt=None):
+    """Enter data based on function arguments.
+
+    prompt :    set the custom prompt to show to the user,
+
+    default :   If a default value is given, it will be already filled
+                in the input, and returned if nothing is entered.
+
+                If this is an exception, empty input will raise it.
+
+                If None, no empty value is allowed and user will be asked
+                until a proper value is given.
+
+    datatype :  allows to override the default datatype.
+
+                If it is specified, the function will try to convert
+                the user input string to this datatype, and force
+                re-entering the data if validation fails.
+
+                Defaults to the type of default_value.
+                If default_value is None or an exception,
+                the function returns a string.
+
+                If default_value is False and no datatype is specified,
+                the function returns False.
+
+    minimum, maximum : validation limit values;
+                       applies to numeric value (float, int),
+                       or string/container's length.
+
+    condition: any additional condition check the value needs to
+               pass in validation.
+
+    allow_abort : if ctrl-C is pressed, the function will
+                  raise Abort to be handled elsewhere.
+
+    type_prompt : info for user about what to enter; if None, use default
+    """
+    def build_prompt():
+        """Make a prompt about required datatype and limits."""
+        retval_type_handler = dt.get_handler(retval_datatype)
+
+        # what type should the input be?
+        type_name = retval_type_handler.type_name
+        if type_prompt:
+            type_text = type_prompt
+        elif type_name:
+            type_text = 'Type: {} '.format(type_name)
         else:
-            prompt = '{}  ?:'.format(message)
-        # Check file parameters and catch early permission errors
-        checks = {'r': {'readable': True, 'exists': True},
-                  'w': {'writable': True, 'exists': True},
-                  'w+': {'writable': True, 'exists': False}}
-        while True:
-            try:
-                readline.set_startup_hook(readline_prefill)
-                click.echo()
-                filename = input(prompt)
-                click.echo()
-                if not filename and allow_abort:
-                    raise Abort
-                # okay, got a path, check if file can be accessed
-                path = click.Path(resolve_path=True, **checks[mode])(filename)
-                return click.File(mode)(path)
-            except (click.BadParameter, click.FileError) as exc:
-                # permission denied and wrong file exception handler
-                click.secho(exc.message, fg='red')
-            except (KeyboardInterrupt, EOFError):
-                # ctrl-C exception handler
-                if allow_abort:
-                    raise Abort
-            finally:
-                # readline prefill cleanup
-                readline.set_startup_hook()
+            type_text = ''
 
-    def import_file(self, default_filename='', allow_abort=True):
-        """Allows user to enter the input filename. Returns a file object.
-        Returns default filename or raises Abort if filename not specified."""
-        return self.open_file(default_filename,
-                              mode='r', message='Enter the input filename',
-                              allow_abort=allow_abort)
+        # what limits are imposed?
+        validated_parameter = retval_type_handler.validated_parameter
+        vp_name = dt.LIMITED_PARAMETERS.get(validated_parameter)
+        min_string = 'min: {}'.format(minimum)
+        max_string = 'max: {}'.format(maximum)
+        limits_string = [min_string if minimum is not None else '',
+                         max_string if maximum is not None else '']
+        limits_str = ', '.join(x for x in limits_string if x)
+        limits_text = ('({} {}) '.format(vp_name, limits_str) if limits_str
+                       else '')
+        requirements = '{}{}'.format(type_text, limits_text)
+        # glue it all together
+        if requirements:
+            return '{}\n{}'.format(prompt, requirements)
+        else:
+            return prompt
 
-    def export_file(self, default_filename='', allow_abort=True):
-        """Allows user to enter the output filename. Returns a file object.
-        Returns default filename or raises Abort if filename not specified."""
-        return self.open_file(default_filename,
-                              mode='w+', message='Enter the output filename',
-                              allow_abort=allow_abort)
+    def get_user_input():
+        """Enter the value and return it"""
+        # get a prefill value from type definition
+        # prefill takes a default and if it evaluates to False
+        def prefill_callback():
+            """A insert_text function wrapper"""
+            pf_value = dt.get_string(default, default_value_type)
+            return readline.insert_text(pf_value)
 
-    @staticmethod
-    def confirm(question='Your choice?', default=True,
-                abort_answer=None, allow_abort=True):
-        """Asks a simple question with yes or no answers.
-        Returns True for yes and False for no.
+        # get value from user
+        readline.set_startup_hook(prefill_callback)
+        que = '[Ctrl-C = abort] ?: ' if allow_abort else '> ?: '
+        value = input(click.style(que, fg='cyan'))
+        return value
 
-        default : default answer if user presses return,
-        abort_answer : if True or False, yes / no answer raises Abort;
-                       if None, the outcome is returned for both answers.
+    # desired type:
+    # specified datatype -> type of default value -> string
+    default_value_type = dt.get_type(default)
+    retval_datatype = datatype or default_value_type or str
+    # configure the conversion/validation function
+    conv_validate = partial(dt.convert_and_validate,
+                            default=default,
+                            datatype=retval_datatype,
+                            minimum=minimum, maximum=maximum,
+                            condition=condition)
 
-        allow_abort : allows aborting by ctrl-C or Esc
-        """
-        # key definitions and their meanings
-        keys = OrderedDict()
-        keys[get_key('y')] = True
-        keys[get_key('n')] = False
-        keys[get_key('esc')] = Abort if allow_abort else False
+    # tell user about the constraints
+    click.echo(build_prompt())
 
-        names = {True: 'yes', False: 'no'}
+    # loop until the function returns correct value
+    while True:
+        # get the value from wrapped function
+        # raise exceptions (if default value was an exception)
+        try:
+            value = conv_validate(get_user_input())
+            if value is None:
+                continue
+            else:
+                return value
 
-        default_text, abort_text = '', ''
-        prompt = click.style('Choice?', fg='yellow', bold=True)
-        yn_text = click.style('Y = yes, N = no', fg='cyan', bold=True)
-
-        # default and abort answer
-        if default is not None:
-            keys[get_key('enter')] = default
-            default_text = click.style(' Enter = {}'.format(names[default]),
-                                       fg='green', bold=True)
-
-        if allow_abort:
-            keys[get_key('esc')] = Abort
-            abort_text = click.style(' Esc = abort', fg='red', bold=True)
-
-        # all keys are defined
-        # build answer dict from key getchars
-        answers = {key.getchar: answer for key, answer in keys.items()}
-        # display user prompts
-        click.echo(question)
-
-        while True:
-            # get the user input
-            click.echo('{} [{}{}{}]'
-                       .format(prompt, yn_text, default_text, abort_text))
-            getchar = click.getchar()
-            answer = answers.get(getchar)
-            if answer == abort_answer:
+        except (TypeError, ValueError) as error:
+            # show the message and loop again
+            click.secho('Error: {}'.format(error), fg='red')
+        except (KeyboardInterrupt, EOFError, Abort):
+            if allow_abort:
                 raise Abort
 
-            # loop further if answer lookup failed
-            if answer is None:
-                continue
+        finally:
+            click.echo('\n')
+            readline.set_startup_hook()
 
-            # return answer, or raise it (if it was Abort)
-            return dt.try_raising(answer)
 
-    def paused(self, routine):
-        """Execute a routine and pause after it's done"""
-        def wrapper(*args, **kwargs):
-            """wrapper function"""
-            retval = routine(*args, **kwargs)
-            self.pause()
-            return retval
+def open_file(default_filename='',
+              mode='r', message='File name?',
+              allow_abort=True):
+    """Allows to enter the input filename and checks if it is readable.
+    Repeats until proper filename or nothing is given.
+    Returns a file object.
+    Raises Abort if filename not specified."""
+    def readline_prefill():
+        """Pre-fill the input prompt for readline."""
+        return readline.insert_text(default_filename)
 
-        return wrapper
+    # Set readline parameters
+    readline.set_completer_delims(' \t\n;')
+    readline.parse_and_bind('tab: complete')
+    readline.set_completer(lambda text, state:
+                           (glob.glob(text+'*')+[None])[state])
+    if allow_abort:
+        abort_text = click.style('[leave blank to abort]', fg='cyan')
+        prompt = '{} {} ?: '.format(message, abort_text)
+    else:
+        prompt = '{}  ?:'.format(message)
+    # Check file parameters and catch early permission errors
+    checks = {'r': {'readable': True, 'exists': True},
+              'w': {'writable': True, 'exists': True},
+              'w+': {'writable': True, 'exists': False}}
+    while True:
+        try:
+            readline.set_startup_hook(readline_prefill)
+            click.echo()
+            filename = input(prompt)
+            click.echo()
+            if not filename and allow_abort:
+                raise Abort
+            # okay, got a path, check if file can be accessed
+            path = click.Path(resolve_path=True, **checks[mode])(filename)
+            return click.File(mode)(path)
+        except (click.BadParameter, click.FileError) as exc:
+            # permission denied and wrong file exception handler
+            click.secho(exc.message, fg='red')
+        except (KeyboardInterrupt, EOFError):
+            # ctrl-C exception handler
+            if allow_abort:
+                raise Abort
+        finally:
+            # readline prefill cleanup
+            readline.set_startup_hook()
+
+
+def import_file(default_filename='', allow_abort=True):
+    """Allows user to enter the input filename. Returns a file object.
+    Returns default filename or raises Abort if filename not specified."""
+    return open_file(default_filename,
+                     mode='r', message='Enter the input filename',
+                     allow_abort=allow_abort)
+
+
+def export_file(default_filename='', allow_abort=True):
+    """Allows user to enter the output filename. Returns a file object.
+    Returns default filename or raises Abort if filename not specified."""
+    return open_file(default_filename,
+                     mode='w+', message='Enter the output filename',
+                     allow_abort=allow_abort)
+
+
+def confirm(question='Your choice?', default=True,
+            abort_answer=None, allow_abort=True):
+    """Asks a simple question with yes or no answers.
+    Returns True for yes and False for no.
+
+    default : default answer if user presses return,
+    abort_answer : if True or False, yes / no answer raises Abort;
+                   if None, the outcome is returned for both answers.
+
+    allow_abort : allows aborting by ctrl-C or Esc
+    """
+    # key definitions and their meanings
+    keys = OrderedDict()
+    keys[get_key('y')] = True
+    keys[get_key('n')] = False
+    keys[get_key('esc')] = Abort if allow_abort else False
+
+    names = {True: 'yes', False: 'no'}
+
+    default_text, abort_text = '', ''
+    prompt = click.style('Choice?', fg='yellow', bold=True)
+    yn_text = click.style('Y = yes, N = no', fg='cyan', bold=True)
+
+    # default and abort answer
+    if default is not None:
+        keys[get_key('enter')] = default
+        default_text = click.style(' Enter = {}'.format(names[default]),
+                                   fg='green', bold=True)
+
+    if allow_abort:
+        keys[get_key('esc')] = Abort
+        abort_text = click.style(' Esc = abort', fg='red', bold=True)
+
+    # all keys are defined
+    # build answer dict from key getchars
+    answers = {key.getchar: answer for key, answer in keys.items()}
+    # display user prompts
+    click.echo(question)
+
+    while True:
+        # get the user input
+        click.echo('{} [{}{}{}]'
+                   .format(prompt, yn_text, default_text, abort_text))
+        getchar = click.getchar()
+        answer = answers.get(getchar)
+        if answer == abort_answer:
+            raise Abort
+
+        # loop further if answer lookup failed
+        if answer is None:
+            continue
+
+        # return answer, or raise it (if it was Abort)
+        return dt.try_raising(answer)
+
+
+def choose_wedge(wedge_name=None):
+    """Choose a wedge manually"""
+    def enter_name():
+        """Enter the wedge's name"""
+        prompt = 'Wedge designation? (enter "?" for a list of known wedges)'
+        designation = enter(prompt, default=default_wedge)
+        if '?' in designation:
+            list_wedges()
+            return enter_name()
+        return designation
+
+    def enter_parameters(name):
+        """Parse the wedge's name and return a list:
+        [series, set_width, is_brit_pica, units]"""
+        def divisible_by_quarter(value):
+            """Check if a value is divisible by 0.25:
+            1, 3.0, 1.25, 2.5, 5.75 etc. -> True
+            2.2, 6.4 etc. -> False"""
+            return not value % 0.25
+
+        # For countries that use comma as decimal delimiter, convert to point:
+        w_name = name.replace(',', '.').upper().strip()
+        # Check if this is an European wedge
+        # (these were based on pica = .1667" )
+        is_brit_pica = w_name.endswith('E')
+        # Away with the initial S, final E and any spaces before and after
+        # Make it work with space or dash as delimiter
+        # ("S5-12" and "S5 12" should work the same)
+        wedge = w_name.strip('SE ').replace('-', ' ').split(' ')
+        try:
+            series, set_width = wedge
+        except ValueError:
+            series, set_width = wedge, 0
+        # Now get the set width - ensure that it is float divisible by 0.25
+        # no smaller than 5 (narrowest type), no wider than 20 (large comp)
+        prompt = ('Enter the set width as a decimal fraction '
+                  'divisible by 0.25 - e.g. 12.25: ')
+        set_width = enter(prompt, datatype=float)
+
+        set_width = enter(prompt, default=set_width, datatype=float,
+                          minimum=5, maximum=20,
+                          condition=divisible_by_quarter)
+        # We have the wedge name, so we can look the wedge up in known wedges
+        # (no need to enter the unit values manually)
+        current_units = Wedge.definitions.get(series, Wedge.S5)
+        prompt = ('Enter the wedge unit values for rows 1...15 '
+                  'or 1...16, separated by commas.\n')
+        units = enter(prompt, default=current_units, minimum=15, maximum=16)
+        # Now we have the data...
+        return {'series': series, 'set_width': set_width,
+                'is_brit_pica': is_brit_pica, 'units': units}
+
+    default_wedge = str(wedge_name) if wedge_name else 'S5-12E'
+    w_name = enter_name()
+    try:
+        return Wedge(wedge_name=w_name)
+    except ValueError:
+        data = enter_parameters(w_name)
+        return Wedge(wedge_data=data)
+
+
+def list_wedges():
+    """List known wedges"""
+    def sorting_key(ua_number):
+        """Sorting key: integer part"""
+        return int(''.join(char for char in ua_number if char.isdigit()))
+
+    display('Wedge definitions and their unit values:\n\n'
+            'The first number is the wedge/stopbar series number.\n'
+            'Unit values are listed for each row of the matrix case.\n'
+            'Some wedges have an additional 16th unit value. This means '
+            'that this wedge was used\nwith a "HMN" or "KMN" early row 16 '
+            'addressing system. Those wedges and attachments are rare.\n\n')
+    display('The program currently knows {} wedge definitions.'
+            .format(len(Wedge.definitions)))
+    rows = ''.join(str(x).ljust(5) for x in range(1, 16))
+    display_header('{:^10}{}[16]'.format('Wedge', rows))
+    # display all wedges
+    for wedge_number in sorted(Wedge.definitions, key=sorting_key):
+        wedge_units = Wedge.definitions[wedge_number]
+        unit_values = ''.join(str(x).ljust(5) for x in wedge_units)
+        display('{:^10}{}'.format(wedge_number, unit_values))
+
+    # display old-style wedge designations
+    aliases = iter(Wedge.aliases)
+    # Group by three
+    grouper = zip_longest(aliases, aliases, aliases, fillvalue='')
+    old_wedges = '\n'.join('\t'.join(z) for z in grouper)
+    desc = ('\n\nSome known OLD-STYLE British wedge designations:\n\n'
+            'If you have one of those, then whenever the program asks you '
+            'about the wedge designation,\nyou need to enter the NEW-STYLE '
+            'number, for example "9 1/4 AK" will be "S5-9.25".\nIf the wedge '
+            'is marked as "EU", then it was made for continental Europe,\n'
+            'and based on old British pica value (.1667"). New-style wedge '
+            'designations\nfor European wedges have the letter "E" '
+            'appended to the set width - e.g. "S5-12E"\n')
+    display(desc)
+    display(old_wedges)
+    display('\n\nScroll your terminal up to see more.')
+
+
+def choose_mat(wedge, code='', units=0,
+               specify_code=True, specify_units=False):
+    """Define a matrix (coordinates, unit width).
+    Returns Matrix together with justifying wedge positions.
+    """
+    if specify_code:
+        coords = enter('Matrix coordinates (eg. G1, leave blank to abort) ?',
+                       default=code, allow_abort=False)
+    else:
+        coords = code
+    if not coords:
+        return None
+    column, row = functions.parse_coordinates(coords)
+    # type width in units wedge's set
+    row_units = wedge[row]
+    if specify_units:
+        # ask for the character unit width
+        unit_width = enter('Units {} set ?'.format(wedge.set_width),
+                           default=units or row_units,
+                           minimum=3, maximum=25)
+    else:
+        unit_width = units or row_units
+
+    # calculate the 0075 / 0005 wedge corrections
+    wedges = wedge.corrections(row, unit_width)
+    if wedges != (3, 8):
+        # use S needle because adjustments are needed
+        mat_code = '{} S {}'.format(column, row)
+    else:
+        # no S-needle nor unit correction
+        mat_code = '{} {}'.format(column, row)
+    return Matrix(column, row, unit_width, row_units, mat_code, wedges)
+
+
+def choose_ribbon():
+    """Choose a file, then parse it and output a Ribbon object."""
+    ribbon_file = import_file()
+    if ribbon_file:
+        with suppress(AttributeError):
+            # Try to open it and get only the lines containing non-whitespace
+            with ribbon_file:
+                return functions.parse_ribbon(ribbon_file.readlines())
+
+
+def choose_type_size(prompt, default=None):
+    """Enter a value in typographic, metric or Imperial units.
+
+        Returns a value in inches to be used elsewhere.
+
+        prompt: what does the user choose?
+        default_width: if None then don't prefill the line
+    """
+    inch_values = {'P': PICA, 'p': PICA/12, 'c': PICA,
+                   'mm': 1/25.4, 'cm': 1/2.54, '"': 1, 'in': 1}
+
+    # start by typing the string
+    width = enter('{} [value+unit: mm, cm, "/in, p=point, c/P=cicero or pica]'
+                  .format(prompt), default=default).strip()
+    # what do we have? number + letter string? number? something else?
+    try:
+        # normally number + letter string denoting units
+        value, unit = re.match('([0-9.]+)([ "a-zA-Z]+)', width).groups()
+        unit = unit.strip()
+        inches = float(value) * inch_values[unit]
+        return inches
+    except (KeyError, AttributeError):
+        # unknown unit string
+        display('Error: Incorrect value and/or measurement unit! Enter again.')
+        return choose_type_size(prompt, default)
