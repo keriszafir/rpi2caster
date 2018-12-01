@@ -14,7 +14,8 @@ except ImportError:
 
 from . import ui
 from . import monotype
-from .functions import pump_stop, single_justification, double_justification
+from .functions import pump_stop, pump_start
+from .functions import single_justification, double_justification
 from .models import Ribbon
 
 
@@ -43,9 +44,9 @@ class Casting:
     machine = monotype.SimulationCaster()
     ribbon = Ribbon()
 
-    def __init__(self):
+    def __init__(self, address, port):
         try:
-            machine = monotype.MonotypeCaster()
+            machine = monotype.MonotypeCaster(address, port)
             if ui.confirm('Use real machine (N = simulation) ?'):
                 self.machine = machine
         except librpi2caster.InterfaceException:
@@ -386,7 +387,7 @@ class Casting:
             # go on, choose a wedge for calibration, widths depend on it
             wedge = ui.choose_wedge()
             ribbon = make_ribbon()
-            self.machine.cast(ribbon)
+            self.machine.simple_cast(ribbon)
 
         if ui.confirm('Calibrate the bridge as well?'):
             self.calibrate_bridge()
@@ -475,11 +476,11 @@ class Casting:
             ui.confirm('Proceed?', default=True, abort_answer=False)
             # prepare casting sequence
             record, justified_record = 'G7', 'GS7'
-            pump_start, pump_stop = 'NKS 0075 3', 'NJS 0005 8'
+            pump_on, pump_off = 'NKS 0075 3', 'NJS 0005 8'
             line_out = 'NKJS 0005 0075 8'
             # start - 7 x G5 - line out - start - 7 x GS5 - line out - stop
-            sequence = [pump_start, *[record] * 7, line_out, pump_start,
-                        *[justified_record] * 7, line_out, pump_stop]
+            sequence = [pump_on, *[record] * 7, line_out, pump_on,
+                        *[justified_record] * 7, line_out, pump_off]
             self.machine.simple_cast(sequence)
 
         def test_row_16(*_):
@@ -490,13 +491,12 @@ class Casting:
                        'If your caster has HMN, KMN or unit-shift attachment, '
                        'turn it on.\n')
             # build casting queue
-            pump_start, pump_stop = 'NKS 0075', 'NJS 0005'
-            line_out = 'NKJS 0005 0075'
             row = ['{}16'.format(col)
                    for col in ('NI', 'NL', *'ABCDEFGHIJKLMNO')]
             # test with actual casting or not?
             if ui.confirm('Use the pump? Y = cast the row, N = test codes.'):
-                sequence = [pump_start, *row, line_out, pump_stop]
+                sequence = [*pump_start(), *row,
+                            *double_justification(), *pump_stop()]
                 self.machine.simple_cast(sequence)
             else:
                 self.machine.choose_row16_mode(row16_needed=True)

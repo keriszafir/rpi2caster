@@ -79,9 +79,13 @@ def cli(ctx, verbosity):
 
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
-           options_metavar='[-hlmsw]', subcommand_metavar='[what] [-h]')
+           options_metavar='[-aph]', subcommand_metavar='[what]')
+@click.option('--address', '-a', help='address (default: 127.0.0.1)',
+              default='127.0.0.1')
+@click.option('--port', '-p', help='port (default: 23017)', type=int,
+              default=23017)
 @click.pass_context
-def cast(ctx):
+def cast(ctx, address, port):
     """Cast type with a Monotype caster.
 
     Casts composition, material for handsetting, QR codes.
@@ -90,7 +94,7 @@ def cast(ctx):
     Can also be run in simulation mode without the actual caster."""
     from .casting import Casting
     # replace the context object for the subcommands to see
-    ctx.obj = Casting()
+    ctx.obj = Casting(address, port)
     if not ctx.invoked_subcommand:
         ctx.obj.main_menu()
 

@@ -62,12 +62,11 @@ def get_key(source):
     if source is None:
         # can be used to generate numbers on the fly
         return Key(getchar=None, name=None)
-    else:
-        key = str(source)
-        normalized_key = key.lower().strip()
-        normalized_key.replace('-', '_')
-        normalized_key.replace(' ', '_')
-        return KEYS.get(normalized_key) or Key(getchar=key, name=key)
+    key = str(source)
+    normalized_key = key.lower().strip()
+    normalized_key.replace('-', '_')
+    normalized_key.replace(' ', '_')
+    return KEYS.get(normalized_key) or Key(getchar=key, name=key)
 
 
 def option(key=None, value=None, cond=True, text='', desc='', seq=50):
@@ -146,9 +145,10 @@ def build_entry(opt, trailing_newline=1):
     key_name = click.style('{:<10}'.format(opt.key.name), bold=True, fg='cyan')
     # use a proper template depending on available data
     if opt.desc:
-        return long_entry.format(key=key_name, text=opt.text, desc=opt.desc)
-    elif opt.text:
-        return short_entry.format(key=key_name, text=opt.text)
+        retval = long_entry.format(key=key_name, text=opt.text, desc=opt.desc)
+    else:
+        retval = short_entry.format(key=key_name, text=opt.text)
+    return retval
 
 
 def build_menu_prompt(menu_actions, default_retval, default_key, abort_keys):
@@ -537,12 +537,10 @@ def enter(prompt='Enter the value',
         limits_str = ', '.join(x for x in limits_string if x)
         limits_text = ('({} {}) '.format(vp_name, limits_str) if limits_str
                        else '')
-        requirements = '{}{}'.format(type_text, limits_text)
+        # requirements for the input
+        reqs = '{}{}'.format(type_text, limits_text)
         # glue it all together
-        if requirements:
-            return '{}\n{}'.format(prompt, requirements)
-        else:
-            return prompt
+        return '{}\n{}'.format(prompt, reqs) if reqs else prompt
 
     def get_user_input():
         """Enter the value and return it"""
@@ -855,10 +853,10 @@ def choose_ribbon():
     """Choose a file, then parse it and output a Ribbon object."""
     ribbon_file = import_file()
     if ribbon_file:
-        with suppress(AttributeError):
+        with suppress(AttributeError), ribbon_file:
             # Try to open it and get only the lines containing non-whitespace
-            with ribbon_file:
-                return functions.parse_ribbon(ribbon_file.readlines())
+            return functions.parse_ribbon(ribbon_file.readlines())
+    return None
 
 
 def choose_type_size(prompt, default=None):

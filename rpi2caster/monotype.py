@@ -57,9 +57,24 @@ class SimulationCaster:
         self.testing_mode = False
 
     @property
+    def working(self):
+        """Working (busy) flag for the interface."""
+        return self.status['working']
+
+    @working.setter
+    def working(self, state):
+        """Sets the working flag"""
+        self.status['working'] = bool(state)
+
+    @property
     def punch_mode(self):
         """Checks if the interface is in ribbon punching mode."""
         return self.config['punch_mode']
+
+    @punch_mode.setter
+    def punch_mode(self, state):
+        """Sets the ribbon punching mode."""
+        self.config['punch_mode'] = bool(state)
 
     @property
     def row16_mode(self):
@@ -471,8 +486,8 @@ class SimulationCaster:
 class MonotypeCaster(SimulationCaster):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         response = self._request(request_timeout=(1, 1))
         config = response.get('config', dict())
         status = response.get('status', dict())

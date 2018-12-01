@@ -318,3 +318,8 @@ def double_justification(wedges=(15, 15)):
 def pump_stop():
     """Double 0005 to stop the pump."""
     return ['NJS 0005', 'NJS 0005']
+
+
+def pump_start():
+    """0075 to start the pump."""
+    return ['NKS 0075']
