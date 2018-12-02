@@ -37,13 +37,16 @@ class SimulationCaster:
     def __init__(self, address='127.0.0.1', port=23017):
         self.url = 'http://{}:{}'.format(address, port)
         self.testing_mode = False
+        self.row16_mode = OFF
         self.config = dict(punching_on_time=0.2, punching_off_time=0.3,
                            sensor_timeout=5, pump_stop_timeout=20,
                            startup_timeout=20, name='Simulation interface',
                            punch_mode=False)
         self.status = dict(water=OFF, air=OFF, motor=OFF, pump=OFF,
                            wedge_0005=15, wedge_0075=15, speed='0rpm',
-                           row16_mode=OFF, working=OFF, signals=[])
+                           machine=OFF, signals=[])
+        self.update_config()
+        self.update_status()
 
     def __str__(self):
         return self.config['name']
@@ -54,17 +57,7 @@ class SimulationCaster:
 
     def __exit__(self, *_):
         self.stop()
-        self.testing_mode = False
-
-    @property
-    def working(self):
-        """Working (busy) flag for the interface."""
-        return self.status['working']
-
-    @working.setter
-    def working(self, state):
-        """Sets the working flag"""
-        self.status['working'] = bool(state)
+        self.update_status(testing_mode=False)
 
     @property
     def punch_mode(self):
@@ -74,30 +67,17 @@ class SimulationCaster:
     @punch_mode.setter
     def punch_mode(self, state):
         """Sets the ribbon punching mode."""
-        self.config['punch_mode'] = bool(state)
+        self.update_config(punch_mode=bool(state))
 
     @property
-    def row16_mode(self):
-        """Get the row 16 addressing mode:
-            None = off, HMN, KMN, unit shift"""
-        return self.status['row16_mode']
+    def testing_mode(self):
+        """Checks the testing mode where signals are advanced manually."""
+        return self.status.get('testing_mode')
 
-    @row16_mode.setter
-    def row16_mode(self, mode):
-        """Change the row 16 addressing mode:
-            None (row 16 addressing is off = cast from row 15 instead)
-            is available in all operation modes;
-
-            HMN, KMN, unit shift are always available in the punching
-            or testing modes, and conditionally available in the casting
-            mode: they need to be supported in the interface configuration.
-        """
-        if self.status['working']:
-            raise librpi2caster.InterfaceBusy
-        if mode not in [OFF, HMN, KMN, UNITSHIFT]:
-            raise librpi2caster.UnsupportedRow16Mode
-        else:
-            self.status['row16_mode'] = mode
+    @testing_mode.setter
+    def testing_mode(self, state):
+        """Sets the testing mode"""
+        self.update_status(testing_mode=bool(state))
 
     @property
     def parameters(self):
@@ -106,13 +86,21 @@ class SimulationCaster:
         parameters.update(**self.config)
         return parameters
 
+    def update_status(self, **kwargs):
+        """Update the machine status."""
+        self.status.update(**kwargs)
+
+    def update_config(self, **kwargs):
+        """Update the configuration."""
+        self.config.update(**kwargs)
+
     def choose_row16_mode(self, row16_needed=False):
         """Choose the addressing system for the diecase row 16."""
         if row16_needed and not self.row16_mode:
             # choose the row 16 addressing mode
             prompt = 'Choose the row 16 addressing mode'
             options = [ui.option(key=name[0], value=name, text=name)
-                       for name in [OFF, HMN, KMN, UNITSHIFT]]
+                       for name in [HMN, KMN, UNITSHIFT]]
             options.append(ui.option(key='o', value=OFF,
                                      text='Off - cast from row 15 instead'))
             if len(options) > 1:
@@ -142,20 +130,24 @@ class SimulationCaster:
 
     def start(self):
         """Simulates the machine start"""
-        self.status.update(air=ON)
-        if self.punch_mode or self.testing_mode:
-            pass
-        else:
-            self.status.update(water=ON, motor=ON)
-        self.status.update(working=ON)
+        if self.status.get('emergency_stop'):
+            if ui.confirm('WARNING!!! Emergency stop is engaged!\n'
+                          'It is necessary to clear it before starting.',
+                          default=False, allow_abort=False):
+                self.update_status(emergency_stop=OFF)
+            else:
+                raise ui.Abort
+        # normal starting sequence
+        self.update_status(air=ON)
+        if not any(self.punch_mode, self.testing_mode):
+            self.update_status(water=ON, motor=ON)
+        self.update_status(machine=ON)
 
     def stop(self):
         """Simulates the machine stop"""
-        if self.punch_mode or self.testing_mode:
-            pass
-        else:
-            self.status.update(pump=OFF, water=OFF, motor=OFF)
-        self.status.update(air=OFF, working=OFF)
+        if not any(self.punch_mode, self.testing_mode):
+            self.update_status(pump=OFF, water=OFF, motor=OFF)
+        self.update_status(air=OFF, machine=OFF)
 
     def send(self, signals, timeout=None, request_timeout=None):
         """Simulates sending the signals to the caster."""
@@ -169,36 +161,37 @@ class SimulationCaster:
             # find the earliest row number or default to 15
             if found(['0075']) or found('NK'):
                 # 0075 always turns the pump on
-                self.status['pump'] = ON
+                self.update_status(pump=ON)
                 for pos in range(1, 15):
                     if str(pos) in signals:
-                        self.status['wedge_0075'] = pos
+                        self.update_status(wedge_0075=pos)
                         break
                 else:
-                    self.status['wedge_0075'] = 15
+                    self.update_status(wedge_0075=15)
 
             elif found(['0005']) or found('NJ'):
                 # 0005 without 0075 turns the pump off
-                self.status['pump'] = OFF
+                self.update_status(pump=OFF)
 
             # check 0005 wedge position:
             # find the earliest row number or default to 15
             if found(['0005']) or found('NJ'):
                 for pos in range(1, 15):
                     if str(pos) in signals:
-                        self.status['wedge_0005'] = pos
+                        self.update_status(wedge_0005=pos)
                         break
                 else:
-                    self.status['wedge_0005'] = 15
+                    self.update_status(wedge_0005=15)
 
-        if not self.status['working']:
+        if not self.status.get('machine'):
             raise librpi2caster.InterfaceNotStarted
 
         start_time = time.time()
         max_wait_time = max(timeout or 0, request_timeout or 0) or 10
         # convert signals based on modes
-        self.status['signals'] = parse_signals(signals, self.row16_mode)
-        signals_string = ''.join(self.status['signals'])
+        converted_signals = parse_signals(signals, self.row16_mode)
+        signals_string = ''.join(converted_signals)
+        self.status.update(signals=converted_signals)
         try:
             update_wedges_and_pump()
             if self.testing_mode:
@@ -216,8 +209,9 @@ class SimulationCaster:
             if (time.time() - start_time) > max_wait_time:
                 raise librpi2caster.MachineStopped
         except (KeyboardInterrupt, EOFError):
+            self.update_status(emergency_stop=ON)
+            self.stop()
             raise librpi2caster.MachineStopped
-        return self.status
 
     def cast_one(self, record, timeout=None):
         """Casting sequence: sensor on - valves on - sensor off - valves off"""
@@ -231,19 +225,18 @@ class SimulationCaster:
             request_timeout = 2 * timeout + 5
         else:
             request_timeout = 2 * self.config['sensor_timeout'] + 2
-        return self.send(signals, timeout=timeout,
-                         request_timeout=request_timeout)
+        self.send(signals, timeout=timeout, request_timeout=request_timeout)
 
     def punch_one(self, signals):
         """Punch a single signals combination"""
         off_time = self.config['punching_off_time']
         on_time = self.config['punching_on_time']
         timeout = on_time + off_time + 5
-        return self.send(signals, request_timeout=timeout)
+        self.send(signals, request_timeout=timeout)
 
     def test_one(self, signals):
         """Test a single signals combination"""
-        return self.send(signals, request_timeout=5)
+        self.send(signals, request_timeout=5)
 
     def cast_or_punch(self, ribbon):
         """Cast / punch a ribbon, based on the selected operation mode."""
@@ -264,10 +257,11 @@ class SimulationCaster:
             while repetitions > 0:
                 try:
                     for record in source:
-                        ui.display('{r.signals:<20}{r.comment}'
-                                   .format(r=record))
-                        codes = self.cast_one(record).get('signals', [])
-                        ui.display('casting: {}'.format(' '.join(codes)))
+                        found = '{r.signals:<20}{r.comment}'.format(r=record)
+                        ui.display(found)
+                        self.cast_one(record)
+                        signals = self.status.get('signals', [])
+                        ui.display('casting: {}'.format(' '.join(signals)))
                     # repetition successful
                     repetitions -= 1
                 except librpi2caster.MachineStopped:
@@ -375,18 +369,17 @@ class SimulationCaster:
                     continue
                 # display some info and cast the signals
                 stats.update(record=record)
-                # cast it and get current machine status
-                status = self.cast_one(record)
+                self.cast_one(record)
                 # prepare data for display
-                casting_status = OrderedDict()
-                casting_status['Signals sent'] = ' '.join(status['signals'])
-                casting_status['Pump'] = 'ON' if status['pump'] else 'OFF'
-                casting_status['Wedge 0005 at'] = status['wedge_0005']
-                casting_status['Wedge 0075 at'] = status['wedge_0075']
-                casting_status['Speed'] = status['speed']
+                info = OrderedDict()
+                info['Signals sent'] = ' '.join(self.status.get('signals', []))
+                info['Pump'] = 'ON' if self.status['pump'] else 'OFF'
+                info['Wedge 0005 at'] = self.status['wedge_0005']
+                info['Wedge 0075 at'] = self.status['wedge_0075']
+                info['Speed'] = self.status['speed']
                 # display status
                 ui.clear()
-                ui.display_parameters(stats.code_parameters(), casting_status)
+                ui.display_parameters(stats.code_parameters(), info)
 
         # Ribbon pre-processing and casting parameters setup
         ribbon = [parse_record(code) for code in input_sequence]
@@ -416,9 +409,6 @@ class SimulationCaster:
                     cast_queue(queue)
                     stats.update(casting_success=True)
                     if not stats.runs_left():
-                        # make sure the machine will check
-                        # whether it's running next time
-                        self.working = False
                         # user might want to re-run this
                         msg = 'Casting successfully finished. Any more runs?'
                         stats.update(runs=ui.enter(msg, default=0, minimum=0))
@@ -450,12 +440,13 @@ class SimulationCaster:
             for record in source:
                 try:
                     ui.display('{r.signals:<20}{r.comment}'.format(r=record))
-                    signals = self.punch_one(record.signals).get('signals', [])
+                    self.punch_one(record.signals)
+                    signals = self.status.get('signals', [])
                     ui.display('punching: {}'.format(' '.join(signals)))
                 except librpi2caster.MachineStopped:
                     if ui.confirm('Machine stopped - continue?'):
-                        signals = (self.punch_one(record.signals)
-                                   .get('signals', []))
+                        self.punch_one(record.signals)
+                        signals = self.status.get('signals', [])
                         ui.display('punching: {}'.format(' '.join(signals)))
                     else:
                         break
@@ -471,8 +462,8 @@ class SimulationCaster:
             while True:
                 try:
                     for record in source:
-                        signals = (self.test_one(record.signals)
-                                   .get('signals', []))
+                        self.test_one(record.signals)
+                        signals = self.status.get('signals', [])
                         ui.display('testing: {}'.format(' '.join(signals)))
                         if duration:
                             time.sleep(duration)
@@ -486,14 +477,6 @@ class SimulationCaster:
 class MonotypeCaster(SimulationCaster):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        response = self._request(request_timeout=(1, 1))
-        config = response.get('config', dict())
-        status = response.get('status', dict())
-        self.config.update(config)
-        self.status.update(status)
-
     def _request(self, path='', request_timeout=None,
                  method=requests.get, **kwargs):
         """Encode data with JSON and send it to self.url in a request."""
@@ -548,15 +531,17 @@ class MonotypeCaster(SimulationCaster):
             codes = parse_signals(signals, self.row16_mode)
             data = dict(signals=codes, timeout=timeout,
                         testing_mode=self.testing_mode)
-            return self._request('signals', method=requests.post,
-                                 request_timeout=request_timeout, **data)
+            self._request('signals', method=requests.post,
+                          request_timeout=request_timeout, **data)
         except librpi2caster.InterfaceNotStarted:
             self.start()
-            return self._request('signals', method=requests.post,
-                                 request_timeout=request_timeout, **data)
+            self._request('signals', method=requests.post,
+                          request_timeout=request_timeout, **data)
         except (KeyboardInterrupt, EOFError, librpi2caster.CommunicationError):
+            self.update_status(emergency_stop=ON)
             self.stop()
             raise librpi2caster.MachineStopped
+        self.update_status()
 
     @handle_communication_error
     def start(self):
@@ -571,6 +556,13 @@ class MonotypeCaster(SimulationCaster):
         In other modes (testing, punching, manual punching):
             The interface will just turn on the compressed air supply.
         """
+        if self.status.get('emergency_stop'):
+            if ui.confirm('WARNING!!! Emergency stop is engaged!\n'
+                          'It is necessary to clear it before starting.',
+                          default=False, allow_abort=False):
+                self.update_status(emergency_stop=OFF)
+            else:
+                raise ui.Abort
         if self.testing_mode:
             request_timeout = 5
         elif self.punch_mode:
@@ -586,14 +578,14 @@ class MonotypeCaster(SimulationCaster):
             request_timeout = 3 * self.config['startup_timeout'] + 2
         # send the request and handle any exceptions
         try:
-            self._request('machine', method=requests.post,
-                          request_timeout=request_timeout, machine=ON,
-                          testing_mode=self.testing_mode)
+            self._request('machine', method=requests.put,
+                          request_timeout=request_timeout)
         except librpi2caster.InterfaceBusy:
             ui.pause('This interface is already working. Aborting...')
             raise ui.Abort
         if not self.punch_mode and not self.testing_mode:
             ui.display('OK, the machine is running...')
+        self.update_status()
 
     @handle_communication_error
     def stop(self):
@@ -613,15 +605,19 @@ class MonotypeCaster(SimulationCaster):
             ui.display('Turning the machine off...')
             request_timeout = self.config['pump_stop_timeout'] * 2 + 2
         self._request('machine', method=requests.delete,
-                      request_timeout=request_timeout,
-                      testing_mode=self.testing_mode)
+                      request_timeout=request_timeout)
+        self.update_status()
 
-    @property
-    def status(self):
-        """Get the interface status"""
-        return self._request().get('status')
+    def update_status(self, **kwargs):
+        """Send the new (optional) parameters to the interface server.
+        Update the local status afterwards."""
+        status = self._request(method=requests.post,
+                               request_timeout=(1, 1), **kwargs)
+        self.status.update(status)
 
-    @status.setter
-    @handle_communication_error
-    def status(self, _):
-        """Prevents raising AttributeError when assigning to status"""
+    def update_config(self, **kwargs):
+        """Send the new (optional) parameters to the interface server.
+        Update the local configuration afterwards."""
+        config = self._request('config', method=requests.post,
+                               request_timeout=(1, 1), **kwargs)
+        self.config.update(config)

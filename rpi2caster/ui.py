@@ -618,7 +618,10 @@ def open_file(default_filename='',
     # Check file parameters and catch early permission errors
     checks = {'r': {'readable': True, 'exists': True},
               'w': {'writable': True, 'exists': True},
-              'w+': {'writable': True, 'exists': False}}
+              'w+': {'writable': True, 'exists': False},
+              'rb': {'readable': True, 'exists': True},
+              'wb': {'writable': True, 'exists': True},
+              'wb+': {'writable': True, 'exists': False}}
     while True:
         try:
             readline.set_startup_hook(readline_prefill)
@@ -642,19 +645,19 @@ def open_file(default_filename='',
             readline.set_startup_hook()
 
 
-def import_file(default_filename='', allow_abort=True):
+def import_file(default_filename='', binary=False, allow_abort=True):
     """Allows user to enter the input filename. Returns a file object.
     Returns default filename or raises Abort if filename not specified."""
-    return open_file(default_filename,
-                     mode='r', message='Enter the input filename',
+    return open_file(default_filename, mode='rb' if binary else 'r',
+                     message='Enter the input filename',
                      allow_abort=allow_abort)
 
 
-def export_file(default_filename='', allow_abort=True):
+def export_file(default_filename='', binary=False, allow_abort=True):
     """Allows user to enter the output filename. Returns a file object.
     Returns default filename or raises Abort if filename not specified."""
-    return open_file(default_filename,
-                     mode='w+', message='Enter the output filename',
+    return open_file(default_filename, mode='wb+' if binary else 'w+',
+                     message='Enter the output filename',
                      allow_abort=allow_abort)
 
 

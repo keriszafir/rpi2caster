@@ -12,6 +12,12 @@ try:
 except ImportError:
     qrcode = None
 
+# XLS sheet handling library
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None
+
 from . import ui
 from . import monotype
 from .functions import pump_stop, pump_start
@@ -54,8 +60,13 @@ class Casting:
                        'Using simulation mode instead...')
             ui.pause(message)
 
+    def cast_xls(self):
+        """Cast characters specified in an Excel file"""
+        excel_file = ui.import_file(binary=True)
+        sheet = openpyxl.load_workbook(filename=excel_file).active
+
     @cast_this
-    def cast_material(self):
+    def cast_material(self, source=None):
         """Cast typesetting material: typecases, specified sorts, spaces"""
         def make_queue():
             """generate a sequence of items for casting"""
@@ -99,8 +110,8 @@ class Casting:
 
             while not done:
                 if not add_new_char():
-                    ui.simple_menu('Choose what to do:',
-                                   options, default_key='n')()
+                    prompt = 'Choose what to do:'
+                    ui.simple_menu(prompt, options, default_key='n')()
 
             # make a flat list of mats to cast from
             order = [item for mat, qty in queue for item in [mat] * qty]
@@ -123,7 +134,11 @@ class Casting:
                 # (or whatever the quad unit width is), in units
                 space_units = units_left % quad.units
                 # choose a matrix for the space
-                space_position = 'G2' if space_units < 16 else 'O15'
+                space_position = 'G2' if 5 <= space_units < 16 else 'O15'
+                # make a quad wider and use it as a space
+                if space_units < 5:
+                    num_quads -= 1
+                    space_units += quad.units
                 space = ui.choose_mat(wedge, space_position, space_units,
                                       specify_code=False)
                 # use single justification to set the character width
@@ -165,7 +180,7 @@ class Casting:
             return ribbon
 
         wedge = ui.choose_wedge()
-        mat_queue = make_queue()
+        mat_queue = source or make_queue()
         # nothing to cast?
         if not mat_queue:
             return []
@@ -595,7 +610,12 @@ class Casting:
 
                    ui.option(key='h', value=self.cast_material, seq=60,
                              cond=is_casting, text='Cast sorts or spaces',
-                             desc='Cast characters from specified mats'),
+                             desc='Cast characters from selected mats'),
+
+                   ui.option(key='x', value=self.cast_xls, seq=60,
+                             cond=is_casting and openpyxl,
+                             text='Cast type from specification',
+                             desc='Cast characters specified in an XLS file'),
 
                    ui.option(key='q', value=self.cast_qr_code, seq=70,
                              cond=qrcode, text='Cast QR codes',
