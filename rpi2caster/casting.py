@@ -2,6 +2,7 @@
 """Casting utility: cast or punch ribbon, cast material for hand typesetting,
 make a diecase proof, quickly compose and cast text.
 """
+from contextlib import suppress
 from functools import wraps
 
 # common definitions
@@ -20,7 +21,8 @@ except ImportError:
 
 from . import ui
 from . import monotype
-from .functions import pump_stop, pump_start
+from .functions import make_mat, make_galley, make_order, parse_ribbon
+from .functions import pump_start, pump_stop
 from .functions import single_justification, double_justification
 from .models import Ribbon
 
@@ -60,30 +62,95 @@ class Casting:
                        'Using simulation mode instead...')
             ui.pause(message)
 
-    def cast_xls(self):
-        """Cast characters specified in an Excel file"""
-        excel_file = ui.import_file(binary=True)
-        sheet = openpyxl.load_workbook(filename=excel_file).active
+    @cast_this
+    def cast_file(self, ribbon_file):
+        """Cast a ribbon directly"""
+        with ribbon_file:
+            return parse_ribbon(ribbon_file.readlines())
 
     @cast_this
-    def cast_material(self, source=None):
+    def cast_xls(self, files=()):
+        """Cast characters specified in an Excel file"""
+        def parse_xls(file):
+            """Parse the Excel file interactively"""
+            workbook = openpyxl.load_workbook(filename=file, read_only=True)
+            sheet = workbook.active
+            data = [[cell.value for cell in row] for row in sheet.rows]
+            width = max(len(row) for row in data)
+            # data loaded - time for preview; show up to 10 rows
+            num_rows = len(data)
+            preview_data = data[:min(10, num_rows)]
+            ui.display('Table preview:')
+            for row in preview_data:
+                ui.display('|'.join('{:10}'.format(v) for v in row))
+
+            # ask about the data range
+            starting_row = ui.enter('Starting row?', 2) - 1
+            num_rows = ui.enter('Number of rows?', default=min(num_rows, 50),
+                                maximum=num_rows)
+            ending_row = starting_row + num_rows
+            positions_col = ui.enter('Column # with positions?',
+                                     default=2, minimum=1, maximum=width) - 1
+            units_col = ui.enter('Column # with units?',
+                                 default=3, minimum=1, maximum=width) - 1
+            qty_col = ui.enter('Column # with type quantities?',
+                               default=4, minimum=1, maximum=width) - 1
+            # store all rows where error occured
+            failed_rows = []
+            for row in data[starting_row:ending_row]:
+                try:
+                    quantity, units = int(row[qty_col]), int(row[units_col])
+                    position = row[positions_col]
+                    ui.display('Adding {} of {} {} units wide.'
+                               .format(quantity, position, units))
+                    matrix = make_mat(code=position, units=units, wedge=wedge)
+                    mat_queue.append((matrix, quantity))
+                except ValueError:
+                    failed_rows.append(row)
+
+            if failed_rows:
+                ui.display('Entries NOT being cast:')
+                for row in failed_rows:
+                    ui.display('|'.join('{:10}'.format(v) for v in row))
+
+        # choose the normal wedge
+        wedge = ui.choose_wedge()
+        mat_queue = []
+        # load a spreadsheet
+        excel_files = files or [ui.import_file(binary=True)]
+        for file in excel_files:
+            parse_xls(file)
+
+        # nothing to cast?
+        if not mat_queue:
+            return []
+        # how wide is the galley?
+        galley_inches = ui.choose_type_size('Galley width?', '25P')
+        galley_units = wedge.inches_to_units(galley_inches)
+        # generate the ribbon
+        order = make_order(mat_queue, wedge)
+        return make_galley(order, galley_units, wedge)
+
+    @cast_this
+    def cast_material(self):
         """Cast typesetting material: typecases, specified sorts, spaces"""
         def make_queue():
             """generate a sequence of items for casting"""
-            def add_new_char():
+            def add_new_chars():
                 """Adds a mat to a queue"""
-                mat = ui.choose_mat(wedge, specify_units=True)
-                if not mat:
-                    return None
-                # how many matrices? (mat not specified? then don't ask)
-                qty_prompt = 'How many sorts? (0 = cancel, start new)'
-                qty = ui.enter(qty_prompt, default=10, minimum=0)
-                if qty:
-                    queue.append((mat, qty))
-                    ui.display('Added {} of {}, {} units wide.'
-                               .format(qty, mat.code, mat.units))
-                    return (mat, qty)
-                return None
+                while True:
+                    mat = ui.choose_mat(wedge, specify_units=True)
+                    if not mat:
+                        return
+                    # how many matrices? (mat not specified? then don't ask)
+                    qty_prompt = 'How many sorts? (0 = cancel, start new)'
+                    qty = ui.enter(qty_prompt, default=10, minimum=0)
+                    if qty:
+                        queue.append((mat, qty))
+                        ui.display('Added {} of {}, {} units wide.'
+                                   .format(qty, mat.code, mat.units))
+                    else:
+                        return
 
             def view_queue():
                 """Show all characters in the queue"""
@@ -91,6 +158,11 @@ class Casting:
                          .format(qty, mat.code, mat.units)
                          for (mat, qty) in queue]
                 ui.display('\n'.join(items))
+
+            def delete_last_item():
+                """Remove the last item added"""
+                mat, _ = queue.pop()
+                ui.display('Deleted {}'.format(mat.code))
 
             def cast():
                 """Set a flag to finish specifying characters"""
@@ -100,97 +172,31 @@ class Casting:
             queue = []
             done = False
             # menu for user decision
-            options = [ui.option(key='n', value=add_new_char, seq=1,
-                                 text='next character'),
-                       ui.option(key='Del', value=queue.pop, seq=2,
+            options = [ui.option(key='a', value=add_new_chars, seq=1,
+                                 text='add characters'),
+                       ui.option(key='d', value=delete_last_item, seq=2,
                                  text='delete last entry'),
                        ui.option(key='v', value=view_queue, seq=3,
                                  text='view queue'),
                        ui.option(key='c', value=cast, text='cast', seq=4)]
 
             while not done:
-                if not add_new_char():
-                    prompt = 'Choose what to do:'
-                    ui.simple_menu(prompt, options, default_key='n')()
+                prompt = 'Choose what to do:'
+                ui.simple_menu(prompt, options, default_key='n')()
 
             # make a flat list of mats to cast from
-            order = [item for mat, qty in queue for item in [mat] * qty]
-            return order
-
-        def make_ribbon(queue):
-            """Iterate over the queue in order to transform all the items
-            to Monotype codes."""
-            def start_line():
-                """Start a new line"""
-                nonlocal units_left
-                units_left = galley_units
-                ribbon.append(quad.code)
-
-            def end_line(char_wedges):
-                """Fill the line with quads and add a variable space
-                in order to get the length equal (for tying the type)."""
-                num_quads = int(units_left // quad.units + 1)
-                # space width: the remainder from dividing units left by 18
-                # (or whatever the quad unit width is), in units
-                space_units = units_left % quad.units
-                # choose a matrix for the space
-                space_position = 'G2' if 5 <= space_units < 16 else 'O15'
-                # make a quad wider and use it as a space
-                if space_units < 5:
-                    num_quads -= 1
-                    space_units += quad.units
-                space = ui.choose_mat(wedge, space_position, space_units,
-                                      specify_code=False)
-                # use single justification to set the character width
-                if char_wedges not in (space.wedges, (3, 8)):
-                    ribbon.extend(single_justification(char_wedges))
-                # add a space to get the width equal
-                ribbon.append(space.code)
-                # fill in with quads
-                ribbon.extend([quad.code] * num_quads)
-                ribbon.extend(double_justification(space.wedges))
-
-            # initialize a ribbon with line out and pump stop
-            # no justification here
-            ribbon = [*pump_stop(), *double_justification()]
-            start_line()
-            # a list of (n, n+1) pairs of matrices for next char prediction
-            pairs = zip(queue, [*queue[1:], None])
-            for curr_mat, next_mat in pairs:
-                # add a mat to the sequence and update the units count
-                ribbon.append(curr_mat.code)
-                units_left -= curr_mat.units
-                if not next_mat:
-                    # all matrices done; fill the line
-                    end_line(curr_mat.wedges)
-                    break
-
-                # predict if we can put the next sort into the line;
-                # if that's not the case, fill and start a new one
-                elif next_mat.units > units_left:
-                    end_line(curr_mat.wedges)
-                    start_line()
-
-                else:
-                    # next character will fit in
-                    # check if we need to change the justification wedges
-                    if curr_mat.wedges not in (next_mat.wedges, (3, 8)):
-                        ribbon.extend(single_justification(curr_mat.wedges))
-
-            return ribbon
+            return make_order(queue, wedge)
 
         wedge = ui.choose_wedge()
-        mat_queue = source or make_queue()
+        mat_queue = make_queue()
         # nothing to cast?
         if not mat_queue:
             return []
+        # how wide is the galley?
         galley_inches = ui.choose_type_size('Galley width?', '25P')
-        # every line will start and end with a quad - O15;
-        # that's why the number of units left for the characters will be lower
-        quad = ui.choose_mat(wedge, code='O15', specify_code=False)
-        galley_units = wedge.inches_to_units(galley_inches) - 2 * quad.units
+        galley_units = wedge.inches_to_units(galley_inches)
         # generate the ribbon
-        return make_ribbon(mat_queue)
+        return make_galley(mat_queue, galley_units, wedge)
 
     @cast_this
     def cast_qr_code(self):
@@ -326,8 +332,7 @@ class Casting:
             # will be adjusted with variable wedges
             space_units = 23 - wedge[row]
             space_code = 'G2' if space_units < 16 else 'O15'
-            space = ui.choose_mat(wedge, code=space_code, units=space_units,
-                                  specify_code=False, specify_units=False)
+            space = make_mat(space_code, space_units, wedge)
             # line starting quad (in print) - cast last
             ribbon.append('O15')
             for column in columns:
@@ -347,14 +352,14 @@ class Casting:
     def calibrate_machine(self):
         """Casts the "en dash" characters for calibrating the character X-Y
         relative to type body."""
-        def make_ribbon():
+        def generate_ribbon():
             """Gets two mats for a given char and adjusts its parameters"""
             sequence = [*pump_stop()]
             # specify the mats
             ui.display('Where is a quad i.e. 18-unit space?')
-            quad = ui.choose_mat(wedge, 'O15')
+            quad = ui.choose_mat(wedge, 'O15', 18)
             ui.display('Where is a half-quad i.e. 9-unit space?')
-            space = ui.choose_mat(wedge, 'G5')
+            space = ui.choose_mat(wedge, 'G5', 9)
             ui.display('Where is a calibration character, n or h?')
             char = ui.choose_mat(wedge, specify_units=True)
             ui.display('Where is a dash or hyphen?')
@@ -401,7 +406,7 @@ class Casting:
         if ui.confirm('Calibrate the mould and diecase?'):
             # go on, choose a wedge for calibration, widths depend on it
             wedge = ui.choose_wedge()
-            ribbon = make_ribbon()
+            ribbon = generate_ribbon()
             self.machine.simple_cast(ribbon)
 
         if ui.confirm('Calibrate the bridge as well?'):
@@ -412,10 +417,7 @@ class Casting:
         ui.display('Adjust the matrix case draw rods '
                    'so that the diecase is not wobbling anymore.\n')
         if ui.confirm('Calibrate G-8?'):
-            self.machine.testing_mode = True
-            with self.machine:
-                self.machine.test_one('G8')
-                ui.pause('Sending G8, press any key to stop...')
+            self.machine.test(['G8'])
 
     def diagnostics(self):
         """Settings and alignment menu for servicing the caster"""
@@ -452,15 +454,11 @@ class Casting:
 
         def test_any_code(*_):
             """Tests a user-specified combination of signals"""
-            self.machine.testing_mode = True
-            with self.machine:
-                while True:
-                    ui.display('Enter the signals to send to the caster, '
-                               'or leave empty to return to menu: ')
-                    signals = ui.enter('Signals?', default=ui.Abort)
-                    # signals after operation/row16 mode correction
-                    output = self.machine.test_one(signals).get('signals', [])
-                    ui.display('Sending {}'.format(' '.join(output)))
+            while True:
+                ui.display('Enter the signals to send to the caster, '
+                           'or leave empty to return to menu: ')
+                signals = ui.enter('Signals?', default=ui.Abort)
+                self.machine.test([signals])
 
         def blow_all(*_):
             """Blow all signals for a short time; add NI, NL also"""
@@ -517,38 +515,41 @@ class Casting:
                 self.machine.choose_row16_mode(row16_needed=True)
                 self.machine.test(row)
 
-        def options():
-            """Generate the menu options"""
-            casting_mode = not self.machine.punch_mode
-            ret = [ui.option(key='a', value=test_all, seq=1,
+        options = [ui.option(key='a', value=test_all, seq=1,
                              text='Test outputs',
                              desc='Test all air outputs N...O15, one by one'),
+
                    ui.option(key='f', value=test_front_pinblock, seq=2,
                              text='Test the front pin block',
                              desc='Test the pins 1...14'),
+
                    ui.option(key='r', value=test_rear_pinblock, seq=2,
                              text='Test the rear pin block',
                              desc='Test the pins NI, NL, A...N, one by one'),
+
                    ui.option(key='b', value=blow_all, seq=2,
                              text='Blow all air pins',
                              desc='Blow air into every pin for a short time'),
+
                    ui.option(key='j', value=test_justification, seq=2,
                              text='Test the justification block',
                              desc='Test the pins for 0075, S and 0005'),
+
                    ui.option(key='c', value=test_any_code, seq=1,
                              text='Send specified signal combination',
                              desc='Send the specified signals to the machine'),
+
                    ui.option(key='w', value=calibrate_wedges, seq=4,
-                             cond=casting_mode,
+                             cond=not self.machine.punch_mode,
                              text='Calibrate the 52D wedge',
                              desc=('Calibrate the space transfer wedge '
                                    'for correct width')),
+
                    ui.option(key='l', value=test_row_16, seq=5,
-                             cond=casting_mode,
+                             cond=not self.machine.punch_mode,
                              text='Test the extended 16x17 diecase system',
                              desc=('Cast type from row 16 '
                                    'with HMN, KMN or unit-shift'))]
-            return ret
 
         header = 'Diagnostics and machine calibration menu:'
         catch_exceptions = (ui.Abort, KeyboardInterrupt, EOFError,

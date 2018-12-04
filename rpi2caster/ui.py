@@ -15,7 +15,7 @@ import click
 from click import Abort
 from . import datatypes as dt
 from . import functions
-from .models import Wedge, Matrix
+from .models import Wedge
 
 
 # menu item namedtuple
@@ -818,16 +818,12 @@ def list_wedges():
     display('\n\nScroll your terminal up to see more.')
 
 
-def choose_mat(wedge, code='', units=0,
-               specify_code=True, specify_units=False):
+def choose_mat(wedge, code='', units=0, specify_units=False):
     """Define a matrix (coordinates, unit width).
     Returns Matrix together with justifying wedge positions.
     """
-    if specify_code:
-        coords = enter('Matrix coordinates (eg. G1, leave blank to abort) ?',
-                       default=code, allow_abort=False)
-    else:
-        coords = code
+    coords = enter('Matrix coordinates (eg. G1, leave blank to abort) ?',
+                   default=code, allow_abort=False)
     if not coords:
         return None
     column, row = functions.parse_coordinates(coords)
@@ -841,15 +837,12 @@ def choose_mat(wedge, code='', units=0,
     else:
         unit_width = units or row_units
 
-    # calculate the 0075 / 0005 wedge corrections
-    wedges = wedge.corrections(row, unit_width)
-    if wedges != (3, 8):
-        # use S needle because adjustments are needed
-        mat_code = '{} S {}'.format(column, row)
-    else:
-        # no S-needle nor unit correction
-        mat_code = '{} {}'.format(column, row)
-    return Matrix(column, row, unit_width, row_units, mat_code, wedges)
+    try:
+        return functions.make_mat(coords, unit_width, wedge)
+    except ValueError as error:
+        display(error)
+        display('You can enter correct data manually.')
+        return choose_mat(wedge, code, units, specify_units=True)
 
 
 def choose_ribbon():

@@ -3,7 +3,7 @@
 
 from collections import deque
 from functools import lru_cache
-from .models import Ribbon, ParsedRecord
+from .models import Ribbon, ParsedRecord, Matrix, Wedge
 
 # parsing delimiters
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
@@ -278,6 +278,112 @@ def parse_ribbon(ribbon):
             # non-empty line without metadata = useful codes
             contents.append(line)
     return Ribbon(*metadata, contents=contents)
+
+
+def make_mat(code='', units=0, wedge=None):
+    """Define a matrix (coordinates, unit width).
+    Returns Matrix together with justifying wedge positions.
+    """
+    normal_wedge = wedge or Wedge()
+    column, row = parse_coordinates(code)
+    row_units = normal_wedge[row]
+    unit_width = units or row_units
+    # calculate the 0075 / 0005 wedge corrections
+    wedges = normal_wedge.corrections(row, unit_width)
+    if wedges != (3, 8):
+        # use S needle because adjustments are needed
+        mat_code = '{} S {}'.format(column, row)
+    else:
+        # no S-needle nor unit correction
+        mat_code = '{} {}'.format(column, row)
+    return Matrix(column, row, unit_width, row_units, mat_code, wedges)
+
+
+def make_order(source, wedge=None, chunk_size=5):
+    """Make a galley of type separated by spaces and quads"""
+    normal_wedge = wedge or Wedge()
+    quad = make_mat('O15', wedge=normal_wedge)
+    order = []
+    for mat, quantity in source:
+        # chunks of specified size separated with quads
+        num_chunks = quantity // chunk_size
+        last_chunk_size = quantity % chunk_size
+        chunk = [mat] * chunk_size
+        last_chunk = [mat] * last_chunk_size
+        if num_chunks > 0:
+            order.extend([*chunk, quad] * (num_chunks - 1))
+            order.extend([*chunk, *last_chunk, quad])
+        elif last_chunk:
+            # just that tiny bit
+            order.extend([*last_chunk, quad])
+    return order
+
+
+def make_galley(queue, galley_units, wedge=None):
+    """Iterate over the queue in order to transform all the items
+    to Monotype codes."""
+    def start_line():
+        """Start a new line"""
+        nonlocal units_left
+        units_left = galley_units
+        ribbon.append(quad.code)
+
+    def end_line(char_wedges):
+        """Fill the line with quads and add a variable space
+        in order to get the length equal (for tying the type)."""
+        num_quads = int(units_left // quad.units + 1)
+        # space width: the remainder from dividing units left by 18
+        # (or whatever the quad unit width is), in units
+        space_units = units_left % quad.units
+        # choose a matrix for the space
+        space_position = 'G2' if 5 <= space_units < 16 else 'O15'
+        # make a quad wider and use it as a space
+        if space_units < 5:
+            num_quads -= 1
+            space_units += quad.units
+        space = make_mat(space_position, space_units, normal_wedge)
+        # use single justification to set the character width
+        if char_wedges not in (space.wedges, (3, 8)):
+            ribbon.extend(single_justification(char_wedges))
+        # add a space to get the width equal
+        ribbon.append(space.code)
+        # fill in with quads
+        ribbon.extend([quad.code] * num_quads)
+        ribbon.extend(double_justification(space.wedges))
+
+    # use a default wedge if not specified
+    normal_wedge = wedge or Wedge()
+    # initialize a ribbon with line out and pump stop
+    # no justification here
+    ribbon = [*pump_stop(), *double_justification()]
+    quad = make_mat('O15', wedge=normal_wedge)
+    galley_units -= 2 * quad.units
+
+    start_line()
+    # a list of (n, n+1) pairs of matrices for next char prediction
+    pairs = zip(queue, [*queue[1:], None])
+    for curr_mat, next_mat in pairs:
+        # add a mat to the sequence and update the units count
+        ribbon.append(curr_mat.code)
+        units_left -= curr_mat.units
+        if not next_mat:
+            # all matrices done; fill the line
+            end_line(curr_mat.wedges)
+            break
+
+        # predict if we can put the next sort into the line;
+        # if that's not the case, fill and start a new one
+        elif next_mat.units > units_left:
+            end_line(curr_mat.wedges)
+            start_line()
+
+        else:
+            # next character will fit in
+            # check if we need to change the justification wedges
+            if curr_mat.wedges not in (next_mat.wedges, (3, 8)):
+                ribbon.extend(single_justification(curr_mat.wedges))
+
+    return ribbon
 
 # caster control combinations
 

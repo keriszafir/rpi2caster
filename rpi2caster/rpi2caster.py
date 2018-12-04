@@ -70,9 +70,14 @@ class CommandGroup(click.Group):
 @click.version_option(None, '--version', '-V')
 @click.option('verbosity', '-v', count=True, default=0,
               help='verbose mode (count, default=0)')
+@click.option('--address', '-a', help='address (default: 127.0.0.1)',
+              default='127.0.0.1')
+@click.option('--port', '-p', help='port (default: 23017)', type=int,
+              default=23017)
 @click.pass_context
-def cli(ctx, verbosity):
+def cli(ctx, verbosity, address, port):
     """decide whether to go to a subcommand or enter main menu"""
+    ctx.obj = dict(address=address, port=port)
     ui.verbosity = verbosity
     if not ctx.invoked_subcommand:
         ctx.invoke(cast)
@@ -80,18 +85,15 @@ def cli(ctx, verbosity):
 
 @cli.group(invoke_without_command=True, cls=CommandGroup,
            options_metavar='[-aph]', subcommand_metavar='[what]')
-@click.option('--address', '-a', help='address (default: 127.0.0.1)',
-              default='127.0.0.1')
-@click.option('--port', '-p', help='port (default: 23017)', type=int,
-              default=23017)
 @click.pass_context
-def cast(ctx, address, port):
+def cast(ctx):
     """Cast type with a Monotype caster.
 
     Casts composition, material for handsetting, QR codes.
     Can also cast a diecase proof.
 
     Can also be run in simulation mode without the actual caster."""
+    address, port = ctx.obj.get('address'), ctx.obj.get('port')
     from .casting import Casting
     # replace the context object for the subcommands to see
     ctx.obj = Casting(address, port)
@@ -100,15 +102,20 @@ def cast(ctx, address, port):
 
 
 @cast.command('ribbon', options_metavar='[-h]')
-@click.argument('ribbon', metavar='[filename|ribbon_id]')
+@click.argument('ribbon', metavar='[filename]', type=click.File())
 @click.pass_obj
 def cast_ribbon(casting, ribbon):
     """Cast composition from file or database."""
-    try:
-        casting.ribbon_by_name(ribbon)
-        casting.cast_composition()
-    except FileNotFoundError:
-        ui.display('File {} not found.'.format(ribbon))
+    casting.cast_file(ribbon)
+
+
+@cast.command('xls', options_metavar='[-h]')
+@click.argument('files', metavar='[filenames]',
+                type=click.File(mode='rb'), nargs=-1)
+@click.pass_obj
+def cast_excel_file(casting, files):
+    """Cast composition from file or database."""
+    casting.cast_xls(files)
 
 
 @cast.command('material', options_metavar='[-h]')

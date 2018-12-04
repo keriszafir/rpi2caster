@@ -5,7 +5,6 @@ Classes-only module. All constants come from definitions."""
 import json
 from collections import namedtuple, OrderedDict
 from pkg_resources import resource_string as rs
-from .exceptions import TypesettingError
 
 # some named tuples for easier attribute addressing
 WedgeLimits = namedtuple('WedgeLimits', 'shrink stretch')
@@ -206,8 +205,8 @@ class Wedge:
             maximum = row_units + limits.stretch
             message = ('Desired width of {} units exceeds '
                        'adjustment limits (min: {} / max: {})')
-            error_msg = message.format(char_width, minimum, maximum)
-            raise TypesettingError(error_msg)
+            error_msg = message.format(units, minimum, maximum)
+            raise ValueError(error_msg)
 
         # absolute width: how many .0005" steps is it?
         char_width = steps(units)
