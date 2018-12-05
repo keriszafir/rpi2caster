@@ -220,7 +220,6 @@ class SimulationCaster:
                 raise librpi2caster.MachineStopped
         except (KeyboardInterrupt, EOFError):
             self.emergency_stop = ON
-            raise librpi2caster.MachineStopped
 
     def cast_one(self, record, timeout=None):
         """Casting sequence: sensor on - valves on - sensor off - valves off"""
@@ -425,14 +424,15 @@ class SimulationCaster:
 
                 except librpi2caster.MachineStopped:
                     stats.update(casting_success=False)
+                    ui.display('The composition caster stopped working!\n')
                     # aborted - ask if user wants to continue
                     runs_left = stats.runs_left()
-                    if runs_left:
+                    if runs_left > 1:
                         ui.confirm('{} runs left, continue?'.format(runs_left),
                                    default=True, abort_answer=False)
                     else:
-                        ui.confirm('Retry casting?', default=True,
-                                   abort_answer=False)
+                        ui.confirm('Do you want to repeat the casting job?',
+                                   default=True, abort_answer=False)
                     # offer to skip lines for re-casting the failed run
                     skip_successful = stats.lines_done() >= 2
                     set_lines_skipped(run=skip_successful, session=False)
@@ -554,6 +554,7 @@ class MonotypeCaster(SimulationCaster):
                           request_timeout=request_timeout, **data)
         except KeyboardInterrupt:
             self.emergency_stop = ON
+            raise librpi2caster.MachineStopped
         except (EOFError, librpi2caster.CommunicationError):
             self.stop()
             raise librpi2caster.MachineStopped
@@ -572,38 +573,51 @@ class MonotypeCaster(SimulationCaster):
         In other modes (testing, punching, manual punching):
             The interface will just turn on the compressed air supply.
         """
-        if self.emergency_stop:
-            if ui.confirm('\n**********\nWARNING!!!\n**********\n'
-                          '\nEmergency stop is engaged!\n'
-                          'It is necessary to clear it before starting.\n'
-                          'Answering "no" will abort casting.',
-                          default=None, abort_answer=False, allow_abort=False):
+
+        try:
+            if self.emergency_stop and ui.confirm(
+                    '\n**********\nWARNING!!!\n**********\n'
+                    '\nEmergency stop is engaged!\n'
+                    'It is necessary to clear it before starting.\n'
+                    'Answering "no" will abort casting.',
+                    default=None, abort_answer=False, allow_abort=False):
                 self.emergency_stop = OFF
 
-        if self.testing_mode:
-            rq_timeout = 5
-        elif self.punch_mode:
-            ui.pause('Waiting for you to start punching...')
-            rq_timeout = 5
-        else:
-            info = ('Starting the composition caster...\n'
-                    'Turn on the motor if necessary, and engage the clutch.\n'
-                    'Casting will begin after detecting the machine rotation.'
-                    '\n\nCommence casting? (N = abort)')
-            if not ui.confirm(info):
-                raise ui.Abort
-            rq_timeout = 3 * self.config['startup_timeout'] + 2
-        # send the request and handle any exceptions
-        try:
-            self._request('machine', method='put', request_timeout=rq_timeout)
-            if not self.punch_mode and not self.testing_mode:
-                ui.display('OK, the machine is running...')
-        except librpi2caster.InterfaceBusy:
-            ui.pause('This interface is already working. Aborting...')
-            raise ui.Abort
-        except KeyboardInterrupt:
-            self.emergency_stop = ON
-        self.update_status()
+            if self.testing_mode:
+                request_timeout = 5
+            elif self.punch_mode:
+                ui.pause('Waiting for you to start punching...')
+                request_timeout = 5
+            else:
+                info = ('Starting the composition caster now...\n\n'
+                        'Turn on the motor if needed, and engage the clutch.\n'
+                        'When the machine is turning, casting will begin.\n'
+                        '\n\nCommence casting? (N = abort)')
+                if ui.confirm(info, abort_answer=False, default=True):
+                    ui.display('\nWait for a few turns of the cam shaft...\n')
+                request_timeout = 3 * self.config['startup_timeout'] + 2
+            # send the request and handle any exceptions
+            try:
+                self._request('machine', method='put',
+                              request_timeout=request_timeout)
+                if not self.punch_mode and not self.testing_mode:
+                    ui.display('\nOK, the machine is running...\n')
+            except librpi2caster.InterfaceBusy:
+                if ui.confirm('\nThis interface is already busy.\n'
+                              'If this is not the case, answer YES to '
+                              'stop and reset it. Otherwise abort.\n',
+                              abort_answer=False, default=None):
+                    self.stop()
+                    self.start()
+            except KeyboardInterrupt:
+                self.emergency_stop = ON
+                self.start()
+        except librpi2caster.MachineStopped:
+            ui.display('\nThe machine was stopped because it was stalling,\n'
+                       'or because emergency stop button was pressed.\n')
+            self.start()
+        finally:
+            self.update_status()
 
     @handle_communication_error
     def stop(self):
@@ -615,13 +629,21 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
-        if self.testing_mode or self.punch_mode:
-            rq_timeout = 3
-        else:
-            ui.display('Turning the machine off...')
-            rq_timeout = self.config['pump_stop_timeout'] * 2 + 2
-        self._request('machine', method='delete', request_timeout=rq_timeout)
-        self.update_status()
+        try:
+            if self.testing_mode or self.punch_mode:
+                request_timeout = 3
+            else:
+                ui.display('Turning the machine off...')
+                request_timeout = self.config['pump_stop_timeout'] * 2 + 2
+            try:
+                self._request('machine', method='delete',
+                              request_timeout=request_timeout)
+            except KeyboardInterrupt:
+                self.emergency_stop = ON
+        except librpi2caster.MachineStopped:
+            self.stop()
+        finally:
+            self.update_status()
 
     @property
     def emergency_stop(self):
@@ -634,10 +656,16 @@ class MonotypeCaster(SimulationCaster):
     def emergency_stop(self, state):
         """Activate or reset the emergency stop on the machine"""
         method = 'put' if state else 'delete'
-        self._request('emergency_stop', method=method, request_timeout=(3, 3))
         if state:
-            self.stop()
-        self.update_status()
+            ui.display('\n**********\nWARNING!!!\n**********\n'
+                       'Emergency stop - stopping the machine NOW.\n\n'
+                       'Turn the machine by hand a few times.\n')
+        try:
+            # will raise MachineStopped
+            self._request('emergency_stop', method=method,
+                          request_timeout=(120, 120))
+        finally:
+            self.update_status()
 
     @handle_communication_error
     def update_status(self, **kwargs):

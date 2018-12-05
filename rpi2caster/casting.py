@@ -2,8 +2,8 @@
 """Casting utility: cast or punch ribbon, cast material for hand typesetting,
 make a diecase proof, quickly compose and cast text.
 """
-from contextlib import suppress
 from functools import wraps
+from zipfile import BadZipFile
 
 # common definitions
 import librpi2caster
@@ -73,6 +73,7 @@ class Casting:
         """Cast characters specified in an Excel file"""
         def parse_xls(file):
             """Parse the Excel file interactively"""
+            ui.display('Loading file: {}'.format(file.name))
             workbook = openpyxl.load_workbook(filename=file, read_only=True)
             sheet = workbook.active
             data = [[cell.value for cell in row] for row in sheet.rows]
@@ -119,7 +120,12 @@ class Casting:
         # load a spreadsheet
         excel_files = files or [ui.import_file(binary=True)]
         for file in excel_files:
-            parse_xls(file)
+            try:
+                parse_xls(file)
+            except (openpyxl.utils.exceptions.InvalidFileException,
+                    BadZipFile):
+                ui.pause('{} is not a valid Excel 2007+ file, not reading...'
+                         .format(file.name))
 
         # nothing to cast?
         if not mat_queue:

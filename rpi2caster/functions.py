@@ -76,15 +76,15 @@ def parse_record(input_data):
 
         return raw_signals.upper().strip(), comment.strip()
 
-    def find(value):
+    def is_present(value):
         """Detect and dispatch known signals in source string"""
         nonlocal signals
+        found = False
         string = str(value)
         if string in signals:
             signals = signals.replace(string, '')
-            return True
-        else:
-            return False
+            found = True
+        return found
 
     def analyze():
         """Check if signals perform certain functions"""
@@ -114,10 +114,10 @@ def parse_record(input_data):
     signals = raw_signals
 
     # read the signals to know what's inside
-    justification = tuple(x for x in ('0075', '0005') if find(x))
-    parsed_rows = [x for x in range(16, 0, -1) if find(x)]
+    justification = tuple(x for x in ('0075', '0005') if is_present(x))
+    parsed_rows = [x for x in range(16, 0, -1) if is_present(x)]
     rows = tuple(x for x in reversed(parsed_rows))
-    columns = tuple(x for x in [*'ABCDEFGHIJKLMNO'] if find(x))
+    columns = tuple(x for x in [*'ABCDEFGHIJKLMNO'] if is_present(x))
 
     return ParsedRecord(signals=raw_signals, comment=comment,
                         raw=input_data, **analyze())
@@ -126,16 +126,6 @@ def parse_record(input_data):
 @lru_cache(maxsize=350)
 def parse_signals(input_signals, row16_mode):
     """Prepare the incoming signals for casting, testing or punching."""
-    def is_present(value):
-        """Detect and dispatch known signals in source string"""
-        nonlocal source
-        string = str(value)
-        if string in source:
-            source = source.replace(string, '')
-            return True
-        else:
-            return False
-
     def strip_16():
         """Get rid of the "16" signal and replace it with "15"."""
         if '16' in parsed_signals:
@@ -224,9 +214,14 @@ def parse_signals(input_signals, row16_mode):
     except AttributeError:
         source = ''.join(str(x) for x in input_signals).upper()
 
-    useful = ['0005', '0075', *(str(x) for x in range(16, 0, -1)),
-              *'ABCDEFGHIJKLMNOS']
-    parsed_signals = {s for s in useful if is_present(s)}
+    valid_signals = ['0005', '0075', *(str(x) for x in range(16, 0, -1)),
+                     *'ABCDEFGHIJKLMNOS']
+
+    parsed_signals = set()
+    for signal in valid_signals:
+        if signal in source:
+            source.replace(signal, '')
+            parsed_signals.add(signal)
 
     # based on row 16 addressing mode,
     # decide which signal conversion should be applied
@@ -302,7 +297,7 @@ def make_mat(code='', units=0, wedge=None):
 def make_order(source, wedge=None, chunk_size=5):
     """Make a galley of type separated by spaces and quads"""
     normal_wedge = wedge or Wedge()
-    quad = make_mat('O15', wedge=normal_wedge)
+    quad = make_mat('O15', units=0, wedge=normal_wedge)
     order = []
     for mat, quantity in source:
         # chunks of specified size separated with quads
@@ -328,7 +323,7 @@ def make_galley(queue, galley_units, wedge=None):
         units_left = galley_units
         ribbon.append(quad.code)
 
-    def end_line(char_wedges):
+    def end_line():
         """Fill the line with quads and add a variable space
         in order to get the length equal (for tying the type)."""
         num_quads = int(units_left // quad.units + 1)
@@ -343,8 +338,8 @@ def make_galley(queue, galley_units, wedge=None):
             space_units += quad.units
         space = make_mat(space_position, space_units, normal_wedge)
         # use single justification to set the character width
-        if char_wedges not in (space.wedges, (3, 8)):
-            ribbon.extend(single_justification(char_wedges))
+        if wedges != (3, 8) and space.wedges not in (wedges, (3, 8)):
+            ribbon.extend(single_justification(wedges))
         # add a space to get the width equal
         ribbon.append(space.code)
         # fill in with quads
@@ -358,6 +353,8 @@ def make_galley(queue, galley_units, wedge=None):
     ribbon = [*pump_stop(), *double_justification()]
     quad = make_mat('O15', wedge=normal_wedge)
     galley_units -= 2 * quad.units
+    # store the justifying wedge positions
+    wedges = (3, 8)
 
     start_line()
     # a list of (n, n+1) pairs of matrices for next char prediction
@@ -365,23 +362,26 @@ def make_galley(queue, galley_units, wedge=None):
     for curr_mat, next_mat in pairs:
         # add a mat to the sequence and update the units count
         ribbon.append(curr_mat.code)
+        # update the justifying wedge positions only when the character
+        # is wider or narrower than wedge[row] i.e. uses S-needle
+        if curr_mat.wedges != (3, 8):
+            wedges = curr_mat.wedges
         units_left -= curr_mat.units
         if not next_mat:
             # all matrices done; fill the line
-            end_line(curr_mat.wedges)
+            end_line()
             break
 
         # predict if we can put the next sort into the line;
         # if that's not the case, fill and start a new one
         elif next_mat.units > units_left:
-            end_line(curr_mat.wedges)
+            end_line()
             start_line()
 
-        else:
-            # next character will fit in
+        elif wedges != (3, 8) and next_mat.wedges not in (wedges, (3, 8)):
+            # next character will fit in (next iteration)
             # check if we need to change the justification wedges
-            if curr_mat.wedges not in (next_mat.wedges, (3, 8)):
-                ribbon.extend(single_justification(curr_mat.wedges))
+            ribbon.extend(single_justification(wedges))
 
     return ribbon
 
@@ -393,17 +393,10 @@ def single_justification(wedges=(15, 15)):
     with justifying wedge positions.
     NB if positions are the same, mere 0075+pos is enough;
     if positions are 3, 8 - then no codes needed"""
-    pos_0075, pos_0005 = wedges
-    if (pos_0075, pos_0005) == (3, 8):
-        # no justification
-        return []
-    elif pos_0075 == pos_0005:
-        # 0075 only
-        return ['NKS 0075 {}'.format(pos_0005)]
-    else:
-        # both codes needed
-        return ['NKS 0075 {}'.format(pos_0075),
-                'NJS 0005 {}'.format(pos_0005)]
+    w_0075, w_0005 = wedges
+    return ([] if (w_0075, w_0005) == (3, 8)
+            else ['NKS 0075 {}'.format(w_0005)] if w_0075 == w_0005
+            else ['NKS 0075 {}'.format(w_0075), 'NJS 0005 {}'.format(w_0005)])
 
 
 def double_justification(wedges=(15, 15)):
@@ -411,14 +404,10 @@ def double_justification(wedges=(15, 15)):
     with or without justifying wedge positions.
     Used for putting a line to the galley, setting the wedges as well.
     """
-    pos_0075, pos_0005 = wedges
-    if pos_0075 == pos_0005:
-        # no following 0075
-        return ['NKJS 0075 0005 {}'.format(pos_0005)]
-    else:
-        # both codes needed
-        return ['NKS 0075 {}'.format(pos_0075),
-                'NKJS 0075 0005 {}'.format(pos_0005)]
+    w_0075, w_0005 = wedges
+    return (['NKJS 0075 0005 {}'.format(w_0005)] if w_0075 == w_0005
+            else ['NKS 0075 {}'.format(w_0075),
+                  'NKJS 0075 0005 {}'.format(w_0005)])
 
 
 def pump_stop():
