@@ -8,7 +8,9 @@ from pkg_resources import resource_string as rs
 
 # some named tuples for easier attribute addressing
 WedgeLimits = namedtuple('WedgeLimits', 'shrink stretch')
-Matrix = namedtuple('Matrix', 'column row units row_units code wedges')
+Matrix = namedtuple('Matrix',
+                    'column row units row_units code '
+                    'comment ribbon_entry wedges')
 ParsedRecord = namedtuple('ParsedRecord',
                           ('raw signals comment column row has_signals is_char'
                            ' uses_row_16 has_0005 has_0075 has_s_needle '

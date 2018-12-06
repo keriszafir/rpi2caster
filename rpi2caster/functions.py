@@ -286,7 +286,7 @@ def parse_ribbon(ribbon):
     return Ribbon(*metadata, contents=contents)
 
 
-def make_mat(code='', units=0, wedge=None):
+def make_mat(code='', units=0, wedge=None, comment=''):
     """Define a matrix (coordinates, unit width).
     Returns Matrix together with justifying wedge positions.
     """
@@ -303,32 +303,52 @@ def make_mat(code='', units=0, wedge=None):
         else:
             # no S-needle nor unit correction
             mat_code = '{} {}'.format(column, row)
-        return Matrix(column, row, unit_width, row_units, mat_code, wedges)
+        ribbon_entry = ('{} // {}'.format(mat_code, comment) if comment
+                        else mat_code)
+        return Matrix(column, row, unit_width, row_units,
+                      mat_code, comment, ribbon_entry, wedges)
     except ValueError as error:
         # cannot set the justification wedges because limits are exceeded
         raise ValueError('{} - {}'.format(code, error))
 
 
-def make_galley(order, galley_units, wedge=None):
+def make_chunks(order, space, separate=True, chunk_size=5):
+    """Accepts an iterable of (matrix, quantity) pairs.
+    Returns a series of chunks of specified size.
+    """
+    chunks = []
+    for item in order:
+        try:
+            mat, quantity = item
+        except (TypeError, ValueError):
+            mat = item
+            quantity = chunk_size
+        # round it up to a full chunk size
+        num_chunks = ceil(quantity / chunk_size)
+        if separate:
+            codes = (*[mat.ribbon_entry] * chunk_size,
+                     space.ribbon_entry)
+            units = mat.units * chunk_size + space.units
+            num_quads = 0
+        else:
+            codes = (mat.ribbon_entry, ) * chunk_size
+            units = mat.units + space.units
+            num_quads = 1
+        chunk = Chunk(codes, units, mat.wedges)
+        quad_chunk = Chunk((space.ribbon_entry, ), space.units, space.wedges)
+        chunks.extend([chunk] * num_chunks)
+        chunks.extend([quad_chunk] * num_quads)
+    return chunks
+
+
+def make_galley(order, galley_units=0,
+                wedge=None, chunk_size=5, separate=True):
     """Iterate over the queue in order to transform all the items
     to Monotype codes."""
-    def make_chunks(chunk_size=5):
-        """Accepts an iterable of (matrix, quantity) pairs.
-        Returns a series of chunks of specified size.
-        """
-        chunks = []
-        for mat, quantity in order:
-            # round it up to a full chunk size
-            num_chunks = ceil(quantity / chunk_size)
-            codes = (*[mat.code] * chunk_size, quad.code)
-            units = mat.units * chunk_size + quad.units
-            chunks.extend([Chunk(codes, units, mat.wedges)] * num_chunks)
-        return chunks
-
     def start_line():
         """Start a new line"""
         nonlocal units_left
-        units_left = galley_units
+        units_left = line_length
         ribbon.append(quad.code)
 
     def end_line():
@@ -347,7 +367,7 @@ def make_galley(order, galley_units, wedge=None):
             space_position = 'G2'
         else:
             space_position = 'O15'
-        space = make_mat(space_position, space_units, normal_wedge)
+        space = make_mat(space_position, space_units, wedge)
         # use single justification to set the character width if necessary
         if wedges not in ((3, 8), space.wedges):
             ribbon.extend(single_justification(wedges))
@@ -360,18 +380,24 @@ def make_galley(order, galley_units, wedge=None):
         ribbon.extend(double_justification(line_wedges))
 
     # use a default wedge if not specified
-    normal_wedge = wedge or Wedge()
+    if not wedge:
+        wedge = Wedge()
+    # group the matrices by chunk_number
+    quad = make_mat('O15', units=0, wedge=wedge)
+    chunks = make_chunks(order, quad, separate, chunk_size)
+    # how long is the line?
+    if galley_units:
+        units_left = line_length = galley_units - 2 * quad.units
+    else:
+        # make the line just as long, with only a slight margin
+        units_left = line_length = sum(chunk.units for chunk in chunks) + 2
+    # store the justifying wedge positions
+    wedges = (3, 8)
     # initialize a ribbon with line out and pump stop
     # no justification here
     ribbon = [*pump_stop(), *double_justification()]
-    quad = make_mat('O15', units=0, wedge=normal_wedge)
-    galley_units -= 2 * quad.units
-    # store the justifying wedge positions
-    wedges = (3, 8)
-
     start_line()
     # a list of (n, n+1) pairs of chunks for next char prediction
-    chunks = make_chunks()
     pairs = zip(chunks, [*chunks[1:], None])
     for this_chunk, next_chunk in pairs:
         # add codes to the ribbon, update unit count

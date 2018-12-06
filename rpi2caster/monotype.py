@@ -16,6 +16,18 @@ from .functions import parse_record, parse_signals
 ON, OFF, HMN, KMN, UNITSHIFT = True, False, 'HMN', 'KMN', 'unit shift'
 
 
+def caster_factory(address, port):
+    """Make a single instance of MonotypeCaster for a given address and port
+    when needed. After it's there, return it when calling the function
+    with this address and port.
+
+    None, None denote a simulation caster."""
+    try:
+        return MonotypeCaster.instances[(address, port)]
+    except KeyError:
+        return MonotypeCaster(address, port)
+
+
 def handle_communication_error(routine):
     """If something goes wrong with a connection, ask what to do."""
     @wraps(routine)
@@ -507,6 +519,8 @@ class SimulationCaster:
 class MonotypeCaster(SimulationCaster):
     """Methods common for Caster classes, used for instantiating
     caster driver objects (whether real hardware or mockup for simulation)."""
+    instances = {(None, None): SimulationCaster()}
+
     def _request(self, path='', method='get', request_timeout=None, **kwargs):
         """Encode data with JSON and send it to self.url in a request."""
         errors = {exc.code: exc

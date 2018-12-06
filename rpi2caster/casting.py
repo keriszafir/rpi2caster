@@ -77,19 +77,38 @@ class Casting:
             workbook = openpyxl.load_workbook(filename=file, read_only=True)
             sheet = workbook.active
             data = [[cell.value for cell in row] for row in sheet.rows]
+            return data
+
+        def read_sheet_data(data):
+            """Make an order from sheet data"""
+            def add_row(row):
+                """Adds an entry to the queue or failed entries"""
+                try:
+                    quantity, units = int(row[qty_col]), int(row[units_col])
+                    position = row[positions_col]
+                    char = row[chars_col]
+                    ui.display('Adding {} of {} at {} {} units wide.'
+                               .format(quantity, char, position, units))
+                    matrix = make_mat(code=position, units=units,
+                                      wedge=wedge, comment=char)
+                    mat_queue.append((matrix, quantity))
+                except ValueError:
+                    failed_rows.append(row)
+
             width = max(len(row) for row in data)
             # data loaded - time for preview; show up to 10 rows
-            num_rows = len(data)
-            preview_data = data[:min(10, num_rows)]
+            preview_data = data[:min(10, len(data))]
             ui.display('Table preview:')
             for row in preview_data:
                 ui.display('|'.join('{:10}'.format(v) for v in row))
 
             # ask about the data range
             starting_row = ui.enter('Starting row?', 2) - 1
-            max_rows = num_rows - starting_row
-            records = ui.enter('Number of rows?', default=max_rows,
-                               maximum=max_rows)
+            max_rows = len(data) - starting_row
+            records = ui.enter('Number of rows to read?',
+                               default=max_rows, maximum=max_rows)
+            chars_col = ui.enter('Column # with characters?',
+                                 default=1, minimum=1, maximum=width) - 1
             positions_col = ui.enter('Column # with positions?',
                                      default=2, minimum=1, maximum=width) - 1
             units_col = ui.enter('Column # with units?',
@@ -99,15 +118,7 @@ class Casting:
             # store all rows where error occured
             failed_rows = []
             for row in data[starting_row:starting_row+records]:
-                try:
-                    quantity, units = int(row[qty_col]), int(row[units_col])
-                    position = row[positions_col]
-                    ui.display('Adding {} of {} {} units wide.'
-                               .format(quantity, position, units))
-                    matrix = make_mat(code=position, units=units, wedge=wedge)
-                    mat_queue.append((matrix, quantity))
-                except ValueError:
-                    failed_rows.append(row)
+                add_row(row)
 
             if failed_rows:
                 ui.display('Entries NOT being cast:')
@@ -121,7 +132,8 @@ class Casting:
         excel_files = files or [ui.import_file(binary=True)]
         for file in excel_files:
             try:
-                parse_xls(file)
+                raw_data = parse_xls(file)
+                read_sheet_data(raw_data)
             except (openpyxl.utils.exceptions.InvalidFileException,
                     BadZipFile):
                 ui.pause('{} is not a valid Excel 2007+ file, not reading...'
@@ -359,42 +371,19 @@ class Casting:
         relative to type body."""
         def generate_ribbon():
             """Gets two mats for a given char and adjusts its parameters"""
-            sequence = [*pump_stop()]
             # specify the mats
-            ui.display('Where is a quad i.e. 18-unit space?')
-            quad = ui.choose_mat(wedge, 'O15', 18)
-            ui.display('Where is a half-quad i.e. 9-unit space?')
-            space = ui.choose_mat(wedge, 'G5', 9)
-            ui.display('Where is a calibration character, n or h?')
-            char = ui.choose_mat(wedge, specify_units=True)
-            ui.display('Where is a dash or hyphen?')
-            dash = ui.choose_mat(wedge, specify_units=True)
-            # characters and their unit widths chosen...
-            items = [(quad, 'square = em quad'),
-                     (space, 'half-square = 1/2em quad'),
-                     (char, 'calibration character'),
-                     (dash, 'dash / hyphen')]
-            record = '{} // {}, width: {:2.4f} inches'
-            wedges = (3, 8)
-            while items:
-                mat, name = items.pop()
-                if not mat:
-                    # skip the character
-                    continue
-                # get the inch width of a character
-                inches = wedge.set_width / 12 * mat.units / 18 * wedge.pica
-                # add the character to the queue
-                sequence.extend(2 * [record.format(mat.code, name, inches)])
+            quad = ui.choose_mat(wedge, 'O15', 18,
+                                 char='a quad i.e. 18-unit space')
+            space = ui.choose_mat(wedge, 'G5', 9,
+                                  char='a half-quad i.e. 9-unit space')
+            char = ui.choose_mat(wedge, specify_units=True,
+                                 char='a calibration character, n or h')
+            dash = ui.choose_mat(wedge, specify_units=True,
+                                 char='a dash or hyphen')
 
-                # check if we need to set the character width correction
-                if wedges in (mat.wedges, (3, 8)):
-                    continue
-                else:
-                    # use single justification
-                    sequence.extend(single_justification(wedges))
-                    wedges = mat.wedges
-            sequence.extend(double_justification(wedges))
-            return sequence
+            valid_mats = [mat for mat in [quad, space, char, dash] if mat]
+            return make_galley(valid_mats, wedge=wedge,
+                               chunk_size=2, separate=False)
 
         # Character width and position calibration
         ui.display('Mould blade opening width and X-Y character calibration:\n'
@@ -403,7 +392,7 @@ class Casting:
                    '(coarse) and micrometer wedge adjusting screw a20D2 (fine)'
                    ' so that the type is of proper width.\n'
                    '\nThen use the 33A1 / 33A2 micrometer screws on the bridge'
-                   'to adjust the X-Y position of the character.\n'
+                   ' to adjust the X-Y position of the character.\n'
                    'Finally, put two dashes next to each other '
                    '(one of them upside down) and adjust the Y position '
                    'so that they line up.\n')
@@ -412,17 +401,21 @@ class Casting:
             # go on, choose a wedge for calibration, widths depend on it
             wedge = ui.choose_wedge()
             ribbon = generate_ribbon()
-            self.machine.simple_cast(ribbon)
+            self.machine.advanced_cast(ribbon)
 
         if ui.confirm('Calibrate the bridge as well?'):
             self.calibrate_bridge()
 
     def calibrate_bridge(self):
         """Calibrate the bridge draw rods to eliminate the diecase wobble"""
-        ui.display('Adjust the matrix case draw rods '
-                   'so that the diecase is not wobbling anymore.\n')
-        if ui.confirm('Calibrate G-8?'):
-            self.machine.test(['G8'])
+        ui.display('The diecase will be put in a central position (G8).\n'
+                   'Turn the machine to 350°, calibrate the bridge '
+                   'bushings a4A2 (3 / 2 paper adjustment).\n\n'
+                   'Turn the machine by hand and adjust the bridge draw rods '
+                   'so that the diecase is not wobbling anymore.\n'
+                   'Then check with the motor turned on.')
+        ui.pause(allow_abort=True)
+        self.machine.test(['G8'])
 
     def diagnostics(self):
         """Settings and alignment menu for servicing the caster"""

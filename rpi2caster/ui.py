@@ -818,12 +818,13 @@ def list_wedges():
     display('\n\nScroll your terminal up to see more.')
 
 
-def choose_mat(wedge, code='', units=0, specify_units=False):
+def choose_mat(wedge, code='', units=0, specify_units=False, char=''):
     """Define a matrix (coordinates, unit width).
     Returns Matrix together with justifying wedge positions.
     """
-    coords = enter('Matrix coordinates (eg. G1, leave blank to abort) ?',
-                   default=code, allow_abort=False)
+    char_info = 'for {} '.format(char) if char else ''
+    coords = enter('Matrix coordinates {}(eg. G1, leave blank to abort) ?'
+                   .format(char_info), default=code, allow_abort=False)
     if not coords:
         return None
     column, row = functions.parse_coordinates(coords)
@@ -838,11 +839,12 @@ def choose_mat(wedge, code='', units=0, specify_units=False):
         unit_width = units or row_units
 
     try:
-        return functions.make_mat(coords, unit_width, wedge)
+        return functions.make_mat(coords, unit_width, wedge, comment=char)
     except ValueError as error:
         display(error)
         display('You can enter correct data manually.')
-        return choose_mat(wedge, code, units, specify_units=True)
+        return choose_mat(wedge, code, units,
+                          specify_units=True, comment=char)
 
 
 def choose_ribbon():
