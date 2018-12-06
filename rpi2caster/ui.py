@@ -757,7 +757,7 @@ def choose_wedge(wedge_name=None):
         set_width = enter(prompt, datatype=float)
 
         set_width = enter(prompt, default=set_width, datatype=float,
-                          minimum=5, maximum=20,
+                          minimum=5, maximum=25,
                           condition=divisible_by_quarter)
         # We have the wedge name, so we can look the wedge up in known wedges
         # (no need to enter the unit values manually)

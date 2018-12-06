@@ -106,6 +106,8 @@ class Wedge:
             set_w_str = ''.join(x for x in raw_set_w
                                 if x.isnumeric() or x == '.')
             set_width = float(set_w_str) // 0.25 * 0.25
+            if set_width > 25:
+                raise ValueError
             # try to get the unit values, otherwise S5
             units = WEDGE_DEFINITIONS.get(series, Wedge.S5)
             # update the attributes
@@ -203,8 +205,7 @@ class Wedge:
             limits = self.get_adjustment_limits()
             minimum = row_units - limits.shrink
             maximum = row_units + limits.stretch
-            message = ('Desired width of {} units exceeds '
-                       'adjustment limits (min: {} / max: {})')
+            message = ('{} units exceed adjustment limits (min: {} / max: {})')
             error_msg = message.format(units, minimum, maximum)
             raise ValueError(error_msg)
 

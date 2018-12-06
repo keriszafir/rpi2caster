@@ -21,7 +21,7 @@ except ImportError:
 
 from . import ui
 from . import monotype
-from .functions import make_mat, make_galley, make_order, parse_ribbon
+from .functions import make_mat, make_galley, parse_ribbon
 from .functions import pump_start, pump_stop
 from .functions import single_justification, double_justification
 from .models import Ribbon
@@ -87,9 +87,9 @@ class Casting:
 
             # ask about the data range
             starting_row = ui.enter('Starting row?', 2) - 1
-            num_rows = ui.enter('Number of rows?', default=min(num_rows, 50),
-                                maximum=num_rows)
-            ending_row = starting_row + num_rows
+            max_rows = num_rows - starting_row
+            records = ui.enter('Number of rows?', default=max_rows,
+                               maximum=max_rows)
             positions_col = ui.enter('Column # with positions?',
                                      default=2, minimum=1, maximum=width) - 1
             units_col = ui.enter('Column # with units?',
@@ -98,7 +98,7 @@ class Casting:
                                default=4, minimum=1, maximum=width) - 1
             # store all rows where error occured
             failed_rows = []
-            for row in data[starting_row:ending_row]:
+            for row in data[starting_row:starting_row+records]:
                 try:
                     quantity, units = int(row[qty_col]), int(row[units_col])
                     position = row[positions_col]
@@ -134,8 +134,7 @@ class Casting:
         galley_inches = ui.choose_type_size('Galley width?', '25P')
         galley_units = wedge.inches_to_units(galley_inches)
         # generate the ribbon
-        order = make_order(mat_queue, wedge)
-        return make_galley(order, galley_units, wedge)
+        return make_galley(mat_queue, galley_units, wedge)
 
     @cast_this
     def cast_material(self):
@@ -191,7 +190,7 @@ class Casting:
                 ui.simple_menu(prompt, options, default_key='n')()
 
             # make a flat list of mats to cast from
-            return make_order(queue, wedge)
+            return queue
 
         wedge = ui.choose_wedge()
         mat_queue = make_queue()

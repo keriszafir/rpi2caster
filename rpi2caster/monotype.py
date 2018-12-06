@@ -27,7 +27,8 @@ def handle_communication_error(routine):
             message = ('Connection to the interface lost. Check your link.\n'
                        'Original error message:\n{}\n'
                        'Do you want to try again, or abort?')
-            if ui.confirm(message.format(error), abort_answer=False):
+            if ui.confirm(message.format(error),
+                          abort_answer=False, allow_abort=False):
                 return routine(*args, **kwargs)
     return wrapper
 
@@ -92,9 +93,10 @@ class SimulationCaster:
     @emergency_stop.setter
     def emergency_stop(self, state):
         """Activate or reset the machine emergency stop"""
+        self.status.update(emergency_stop=state)
         if state:
             self.stop()
-        self.status.update(emergency_stop=state)
+            raise librpi2caster.MachineStopped
 
     def update_status(self, **kwargs):
         """Update the machine status."""
@@ -106,7 +108,9 @@ class SimulationCaster:
 
     def choose_row16_mode(self, row16_needed=False):
         """Choose the addressing system for the diecase row 16."""
-        if row16_needed and not self.row16_mode:
+        if row16_needed and self.row16_mode:
+            ui.display('Keep the {} attachment ON.'.format(self.row16_mode))
+        elif row16_needed and not self.row16_mode:
             # choose the row 16 addressing mode
             prompt = 'Choose the row 16 addressing mode'
             options = [ui.option(key=name[0], value=name, text=name)
@@ -127,11 +131,7 @@ class SimulationCaster:
             self.row16_mode = OFF
 
         else:
-            if not self.row16_mode:
-                ui.display('No row 16 addressing attachment is needed.')
-            else:
-                ui.display('Keep the {} attachment ON.'
-                           .format(self.row16_mode))
+            ui.display('No row 16 addressing attachment is needed.')
 
     @property
     def signals(self):
@@ -167,59 +167,70 @@ class SimulationCaster:
             def found(code):
                 """check if code was found in a combination"""
                 return set(code).issubset(signals)
+
+            # check the previous wedge positions and pump state
+            pos_0075 = self.status.get('wedge_0075')
+            pos_0005 = self.status.get('wedge_0005')
+            pump_working = self.status.get('pump')
+            # check 0005 wedge position:
+            # find the earliest row number or default to 15
+            if found(['0005']) or found('NJ'):
+                pump_working = OFF
+                for pos in range(1, 15):
+                    if str(pos) in signals_sent:
+                        pos_0005 = pos
+                        break
+                else:
+                    pos_0005 = 15
+
             # check 0075 wedge position and determine the pump status:
             # find the earliest row number or default to 15
             if found(['0075']) or found('NK'):
                 # 0075 always turns the pump on
-                self.update_status(pump=ON)
+                pump_working = ON
                 for pos in range(1, 15):
-                    if str(pos) in signals:
-                        self.update_status(wedge_0075=pos)
+                    if str(pos) in signals_sent:
+                        pos_0075 = pos
                         break
                 else:
-                    self.update_status(wedge_0075=15)
+                    pos_0075 = 15
 
-            elif found(['0005']) or found('NJ'):
-                # 0005 without 0075 turns the pump off
-                self.update_status(pump=OFF)
-
-            # check 0005 wedge position:
-            # find the earliest row number or default to 15
-            if found(['0005']) or found('NJ'):
-                for pos in range(1, 15):
-                    if str(pos) in signals:
-                        self.update_status(wedge_0005=pos)
-                        break
-                else:
-                    self.update_status(wedge_0005=15)
-
-        if not self.status.get('machine'):
-            raise librpi2caster.InterfaceNotStarted
+            self.update_status(pump=bool(pump_working),
+                               wedge_0075=pos_0075, wedge_0005=pos_0005)
 
         start_time = time.time()
         max_wait_time = max(timeout or 0, request_timeout or 0) or 10
         # convert signals based on modes
-        converted_signals = parse_signals(signals, self.row16_mode)
-        signals_string = ''.join(converted_signals)
-        self.status.update(signals=converted_signals)
+        codes = parse_signals(signals, self.row16_mode)
+        signals_string = ''.join(codes)
         try:
-            update_wedges_and_pump()
             if self.testing_mode:
                 ui.display('Testing signals: {}'.format(signals_string))
+                signals_sent = codes
             elif self.punch_mode:
+                signals_sent = (codes if len(codes) >= 2
+                                else codes if 'O15' in codes
+                                else [*codes, 'O15'])
                 ui.display('punches going up')
                 time.sleep(self.config['punching_on_time'])
                 ui.display('punches going down')
                 time.sleep(self.config['punching_off_time'])
             else:
+                signals_sent = [s for s in codes if s != 'O15']
                 ui.display('photocell ON')
                 time.sleep(0.5)
                 ui.display('photocell OFF')
                 time.sleep(0.5)
+            self.update_status(signals=signals_sent)
+            update_wedges_and_pump()
             if (time.time() - start_time) > max_wait_time:
                 raise librpi2caster.MachineStopped
         except (KeyboardInterrupt, EOFError):
             self.emergency_stop = ON
+        except librpi2caster.InterfaceNotStarted:
+            self.start()
+        finally:
+            self.update_status()
 
     def cast_one(self, record, timeout=None):
         """Casting sequence: sensor on - valves on - sensor off - valves off"""
@@ -387,8 +398,9 @@ class SimulationCaster:
                 info['Wedge 0075 at'] = self.status['wedge_0075']
                 info['Speed'] = self.status['speed']
                 # display status
-                ui.clear()
+                ui.display('*' * 80)
                 ui.display_parameters(stats.code_parameters(), info)
+                ui.display('*' * 80)
 
         # Ribbon pre-processing and casting parameters setup
         ribbon = [parse_record(code) for code in input_sequence]
@@ -429,10 +441,12 @@ class SimulationCaster:
                     runs_left = stats.runs_left()
                     if runs_left > 1:
                         ui.confirm('{} runs left, continue?'.format(runs_left),
-                                   default=True, abort_answer=False)
+                                   default=True, abort_answer=False,
+                                   allow_abort=False)
                     else:
                         ui.confirm('Do you want to repeat the casting job?',
-                                   default=True, abort_answer=False)
+                                   default=True, abort_answer=False,
+                                   allow_abort=False)
                     # offer to skip lines for re-casting the failed run
                     skip_successful = stats.lines_done() >= 2
                     set_lines_skipped(run=skip_successful, session=False)

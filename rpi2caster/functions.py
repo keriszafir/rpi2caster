@@ -1,15 +1,16 @@
 # coding: utf-8
 """rpi2caster routines and functions"""
 
-from collections import deque
+from collections import deque, namedtuple
 from functools import lru_cache
+from math import ceil
 from .models import Ribbon, ParsedRecord, Matrix, Wedge
 
 # parsing delimiters
 COMMENT_SYMBOLS = ['**', '*', '//', '##', '#']
 ASSIGNMENT_SYMBOLS = ['=', ':', ' ']
-OUTPUT_SIGNALS = tuple(['0075', 'S', '0005', *'ABCDEFGHIJKLMN',
-                        *(str(x) for x in range(1, 15)), 'O15'])
+
+Chunk = namedtuple('Chunk', 'codes units wedges')
 
 
 # matrix routines
@@ -123,9 +124,18 @@ def parse_record(input_data):
                         raw=input_data, **analyze())
 
 
-@lru_cache(maxsize=350)
 def parse_signals(input_signals, row16_mode):
     """Prepare the incoming signals for casting, testing or punching."""
+    def is_present(value):
+        """Detect and dispatch known signals in source string"""
+        nonlocal sequence
+        string = str(value)
+        if string in sequence:
+            # required for correct parsing of numbers
+            sequence = sequence.replace(string, '')
+            return True
+        return False
+
     def strip_16():
         """Get rid of the "16" signal and replace it with "15"."""
         if '16' in parsed_signals:
@@ -198,10 +208,10 @@ def parse_signals(input_signals, row16_mode):
     def formatted_output():
         """Arrange the signals so that NI, NL will be present at the
         beginning of the signals collection"""
-        arranged = deque(s for s in OUTPUT_SIGNALS if s in parsed_signals)
+        arranged = deque(s for s in ordered_signals if s in parsed_signals)
         # put NI, NL, NK, NJ, NKJ etc. at the front
         if 'N' in arranged:
-            for other in 'JKLI':
+            for other in 'SJKLI':
                 if other in parsed_signals:
                     arranged.remove('N')
                     arranged.remove(other)
@@ -210,19 +220,15 @@ def parse_signals(input_signals, row16_mode):
         return list(arranged)
 
     try:
-        source = input_signals.upper()
+        sequence = input_signals.upper()
     except AttributeError:
-        source = ''.join(str(x) for x in input_signals).upper()
+        sequence = ''.join(str(x) for x in input_signals).upper()
 
+    ordered_signals = ['0075', '0005', *'ABCDEFGHIJKLMNOS',
+                       *(str(x) for x in range(16))]
     valid_signals = ['0005', '0075', *(str(x) for x in range(16, 0, -1)),
                      *'ABCDEFGHIJKLMNOS']
-
-    parsed_signals = set()
-    for signal in valid_signals:
-        if signal in source:
-            source.replace(signal, '')
-            parsed_signals.add(signal)
-
+    parsed_signals = set(s for s in valid_signals if is_present(s))
     # based on row 16 addressing mode,
     # decide which signal conversion should be applied
     if row16_mode == 'HMN':
@@ -233,6 +239,11 @@ def parse_signals(input_signals, row16_mode):
         convert_unitshift()
     else:
         strip_16()
+    # combine O and 15 into O15 signal if no other signals are there
+    if parsed_signals.issuperset(['O', '15']):
+        parsed_signals.discard('O')
+        parsed_signals.discard('15')
+        parsed_signals.add('O15')
     # all ready for sending
     return formatted_output()
 
@@ -284,39 +295,36 @@ def make_mat(code='', units=0, wedge=None):
     row_units = normal_wedge[row]
     unit_width = units or row_units
     # calculate the 0075 / 0005 wedge corrections
-    wedges = normal_wedge.corrections(row, unit_width)
-    if wedges != (3, 8):
-        # use S needle because adjustments are needed
-        mat_code = '{} S {}'.format(column, row)
-    else:
-        # no S-needle nor unit correction
-        mat_code = '{} {}'.format(column, row)
-    return Matrix(column, row, unit_width, row_units, mat_code, wedges)
+    try:
+        wedges = normal_wedge.corrections(row, unit_width)
+        if wedges != (3, 8):
+            # use S needle because adjustments are needed
+            mat_code = '{} S {}'.format(column, row)
+        else:
+            # no S-needle nor unit correction
+            mat_code = '{} {}'.format(column, row)
+        return Matrix(column, row, unit_width, row_units, mat_code, wedges)
+    except ValueError as error:
+        # cannot set the justification wedges because limits are exceeded
+        raise ValueError('{} - {}'.format(code, error))
 
 
-def make_order(source, wedge=None, chunk_size=5):
-    """Make a galley of type separated by spaces and quads"""
-    normal_wedge = wedge or Wedge()
-    quad = make_mat('O15', units=0, wedge=normal_wedge)
-    order = []
-    for mat, quantity in source:
-        # chunks of specified size separated with quads
-        num_chunks = quantity // chunk_size
-        last_chunk_size = quantity % chunk_size
-        chunk = [mat] * chunk_size
-        last_chunk = [mat] * last_chunk_size
-        if num_chunks > 0:
-            order.extend([*chunk, quad] * (num_chunks - 1))
-            order.extend([*chunk, *last_chunk, quad])
-        elif last_chunk:
-            # just that tiny bit
-            order.extend([*last_chunk, quad])
-    return order
-
-
-def make_galley(queue, galley_units, wedge=None):
+def make_galley(order, galley_units, wedge=None):
     """Iterate over the queue in order to transform all the items
     to Monotype codes."""
+    def make_chunks(chunk_size=5):
+        """Accepts an iterable of (matrix, quantity) pairs.
+        Returns a series of chunks of specified size.
+        """
+        chunks = []
+        for mat, quantity in order:
+            # round it up to a full chunk size
+            num_chunks = ceil(quantity / chunk_size)
+            codes = (*[mat.code] * chunk_size, quad.code)
+            units = mat.units * chunk_size + quad.units
+            chunks.extend([Chunk(codes, units, mat.wedges)] * num_chunks)
+        return chunks
+
     def start_line():
         """Start a new line"""
         nonlocal units_left
@@ -330,55 +338,56 @@ def make_galley(queue, galley_units, wedge=None):
         # space width: the remainder from dividing units left by 18
         # (or whatever the quad unit width is), in units
         space_units = units_left % quad.units
-        # choose a matrix for the space
-        space_position = 'G2' if 5 <= space_units < 16 else 'O15'
-        # make a quad wider and use it as a space
         if space_units < 5:
+            # make a quad wider and use it as a space
             num_quads -= 1
             space_units += quad.units
+            space_position = 'O15'
+        elif space_units < 16:
+            space_position = 'G2'
+        else:
+            space_position = 'O15'
         space = make_mat(space_position, space_units, normal_wedge)
-        # use single justification to set the character width
-        if wedges != (3, 8) and space.wedges not in (wedges, (3, 8)):
+        # use single justification to set the character width if necessary
+        if wedges not in ((3, 8), space.wedges):
             ribbon.extend(single_justification(wedges))
-        # add a space to get the width equal
+        # add this space after setting the wedges
         ribbon.append(space.code)
+        # set the wedges for double justification
+        line_wedges = space.wedges if space.wedges != (3, 8) else wedges
         # fill in with quads
         ribbon.extend([quad.code] * num_quads)
-        ribbon.extend(double_justification(space.wedges))
+        ribbon.extend(double_justification(line_wedges))
 
     # use a default wedge if not specified
     normal_wedge = wedge or Wedge()
     # initialize a ribbon with line out and pump stop
     # no justification here
     ribbon = [*pump_stop(), *double_justification()]
-    quad = make_mat('O15', wedge=normal_wedge)
+    quad = make_mat('O15', units=0, wedge=normal_wedge)
     galley_units -= 2 * quad.units
     # store the justifying wedge positions
     wedges = (3, 8)
 
     start_line()
-    # a list of (n, n+1) pairs of matrices for next char prediction
-    pairs = zip(queue, [*queue[1:], None])
-    for curr_mat, next_mat in pairs:
-        # add a mat to the sequence and update the units count
-        ribbon.append(curr_mat.code)
-        # update the justifying wedge positions only when the character
-        # is wider or narrower than wedge[row] i.e. uses S-needle
-        if curr_mat.wedges != (3, 8):
-            wedges = curr_mat.wedges
-        units_left -= curr_mat.units
-        if not next_mat:
+    # a list of (n, n+1) pairs of chunks for next char prediction
+    chunks = make_chunks()
+    pairs = zip(chunks, [*chunks[1:], None])
+    for this_chunk, next_chunk in pairs:
+        # add codes to the ribbon, update unit count
+        ribbon.extend(this_chunk.codes)
+        units_left -= this_chunk.units
+        wedges = this_chunk.wedges
+        if not next_chunk:
             # all matrices done; fill the line
             end_line()
             break
-
-        # predict if we can put the next sort into the line;
-        # if that's not the case, fill and start a new one
-        elif next_mat.units > units_left:
+        elif next_chunk.units > units_left:
+            # predict if we can put the next sort into the line;
+            # if that's not the case, fill and start a new one
             end_line()
             start_line()
-
-        elif wedges != (3, 8) and next_mat.wedges not in (wedges, (3, 8)):
+        elif wedges != (3, 8) and next_chunk.wedges not in (wedges, (3, 8)):
             # next character will fit in (next iteration)
             # check if we need to change the justification wedges
             ribbon.extend(single_justification(wedges))
