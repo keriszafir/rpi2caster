@@ -347,8 +347,9 @@ def make_galley(order, galley_units=0,
     to Monotype codes."""
     def start_line():
         """Start a new line"""
-        nonlocal units_left
+        nonlocal units_left, wedges
         units_left = line_length
+        wedges = (3, 8)
         ribbon.append(quad.code)
 
     def end_line():
@@ -403,7 +404,8 @@ def make_galley(order, galley_units=0,
         # add codes to the ribbon, update unit count
         ribbon.extend(this_chunk.codes)
         units_left -= this_chunk.units
-        wedges = this_chunk.wedges
+        if this_chunk.wedges != (3, 8):
+            wedges = this_chunk.wedges
         if not next_chunk:
             # all matrices done; fill the line
             end_line()

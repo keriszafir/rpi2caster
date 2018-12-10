@@ -481,6 +481,7 @@ class SimulationCaster:
                     ui.display('punching: {}'.format(' '.join(signals)))
                 except librpi2caster.MachineStopped:
                     if ui.confirm('Machine stopped - continue?'):
+                        self.start()
                         self.punch_one(record.signals)
                         signals = self.status.get('signals', [])
                         ui.display('punching: {}'.format(' '.join(signals)))
