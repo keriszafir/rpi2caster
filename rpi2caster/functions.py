@@ -225,7 +225,7 @@ def parse_signals(input_signals, row16_mode):
         sequence = ''.join(str(x) for x in input_signals).upper()
 
     ordered_signals = ['0075', '0005', *'ABCDEFGHIJKLMNOS',
-                       *(str(x) for x in range(16))]
+                       *(str(x) for x in range(16)), 'O15']
     valid_signals = ['0005', '0075', *(str(x) for x in range(16, 0, -1)),
                      *'ABCDEFGHIJKLMNOS']
     parsed_signals = set(s for s in valid_signals if is_present(s))
