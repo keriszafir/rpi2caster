@@ -256,6 +256,9 @@ def parse_ribbon(ribbon):
         # strip any whitespace or multipled symbols
         return line.split(symbol, 1)[-1].strip(symbol).strip()
 
+    # nothing? empty ribbon then
+    if not ribbon:
+        return Ribbon()
     # What to look for
     keywords = ['diecase', 'diecase_id', 'description', 'desc',
                 'wedge', 'stopbar', 'wedge_name']
@@ -317,6 +320,8 @@ def make_chunks(order, space, separate=True, chunk_size=5):
     Returns a series of chunks of specified size.
     """
     chunks = []
+    if not chunk_size:
+        chunk_size = 1
     for item in order:
         try:
             mat, quantity = item

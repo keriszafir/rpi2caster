@@ -33,7 +33,7 @@ def cast_this(ribbon_source):
     def wrapper(self, *args, **kwargs):
         """Wrapper function"""
         ribbon = ribbon_source(self, *args, **kwargs)
-        return None if not ribbon else self.machine.cast_or_punch(ribbon)
+        return self.machine.cast_or_punch(ribbon)
     return wrapper
 
 
@@ -74,7 +74,8 @@ class Casting:
         def parse_xls(file):
             """Parse the Excel file interactively"""
             ui.display('Loading file: {}'.format(file.name))
-            workbook = openpyxl.load_workbook(filename=file, read_only=True)
+            kwargs = dict(filename=file, read_only=True, data_only=True)
+            workbook = openpyxl.load_workbook(**kwargs)
             sheet = workbook.active
             data = [[cell.value for cell in row] for row in sheet.rows]
             return data
@@ -100,7 +101,7 @@ class Casting:
             preview_data = data[:min(10, len(data))]
             ui.display('Table preview:')
             for row in preview_data:
-                ui.display('|'.join('{:10}'.format(v) for v in row))
+                ui.display('|'.join('{:10}'.format(v or '') for v in row))
 
             # ask about the data range
             starting_row = ui.enter('Starting row?', 2) - 1
@@ -142,11 +143,15 @@ class Casting:
         # nothing to cast?
         if not mat_queue:
             return []
+        chunk_size = ui.enter('How many sorts per group? '
+                              '(0 = not separating with quads)',
+                              default=10, minimum=0, maximum=20)
         # how wide is the galley?
         galley_inches = ui.choose_type_size('Galley width?', '25P')
         galley_units = wedge.inches_to_units(galley_inches)
         # generate the ribbon
-        return make_galley(mat_queue, galley_units, wedge)
+        return make_galley(mat_queue, galley_units, wedge,
+                           chunk_size, chunk_size)
 
     @cast_this
     def cast_material(self):
@@ -205,6 +210,9 @@ class Casting:
             return queue
 
         wedge = ui.choose_wedge()
+        chunk_size = ui.enter('How many sorts per group? '
+                              '(0 = not separating with quads)',
+                              default=10, minimum=0, maximum=20)
         mat_queue = make_queue()
         # nothing to cast?
         if not mat_queue:
@@ -213,7 +221,8 @@ class Casting:
         galley_inches = ui.choose_type_size('Galley width?', '25P')
         galley_units = wedge.inches_to_units(galley_inches)
         # generate the ribbon
-        return make_galley(mat_queue, galley_units, wedge)
+        return make_galley(mat_queue, galley_units, wedge,
+                           chunk_size, chunk_size)
 
     @cast_this
     def cast_qr_code(self):
@@ -385,6 +394,9 @@ class Casting:
             return make_galley(valid_mats, wedge=wedge,
                                chunk_size=2, separate=False)
 
+        if ui.confirm('Calibrate the bridge first?'):
+            self.calibrate_bridge()
+
         # Character width and position calibration
         ui.display('Mould blade opening width and X-Y character calibration:\n'
                    'Measure the quad / half-quad width and adjust '
@@ -402,9 +414,6 @@ class Casting:
             wedge = ui.choose_wedge()
             ribbon = generate_ribbon()
             self.machine.advanced_cast(ribbon)
-
-        if ui.confirm('Calibrate the bridge as well?'):
-            self.calibrate_bridge()
 
     def calibrate_bridge(self):
         """Calibrate the bridge draw rods to eliminate the diecase wobble"""

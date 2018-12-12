@@ -272,7 +272,8 @@ class SimulationCaster:
 
     def cast_or_punch(self, ribbon):
         """Cast / punch a ribbon, based on the selected operation mode."""
-        return (self.punch(ribbon) if self.punch_mode
+        return (None if not ribbon
+                else self.punch(ribbon) if self.punch_mode
                 else self.advanced_cast(ribbon))
 
     def simple_cast(self, input_sequence, ask=True, repetitions=1):
@@ -423,8 +424,11 @@ class SimulationCaster:
         # display some info for the user
         ui.display_parameters(stats.ribbon_parameters())
         # set the number of casting runs
-        stats.update(runs=ui.enter('How many times do you want to cast this?',
-                                   default=1, minimum=0))
+        runs = ui.enter('How many times do you want to cast this?',
+                        default=1, minimum=0)
+        if not runs:
+            return
+        stats.update(runs=runs)
         # initial line skipping
         set_lines_skipped(run=True, session=True)
         ui.display_parameters(stats.session_parameters())
