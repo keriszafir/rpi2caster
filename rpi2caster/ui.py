@@ -2,7 +2,6 @@
 """User interface for rpi2caster. Text UI is implemented here, additional UIs
 can be added later or imported from separate modules"""
 import glob
-import re
 import readline
 import string
 
@@ -46,10 +45,6 @@ KEYS = dict(
     )
 DEFAULT_ABORT_KEYS = [KEYS[key] for key in ('esc', 'f10')]
 NONSENSE = 'etaoin shrdlu cmfwyp'
-
-# pica definition will be overridden in the initial setup
-# pica = .1667, US pica = .166, Didot = .1776, Fournier = .1628
-PICA = 0.1667
 
 # Global variable for message verbosity level
 verbosity = 0
@@ -855,30 +850,3 @@ def choose_ribbon():
             # Try to open it and get only the lines containing non-whitespace
             return functions.parse_ribbon(ribbon_file.readlines())
     return None
-
-
-def choose_type_size(prompt, default=None):
-    """Enter a value in typographic, metric or Imperial units.
-
-        Returns a value in inches to be used elsewhere.
-
-        prompt: what does the user choose?
-        default_width: if None then don't prefill the line
-    """
-    inch_values = {'P': PICA, 'p': PICA/12, 'c': PICA,
-                   'mm': 1/25.4, 'cm': 1/2.54, '"': 1, 'in': 1}
-
-    # start by typing the string
-    width = enter('{} [value+unit: mm, cm, "/in, p=point, c/P=cicero or pica]'
-                  .format(prompt), default=default).strip()
-    # what do we have? number + letter string? number? something else?
-    try:
-        # normally number + letter string denoting units
-        value, unit = re.match('([0-9.]+)([ "a-zA-Z]+)', width).groups()
-        unit = unit.strip()
-        inches = float(value) * inch_values[unit]
-        return inches
-    except (KeyError, AttributeError):
-        # unknown unit string
-        display('Error: Incorrect value and/or measurement unit! Enter again.')
-        return choose_type_size(prompt, default)

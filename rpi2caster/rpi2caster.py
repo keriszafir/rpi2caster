@@ -12,7 +12,7 @@
 
 """
 from contextlib import suppress
-from functools import partial, wraps
+from functools import wraps
 from zipfile import BadZipFile
 import os
 
@@ -32,9 +32,10 @@ except ImportError:
     openpyxl = None
 
 from . import ui
-from .functions import make_mat, make_galley, parse_ribbon
-from .functions import pump_start, pump_stop
+from .functions import make_mat, make_galley, make_wedge
+from .functions import make_ribbon, read_ribbon, pump_start, pump_stop
 from .functions import single_justification, double_justification
+from .monotype import caster_factory
 
 # initialize the configuration for rpi2caster
 USER_DATA_DIR = click.get_app_dir('rpi2caster', force_posix=True, roaming=True)
@@ -43,21 +44,23 @@ with suppress(FileExistsError):
 
 # pica = .1667, US pica = .166, Didot = .1776, Fournier = .1628
 # make it configurable in the future
-ui.PICA = 0.1776
+PICA = 0.1776
 
 
-def cast_this(ribbon_source):
-    """Get the ribbon from decorated routine and cast it"""
-    @wraps(ribbon_source)
-    def wrapper(machine, *args, **kwargs):
+def wedge_needed(routine):
+    """Make sure the function gets a wedge. It is always passed as a keyword
+    argument in the function call."""
+    @wraps(routine)
+    def wrapper(wedge, **kwargs):
         """Wrapper function"""
-        ribbon = ribbon_source(*args, **kwargs)
-        return machine.cast_or_punch(ribbon)
+        normal_wedge = wedge or ui.choose_wedge()
+        ui.display('Using wedge {}'.format(normal_wedge.name))
+        return routine(wedge=normal_wedge, **kwargs)
     return wrapper
 
 
-@cast_this
-def cast_xls(excel_file=None):
+@wedge_needed
+def cast_xls(wedge, excel_file=None, **__):
     """Cast characters specified in an Excel file"""
     def parse_xls(file):
         """Parse the Excel file interactively"""
@@ -73,7 +76,8 @@ def cast_xls(excel_file=None):
         def add_row(row):
             """Adds an entry to the queue or failed entries"""
             try:
-                quantity, units = int(row[qty_col]), int(row[units_col])
+                qty, units = int(row[qty_col]), int(row[units_col])
+                quantity = round(scale * qty)
                 position = row[positions_col]
                 char = row[chars_col]
                 ui.display('Adding {} of {} at {} {} units wide.'
@@ -104,6 +108,8 @@ def cast_xls(excel_file=None):
                              default=3, minimum=1, maximum=width) - 1
         qty_col = ui.enter('Column # with type quantities?',
                            default=4, minimum=1, maximum=width) - 1
+        scale = ui.enter('Scale [%] for casting?', minimum=1, maximum=1000,
+                         default=100, datatype=float) / 100
         # store all rows where error occured
         failed_rows = []
         for row in data[starting_row:starting_row+records]:
@@ -114,11 +120,9 @@ def cast_xls(excel_file=None):
             for row in failed_rows:
                 ui.display('|'.join('{:10}'.format(v) for v in row))
 
-    # choose the normal wedge
-    wedge = ui.choose_wedge()
     mat_queue = []
     # load a spreadsheet
-    file = excel_file or [ui.import_file(binary=True)]
+    file = excel_file or ui.import_file(binary=True)
     try:
         raw_data = parse_xls(file)
         read_sheet_data(raw_data)
@@ -134,15 +138,15 @@ def cast_xls(excel_file=None):
                           '(0 = not separating with quads)',
                           default=10, minimum=0, maximum=20)
     # how wide is the galley?
-    galley_inches = ui.choose_type_size('Galley width?', '25P')
-    galley_units = wedge.inches_to_units(galley_inches)
+    galley_width = ui.enter('Galley width in picas/ciceros?', 25)
+    galley_units = wedge.inches_to_units(galley_width * PICA)
     # generate the ribbon
     return make_galley(mat_queue, galley_units, wedge,
                        chunk_size, chunk_size)
 
 
-@cast_this
-def cast_material():
+@wedge_needed
+def cast_material(wedge, **__):
     """Cast typesetting material: typecases, specified sorts, spaces"""
     def make_queue():
         """generate a sequence of items for casting"""
@@ -197,7 +201,6 @@ def cast_material():
         # make a flat list of mats to cast from
         return queue
 
-    wedge = ui.choose_wedge()
     chunk_size = ui.enter('How many sorts per group? '
                           '(0 = not separating with quads)',
                           default=10, minimum=0, maximum=20)
@@ -209,15 +212,15 @@ def cast_material():
                           '(0 = not separating with quads)',
                           default=10, minimum=0, maximum=20)
     # how wide is the galley?
-    galley_inches = ui.choose_type_size('Galley width?', '25P')
-    galley_units = wedge.inches_to_units(galley_inches)
+    galley_width = ui.enter('Galley width in picas/ciceros?', 25)
+    galley_units = wedge.inches_to_units(galley_width * PICA)
     # generate the ribbon
     return make_galley(mat_queue, galley_units, wedge,
                        chunk_size, chunk_size)
 
 
-@cast_this
-def cast_qr_code(input_data=''):
+@wedge_needed
+def cast_qr_code(wedge, text='', **__):
     """Set up and cast a QR code which can be printed and then scanned
     with a mobile device."""
     def make_qr(data):
@@ -264,18 +267,16 @@ def cast_qr_code(input_data=''):
             ribbon.extend(double_justification(curr_mat.wedges))
         return ribbon
 
-    # first choose a normal wedge for unit calculations
-    wedge = ui.choose_wedge()
-
     # set the pixel size; smaler is preferred; the same as mould size
     # all pixels will be square; unit correction is used
-    inches = ui.choose_type_size('Type size i.e. mould to use?')
+    points = ui.enter('Square size in points? (the same as mould used)', 6)
+    inches = PICA * points / 12
     units = wedge.inches_to_units(inches)
-    ui.display('The pixel size is {}" - that is {} units {} set.'
-               .format(inches, units, wedge.set_width))
+    ui.display('The pixel size is {} points - that is {} units {} set.'
+               .format(points, units, wedge.set_width))
 
     # enter text and encode it
-    qr_matrix = make_qr(input_data or ui.enter('Enter data to encode', ''))
+    qr_matrix = make_qr(text or ui.enter('Enter data to encode', ''))
     # let the operator know how large the code is
     size = len(qr_matrix)
     prompt = ('The resulting QR code is {0} × {0} squares '
@@ -297,8 +298,8 @@ def cast_qr_code(input_data=''):
     return render(qr_matrix, high, low)
 
 
-@cast_this
-def cast_diecase_proof():
+@wedge_needed
+def cast_diecase_proof(wedge, **__):
     """Tests the whole diecase, casting from each matrix.
     Casts spaces between characters to be sure that the resulting
     type will be of equal width."""
@@ -331,8 +332,6 @@ def cast_diecase_proof():
     if not ui.confirm('Proceed?', default=True, abort_answer=False):
         return None
 
-    # choose a wedge for casting the diecase proof
-    wedge = ui.choose_wedge()
     rows, columns = make_diecase()
     # double pump stop and galley trip
     ribbon = [*pump_stop(), *double_justification()]
@@ -357,11 +356,11 @@ def cast_diecase_proof():
         ribbon.append('O15')
         # end line (cast first), set the wedges
         ribbon.extend(double_justification(space.wedges))
-
     return ribbon
 
 
-def calibrate_machine(machine):
+@wedge_needed
+def calibrate_machine(machine, wedge, **__):
     """Casts the "en dash" characters for calibrating the character X-Y
     relative to type body."""
     def generate_ribbon():
@@ -397,12 +396,11 @@ def calibrate_machine(machine):
 
     if ui.confirm('Calibrate the mould and diecase?'):
         # go on, choose a wedge for calibration, widths depend on it
-        wedge = ui.choose_wedge()
         ribbon = generate_ribbon()
         machine.advanced_cast(ribbon)
 
 
-def calibrate_bridge(machine):
+def calibrate_bridge(machine, **__):
     """Calibrate the bridge draw rods to eliminate the diecase wobble"""
     ui.display('The diecase will be put in a central position (G8).\n'
                'Turn the machine to 350°, calibrate the bridge '
@@ -414,7 +412,7 @@ def calibrate_bridge(machine):
     machine.test(['G8'])
 
 
-def diagnostics(machine):
+def diagnostics(machine, **__):
     """Settings and alignment menu for servicing the caster"""
     def test_front_pinblock():
         """Sends signals 1...14, one by one"""
@@ -547,11 +545,12 @@ def diagnostics(machine):
                                'with HMN, KMN or unit-shift'))]
 
     header = 'Diagnostics and machine calibration menu:'
-    catch_exceptions = (ui.Abort, KeyboardInterrupt, EOFError,
-                        librpi2caster.MachineStopped)
     # Keep displaying the menu and go back here after any method ends
-    ui.dynamic_menu(options=options, header=header,
-                    catch_exceptions=catch_exceptions)
+    while True:
+        command = ui.menu(options=options, header=header)
+        with suppress(ui.Abort, KeyboardInterrupt, EOFError,
+                      librpi2caster.MachineStopped):
+            command()
 
 
 @click.group(invoke_without_command=True, help=__doc__,
@@ -571,14 +570,13 @@ def diagnostics(machine):
 @click.option('--service', '-s', is_flag=True, help='service/diagnostics menu')
 @click.option('--calibrate', '-c', is_flag=True,
               help='calibrate the machine')
-@click.argument('ribbon', metavar='[filename]', type=click.File(),
-                required=False)
+@click.option('--ribbon', '-r', metavar='[filename]', type=click.File())
 @click.pass_context
-def cli(ctx, verbosity, **args):
+def cli(ctx, verbosity, **kwargs):
     """decide whether to go to a subcommand or enter main menu"""
     ui.verbosity = verbosity
     if not ctx.invoked_subcommand:
-        ctx.forward(cast)
+        ctx.invoke(cast, **kwargs)
 
 
 @cli.command('cast', hidden=True)
@@ -589,28 +587,37 @@ def cast(**attrs):
     Can also cast a diecase proof.
 
     Can also be run in simulation mode without the actual caster."""
-    @cast_this
-    def cast_composition():
+    def cast_composition(**__):
         """Casts or punches the ribbon contents if there are any"""
         with suppress(AttributeError):
-            return ribbon.contents
+            machine.cast_or_punch(ribbon.contents)
+
+    def choose_ribbon(**__):
+        """Import the ribbon from a file"""
+        nonlocal ribbon
+        ribbon = ui.choose_ribbon()
+
+    def choose_wedge(**__):
+        """Change a normal wedge"""
+        nonlocal wedge
+        wedge = ui.choose_wedge()
+
+    def display_ribbon(**__):
+        """Display the ribbon contents"""
+        length = len(ribbon.contents)
+        len_info = 'The ribbon contains {} combinations.'.format(length)
+        ui.paged_display([len_info, *ribbon.contents], sep='\n')
+
+    def display_details(**__):
+        """Collect ribbon, diecase and wedge data here"""
+        data = [ribbon.parameters if ribbon else {},
+                wedge.parameters if wedge else {},
+                machine.parameters]
+        ui.display_parameters(*data)
+        ui.pause()
 
     def main_menu():
         """Main menu for the type casting utility."""
-        def choose_ribbon(*_):
-            """Import the ribbon from a file"""
-            nonlocal ribbon
-            ribbon = ui.choose_ribbon()
-
-        def display_ribbon(*_):
-            """Display the ribbon contents"""
-            ui.paged_display(ribbon.contents, sep='')
-
-        def display_details(*_):
-            """Collect ribbon, diecase and wedge data here"""
-            data = [ribbon.parameters if ribbon else {}, machine.parameters]
-            ui.display_parameters(*data)
-            ui.pause()
 
         def options():
             """Generate options based on current state of the program."""
@@ -636,6 +643,10 @@ def cast(**attrs):
                    ui.option(key='r', value=choose_ribbon, seq=10,
                              text='Select ribbon',
                              desc='Select a ribbon from database or file'),
+
+                   ui.option(key='w', value=choose_wedge, seq=11,
+                             text='Choose or change normal wedge',
+                             desc='Select a normal wedge to use'),
 
                    ui.option(key='p', value=cast_composition, seq=30,
                              cond=is_punching and got_ribbon,
@@ -672,40 +683,46 @@ def cast(**attrs):
                              desc='Interface and machine diagnostics')]
             return ret
 
+        nonlocal ribbon
         header = ('rpi2caster - CAT (Computer-Aided Typecasting) '
                   'for Monotype Composition or Type and Rule casters.\n\n'
                   'This program reads a ribbon (from file or database) '
                   'and casts the type on a composition caster.'
                   '\n\nCasting / Punching Menu:')
-        exceptions = (ui.Abort, KeyboardInterrupt, EOFError)
-        ui.dynamic_menu(options, header, catch_exceptions=exceptions,
-                        func_args=(machine, ))
+        while True:
+            routine = ui.menu(options=options, header=header)
+            with suppress(ui.Abort, KeyboardInterrupt, EOFError):
+                retval = routine(wedge=wedge, machine=machine)
+                ribbon = make_ribbon(retval) or ribbon
 
-    address, port = attrs.get('address'), attrs.get('port')
-    from .monotype import caster_factory
-    machine = caster_factory(address, port)
-    ribbon = parse_ribbon(attrs.get('ribbon'))
-    # wedge = Wedge(args.get('wedge'))
+    def entrypoint():
+        """Decide what function to run based on options"""
+        nonlocal ribbon
+        excel_file = attrs.get('excelfile')
+        qr_code = attrs.get('qrcode')
+        diecase_proof = attrs.get('diecase-proof')
+        service = attrs.get('service')
+        calibration = attrs.get('calibration')
+        ret = None
+        if excel_file:
+            ret = cast_xls(machine=machine, wedge=wedge, excel_file=excel_file)
+        elif qr_code:
+            ret = cast_qr_code(machine=machine, wedge=wedge, text=qr_code)
+        elif diecase_proof:
+            ret = cast_diecase_proof(machine=machine, wedge=wedge)
+        elif service:
+            diagnostics(machine=machine, wedge=wedge)
+        elif calibration:
+            calibrate_machine(machine=machine, wedge=wedge)
+        ribbon = make_ribbon(ret) or ribbon
 
-    excel_file = attrs.get('excelfile')
-    qr_code = attrs.get('qrcode')
-    diecase_proof = attrs.get('diecase-proof')
-    service = attrs.get('service')
-    calibration = attrs.get('calibration')
-    if ribbon:
-        cast_composition(machine)
-    elif excel_file:
-        cast_xls(machine, excel_file)
-    elif qr_code:
-        cast_qr_code(machine, qr_code)
-    elif diecase_proof:
-        cast_diecase_proof(machine)
-    elif service:
-        diagnostics(machine)
-    elif calibration:
-        calibrate_machine(machine)
-    else:
-        main_menu()
+    machine = caster_factory(attrs.get('address'), attrs.get('port'))
+    ribbon = read_ribbon(attrs.get('ribbon'))
+    wedge_designation = attrs.get('wedge')
+    wedge = make_wedge(wedge_designation) if wedge_designation else None
+
+    entrypoint()
+    main_menu()
 
 
 @cli.command(options_metavar='[-ht]')

@@ -2,6 +2,7 @@
 """rpi2caster routines and functions"""
 
 from collections import deque, namedtuple
+from contextlib import suppress
 from functools import lru_cache
 from math import ceil
 from .models import Ribbon, ParsedRecord, Matrix, Wedge
@@ -426,6 +427,25 @@ def make_galley(order, galley_units=0,
             ribbon.extend(single_justification(wedges))
 
     return ribbon
+
+
+def make_wedge(wedge_name):
+    """Make a Wedge instance from a designation e.g. S5-12E"""
+    return Wedge(wedge_name)
+
+
+def read_ribbon(ribbon_file):
+    """Read a file and make a ribbon object"""
+    if ribbon_file:
+        with suppress(AttributeError), ribbon_file:
+            # Try to open it and get only the lines containing non-whitespace
+            return parse_ribbon(ribbon_file.readlines())
+    return Ribbon()
+
+
+def make_ribbon(contents):
+    """Make a Ribbon object"""
+    return Ribbon(contents=contents)
 
 # caster control combinations
 

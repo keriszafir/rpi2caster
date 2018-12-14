@@ -2,6 +2,7 @@
 """Caster object for either real or virtual Monotype composition caster"""
 # Standard library imports
 from collections import deque, OrderedDict
+from contextlib import suppress
 from functools import wraps
 from json.decoder import JSONDecodeError
 import time
@@ -22,10 +23,18 @@ def caster_factory(address, port):
     with this address and port.
 
     None, None denote a simulation caster."""
-    try:
+    with suppress(KeyError):
         return MonotypeCaster.instances[(address, port)]
-    except KeyError:
-        return MonotypeCaster(address, port)
+    # make a new caster object
+    try:
+        caster = MonotypeCaster(address, port)
+        MonotypeCaster.instances[(address, port)] = caster
+        return caster
+    except librpi2caster.CommunicationError:
+        # return a simulation caster
+        ui.confirm('Cannot connect with the interface.\n'
+                   'Do you want to use simulation mode instead?')
+        return MonotypeCaster.instances[(None, None)]
 
 
 def handle_communication_error(routine):
