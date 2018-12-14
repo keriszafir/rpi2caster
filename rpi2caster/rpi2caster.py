@@ -59,6 +59,28 @@ def wedge_needed(routine):
     return wrapper
 
 
+def cast_galley(mat_queue, wedge):
+    """Asks about galley width and number of sorts per group,
+    then generates a ribbon with characters."""
+    ui.display('\nThe type will be cast in groups of specified size '
+               'separated with quads, like:\n'
+               'aaaaaaaaaa  aaaaaaaaaa  bbbbbbbbbb  bbbbbbbbbb, etc.\n'
+               'A whole group is the minimum amount to cast.\n'
+               'If you choose 0, sorts of the same character will be cast '
+               'without quads in between.\n'
+               'Groups of different characters will still be separated.\n')
+    grp_size = ui.enter('Sorts per group?', default=10, minimum=0, maximum=20)
+    # how wide is the galley?
+    galley_width = ui.enter('Galley width in picas/ciceros?', 25)
+    galley_units = wedge.inches_to_units(galley_width * PICA)
+    # generate the ribbon
+    ribbon = make_galley(mat_queue, galley_units, wedge, grp_size, grp_size)
+    if ribbon:
+        ui.pause('The ribbon is ready. You will now return to main menu.\n'
+                 'Choose V to view the ribbon codes, or C to cast the type.')
+    return ribbon
+
+
 @wedge_needed
 def cast_xls(wedge, excel_file=None, **__):
     """Cast characters specified in an Excel file"""
@@ -134,15 +156,7 @@ def cast_xls(wedge, excel_file=None, **__):
     # nothing to cast?
     if not mat_queue:
         return []
-    chunk_size = ui.enter('How many sorts per group? '
-                          '(0 = not separating with quads)',
-                          default=10, minimum=0, maximum=20)
-    # how wide is the galley?
-    galley_width = ui.enter('Galley width in picas/ciceros?', 25)
-    galley_units = wedge.inches_to_units(galley_width * PICA)
-    # generate the ribbon
-    return make_galley(mat_queue, galley_units, wedge,
-                       chunk_size, chunk_size)
+    return cast_galley(mat_queue, wedge)
 
 
 @wedge_needed
@@ -153,6 +167,8 @@ def cast_material(wedge, **__):
         def add_new_chars():
             """Adds a mat to a queue"""
             while True:
+                ui.display('Choose a matrix for the character to cast, '
+                           'or leave blank to return to menu.')
                 mat = ui.choose_mat(wedge, specify_units=True)
                 if not mat:
                     return
@@ -192,7 +208,7 @@ def cast_material(wedge, **__):
                              text='delete last entry'),
                    ui.option(key='v', value=view_queue, seq=3,
                              text='view queue'),
-                   ui.option(key='c', value=cast_it, text='cast', seq=4)]
+                   ui.option(key='f', value=cast_it, text='finish', seq=4)]
 
         while not done:
             prompt = 'Choose what to do:'
@@ -201,22 +217,11 @@ def cast_material(wedge, **__):
         # make a flat list of mats to cast from
         return queue
 
-    chunk_size = ui.enter('How many sorts per group? '
-                          '(0 = not separating with quads)',
-                          default=10, minimum=0, maximum=20)
     mat_queue = make_queue()
     # nothing to cast?
     if not mat_queue:
         return []
-    chunk_size = ui.enter('How many sorts per group? '
-                          '(0 = not separating with quads)',
-                          default=10, minimum=0, maximum=20)
-    # how wide is the galley?
-    galley_width = ui.enter('Galley width in picas/ciceros?', 25)
-    galley_units = wedge.inches_to_units(galley_width * PICA)
-    # generate the ribbon
-    return make_galley(mat_queue, galley_units, wedge,
-                       chunk_size, chunk_size)
+    return cast_galley(mat_queue, wedge)
 
 
 @wedge_needed
