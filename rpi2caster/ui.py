@@ -839,7 +839,7 @@ def choose_mat(wedge, code='', units=0, specify_units=False, char=''):
         display(error)
         display('You can enter correct data manually.')
         return choose_mat(wedge, code, units,
-                          specify_units=True, comment=char)
+                          specify_units=specify_units, char=char)
 
 
 def choose_ribbon():

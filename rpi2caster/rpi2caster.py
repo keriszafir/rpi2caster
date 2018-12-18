@@ -567,7 +567,7 @@ def diagnostics(machine, **__):
               default='127.0.0.1')
 @click.option('--port', '-p', help='port (default: 23017)', type=int,
               default=23017)
-@click.option('excelfile', '-x', help='Excel file to cast from',
+@click.option('excelfile', '--xlsx', '-x', help='Excel file to cast from',
               type=click.File(mode='rb'))
 @click.option('--qrcode', '-q', help='text to make a QR code from')
 @click.option('--wedge', '-w', help='normal wedge designation, e.g. S5-12E')
@@ -575,7 +575,8 @@ def diagnostics(machine, **__):
 @click.option('--service', '-s', is_flag=True, help='service/diagnostics menu')
 @click.option('--calibrate', '-c', is_flag=True,
               help='calibrate the machine')
-@click.option('--ribbon', '-r', metavar='[filename]', type=click.File())
+@click.option('--ribbon', '-r', metavar='[filename]', type=click.File(),
+              help='ribbon file to use')
 @click.pass_context
 def cli(ctx, verbosity, **kwargs):
     """decide whether to go to a subcommand or enter main menu"""

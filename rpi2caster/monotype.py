@@ -650,7 +650,6 @@ class MonotypeCaster(SimulationCaster):
                     self.start()
             except KeyboardInterrupt:
                 self.emergency_stop = ON
-                self.start()
         except librpi2caster.MachineStopped:
             ui.display('\nThe machine was stopped because it was stalling,\n'
                        'or because emergency stop button was pressed.\n')
