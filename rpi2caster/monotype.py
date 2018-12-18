@@ -253,7 +253,7 @@ class SimulationCaster:
         finally:
             self.update_status()
 
-    def cast_one(self, record, timeout=None):
+    def cast_one(self, record, timeout=0):
         """Casting sequence: sensor on - valves on - sensor off - valves off"""
         try:
             signals = record.signals
@@ -264,7 +264,7 @@ class SimulationCaster:
         if timeout:
             request_timeout = 2 * timeout + 5
         else:
-            request_timeout = 2 * self.config['sensor_timeout'] + 2
+            request_timeout = 2 * self.config['sensor_timeout'] + 20
         self.send(signals, timeout=timeout, request_timeout=request_timeout)
 
     def punch_one(self, signals):
@@ -461,7 +461,10 @@ class SimulationCaster:
 
                 except librpi2caster.MachineStopped:
                     stats.update(casting_success=False)
-                    ui.display('The composition caster stopped working!\n')
+                    if self.status.get('emergency_stop'):
+                        ui.display('Emergency stop activated!\n')
+                    else:
+                        ui.display('The composition caster is stalling!\n')
                     # aborted - ask if user wants to continue
                     runs_left = stats.runs_left()
                     if runs_left > 1:
@@ -497,9 +500,8 @@ class SimulationCaster:
                     self.punch_one(record.signals)
                     signals = self.status.get('signals', [])
                     ui.display('punching: {}'.format(' '.join(signals)))
-            else:
-                ui.display('All codes successfully punched.')
-            ui.pause('Punching finished. Take the ribbon off the tower.')
+            ui.display('All codes successfully punched.')
+            ui.pause('Take the ribbon off the tower...')
 
     def test(self, signals_sequence, duration=None):
         """Testing: advance manually or automatically"""
