@@ -60,12 +60,14 @@ class SimulationCaster:
         self.url = 'http://{}:{}'.format(address, port)
         self.row16_mode = OFF
         self.config = dict(punching_on_time=0.2, punching_off_time=0.3,
-                           sensor_timeout=5, pump_stop_timeout=20,
+                           sensor_timeout=5, pump_stop_timeout=120,
                            startup_timeout=20, name='Simulation interface',
                            punch_mode=False)
-        self.status = dict(water=OFF, air=OFF, motor=OFF, pump=OFF,
-                           wedge_0005=15, wedge_0075=15, speed='0rpm',
-                           machine=OFF, signals=[])
+        self.status = dict(wedge_0005=15, wedge_0075=15, water=OFF, air=OFF,
+                           valves=OFF, signals=[], testing_mode=False,
+                           is_working=False, motor_working=False,
+                           emergency_stop=False, pump_working=False,
+                           is_stopping=False, is_starting=False)
         self.update_config()
         self.update_status()
 
@@ -114,10 +116,14 @@ class SimulationCaster:
     @emergency_stop.setter
     def emergency_stop(self, state):
         """Activate or reset the machine emergency stop"""
+        if state:
+            ui.display('\n**********\nWARNING!!!\n**********\n'
+                       'Emergency stop - stopping the machine NOW.\n\n')
+        else:
+            ui.display('\nEmergency stop cleared. Ready to work again.\n')
         self.status.update(emergency_stop=state)
         if state:
             self.stop()
-            raise librpi2caster.MachineStopped
 
     def update_status(self, **kwargs):
         """Update the machine status."""
@@ -159,6 +165,21 @@ class SimulationCaster:
         """Get the signals from the machine"""
         return self.status.get('signals', [])
 
+    @property
+    def is_starting(self):
+        """Get the machine starting status"""
+        return self.status.get('is_starting')
+
+    @property
+    def is_working(self):
+        """Get the machine working status"""
+        return self.status.get('is_working')
+
+    @property
+    def is_stopping(self):
+        """Get the machine stopping status"""
+        return self.status.get('is_stopping')
+
     def start(self):
         """Simulates the machine start"""
         if self.emergency_stop:
@@ -168,17 +189,21 @@ class SimulationCaster:
                           'Answering "no" will abort casting.',
                           default=None, abort_answer=False, allow_abort=False):
                 self.emergency_stop = OFF
+        if any((self.is_starting, self.is_working, self.is_stopping)):
+            raise librpi2caster.InterfaceBusy
         # normal starting sequence
-        self.update_status(air=ON)
+        self.update_status(air=ON, is_starting=True, is_working=True)
         if not any((self.punch_mode, self.testing_mode)):
             self.update_status(water=ON, motor=ON)
-        self.update_status(machine=ON)
+        self.update_status(is_starting=False)
 
     def stop(self):
         """Simulates the machine stop"""
+        self.update_status(is_stopping=True)
         if not any((self.punch_mode, self.testing_mode)):
             self.update_status(pump=OFF, water=OFF, motor=OFF)
-        self.update_status(air=OFF, machine=OFF, testing_mode=OFF)
+        self.update_status(air=OFF, testing_mode=False,
+                           is_stopping=False, is_working=False)
 
     def send(self, signals, timeout=None, request_timeout=None):
         """Simulates sending the signals to the caster."""
@@ -192,7 +217,7 @@ class SimulationCaster:
             # check the previous wedge positions and pump state
             pos_0075 = self.status.get('wedge_0075')
             pos_0005 = self.status.get('wedge_0005')
-            pump_working = self.status.get('pump')
+            pump_working = self.pump_working
             # check 0005 wedge position:
             # find the earliest row number or default to 15
             if found(['0005']) or found('NJ'):
@@ -216,7 +241,7 @@ class SimulationCaster:
                 else:
                     pos_0075 = 15
 
-            self.update_status(pump=bool(pump_working),
+            self.update_status(pump_working=pump_working,
                                wedge_0075=pos_0075, wedge_0005=pos_0005)
 
         start_time = time.time()
@@ -269,10 +294,13 @@ class SimulationCaster:
 
     def punch_one(self, signals):
         """Punch a single signals combination"""
-        off_time = self.config['punching_off_time']
-        on_time = self.config['punching_on_time']
-        timeout = on_time + off_time + 5
-        self.send(signals, request_timeout=timeout)
+        try:
+            off_time = self.config['punching_off_time']
+            on_time = self.config['punching_on_time']
+            timeout = on_time + off_time + 5
+            self.send(signals, request_timeout=timeout)
+        except KeyboardInterrupt:
+            raise librpi2caster.MachineStopped
 
     def test_one(self, signals):
         """Test a single signals combination"""
@@ -308,8 +336,18 @@ class SimulationCaster:
                     repetitions -= 1
                 except librpi2caster.MachineStopped:
                     # repetition failed
+                    if self.status.get('emergency_stop'):
+                        ui.display('Emergency stop activated!\n')
+                    else:
+                        ui.display('The composition caster is stalling!\n')
                     if ui.confirm('Machine stopped: continue casting?',
-                                  abort_answer=False):
+                                  abort_answer=False, allow_abort=False):
+                        # restart the machine
+                        self.start()
+                except KeyboardInterrupt:
+                    self.emergency_stop = True
+                    if ui.confirm('Continue casting?',
+                                  abort_answer=False, allow_abort=False):
                         # restart the machine
                         self.start()
                 if ask and not repetitions and ui.confirm('Repeat?'):
@@ -415,7 +453,7 @@ class SimulationCaster:
                 # prepare data for display
                 info = OrderedDict()
                 info['Signals sent'] = ' '.join(self.status.get('signals', []))
-                info['Pump'] = 'ON' if self.status['pump'] else 'OFF'
+                info['Pump'] = 'ON' if self.status['pump_working'] else 'OFF'
                 info['Wedge 0005 at'] = self.status['wedge_0005']
                 info['Wedge 0075 at'] = self.status['wedge_0075']
                 info['Speed'] = self.status['speed']
@@ -461,6 +499,7 @@ class SimulationCaster:
 
                 except librpi2caster.MachineStopped:
                     stats.update(casting_success=False)
+                    self.update_status()
                     if self.status.get('emergency_stop'):
                         ui.display('Emergency stop activated!\n')
                     else:
@@ -480,6 +519,13 @@ class SimulationCaster:
                     set_lines_skipped(run=skip_successful, session=False)
                     # restart the machine after emergency stop
                     self.start()
+
+                except KeyboardInterrupt:
+                    self.emergency_stop = True
+                    if ui.confirm('Continue casting?',
+                                  abort_answer=False, allow_abort=False):
+                        # restart the machine
+                        self.start()
 
     def punch(self, signals_sequence):
         """Punching sequence: valves on - wait - valves off- wait"""
@@ -543,11 +589,10 @@ class MonotypeCaster(SimulationCaster):
                               librpi2caster.InterfaceBusy,
                               librpi2caster.InterfaceNotStarted)}
         url = '{}/{}'.format(self.url, path).strip('/')
-        data = kwargs or {}
         try:
             # get the info from the server
-            response = requests.request(method, url,
-                                        json=data, timeout=request_timeout)
+            response = requests.request(method, url, json=kwargs or {},
+                                        timeout=request_timeout)
             # raise any HTTP errors ASAP
             response.raise_for_status()
             # we're sure we have a proper 200 OK status code
@@ -591,11 +636,18 @@ class MonotypeCaster(SimulationCaster):
                           request_timeout=request_timeout, **data)
         except librpi2caster.InterfaceNotStarted:
             self.start()
-            self._request('signals', method='post',
-                          request_timeout=request_timeout, **data)
+            self.send(signals, timeout, request_timeout)
+        except librpi2caster.InterfaceBusy:
+            msg = ('\nThis interface is busy. Cannot send signals.\n\n'
+                   'Check if someone else is already using the machine.\n'
+                   'If so, wait until the machine is free to use again.\n'
+                   'If the machine is being stopped, turn it a few times '
+                   'to finish the stopping sequence.\n\n'
+                   'Continue?')
+            if ui.confirm(msg, default=None, abort_answer=False):
+                self.send(signals, timeout, request_timeout)
         except KeyboardInterrupt:
             self.emergency_stop = ON
-            raise librpi2caster.MachineStopped
         except (EOFError, librpi2caster.CommunicationError):
             self.stop()
             raise librpi2caster.MachineStopped
@@ -621,7 +673,7 @@ class MonotypeCaster(SimulationCaster):
                     '\nEmergency stop is engaged!\n'
                     'It is necessary to clear it before starting.\n'
                     'Answering "no" will abort casting.',
-                    default=None, abort_answer=False, allow_abort=False):
+                    default=None, abort_answer=False):
                 self.emergency_stop = OFF
 
             if self.testing_mode:
@@ -644,11 +696,13 @@ class MonotypeCaster(SimulationCaster):
                 if not self.punch_mode and not self.testing_mode:
                     ui.display('\nOK, the machine is running...\n')
             except librpi2caster.InterfaceBusy:
-                if ui.confirm('\nThis interface is already busy.\n'
-                              'If this is not the case, answer YES to '
-                              'stop and reset it. Otherwise abort.\n',
-                              abort_answer=False, default=None):
-                    self.stop()
+                msg = ('\nThis interface is busy. Cannot send signals.\n\n'
+                       'Check if someone else is already using the machine.\n'
+                       'If so, wait until the machine is free to use again.\n'
+                       'If the machine is being stopped, turn it a few times '
+                       'to finish the stopping sequence.\n\n'
+                       'Continue?')
+                if ui.confirm(msg, default=None, abort_answer=False):
                     self.start()
             except KeyboardInterrupt:
                 self.emergency_stop = ON
@@ -669,18 +723,17 @@ class MonotypeCaster(SimulationCaster):
         and cut off the cooling water supply.
         Then, the air supply is cut off.
         """
+        if not self.status.get('is_working'):
+            ui.display('No need to stop the machine.')
+            return
         try:
-            if self.testing_mode or self.punch_mode:
-                request_timeout = 3
-            else:
-                ui.display('Turning the machine off...')
-                request_timeout = self.config['pump_stop_timeout'] * 2 + 2
-            try:
-                self._request('machine', method='delete',
-                              request_timeout=request_timeout)
-            except KeyboardInterrupt:
-                self.emergency_stop = ON
-        except librpi2caster.MachineStopped:
+            if not self.testing_mode or self.punch_mode:
+                ui.display('The machine is being stopped...\n\n'
+                           'If necessary, put the pump out of action,\n'
+                           'then turn the main shaft by hand a few times.')
+            self._request('machine', method='delete', request_timeout=None)
+        except (KeyboardInterrupt, librpi2caster.MachineStopped):
+            ui.display('Already stopping the machine.')
             self.stop()
         finally:
             self.update_status()
@@ -695,17 +748,17 @@ class MonotypeCaster(SimulationCaster):
     @handle_communication_error
     def emergency_stop(self, state):
         """Activate or reset the emergency stop on the machine"""
-        method = 'put' if state else 'delete'
         if state:
             ui.display('\n**********\nWARNING!!!\n**********\n'
-                       'Emergency stop - stopping the machine NOW.\n\n'
-                       'Turn the machine by hand a few times.\n')
-        try:
-            # will raise MachineStopped
-            self._request('emergency_stop', method=method,
-                          request_timeout=(120, 120))
-        finally:
-            self.update_status()
+                       'Emergency stop - stopping the machine NOW.\n\n')
+        else:
+            ui.display('\nEmergency stop cleared. Ready to work again.\n')
+        with suppress(librpi2caster.CommunicationError,
+                      librpi2caster.MachineStopped,
+                      KeyboardInterrupt):
+            self._request('emergency_stop', request_timeout=3,
+                          method='put' if state else 'delete')
+        self.update_status()
 
     @handle_communication_error
     def update_status(self, **kwargs):

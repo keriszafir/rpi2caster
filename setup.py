@@ -4,7 +4,7 @@
 from setuptools import setup, find_packages
 
 # global package-wide declarations
-__version__ = '2.4.3'
+__version__ = '2.5.0'
 __author__ = 'Christophe Catherine Slychan'
 __author_email__ = 'krzysztof.slychan@gmail.com'
 __github_url__ = 'http://github.com/elegantandrogyne/rpi2caster'

@@ -329,12 +329,16 @@ def menu(options, header='', footer='',
     click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
     # wait for user input
     while True:
-        getchar = click.getchar()
-        if getchar in [key.getchar for key in abort_keys]:
-            raise Abort
-        retval = rets.get(getchar, NONSENSE)
-        if retval != NONSENSE:
-            return dt.try_raising(retval)
+        try:
+            getchar = click.getchar()
+            if getchar in [key.getchar for key in abort_keys]:
+                raise Abort
+            retval = rets.get(getchar, NONSENSE)
+            if retval != NONSENSE:
+                return dt.try_raising(retval)
+        except (KeyboardInterrupt, EOFError):
+            if allow_abort:
+                raise Abort
 
 
 def simple_menu(message, options, default_key=None, allow_abort=True):
@@ -373,12 +377,16 @@ def simple_menu(message, options, default_key=None, allow_abort=True):
     click.echo(build_menu_prompt(rets, def_rv, def_key, abort_keys))
     # Wait for user input
     while True:
-        getchar = click.getchar()
-        if getchar in [key.getchar for key in abort_keys]:
-            raise Abort
-        retval = rets.get(getchar, NONSENSE)
-        if retval != NONSENSE:
-            return dt.try_raising(retval)
+        try:
+            getchar = click.getchar()
+            if getchar in [key.getchar for key in abort_keys]:
+                raise Abort
+            retval = rets.get(getchar, NONSENSE)
+            if retval != NONSENSE:
+                return dt.try_raising(retval)
+        except (KeyboardInterrupt, EOFError):
+            if allow_abort:
+                raise Abort
 
 
 def clear():
@@ -671,23 +679,25 @@ def confirm(question='Your choice?', default=True,
     keys = OrderedDict()
     keys[get_key('y')] = True
     keys[get_key('n')] = False
-    keys[get_key('esc')] = Abort if allow_abort else False
 
-    names = {True: 'yes', False: 'no'}
-
-    default_text, abort_text = '', ''
-    prompt = click.style('Choice?', fg='yellow', bold=True)
-    yn_text = click.style('Y = yes, N = no', fg='cyan', bold=True)
+    if allow_abort and abort_answer is None:
+        keys[get_key('esc')] = Abort
+        abort_text = click.style(' Esc = abort', fg='red', bold=True)
+    else:
+        keys[get_key('esc')] = False
+        abort_text = click.style(' Esc = no', fg='red', bold=True)
 
     # default and abort answer
     if default is not None:
         keys[get_key('enter')] = default
+        names = {True: 'yes', False: 'no'}
         default_text = click.style(' Enter = {}'.format(names[default]),
                                    fg='green', bold=True)
+    else:
+        default_text = ''
 
-    if allow_abort:
-        keys[get_key('esc')] = Abort
-        abort_text = click.style(' Esc = abort', fg='red', bold=True)
+    prompt = click.style('Choice?', fg='yellow', bold=True)
+    yn_text = click.style('Y = yes, N = no', fg='cyan', bold=True)
 
     # all keys are defined
     # build answer dict from key getchars
@@ -696,20 +706,24 @@ def confirm(question='Your choice?', default=True,
     click.echo(question)
 
     while True:
-        # get the user input
-        click.echo('{} [{}{}{}]'
-                   .format(prompt, yn_text, default_text, abort_text))
-        getchar = click.getchar()
-        answer = answers.get(getchar)
-        if answer == abort_answer:
-            raise Abort
+        try:
+            # get the user input
+            click.echo('{} [{}{}{}]'
+                       .format(prompt, yn_text, default_text, abort_text))
+            getchar = click.getchar()
+            answer = answers.get(getchar)
+            if answer == abort_answer:
+                raise Abort
 
-        # loop further if answer lookup failed
-        if answer is None:
-            continue
+            # loop further if answer lookup failed
+            if answer is None:
+                continue
 
-        # return answer, or raise it (if it was Abort)
-        return dt.try_raising(answer)
+            # return answer, or raise it (if it was Abort)
+            return dt.try_raising(answer)
+        except (KeyboardInterrupt, EOFError):
+            if allow_abort and abort_answer is None:
+                raise Abort
 
 
 def choose_wedge(wedge_name=None):
