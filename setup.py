@@ -5,9 +5,9 @@ from setuptools import setup, find_packages
 
 # global package-wide declarations
 __version__ = '2.5.0'
-__author__ = 'Christophe Catherine Slychan'
-__author_email__ = 'krzysztof.slychan@gmail.com'
-__github_url__ = 'http://github.com/elegantandrogyne/rpi2caster'
+__author__ = 'Keri Szafir'
+__author_email__ = 'keri.szafir@gmail.com'
+__github_url__ = 'http://github.com/keriszafir/rpi2caster'
 __dependencies__ = ['pip > 1.5', 'click >= 7.0', 'peewee > 2.0',
                     'qrcode > 5.0', 'requests > 2.0', 
                     'librpi2caster >= 2.0'],
